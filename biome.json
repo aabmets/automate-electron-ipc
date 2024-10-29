@@ -57,7 +57,7 @@
             "noDoneCallback": "error",
             "noImplicitBoolean": "error",
             "noNamespace": "error",
-            "noNamespaceImport": "error",
+            "noNamespaceImport": "off",
             "noNegationElse": "error",
             "noParameterProperties": "error",
             "noShoutyConstants": "error",

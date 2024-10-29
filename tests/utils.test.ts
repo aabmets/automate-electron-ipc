@@ -12,11 +12,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import utils from "../src/utils";
 
 describe("utils", () => {
-   test("searchUpwards for existing file from default base path", () => {
+   it("should find an existing file in the default base path", () => {
       const mockForPath = "testfile.txt";
       const expectedPath = path.resolve(process.cwd(), mockForPath);
 
@@ -24,7 +24,8 @@ describe("utils", () => {
       const result = utils.searchUpwards(mockForPath);
       expect(result).toBe(expectedPath);
    });
-   test("searchUpwards for existing file in current directory", () => {
+
+   it("should find an existing file in the specified starting directory", () => {
       const mockForPath = "testfile.txt";
       const mockStartFrom = url.pathToFileURL("/mock/directory/start.js").href;
       const expectedPath = path.resolve("/mock/directory", mockForPath);
@@ -33,7 +34,8 @@ describe("utils", () => {
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
       expect(result).toBe(expectedPath);
    });
-   test("searchUpwards for existing file in parent directory", () => {
+
+   it("should find an existing file in the parent directory when not found in the starting directory", () => {
       const mockForPath = "testfile.txt";
       const mockStartFrom = url.pathToFileURL("/mock/directory/subdir/start.js").href;
       const expectedPath = path.resolve("/mock/directory", mockForPath);
@@ -42,7 +44,8 @@ describe("utils", () => {
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
       expect(result).toBe(expectedPath);
    });
-   test("searchUpwards for non-existing file", () => {
+
+   it("should return an empty string when the file does not exist in any directory upwards", () => {
       const mockForPath = "testfile.txt";
       const mockStartFrom = url.pathToFileURL("/mock/directory/start.js").href;
 
@@ -50,7 +53,8 @@ describe("utils", () => {
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
       expect(result).toBe("");
    });
-   test("concatRegex", () => {
+
+   it("should concatenate multiple regex patterns into a single pattern", () => {
       const pattern = utils.concatRegex([
          /^/, // Start of string
          /[a-zA-Z]+/, // One or more letters
