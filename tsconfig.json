@@ -10,7 +10,7 @@
       "composite": false,
       "outDir": "./dist",
 
-      "moduleResolution": "bundler",
+      "moduleResolution": "node",
       "verbatimModuleSyntax": false,
       "sourceMap": false,
 
