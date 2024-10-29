@@ -23,7 +23,7 @@ import url from "node:url";
  * @returns The full resolved path if found, or an empty string.
  */
 export function searchUpwards(forPath: string, startFrom = import.meta.url): string {
-   const startPath = url.fileURLToPath(startFrom);
+   const startPath = startFrom.startsWith("file://") ? url.fileURLToPath(startFrom) : startFrom;
    let currentDir = path.dirname(startPath);
    while (true) {
       const possiblePath = path.resolve(currentDir, forPath);
@@ -39,4 +39,16 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
    return "";
 }
 
-export default { searchUpwards };
+/**
+ * Concatenates an array of regular expressions into a single regular expression.
+ *
+ * @param parts - An array of smaller regex patterns to be concatenated.
+ * @param [flags=''] - Optional flags (e.g., 'g', 'i') to apply to the final concatenated regex.
+ * @returns A new regular expression composed of the concatenated patterns.
+ */
+export function concatRegex(parts: RegExp[], flags = ""): RegExp {
+   const pattern = parts.map((part) => part.source).join("");
+   return new RegExp(pattern, flags);
+}
+
+export default { searchUpwards, concatRegex };
