@@ -1,0 +1,49 @@
+{
+   "name": "vite-plugin-electron-auto-ipc",
+   "version": "0.0.0",
+   "description": "A Vite plugin for Electron apps that auto-generates IPC bindings into the source files of the main process and the preload environment.",
+   "keywords": ["vite", "plugin", "electron", "auto", "ipc"],
+   "type": "module",
+   "license": "MIT",
+   "repository": {
+      "type": "git",
+      "url": "https://github.com/aabmets/vite-plugin-electron-auto-ipc.git"
+   },
+   "author": "Mattias Aabmets <mattias.aabmets@gmail.com>",
+   "types": "./types/index.d.ts",
+   "module": "./dist/index.js",
+   "exports": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/index.js"
+   },
+   "files": ["dist", "types", "README.md", "LICENSE"],
+   "scripts": {
+      "check": "tsc -p tsconfig.json --noEmit && biome check",
+      "pubtest": "tsc -p tsconfig.json && bun pm pack --destination ./packages",
+      "pubnow": "biome check --error-on-warnings && tsc -p tsconfig.json && bun publish"
+   },
+   "devDependencies": {
+      "@biomejs/biome": "^1.9.4",
+      "@jest/globals": "^29.7.0",
+      "@types/bun": "^1.1.12",
+      "@types/jest": "^29.5.14",
+      "@types/node": "^22.8.2",
+      "jest": "^29.7.0",
+      "lefthook": "^1.8.1",
+      "vite": "^5.4.10",
+      "ts-jest": "^29.2.5",
+      "typescript": "^5.6.3"
+   },
+   "peerDependencies": {
+      "vite": "^5.4.10",
+      "typescript": "^5.6.3"
+   },
+   "peerDependenciesMeta": {
+      "typescript": {
+         "optional": true
+      },
+      "vite": {
+         "optional": true
+      }
+   }
+}
