@@ -9,134 +9,148 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import * as utils from "./utils";
+import ts from "typescript";
+import utils from "./utils";
 
-export interface IPCParams {
+type TypeKind = "type" | "interface";
+
+interface TypeSpec {
    name: string;
-   type: string;
+   kind: TypeKind;
+   isExported: boolean;
+   definition: string;
 }
 
-export interface IPCFunction {
+export interface FuncParam {
    name: string;
-   params: IPCParams[];
+   type: string | null;
+   defaultValue: string | null;
+}
+
+export interface FuncSpec {
+   name: string;
+   params: FuncParam[];
    returnType: string;
    customTypes: string[];
 }
 
-const builtinTypes = new Set(["string", "number", "boolean", "void", "unknown", "any"]);
+interface ParsedContents {
+   funcSpecArray: FuncSpec[];
+   typeSpecArray: TypeSpec[];
+}
 
-export function getFunctionSignatureRegex(): RegExp {
+export function getParserRegex(): RegExp {
    return utils.concatRegex(
       [
-         /export\s+function\s+/,
-         /([a-zA-Z0-9_]+)\s*\(/,
-         /([^)]*)\)\s*/,
-         /(:\s*([a-zA-Z0-9_\[\]\s<>,]+))?/,
+         /^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
+         /|^(export\s+)?(interface)\s+(\w+)\s*{[\s\S]*?\n}\n/,
+         /|^(export\s+)?(type)\s+(\w+)\s*=\s*[\s\S]*?;\n/,
       ],
-      "g",
+      "gm",
    );
 }
 
-export function extractReturnType(match: RegExpExecArray): {
-   returnType: string;
-   customTypes: Set<string>;
-} {
-   const returnType = match[4] ? match[4].trim() : "void";
-   const customTypes = new Set<string>();
-
-   if (returnType && !builtinTypes.has(returnType)) {
-      customTypes.add(returnType);
-   }
-   return { returnType, customTypes };
+function isBuiltinType(typeName: string): boolean {
+   return new Set([
+      "string",
+      "number",
+      "boolean",
+      "void",
+      "any",
+      "unknown",
+      "null",
+      "undefined",
+      "never",
+      "object",
+      "Function",
+   ]).has(typeName);
 }
 
-export function parseObjectExpansionParam(param: string, customTypes: Set<string>): IPCParams {
-   const innerParam = param.slice(1, -1).trim();
-   const name = "";
-   let type: string;
-
-   if (innerParam.includes(":")) {
-      const [key, value] = innerParam.split(":").map((part) => part.trim());
-      type = `{ ${key}: ${value} }`;
-
-      if (value && !builtinTypes.has(value)) {
-         customTypes.add(value);
+function collectCustomTypes(
+   node: ts.Node | ts.TypeNode | undefined,
+   customTypes: Set<string>,
+   sourceFile: ts.SourceFile,
+): void {
+   if (!node) {
+      return;
+   } else if (ts.isTypeReferenceNode(node)) {
+      const name = node.typeName.getText(sourceFile);
+      if (!isBuiltinType(name)) {
+         customTypes.add(name);
       }
-   } else {
-      type = `{ ${innerParam}: unknown }`;
-   }
-   return { name, type };
-}
-
-export function parseExpandedObjectParam(param: string, customTypes: Set<string>): IPCParams {
-   const name = "";
-   const type = param.replace("...", "").trim() || "unknown";
-
-   if (!builtinTypes.has(type)) {
-      customTypes.add(type);
-   }
-   return { name, type };
-}
-
-export function parseSimpleParam(param: string, customTypes: Set<string>): IPCParams {
-   const [namePart, ...typeParts] = param.split(":");
-   const name = namePart.trim();
-   const type = typeParts.join(":").trim() || "unknown";
-   const cleanedType = type.replace(/[\[\]]/g, "");
-
-   if (cleanedType && !builtinTypes.has(cleanedType) && !type.startsWith("{")) {
-      customTypes.add(cleanedType);
-   }
-   return { name, type };
-}
-
-export function parseParam(param: string, customTypes: Set<string>): IPCParams {
-   const p = param.trim();
-   if (p.startsWith("{") && p.endsWith("}")) {
-      return parseObjectExpansionParam(p, customTypes);
-   } else if (p.startsWith("...")) {
-      return parseExpandedObjectParam(p, customTypes);
-   } else {
-      return parseSimpleParam(p, customTypes);
-   }
-}
-
-export function extractFunctionParams(parameters: string, customTypes: Set<string>): IPCParams[] {
-   return parameters
-      .split(",")
-      .map((param) => parseParam(param, customTypes))
-      .filter((param) => param.name.length > 0 || param.type !== "unknown");
-}
-
-export function extractFunctionSignatures(fileContent: string): IPCFunction[] {
-   const functionSignatureRegex = getFunctionSignatureRegex();
-   const functions: IPCFunction[] = [];
-   let match: RegExpExecArray | null = functionSignatureRegex.exec(fileContent);
-
-   while (match !== null) {
-      const functionName = match[1];
-      const parameters = match[2];
-      const { returnType, customTypes } = extractReturnType(match);
-      const params = extractFunctionParams(parameters, customTypes);
-
-      functions.push({
-         name: functionName,
-         params,
-         returnType,
-         customTypes: Array.from(customTypes),
+   } else if (ts.isTypeLiteralNode(node)) {
+      node.members.forEach((member) => {
+         if (ts.isPropertySignature(member) && member.type) {
+            collectCustomTypes(member.type, customTypes, sourceFile);
+         }
       });
-      match = functionSignatureRegex.exec(fileContent);
+   } else if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
+      node.types.forEach((subType) => collectCustomTypes(subType, customTypes, sourceFile));
+   } else if (ts.isBindingElement(node)) {
+      const children = node.getChildren();
+      if (children.length === 3 && ts.isIdentifier(children[2])) {
+         const name = children[2].getText(sourceFile);
+         if (!isBuiltinType(name)) {
+            customTypes.add(name);
+         }
+      }
    }
-   return functions;
+   node.forEachChild((child) => collectCustomTypes(child, customTypes, sourceFile));
+}
+
+function getFuncSpecs(code: string): FuncSpec[] {
+   const sourceFile = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+   const customTypes = new Set<string>();
+   const funcSpecArray: FuncSpec[] = [];
+
+   ts.forEachChild(sourceFile, (node: ts.Node) => {
+      if (ts.isFunctionDeclaration(node)) {
+         collectCustomTypes(node, customTypes, sourceFile);
+         funcSpecArray.push({
+            name: node.name?.text || "",
+            customTypes: Array.from(customTypes),
+            returnType: node.type ? node.type.getText(sourceFile) : "void",
+            params: (node.parameters || []).map((param) => {
+               return {
+                  name: param.name.getText(sourceFile),
+                  type: param.type ? param.type.getText(sourceFile) : null,
+                  defaultValue: param.initializer ? param.initializer.getText(sourceFile) : null,
+               };
+            }),
+         });
+      }
+   });
+   return funcSpecArray;
+}
+
+export function parseContents(contents: string): ParsedContents {
+   const regex = getParserRegex();
+   const typeSpecArray: TypeSpec[] = [];
+   const funcSignatures: string[] = [];
+
+   let match: RegExpExecArray | null = regex.exec(contents);
+   while (match !== null) {
+      const kind = match[2] ?? match[5] ?? "function";
+      if (kind === "function") {
+         funcSignatures.push(`${match[0].trimEnd()}}\n`);
+      } else {
+         typeSpecArray.push({
+            name: match[3] ?? match[6],
+            kind: kind as TypeKind,
+            isExported: (match[1] ?? match[4] ?? "").trim() === "export",
+            definition: match[0],
+         });
+      }
+      match = regex.exec(contents);
+   }
+   const funcSpecArray: FuncSpec[] = getFuncSpecs(funcSignatures.join(""));
+   return { funcSpecArray, typeSpecArray };
 }
 
 export default {
-   getFunctionSignatureRegex,
-   extractReturnType,
-   parseObjectExpansionParam,
-   parseExpandedObjectParam,
-   parseSimpleParam,
-   parseParam,
-   extractFunctionParams,
-   extractFunctionSignatures,
+   getParserRegex,
+   isBuiltinType,
+   collectCustomTypes,
+   getFuncSpecs,
+   parseContents,
 };

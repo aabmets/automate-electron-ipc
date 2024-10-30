@@ -39,7 +39,7 @@
    },
    "peerDependenciesMeta": {
       "typescript": {
-         "optional": true
+         "optional": false
       },
       "vite": {
          "optional": true
