@@ -12,9 +12,9 @@
 import ts from "typescript";
 import utils from "./utils";
 
-type TypeKind = "type" | "interface";
+export type TypeKind = "type" | "interface";
 
-interface TypeSpec {
+export interface TypeSpec {
    name: string;
    kind: TypeKind;
    isExported: boolean;
@@ -34,7 +34,7 @@ export interface FuncSpec {
    customTypes: string[];
 }
 
-interface ParsedContents {
+export interface ParsedContents {
    funcSpecArray: FuncSpec[];
    typeSpecArray: TypeSpec[];
 }
@@ -50,7 +50,7 @@ export function getParserRegex(): RegExp {
    );
 }
 
-function isBuiltinType(typeName: string): boolean {
+export function isBuiltinType(typeName: string): boolean {
    return new Set([
       "string",
       "number",
@@ -66,7 +66,7 @@ function isBuiltinType(typeName: string): boolean {
    ]).has(typeName);
 }
 
-function collectCustomTypes(
+export function collectCustomTypes(
    node: ts.Node | ts.TypeNode | undefined,
    customTypes: Set<string>,
    sourceFile: ts.SourceFile,
@@ -98,7 +98,7 @@ function collectCustomTypes(
    node.forEachChild((child) => collectCustomTypes(child, customTypes, sourceFile));
 }
 
-function getFuncSpecs(code: string): FuncSpec[] {
+export function getFuncSpecs(code: string): FuncSpec[] {
    const sourceFile = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
    const customTypes = new Set<string>();
    const funcSpecArray: FuncSpec[] = [];
