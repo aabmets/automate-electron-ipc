@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import parser from "../../src/parser";
 import viUtils from "../vitest_utils";
 
 describe("collectCustomTypes", () => {
@@ -36,6 +37,7 @@ describe("collectCustomTypes", () => {
          "object",
          "Function",
       ].forEach((typeName) => {
+         expect(parser.isBuiltinType(typeName)).toStrictEqual(true);
          const customTypes = viUtils.collectCustomTypes(`
             export function myFunction(abc: ${typeName}): ${typeName} {
                return;
