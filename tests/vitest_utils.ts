@@ -9,6 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import ts from "typescript";
+import parser from "../src/parser";
+
 export function dedent(text: string): string {
    const reducer = (minIndent: number, line: string) =>
       Math.min(minIndent, line.match(/^(\s*)/)?.[0].length || 0);
@@ -19,4 +22,13 @@ export function dedent(text: string): string {
    return lines.map((line) => line.slice(indent)).join("\n");
 }
 
-export default { dedent };
+export function collectCustomTypes(code: string): Set<string> {
+   const sourceFile = ts.createSourceFile("temp.ts", dedent(code), ts.ScriptTarget.Latest, true);
+   const customTypes = new Set<string>();
+   ts.forEachChild(sourceFile, (node: ts.Node) => {
+      parser.collectCustomTypes(node, customTypes, sourceFile);
+   });
+   return customTypes;
+}
+
+export default { dedent, collectCustomTypes };
