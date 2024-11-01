@@ -100,11 +100,11 @@ export function collectCustomTypes(
 
 export function getFuncSpecs(code: string): FuncSpec[] {
    const sourceFile = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
-   const customTypes = new Set<string>();
    const funcSpecArray: FuncSpec[] = [];
 
    ts.forEachChild(sourceFile, (node: ts.Node) => {
       if (ts.isFunctionDeclaration(node)) {
+         const customTypes = new Set<string>();
          collectCustomTypes(node, customTypes, sourceFile);
          funcSpecArray.push({
             name: node.name?.text || "",
