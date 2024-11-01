@@ -10,12 +10,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { getParserRegex } from "../../src/parser";
+import parser from "../../src/parser";
 import viUtils from "../vitest_utils";
 
 describe("getParserRegex", () => {
    it("should match exported function syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const functionExportString = viUtils.dedent(`
          export function myFunction() {
             return;
@@ -25,7 +25,7 @@ describe("getParserRegex", () => {
    });
 
    it("should not match non-exported function syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const functionExportString = viUtils.dedent(`
          function myFunction() {
             return;
@@ -35,7 +35,7 @@ describe("getParserRegex", () => {
    });
 
    it("should match exported interface syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const interfaceExportString = viUtils.dedent(`
          export interface MyInterface {
             property: string;
@@ -45,7 +45,7 @@ describe("getParserRegex", () => {
    });
 
    it("should match non-exported interface syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const interfaceString = viUtils.dedent(`
          interface MyInterface {
             property: string;
@@ -55,7 +55,7 @@ describe("getParserRegex", () => {
    });
 
    it("should match export type syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const typeExportString = viUtils.dedent(`
          export type MyType = {
             property: string;
@@ -65,7 +65,7 @@ describe("getParserRegex", () => {
    });
 
    it("should match non-exported type syntax", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       const typeString = viUtils.dedent(`
          type MyType = {
             property: string;
@@ -75,7 +75,7 @@ describe("getParserRegex", () => {
    });
 
    it("should not match other declarations", () => {
-      const regex = getParserRegex();
+      const regex = parser.getParserRegex();
       [
          "const myFunc = () => null",
          "const myVar = 42;",

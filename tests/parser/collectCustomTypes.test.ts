@@ -85,9 +85,16 @@ describe("collectCustomTypes", () => {
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
-   it("should collect custom types from destructured objects", () => {
+   it("should collect custom types from within destructured objects", () => {
       const customTypes = viUtils.collectCustomTypes(`
          export function myFunction({ abc: CustomType1 }) {}
+      `);
+      expect(customTypes).toStrictEqual(new Set(["CustomType1"]));
+   });
+
+   it("should collect custom types from destructured object literal typehints", () => {
+      const customTypes = viUtils.collectCustomTypes(`
+         export function myFunction({ abc }: CustomType1) {}
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1"]));
    });
