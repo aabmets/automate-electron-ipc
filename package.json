@@ -2,7 +2,7 @@
    "name": "vite-plugin-automate-electron-ipc",
    "version": "0.0.0",
    "description": "A Vite plugin for Electron apps that automates the generation of IPC components into source code files",
-   "keywords": ["vite", "plugin", "electron", "auto", "ipc"],
+   "keywords": ["vite", "plugin", "automate", "electron", "ipc"],
    "type": "module",
    "license": "MIT",
    "repository": {
