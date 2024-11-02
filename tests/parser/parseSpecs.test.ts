@@ -14,7 +14,7 @@ import parser from "../../src/parser";
 
 describe("parseContents", () => {
    it("should parse exported interfaces and types", () => {
-      const { typeSpecArray } = parser.parseContents(`
+      const { typeSpecArray } = parser.parseSpecs(`
          export interface MyInterface {
             property: string;
          }
@@ -36,7 +36,7 @@ describe("parseContents", () => {
    });
 
    it("should parse non-exported interfaces and types", () => {
-      const { typeSpecArray } = parser.parseContents(`
+      const { typeSpecArray } = parser.parseSpecs(`
          interface MyInterface {
             property: string;
          }
@@ -58,7 +58,7 @@ describe("parseContents", () => {
    });
 
    it("should parse multiple functions", () => {
-      const { funcSpecArray } = parser.parseContents(`
+      const { funcSpecArray } = parser.parseSpecs(`
          export function myFunction1(arg1: CustomType1): string {
             return;
          }
@@ -94,7 +94,7 @@ describe("parseContents", () => {
    });
 
    it("should parse ES module and CommonJS import statements", () => {
-      const { importSpecArray } = parser.parseContents(`
+      const { importSpecArray } = parser.parseSpecs(`
          import defaultExport1 from "module-name1";
          import { namedExport2 } from 'module-name2';
          import type { CustomType3 } from 'module-name3';

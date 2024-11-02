@@ -160,7 +160,7 @@ export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
    return funcSpecArray;
 }
 
-export function parseContents(contents: string): ParsedContents {
+export function parseSpecs(contents: string): ParsedContents {
    const normalizedContents = utils.dedent(contents);
    const regex = getParserRegex();
    const importSpecArray: ImportSpec[] = [];
@@ -199,5 +199,5 @@ export default {
    collectCustomTypes,
    cctFromCode,
    getFuncSpecs,
-   parseContents,
+   parseSpecs,
 };
