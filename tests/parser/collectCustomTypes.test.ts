@@ -98,4 +98,18 @@ describe("collectCustomTypes", () => {
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1"]));
    });
+
+   it("should collect custom types from named types import syntax", () => {
+      const customTypes = viUtils.collectCustomTypes(`
+         import type { CustomType } from 'module-name';
+      `);
+      expect(customTypes).toStrictEqual(new Set(["CustomType"]));
+   });
+
+   it("should collect custom types from objects and named types import syntax", () => {
+      const customTypes = viUtils.collectCustomTypes(`
+         import { namedExport, type CustomType } from 'module-name';
+      `);
+      expect(customTypes).toStrictEqual(new Set(["CustomType"]));
+   });
 });

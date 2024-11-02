@@ -69,7 +69,7 @@ export function isBuiltinType(typeName: string): boolean {
 }
 
 export function collectCustomTypes(
-   node: ts.Node | ts.TypeNode | undefined,
+   node: ts.Node | ts.TypeNode | ts.ImportDeclaration | undefined,
    customTypes: Set<string>,
    sourceFile: ts.SourceFile,
 ): void {
@@ -95,6 +95,16 @@ export function collectCustomTypes(
          if (!isBuiltinType(name)) {
             customTypes.add(name);
          }
+      }
+   } else if (ts.isImportDeclaration(node)) {
+      const clause = node.importClause;
+      if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+         clause.namedBindings.elements.forEach((element) => {
+            const name = element.name.getText(sourceFile);
+            if ((clause?.isTypeOnly || element.isTypeOnly) && !isBuiltinType(name)) {
+               customTypes.add(name);
+            }
+         });
       }
    }
    node.forEachChild((child) => collectCustomTypes(child, customTypes, sourceFile));
