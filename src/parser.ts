@@ -42,7 +42,9 @@ export interface ParsedContents {
 export function getParserRegex(): RegExp {
    return utils.concatRegex(
       [
-         /^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
+         /^import[\s\S]*?;\n/,
+         /|^const[\s\S]*?require\(.*?\);\n/,
+         /|^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
          /|^(export\s+)?(interface)\s+(\w+)\s*{[\s\S]*?\n}\n/,
          /|^(export\s+)?(type)\s+(\w+)\s*=\s*[\s\S]*?;\n/,
       ],

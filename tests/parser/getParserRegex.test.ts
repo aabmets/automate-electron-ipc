@@ -74,7 +74,77 @@ describe("getParserRegex", () => {
       expect(regex.test(typeString)).toBe(true);
    });
 
-   it("should not match other declarations", () => {
+   it("should match default import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         import defaultExport from "module-name";
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match named import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         import { namedExport } from 'module-name';
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match multiline named import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         import { 
+            namedExport1, 
+            namedExport2 
+         } from 'module-name';
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match named types import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         import type { CustomType } from 'module-name';
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match objects and named types import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         import { namedExport, type CustomType } from 'module-name';
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match require module import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         const module = require('module-name');
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match named require import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         const { namedExport } = require('module-name');
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should match multiline named require import syntax", () => {
+      const regex = parser.getParserRegex();
+      const importString = viUtils.dedent(`
+         const { 
+            namedExport1,
+            namedExport2
+         } = require('module-name');
+      `);
+      expect(regex.test(importString)).toBe(true);
+   });
+
+   it("should not match non-required variable declarations", () => {
       const regex = parser.getParserRegex();
       [
          "const myFunc = () => null",
@@ -84,5 +154,20 @@ describe("getParserRegex", () => {
       ].forEach((item) => {
          expect(regex.test(item)).toBe(false);
       });
+   });
+
+   it("should not match class declarations", () => {
+      const regex = parser.getParserRegex();
+      const classDeclaration = viUtils.dedent(`
+         class CustomClass {
+            constructor(value) {
+               this.value = value;
+            }
+            print() {
+               console.log(this.value);
+            }
+         }
+      `);
+      expect(regex.test(classDeclaration)).toBe(false);
    });
 });
