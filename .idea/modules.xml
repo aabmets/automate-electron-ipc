@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/vite-plugin-automate-electron-ipc.iml" filepath="$PROJECT_DIR$/.idea/vite-plugin-automate-electron-ipc.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Automate Electron IPC.iml" filepath="$PROJECT_DIR$/.idea/Automate Electron IPC.iml" />
     </modules>
   </component>
 </project>
