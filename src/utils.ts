@@ -51,4 +51,24 @@ export function concatRegex(parts: RegExp[], flags = ""): RegExp {
    return new RegExp(pattern, flags);
 }
 
-export default { searchUpwards, concatRegex };
+/**
+ * Removes the common leading whitespace from each line in a multiline string.
+ *
+ * This function calculates the minimum indentation level of all non-blank lines and
+ * removes that amount of leading whitespace from every line. Useful for cleaning up
+ * multiline strings without altering the relative indentation of lines.
+ *
+ * @param text - The multiline string to dedent.
+ * @returns The de-dented string with common leading whitespace removed.
+ */
+export function dedent(text: string): string {
+   const reducer = (minIndent: number, line: string) =>
+      Math.min(minIndent, line.match(/^(\s*)/)?.[0].length || 0);
+   const lines = text.split("\n");
+   const indent = lines
+      .filter((line) => line.trim()) // Exclude blank lines
+      .reduce(reducer, Number.POSITIVE_INFINITY);
+   return lines.map((line) => line.slice(indent)).join("\n");
+}
+
+export default { searchUpwards, concatRegex, dedent };

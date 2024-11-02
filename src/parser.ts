@@ -13,12 +13,20 @@ import ts from "typescript";
 import utils from "./utils";
 
 export type TypeKind = "type" | "interface";
+export type ImportKind = "import" | "require";
 
 export interface TypeSpec {
-   name: string;
    kind: TypeKind;
+   name: string;
    isExported: boolean;
    definition: string;
+}
+
+export interface ImportSpec {
+   kind: ImportKind;
+   fromPath: string | null;
+   definition: string;
+   customTypes: string[];
 }
 
 export interface FuncParam {
@@ -37,16 +45,17 @@ export interface FuncSpec {
 export interface ParsedContents {
    funcSpecArray: FuncSpec[];
    typeSpecArray: TypeSpec[];
+   importSpecArray: ImportSpec[];
 }
 
 export function getParserRegex(): RegExp {
    return utils.concatRegex(
       [
-         /^import[\s\S]*?;\n/,
-         /|^const[\s\S]*?require\(.*?\);\n/,
-         /|^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
+         /^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
          /|^(export\s+)?(interface)\s+(\w+)\s*{[\s\S]*?\n}\n/,
          /|^(export\s+)?(type)\s+(\w+)\s*=\s*[\s\S]*?;\n/,
+         /|^(import\s+)[\s\S]*?from\s*['"](.*?)['"];?\n/,
+         /|^const[\s\S]*?(require)\(\s*['"](.*?)['"]\s*\);?\n/,
       ],
       "gm",
    );
@@ -110,8 +119,24 @@ export function collectCustomTypes(
    node.forEachChild((child) => collectCustomTypes(child, customTypes, sourceFile));
 }
 
-export function getFuncSpecs(code: string): FuncSpec[] {
-   const sourceFile = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+export function cctFromCode(code: string): Set<string> {
+   const sourceFile = ts.createSourceFile(
+      "temp.ts",
+      utils.dedent(code),
+      ts.ScriptTarget.Latest,
+      true,
+   );
+   const customTypes = new Set<string>();
+
+   ts.forEachChild(sourceFile, (node: ts.Node) => {
+      collectCustomTypes(node, customTypes, sourceFile);
+   });
+   return customTypes;
+}
+
+export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
+   const normalizedCode = skipDedent ? code : utils.dedent(code);
+   const sourceFile = ts.createSourceFile("temp.ts", normalizedCode, ts.ScriptTarget.Latest, true);
    const funcSpecArray: FuncSpec[] = [];
 
    ts.forEachChild(sourceFile, (node: ts.Node) => {
@@ -136,33 +161,43 @@ export function getFuncSpecs(code: string): FuncSpec[] {
 }
 
 export function parseContents(contents: string): ParsedContents {
+   const normalizedContents = utils.dedent(contents);
    const regex = getParserRegex();
+   const importSpecArray: ImportSpec[] = [];
    const typeSpecArray: TypeSpec[] = [];
    const funcSignatures: string[] = [];
 
-   let match: RegExpExecArray | null = regex.exec(contents);
+   let match: RegExpExecArray | null = regex.exec(normalizedContents);
    while (match !== null) {
-      const kind = match[2] ?? match[5] ?? "function";
+      const kind = (match[2] ?? match[5] ?? match[7] ?? match[9] ?? "function").trim();
       if (kind === "function") {
          funcSignatures.push(`${match[0].trimEnd()}}\n`);
-      } else {
+      } else if (["type", "interface"].includes(kind)) {
          typeSpecArray.push({
-            name: match[3] ?? match[6],
             kind: kind as TypeKind,
+            name: match[3] ?? match[6],
             isExported: (match[1] ?? match[4] ?? "").trim() === "export",
             definition: match[0],
          });
+      } else if (["import", "require"].includes(kind)) {
+         importSpecArray.push({
+            kind: kind as ImportKind,
+            fromPath: match[8] ?? match[10] ?? null,
+            definition: match[0],
+            customTypes: Array.from(cctFromCode(match[0])),
+         });
       }
-      match = regex.exec(contents);
+      match = regex.exec(normalizedContents);
    }
-   const funcSpecArray: FuncSpec[] = getFuncSpecs(funcSignatures.join(""));
-   return { funcSpecArray, typeSpecArray };
+   const funcSpecArray: FuncSpec[] = getFuncSpecs(funcSignatures.join(""), true);
+   return { funcSpecArray, typeSpecArray, importSpecArray };
 }
 
 export default {
    getParserRegex,
    isBuiltinType,
    collectCustomTypes,
+   cctFromCode,
    getFuncSpecs,
    parseContents,
 };
