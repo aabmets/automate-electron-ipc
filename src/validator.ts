@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import { assert, array, object, string } from "superstruct";
 import type { IPCAutomationOption } from "../types";
 import utils from "./utils";
 
@@ -21,6 +22,16 @@ import utils from "./utils";
  * @param options - An array of IPCAutomationOption objects.
  */
 export function validateOptions(options: IPCAutomationOption[]): void {
+   const IPCAutomationOptionStruct = object({
+      mainHandlersDir: string(),
+      browserPreloadFile: string(),
+      rendererTypesFile: string(),
+   });
+   const msg = utils.dedent(`
+      IPC automation cannot work without configuration options.
+      Please read the documentation on the correct usage of this plugin.
+   `);
+   assert(options, array(IPCAutomationOptionStruct), msg);
    const usedPaths = new Set<string>();
 
    for (const option of options) {
