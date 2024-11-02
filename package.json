@@ -40,7 +40,13 @@
    },
    "peerDependenciesMeta": {
       "vite": {
-         "optional": true
+         "optional": false
+      },
+      "typescript": {
+         "optional": false
+      },
+      "superstruct": {
+         "optional": false
       }
    }
 }
