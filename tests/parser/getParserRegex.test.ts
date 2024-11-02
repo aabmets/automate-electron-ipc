@@ -11,12 +11,12 @@
 
 import { describe, expect, it } from "vitest";
 import parser from "../../src/parser";
-import viUtils from "../vitest_utils";
+import utils from "../../src/utils";
 
 describe("getParserRegex", () => {
    it("should match exported function syntax", () => {
       const regex = parser.getParserRegex();
-      const functionExportString = viUtils.dedent(`
+      const functionExportString = utils.dedent(`
          export function myFunction() {
             return;
          }
@@ -26,7 +26,7 @@ describe("getParserRegex", () => {
 
    it("should not match non-exported function syntax", () => {
       const regex = parser.getParserRegex();
-      const functionExportString = viUtils.dedent(`
+      const functionExportString = utils.dedent(`
          function myFunction() {
             return;
          }
@@ -36,7 +36,7 @@ describe("getParserRegex", () => {
 
    it("should match exported interface syntax", () => {
       const regex = parser.getParserRegex();
-      const interfaceExportString = viUtils.dedent(`
+      const interfaceExportString = utils.dedent(`
          export interface MyInterface {
             property: string;
          }
@@ -46,7 +46,7 @@ describe("getParserRegex", () => {
 
    it("should match non-exported interface syntax", () => {
       const regex = parser.getParserRegex();
-      const interfaceString = viUtils.dedent(`
+      const interfaceString = utils.dedent(`
          interface MyInterface {
             property: string;
          }
@@ -56,7 +56,7 @@ describe("getParserRegex", () => {
 
    it("should match export type syntax", () => {
       const regex = parser.getParserRegex();
-      const typeExportString = viUtils.dedent(`
+      const typeExportString = utils.dedent(`
          export type MyType = {
             property: string;
          };
@@ -66,7 +66,7 @@ describe("getParserRegex", () => {
 
    it("should match non-exported type syntax", () => {
       const regex = parser.getParserRegex();
-      const typeString = viUtils.dedent(`
+      const typeString = utils.dedent(`
          type MyType = {
             property: string;
          };
@@ -76,7 +76,7 @@ describe("getParserRegex", () => {
 
    it("should match default import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          import defaultExport from "module-name";
       `);
       expect(regex.test(importString)).toBe(true);
@@ -84,7 +84,7 @@ describe("getParserRegex", () => {
 
    it("should match named import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          import { namedExport } from 'module-name';
       `);
       expect(regex.test(importString)).toBe(true);
@@ -92,7 +92,7 @@ describe("getParserRegex", () => {
 
    it("should match multiline named import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          import { 
             namedExport1, 
             namedExport2 
@@ -103,7 +103,7 @@ describe("getParserRegex", () => {
 
    it("should match named types import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          import type { CustomType } from 'module-name';
       `);
       expect(regex.test(importString)).toBe(true);
@@ -111,7 +111,7 @@ describe("getParserRegex", () => {
 
    it("should match objects and named types import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          import { namedExport, type CustomType } from 'module-name';
       `);
       expect(regex.test(importString)).toBe(true);
@@ -119,7 +119,7 @@ describe("getParserRegex", () => {
 
    it("should match require module import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          const module = require('module-name');
       `);
       expect(regex.test(importString)).toBe(true);
@@ -127,7 +127,7 @@ describe("getParserRegex", () => {
 
    it("should match named require import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          const { namedExport } = require('module-name');
       `);
       expect(regex.test(importString)).toBe(true);
@@ -135,7 +135,7 @@ describe("getParserRegex", () => {
 
    it("should match multiline named require import syntax", () => {
       const regex = parser.getParserRegex();
-      const importString = viUtils.dedent(`
+      const importString = utils.dedent(`
          const { 
             namedExport1,
             namedExport2
@@ -158,7 +158,7 @@ describe("getParserRegex", () => {
 
    it("should not match class declarations", () => {
       const regex = parser.getParserRegex();
-      const classDeclaration = viUtils.dedent(`
+      const classDeclaration = utils.dedent(`
          class CustomClass {
             constructor(value) {
                this.value = value;

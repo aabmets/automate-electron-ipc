@@ -11,17 +11,15 @@
 
 import { describe, expect, it } from "vitest";
 import parser from "../../src/parser";
-import viUtils from "../vitest_utils";
 
 describe("parseContents", () => {
    it("should parse exported interfaces and types", () => {
-      const code = viUtils.dedent(`
+      const { typeSpecArray } = parser.parseContents(`
          export interface MyInterface {
             property: string;
          }
          export type MyType = number | boolean;
       `);
-      const { typeSpecArray } = parser.parseContents(code);
       expect(typeSpecArray).toHaveLength(2);
       expect(typeSpecArray[0]).toMatchObject({
          name: "MyInterface",
@@ -38,13 +36,12 @@ describe("parseContents", () => {
    });
 
    it("should parse non-exported interfaces and types", () => {
-      const code = viUtils.dedent(`
+      const { typeSpecArray } = parser.parseContents(`
          interface MyInterface {
             property: string;
          }
          type MyType = number | boolean;
       `);
-      const { typeSpecArray } = parser.parseContents(code);
       expect(typeSpecArray).toHaveLength(2);
       expect(typeSpecArray[0]).toMatchObject({
          name: "MyInterface",
@@ -61,7 +58,7 @@ describe("parseContents", () => {
    });
 
    it("should parse multiple functions", () => {
-      const code = viUtils.dedent(`
+      const { funcSpecArray } = parser.parseContents(`
          export function myFunction1(arg1: CustomType1): string {
             return;
          }
@@ -69,7 +66,6 @@ describe("parseContents", () => {
             return;
          }
       `);
-      const { funcSpecArray } = parser.parseContents(code);
       expect(funcSpecArray).toHaveLength(2);
       expect(funcSpecArray[0]).toMatchObject({
          name: "myFunction1",
@@ -94,6 +90,54 @@ describe("parseContents", () => {
                type: "boolean",
             },
          ],
+      });
+   });
+
+   it("should parse ES module and CommonJS import statements", () => {
+      const { importSpecArray } = parser.parseContents(`
+         import defaultExport1 from "module-name1";
+         import { namedExport2 } from 'module-name2';
+         import type { CustomType3 } from 'module-name3';
+         import { namedExport4, type CustomType4 } from 'module-name4';
+         const module5 = require('module-name5');
+         const { namedExport6 } = require('module-name6');
+      `);
+      expect(importSpecArray).toHaveLength(6);
+      expect(importSpecArray[0]).toMatchObject({
+         kind: "import",
+         fromPath: "module-name1",
+         definition: 'import defaultExport1 from "module-name1";\n',
+         customTypes: [],
+      });
+      expect(importSpecArray[1]).toMatchObject({
+         kind: "import",
+         fromPath: "module-name2",
+         definition: "import { namedExport2 } from 'module-name2';\n",
+         customTypes: [],
+      });
+      expect(importSpecArray[2]).toMatchObject({
+         kind: "import",
+         fromPath: "module-name3",
+         definition: "import type { CustomType3 } from 'module-name3';\n",
+         customTypes: ["CustomType3"],
+      });
+      expect(importSpecArray[3]).toMatchObject({
+         kind: "import",
+         fromPath: "module-name4",
+         definition: "import { namedExport4, type CustomType4 } from 'module-name4';\n",
+         customTypes: ["CustomType4"],
+      });
+      expect(importSpecArray[4]).toMatchObject({
+         kind: "require",
+         fromPath: "module-name5",
+         definition: "const module5 = require('module-name5');\n",
+         customTypes: [],
+      });
+      expect(importSpecArray[5]).toMatchObject({
+         kind: "require",
+         fromPath: "module-name6",
+         definition: "const { namedExport6 } = require('module-name6');\n",
+         customTypes: [],
       });
    });
 });

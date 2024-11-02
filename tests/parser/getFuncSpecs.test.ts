@@ -11,14 +11,12 @@
 
 import { describe, expect, it } from "vitest";
 import parser from "../../src/parser";
-import viUtils from "../vitest_utils";
 
 describe("getFuncSpecs", () => {
    it("should match basic function specification", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction() {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -29,10 +27,9 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture builtin return type", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(): unknown {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -43,10 +40,9 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture custom return type", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(): CustomType {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -57,10 +53,9 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture string param type", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(abc: string) {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -77,10 +72,9 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture custom param type", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(abc: CustomType) {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -97,10 +91,9 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture param default value", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(abc = 123) {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
@@ -117,14 +110,13 @@ describe("getFuncSpecs", () => {
    });
 
    it("should capture multiple params with types and default values", () => {
-      const code = viUtils.dedent(`
+      const specs = parser.getFuncSpecs(`
          export function myFunction(
             abc: string = "xyz", 
             def: number = 123, 
             ghi: boolean = true
          ) {}
       `);
-      const specs = parser.getFuncSpecs(code);
       expect(specs).toHaveLength(1);
       expect(specs[0]).toMatchObject({
          name: "myFunction",
