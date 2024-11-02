@@ -37,6 +37,12 @@ describe("validateOptions", () => {
       expect(() => validateOptions(options)).not.toThrow();
    });
 
+   it("should throw errors when options array is not provided or empty", () => {
+      const options = null as unknown as IPCAutomationOption[];
+      expect(() => validateOptions(options)).toThrow("Please read the documentation");
+      expect(() => validateOptions([])).toThrow("Please read the documentation");
+   });
+
    it("should throw an error if mainHandlersDir is not found", () => {
       vi.spyOn(utils, "searchUpwards").mockReturnValueOnce("");
 
@@ -48,7 +54,7 @@ describe("validateOptions", () => {
          },
       ];
 
-      expect(() => validateOptions(options)).toThrow('mainHandlersDir "/invalid/path" not found');
+      expect(() => validateOptions(options)).toThrow("mainHandlersDir path not found");
    });
 
    it("should throw an error if browserPreloadFile is not found", () => {
@@ -64,9 +70,7 @@ describe("validateOptions", () => {
          },
       ];
 
-      expect(() => validateOptions(options)).toThrow(
-         'browserPreloadFile "/invalid/preload.js" not found',
-      );
+      expect(() => validateOptions(options)).toThrow("browserPreloadFile path not found");
    });
 
    it("should throw an error if rendererTypesFile is not found", () => {
@@ -83,9 +87,7 @@ describe("validateOptions", () => {
          },
       ];
 
-      expect(() => validateOptions(options)).toThrow(
-         'rendererTypesFile "/invalid/types.js" not found',
-      );
+      expect(() => validateOptions(options)).toThrow("rendererTypesFile path not found");
    });
 
    it("should throw an error if browserPreloadFile and rendererTypesFile are the same", () => {

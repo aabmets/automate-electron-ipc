@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import { assert, array, object, string } from "superstruct";
+import { assert, array, object, refine, string } from "superstruct";
 import type { IPCAutomationOption } from "../types";
 import utils from "./utils";
 
@@ -22,16 +22,20 @@ import utils from "./utils";
  * @param options - An array of IPCAutomationOption objects.
  */
 export function validateOptions(options: IPCAutomationOption[]): void {
+   const msg = utils.dedent(`
+      IPC automation cannot work with invalid configuration options.
+      Please read the documentation on the correct usage of this plugin.
+   `);
    const IPCAutomationOptionStruct = object({
       mainHandlersDir: string(),
       browserPreloadFile: string(),
       rendererTypesFile: string(),
    });
-   const msg = utils.dedent(`
-      IPC automation cannot work without configuration options.
-      Please read the documentation on the correct usage of this plugin.
-   `);
-   assert(options, array(IPCAutomationOptionStruct), msg);
+   const OptionsArray = refine(array(IPCAutomationOptionStruct), "OptionsArray", (value) => {
+      return Array.isArray(value) && value.length > 0;
+   });
+   assert(options, OptionsArray, msg);
+
    const usedPaths = new Set<string>();
 
    for (const option of options) {
@@ -40,11 +44,11 @@ export function validateOptions(options: IPCAutomationOption[]): void {
       const resolvedRendererTypesFile = utils.searchUpwards(option.rendererTypesFile);
 
       if (!resolvedMainHandlersDir) {
-         throw new Error(`mainHandlersDir "${option.mainHandlersDir}" not found`);
+         throw new Error(`mainHandlersDir path not found: "${option.mainHandlersDir}"`);
       } else if (!resolvedBrowserPreloadFile) {
-         throw new Error(`browserPreloadFile "${option.browserPreloadFile}" not found`);
+         throw new Error(`browserPreloadFile path not found: "${option.browserPreloadFile}"`);
       } else if (!resolvedRendererTypesFile) {
-         throw new Error(`rendererTypesFile "${option.rendererTypesFile}" not found`);
+         throw new Error(`rendererTypesFile path not found: "${option.rendererTypesFile}"`);
       }
       option.mainHandlersDir = resolvedMainHandlersDir;
       option.browserPreloadFile = resolvedBrowserPreloadFile;
