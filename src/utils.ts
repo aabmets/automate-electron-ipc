@@ -13,6 +13,11 @@ import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
 
+export interface FileHeader {
+   shebang: string | null;
+   license: string | null;
+}
+
 /**
  * Recursively searches upwards from the provided module URL or directory
  * to find a specified path. Returns the full resolved path if found,
@@ -88,4 +93,41 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
    );
 }
 
-export default { searchUpwards, concatRegex, dedent, isPathInside };
+/**
+ * Extracts the shebang and license header from the beginning of a file's content.
+ *
+ * @param fileContents - The full contents of the file as a string.
+ * @returns An object containing the shebang (if present) and license information
+ *          extracted from the file header, or null for each if not present.
+ */
+export function extractFileHeader(fileContents: string): FileHeader {
+   const header: FileHeader = { shebang: null, license: null };
+   if (!fileContents) {
+      return header;
+   }
+   const lines = fileContents.split("\n");
+   const licenseLines: string[] = [];
+
+   for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (i === 0 && line.startsWith("#!")) {
+         header.shebang = line;
+      } else if (
+         line === "" ||
+         line.startsWith("//") ||
+         line.startsWith("/*") ||
+         line.startsWith(" *")
+      ) {
+         licenseLines.push(line);
+      } else {
+         break;
+      }
+   }
+   if (licenseLines.length > 0) {
+      header.license = licenseLines.join("\n");
+   }
+   return header;
+}
+
+export default { searchUpwards, concatRegex, dedent, isPathInside, extractFileHeader };

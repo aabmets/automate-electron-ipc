@@ -107,3 +107,43 @@ describe("isPathInside", () => {
       expect(utils.isPathInside(childPath, parentPath)).toBe(true);
    });
 });
+
+describe("extractFileHeader", () => {
+   it("should return empty file header object when file is empty", () => {
+      const result = utils.extractFileHeader("");
+      expect(result).toMatchObject({
+         shebang: null,
+         license: null,
+      });
+   });
+
+   it("should capture shebang from file contents", () => {
+      const contents = "#!/usr/bin/node";
+      const result = utils.extractFileHeader(contents);
+      expect(result).toMatchObject({
+         shebang: contents,
+         license: null,
+      });
+   });
+
+   it("should capture license header from file contents", () => {
+      const license = `
+         /*
+          *   MIT License
+          *
+          *   Copyright (c) 2024, Mattias Aabmets
+          *
+          *   The contents of this file are subject to the terms and conditions defined in the License.
+          *   You may not use, modify, or distribute this file except in compliance with the License.
+          *
+          *   SPDX-License-Identifier: MIT
+          */
+      `;
+      const contents = utils.dedent(license).trim();
+      const result = utils.extractFileHeader(contents);
+      expect(result).toMatchObject({
+         shebang: null,
+         license: contents,
+      });
+   });
+});
