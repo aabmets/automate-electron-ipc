@@ -71,4 +71,21 @@ export function dedent(text: string): string {
    return lines.map((line) => line.slice(indent)).join("\n");
 }
 
-export default { searchUpwards, concatRegex, dedent };
+/**
+ * Checks if a given path is inside another path.
+ *
+ * @param childPath - The path to check.
+ * @param parentPath - The parent path.
+ * @returns True if childPath is inside parentPath, false otherwise.
+ */
+export function isPathInside(childPath: string, parentPath: string): boolean {
+   const relative = path.relative(parentPath, childPath);
+   return (
+      Boolean(relative) &&
+      !relative.startsWith("..") &&
+      !path.isAbsolute(relative) &&
+      relative !== ""
+   );
+}
+
+export default { searchUpwards, concatRegex, dedent, isPathInside };

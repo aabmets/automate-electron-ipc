@@ -15,7 +15,7 @@ import url from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import utils from "../src/utils";
 
-describe("utils", () => {
+describe("searchUpwards", () => {
    it("should find an existing file in the default base path", () => {
       const mockForPath = "testfile.txt";
       const expectedPath = path.resolve(process.cwd(), mockForPath);
@@ -53,7 +53,9 @@ describe("utils", () => {
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
       expect(result).toBe("");
    });
+});
 
+describe("concatRegex", () => {
    it("should concatenate multiple regex patterns into a single pattern", () => {
       const pattern = utils.concatRegex([
          /^/, // Start of string
@@ -65,5 +67,43 @@ describe("utils", () => {
          /$/, // End of string
       ]);
       expect(pattern.source).toEqual("^[a-zA-Z]+\\s+[0-9]+\\s+[a-zA-Z]+$");
+   });
+});
+
+describe("isPathInside", () => {
+   it("should return true when childPath is directly inside parentPath", () => {
+      const parentPath = "/home/user";
+      const childPath = "/home/user/documents/file.txt";
+      expect(utils.isPathInside(childPath, parentPath)).toBe(true);
+   });
+
+   it("should return false when childPath is outside of parentPath", () => {
+      const parentPath = "/home/user";
+      const childPath = "/home/otherUser/documents/file.txt";
+      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
+   });
+
+   it("should return false when childPath is the same as parentPath", () => {
+      const parentPath = "/home/user";
+      const childPath = "/home/user";
+      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
+   });
+
+   it("should handle relative paths correctly", () => {
+      const parentPath = "/home/user";
+      const childPath = path.join(parentPath, "../user2/documents/file.txt");
+      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
+   });
+
+   it("should return true for nested directories within the parentPath", () => {
+      const parentPath = "/home/user";
+      const childPath = "/home/user/documents/subdir/file.txt";
+      expect(utils.isPathInside(childPath, parentPath)).toBe(true);
+   });
+
+   it("should work with different path separators (cross-platform)", () => {
+      const parentPath = path.join("home", "user");
+      const childPath = path.join("home", "user", "documents", "file.txt");
+      expect(utils.isPathInside(childPath, parentPath)).toBe(true);
    });
 });
