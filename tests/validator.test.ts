@@ -9,10 +9,10 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import type { IPCAutomationOption } from "@types";
+import utils from "@utils";
+import { validateOptions } from "@validator";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import utils from "../src/utils";
-import { validateOptions } from "../src/validator";
-import type { IPCAutomationOption } from "../types";
 
 describe("validateOptions", () => {
    const mockSearchUpwards = (path: string) => path;

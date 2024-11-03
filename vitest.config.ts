@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -17,6 +18,15 @@ export default defineConfig({
          deps: {
             external: ["typescript"],
          },
+      },
+   },
+   resolve: {
+      alias: {
+         "@types": path.resolve(__dirname, "./types/internal.d.ts"),
+         "@plugin": path.resolve(__dirname, "./src/index.ts"),
+         "@validator": path.resolve(__dirname, "./src/validator.ts"),
+         "@parser": path.resolve(__dirname, "./src/parser.ts"),
+         "@utils": path.resolve(__dirname, "./src/utils.ts"),
       },
    },
 });

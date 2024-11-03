@@ -12,8 +12,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import utils from "@utils";
 import { describe, expect, it, vi } from "vitest";
-import utils from "../src/utils";
 
 describe("searchUpwards", () => {
    it("should find an existing file in the default base path", () => {

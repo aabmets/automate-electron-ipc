@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import parser from "@parser";
 import { describe, expect, it } from "vitest";
-import parser from "../../src/parser";
 
 describe("collectCustomTypes", () => {
    it("should not collect any types when no types are defined", () => {
