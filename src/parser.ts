@@ -24,7 +24,7 @@ export interface TypeSpec {
 
 export interface ImportSpec {
    kind: ImportKind;
-   fromPath: string | null;
+   fromPath: string;
    definition: string;
    customTypes: string[];
 }
@@ -37,6 +37,7 @@ export interface FuncParam {
 
 export interface FuncSpec {
    name: string;
+   async: boolean;
    params: FuncParam[];
    returnType: string;
    customTypes: string[];
@@ -50,7 +51,7 @@ export interface ParsedContents {
 
 export function getParserRegex(): RegExp {
    const functionsRegex = utils.concatRegex([
-      /^export\s+(?<async>async\s+)?(?<function>function)/,
+      /^export\s+(async\s+)?(?<function>function)/,
       /\s+(?<functionName>\w+)\s*\([^)]*\)\s*(?::\s*[^\n]+)?\s+{\n/,
    ]);
    const interfaceRegex = utils.concatRegex([
@@ -81,6 +82,7 @@ export function isBuiltinType(typeName: string): boolean {
       "never",
       "object",
       "Function",
+      "Promise",
    ]).has(typeName);
 }
 
@@ -152,6 +154,9 @@ export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
          collectCustomTypes(node, customTypes, sourceFile);
          funcSpecArray.push({
             name: node.name?.text || "",
+            async: (node.modifiers || []).some(
+               (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword,
+            ),
             customTypes: Array.from(customTypes),
             returnType: node.type ? node.type.getText(sourceFile) : "void",
             params: (node.parameters || []).map((param) => {
@@ -176,20 +181,21 @@ export function parseSpecs(contents: string): ParsedContents {
 
    let match: RegExpExecArray | null = regex.exec(normalizedContents);
    while (match !== null) {
-      const kind = (match[2] ?? match[5] ?? match[7] ?? match[9] ?? "function").trim();
+      const mg = match.groups;
+      const kind = (mg?.function ?? mg?.interface ?? mg?.type ?? mg?.import ?? "").trim();
       if (kind === "function") {
          funcSignatures.push(`${match[0].trimEnd()}}\n`);
       } else if (["type", "interface"].includes(kind)) {
          typeSpecArray.push({
             kind: kind as TypeKind,
-            name: match[3] ?? match[6],
-            isExported: (match[1] ?? match[4] ?? "").trim() === "export",
+            name: mg?.interfaceName ?? mg?.typeName ?? "",
+            isExported: [mg?.exportedInterface, mg?.exportedType].includes("export "),
             definition: match[0],
          });
-      } else if (["import", "require"].includes(kind)) {
+      } else if (kind === "import") {
          importSpecArray.push({
             kind: kind as ImportKind,
-            fromPath: match[8] ?? match[10] ?? null,
+            fromPath: mg?.importPath ?? "",
             definition: match[0],
             customTypes: Array.from(cctFromCode(match[0])),
          });

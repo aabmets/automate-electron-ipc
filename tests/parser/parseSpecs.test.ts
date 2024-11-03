@@ -62,13 +62,14 @@ describe("parseContents", () => {
          export function myFunction1(arg1: CustomType1): string {
             return;
          }
-         export function myFunction2(arg2: boolean): CustomType2 {
+         export async function myFunction2(arg2: boolean): Promise<CustomType2> {
             return;
          }
       `);
       expect(funcSpecArray).toHaveLength(2);
       expect(funcSpecArray[0]).toMatchObject({
          name: "myFunction1",
+         async: false,
          customTypes: ["CustomType1"],
          returnType: "string",
          params: [
@@ -81,8 +82,9 @@ describe("parseContents", () => {
       });
       expect(funcSpecArray[1]).toMatchObject({
          name: "myFunction2",
+         async: true,
          customTypes: ["CustomType2"],
-         returnType: "CustomType2",
+         returnType: "Promise<CustomType2>",
          params: [
             {
                defaultValue: null,
@@ -93,16 +95,14 @@ describe("parseContents", () => {
       });
    });
 
-   it("should parse ES module and CommonJS import statements", () => {
+   it("should parse ES module import statements", () => {
       const { importSpecArray } = parser.parseSpecs(`
          import defaultExport1 from "module-name1";
          import { namedExport2 } from 'module-name2';
          import type { CustomType3 } from 'module-name3';
          import { namedExport4, type CustomType4 } from 'module-name4';
-         const module5 = require('module-name5');
-         const { namedExport6 } = require('module-name6');
       `);
-      expect(importSpecArray).toHaveLength(6);
+      expect(importSpecArray).toHaveLength(4);
       expect(importSpecArray[0]).toMatchObject({
          kind: "import",
          fromPath: "module-name1",
@@ -126,18 +126,6 @@ describe("parseContents", () => {
          fromPath: "module-name4",
          definition: "import { namedExport4, type CustomType4 } from 'module-name4';\n",
          customTypes: ["CustomType4"],
-      });
-      expect(importSpecArray[4]).toMatchObject({
-         kind: "require",
-         fromPath: "module-name5",
-         definition: "const module5 = require('module-name5');\n",
-         customTypes: [],
-      });
-      expect(importSpecArray[5]).toMatchObject({
-         kind: "require",
-         fromPath: "module-name6",
-         definition: "const { namedExport6 } = require('module-name6');\n",
-         customTypes: [],
       });
    });
 });

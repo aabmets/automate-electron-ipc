@@ -24,7 +24,7 @@ describe("getParserRegex", () => {
       expect(regex.test(functionExportString)).toBe(true);
    });
 
-   it("should match exported coroutine syntax", () => {
+   it("should match exported async function syntax", () => {
       const regex = parser.getParserRegex();
       const functionExportString = utils.dedent(`
          export async function myFunction() {
@@ -38,6 +38,9 @@ describe("getParserRegex", () => {
       const regex = parser.getParserRegex();
       const functionExportString = utils.dedent(`
          function myFunction() {
+            return;
+         }
+         async function myFunction() {
             return;
          }
       `);
