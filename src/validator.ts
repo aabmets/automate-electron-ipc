@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import type { IPCAutomationOption } from "@types";
+import utils from "@utils";
 import { assert, array, object, refine, string } from "superstruct";
-import type { IPCAutomationOption } from "../types";
-import utils from "./utils";
 
 /**
  * Resolves all paths in an array of IPCAutomationOption objects using the searchUpwards function

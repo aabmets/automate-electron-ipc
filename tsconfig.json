@@ -26,8 +26,13 @@
       "noUnusedParameters": true,
       "noPropertyAccessFromIndexSignature": false,
 
+      "baseUrl": ".",
       "paths": {
-         "@types": ["./types/internal.d.ts"]
+         "@types": ["./types/internal.d.ts"],
+         "@plugin": ["./src/index.ts"],
+         "@validator": ["./src/validator.ts"],
+         "@parser": ["./src/parser.ts"],
+         "@utils": ["./src/utils.ts"]
       }
    }
 }

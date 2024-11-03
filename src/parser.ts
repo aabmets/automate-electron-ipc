@@ -9,45 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import type { FuncSpec, ImportKind, ImportSpec, ParsedContents, TypeKind, TypeSpec } from "@types";
+import utils from "@utils";
 import ts from "typescript";
-import utils from "./utils";
-
-export type TypeKind = "type" | "interface";
-export type ImportKind = "import" | "require";
-
-export interface TypeSpec {
-   kind: TypeKind;
-   name: string;
-   isExported: boolean;
-   definition: string;
-}
-
-export interface ImportSpec {
-   kind: ImportKind;
-   fromPath: string;
-   definition: string;
-   customTypes: string[];
-}
-
-export interface FuncParam {
-   name: string;
-   type: string | null;
-   defaultValue: string | null;
-}
-
-export interface FuncSpec {
-   name: string;
-   async: boolean;
-   params: FuncParam[];
-   returnType: string;
-   customTypes: string[];
-}
-
-export interface ParsedContents {
-   funcSpecArray: FuncSpec[];
-   typeSpecArray: TypeSpec[];
-   importSpecArray: ImportSpec[];
-}
 
 export function getParserRegex(): RegExp {
    const functionsRegex = utils.concatRegex([

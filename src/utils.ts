@@ -12,11 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-
-export interface FileHeader {
-   shebang: string | null;
-   license: string | null;
-}
+import type { FileHeader } from "@types";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
