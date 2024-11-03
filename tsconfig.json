@@ -32,7 +32,8 @@
          "@plugin": ["./src/index.ts"],
          "@validator": ["./src/validator.ts"],
          "@parser": ["./src/parser.ts"],
-         "@utils": ["./src/utils.ts"]
+         "@utils": ["./src/utils.ts"],
+         "@ipc": ["./src/ipc.ts"]
       }
    }
 }

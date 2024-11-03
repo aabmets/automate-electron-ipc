@@ -36,17 +36,8 @@
    "peerDependencies": {
       "vite": "^5.4.10",
       "typescript": "^5.6.3",
-      "superstruct": "^2.0.2"
-   },
-   "peerDependenciesMeta": {
-      "vite": {
-         "optional": false
-      },
-      "typescript": {
-         "optional": false
-      },
-      "superstruct": {
-         "optional": false
-      }
+      "superstruct": "^2.0.2",
+      "electron": "^32.2.2",
+      "electron-vite": "^2.3.0"
    }
 }

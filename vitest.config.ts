@@ -27,6 +27,7 @@ export default defineConfig({
          "@validator": path.resolve(__dirname, "./src/validator.ts"),
          "@parser": path.resolve(__dirname, "./src/parser.ts"),
          "@utils": path.resolve(__dirname, "./src/utils.ts"),
+         "@ipc": path.resolve(__dirname, "./src/ipc.ts"),
       },
    },
 });
