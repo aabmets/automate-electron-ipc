@@ -24,6 +24,10 @@
       "noUnusedLocals": true,
       "noImplicitReturns": true,
       "noUnusedParameters": true,
-      "noPropertyAccessFromIndexSignature": false
+      "noPropertyAccessFromIndexSignature": false,
+
+      "paths": {
+         "@types": ["./types/internal.d.ts"]
+      }
    }
 }

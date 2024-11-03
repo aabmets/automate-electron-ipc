@@ -37,7 +37,7 @@
          "correctness": {
             "noConstantMathMinMaxClamp": "error",
             "noInvalidBuiltinInstantiation": "error",
-            "noUndeclaredDependencies": "error",
+            "noUndeclaredDependencies": "off",
             "noUndeclaredVariables": "error",
             "noUnusedFunctionParameters": "warn",
             "noUnusedImports": "warn",

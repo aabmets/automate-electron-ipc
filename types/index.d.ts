@@ -9,13 +9,8 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import type { IPCAutomationOption } from "@types";
 import type { Plugin } from "vite";
-
-interface IPCAutomationOption {
-   mainHandlersDir: string;
-   browserPreloadFile: string;
-   rendererTypesFile: string;
-}
 
 declare module "vite-plugin-electron-auto-ipc" {
    export function ipcAutomation(options?: IPCAutomationOption[]): Plugin;
