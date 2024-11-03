@@ -109,6 +109,8 @@ export function extractFileHeader(fileContents: string): FileHeader {
 
       if (i === 0 && line.startsWith("#!")) {
          header.shebang = line;
+      } else if (line.startsWith("// NOTICE:")) {
+         break;
       } else if (
          line === "" ||
          line.startsWith("//") ||
