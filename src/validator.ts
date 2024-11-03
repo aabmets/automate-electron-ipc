@@ -23,7 +23,7 @@ import utils from "./utils";
  */
 export function validateOptions(options: IPCAutomationOption[]): void {
    const msg = utils.dedent(`
-      IPC automation cannot work with invalid configuration options.
+      IPC automation cannot work without valid configuration options.
       Please read the documentation on the correct usage of this plugin.
    `);
    const IPCAutomationOptionStruct = object({
