@@ -147,3 +147,15 @@ describe("extractFileHeader", () => {
       });
    });
 });
+
+describe("getChannelName", () => {
+   it("should remove extensions from file names", () => {
+      const cn = utils.getChannelName("handlers.ts", "getNodeVersion");
+      expect(cn).toStrictEqual("handlers.getNodeVersion");
+   });
+
+   it("should handle nested directory structures", () => {
+      const cn = utils.getChannelName(`general${path.sep}handlers.ts`, "getNodeVersion");
+      expect(cn).toStrictEqual("general.handlers.getNodeVersion");
+   });
+});

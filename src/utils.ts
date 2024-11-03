@@ -128,4 +128,26 @@ export function extractFileHeader(fileContents: string): FileHeader {
    return header;
 }
 
-export default { searchUpwards, concatRegex, dedent, isPathInside, extractFileHeader };
+/**
+ * Constructs an IPC channel name based on the file path and function name.
+ *
+ * @param filePath - The file path used to derive channel segments.
+ * @param funcName - The function name to include in the channel name.
+ * @returns A string representing the IPC channel name.
+ */
+export function getChannelName(filePath: string, funcName: string): string {
+   const parts = filePath.split(path.sep).map((part) => {
+      const ext = path.extname(part);
+      return ext === "" ? part : part.slice(0, part.length - ext.length);
+   });
+   return `${parts.join(".")}.${funcName}`;
+}
+
+export default {
+   searchUpwards,
+   concatRegex,
+   dedent,
+   isPathInside,
+   extractFileHeader,
+   getChannelName,
+};
