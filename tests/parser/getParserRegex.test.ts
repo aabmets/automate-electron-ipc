@@ -24,6 +24,16 @@ describe("getParserRegex", () => {
       expect(regex.test(functionExportString)).toBe(true);
    });
 
+   it("should match exported coroutine syntax", () => {
+      const regex = parser.getParserRegex();
+      const functionExportString = utils.dedent(`
+         export async function myFunction() {
+            return;
+         }
+      `);
+      expect(regex.test(functionExportString)).toBe(true);
+   });
+
    it("should not match non-exported function syntax", () => {
       const regex = parser.getParserRegex();
       const functionExportString = utils.dedent(`
@@ -117,31 +127,12 @@ describe("getParserRegex", () => {
       expect(regex.test(importString)).toBe(true);
    });
 
-   it("should match require module import syntax", () => {
+   it("should not match require import syntax", () => {
       const regex = parser.getParserRegex();
       const importString = utils.dedent(`
          const module = require('module-name');
       `);
-      expect(regex.test(importString)).toBe(true);
-   });
-
-   it("should match named require import syntax", () => {
-      const regex = parser.getParserRegex();
-      const importString = utils.dedent(`
-         const { namedExport } = require('module-name');
-      `);
-      expect(regex.test(importString)).toBe(true);
-   });
-
-   it("should match multiline named require import syntax", () => {
-      const regex = parser.getParserRegex();
-      const importString = utils.dedent(`
-         const { 
-            namedExport1,
-            namedExport2
-         } = require('module-name');
-      `);
-      expect(regex.test(importString)).toBe(true);
+      expect(regex.test(importString)).toBe(false);
    });
 
    it("should not match non-required variable declarations", () => {

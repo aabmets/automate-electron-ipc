@@ -49,16 +49,23 @@ export interface ParsedContents {
 }
 
 export function getParserRegex(): RegExp {
-   return utils.concatRegex(
-      [
-         /^export\s+function\s+\w+\s*\([^)]*\)\s*(?::\s*[^<\n]+)?\s+{\n/,
-         /|^(export\s+)?(interface)\s+(\w+)\s*{[\s\S]*?\n}\n/,
-         /|^(export\s+)?(type)\s+(\w+)\s*=\s*[\s\S]*?;\n/,
-         /|^(import\s+)[\s\S]*?from\s*['"](.*?)['"];?\n/,
-         /|^const[\s\S]*?(require)\(\s*['"](.*?)['"]\s*\);?\n/,
-      ],
-      "gm",
-   );
+   const functionsRegex = utils.concatRegex([
+      /^export\s+(?<async>async\s+)?(?<function>function)/,
+      /\s+(?<functionName>\w+)\s*\([^)]*\)\s*(?::\s*[^\n]+)?\s+{\n/,
+   ]);
+   const interfaceRegex = utils.concatRegex([
+      /|^(?<exportedInterface>export\s+)?(?<interface>interface)/,
+      /\s+(?<interfaceName>\w+)\s*{[\s\S]*?\n}\n/,
+   ]);
+   const typeRegex = utils.concatRegex([
+      /|^(?<exportedType>export\s+)?(?<type>type)/,
+      /\s+(?<typeName>\w+)\s*=\s*[\s\S]*?;\n/,
+   ]);
+   const importRegex = utils.concatRegex([
+      /|^(?<import>import\s+)[\s\S]*?from/,
+      /\s*['"](?<importPath>.*?)['"];?\n/,
+   ]);
+   return utils.concatRegex([functionsRegex, interfaceRegex, typeRegex, importRegex], "gm");
 }
 
 export function isBuiltinType(typeName: string): boolean {
