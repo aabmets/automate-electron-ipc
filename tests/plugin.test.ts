@@ -10,12 +10,12 @@
  */
 
 import { ipcAutomation } from "@plugin";
-import * as validator from "@validator";
+import validators from "@validators";
 import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation", () => {
    it("should call validator and throw error on empty options array", () => {
-      const spy = vi.spyOn(validator, "validateOptions");
+      const spy = vi.spyOn(validators, "validateOptions");
       expect(() => ipcAutomation([])).toThrow("Please read the documentation");
       expect(spy).toHaveBeenCalledOnce();
    });

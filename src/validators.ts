@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import type { IPCAutomationOption } from "@types";
+import type { IPCAssuredConfig, IPCAutomationOption } from "@types";
 import utils from "@utils";
-import { assert, array, object, refine, string } from "superstruct";
+import { assert, array, number, object, refine, string } from "superstruct";
 
 /**
  * Resolves all paths in an array of IPCAutomationOption objects using the searchUpwards function
@@ -87,4 +87,18 @@ export function validateOptions(options: IPCAutomationOption[]): void {
    }
 }
 
-export default { validateOptions };
+export function validateConfig(config: IPCAssuredConfig): void {
+   const clampedNumberStruct = (min: number, max: number) => {
+      return refine(number(), `RefinedNumber-${min}-${max}`, (value) => {
+         return value >= min && value <= max;
+      });
+   };
+   const IPCGeneralConfigStruct = object({
+      codeIndent: clampedNumberStruct(2, 4),
+      channelIdentifierLength: clampedNumberStruct(16, 64),
+      namespaceLength: clampedNumberStruct(8, 16),
+   });
+   assert(config, IPCGeneralConfigStruct);
+}
+
+export default { validateOptions, validateConfig };

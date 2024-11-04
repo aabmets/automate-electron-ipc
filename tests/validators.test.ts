@@ -11,7 +11,7 @@
 
 import type { IPCAutomationOption } from "@types";
 import utils from "@utils";
-import { validateOptions } from "@validator";
+import { validateOptions } from "@validators";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("validateOptions", () => {

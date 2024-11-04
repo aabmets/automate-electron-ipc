@@ -9,6 +9,18 @@
  *   SPDX-License-Identifier: MIT
  */
 
+export interface IPCOptionalConfig {
+   codeIndent?: number;
+   channelIdentifierLength?: number;
+   namespaceLength?: number;
+}
+
+export interface IPCAssuredConfig {
+   codeIndent: number;
+   channelIdentifierLength: number;
+   namespaceLength: number;
+}
+
 export interface IPCAutomationOption {
    mainHandlersDir: string;
    browserPreloadFile: string;
@@ -55,4 +67,10 @@ export interface ParsedSpecs {
    funcSpecArray: FuncSpec[];
    typeSpecArray: TypeSpec[];
    importSpecArray: ImportSpec[];
+}
+
+export interface CollectedSpecs {
+   fullPath: string;
+   relativePath: string;
+   parsedSpecs: ParsedSpecs;
 }

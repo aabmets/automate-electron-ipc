@@ -30,7 +30,7 @@
       "paths": {
          "@types": ["./types/internal.d.ts"],
          "@plugin": ["./src/index.ts"],
-         "@validator": ["./src/validator.ts"],
+         "@validators": ["./src/validators.ts"],
          "@parser": ["./src/parser.ts"],
          "@utils": ["./src/utils.ts"],
          "@ipc": ["./src/ipc.ts"]
