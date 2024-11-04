@@ -148,28 +148,10 @@ describe("extractFileHeader", () => {
    });
 });
 
-describe("digestObject", () => {
-   it("should return the SHA256 checksum of an object", () => {
-      const result = utils.digestObject({});
-      const expected = "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
+describe("digestData", () => {
+   it("should return the SHA256 checksum of input objects and strings", () => {
+      const result = utils.digestData({ key: "value" }, "asdfg");
+      const expected = "c70299a6b9e2c95581e7051399c36ebc104a17ab4e6db68ff27a9a589165815b";
       expect(result).toStrictEqual(expected);
-   });
-});
-
-describe("getChannelName", () => {
-   const option = {
-      mainHandlersDir: "ipcHandlers",
-      browserPreloadFile: "preload.js",
-      rendererTypesFile: "window.d.ts",
-   };
-
-   it("should remove extensions from file names", () => {
-      const cn = utils.getChannelName(option, "handlers.ts", "getNodeVersion");
-      expect(cn).toStrictEqual("9c59c828.handlers.getNodeVersion");
-   });
-
-   it("should handle nested directory structures", () => {
-      const cn = utils.getChannelName(option, `general${path.sep}handlers.ts`, "getNodeVersion");
-      expect(cn).toStrictEqual("9c59c828.general.handlers.getNodeVersion");
    });
 });

@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import type { FileHeader, IPCAutomationOption } from "@types";
+import type { FileHeader } from "@types";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
@@ -130,36 +130,30 @@ export function extractFileHeader(fileContents: string): FileHeader {
 }
 
 /**
- * Generates a SHA-256 hash of a given object.
+ * Generates a SHA-256 hash of given objects and/or strings.
  *
- * @param object - The object to be hashed.
- * @returns The hexadecimal SHA-256 hash of the object.
+ * @param data - A rest parameter of objects and/or strings to be hashed together.
+ * @returns The hexadecimal SHAKE-256 hash of the data input.
  */
-function digestObject(object: object): string {
-   const objStr = JSON.stringify(object);
-   const hash = crypto.createHash("sha256");
-   return hash.update(objStr).digest("hex");
+function digestData(...data: (object | string)[]): string {
+   const hash = crypto.createHash("shake256");
+   data.forEach((item) => {
+      hash.update(typeof item === "string" ? item : JSON.stringify(data));
+   });
+   return hash.digest("hex");
 }
 
 /**
- * Constructs an IPC channel name based on the file path and function name.
+ * Converts a given filesystem path to a normalized import path by replacing
+ * all path separators with forward slashes and removing the file extension.
  *
- * @param option - The IPC automation option provided by the user.
- * @param filePath - The file path used to derive channel segments.
- * @param funcName - The function name to include in the channel name.
- * @returns A string representing the IPC channel name.
+ * @param relativePath - The relative filesystem path to normalize.
+ * @returns - The normalized import path without the file extension.
  */
-export function getChannelName(
-   option: IPCAutomationOption,
-   filePath: string,
-   funcName: string,
-): string {
-   const optionDigest = digestObject(option).slice(0, 8);
-   const parts = filePath.split(path.sep).map((part) => {
-      const ext = path.extname(part);
-      return ext === "" ? part : part.slice(0, part.length - ext.length);
-   });
-   return `${optionDigest}.${parts.join(".")}.${funcName}`;
+export function getImportPath(relativePath: string): string {
+   const normalizedPath = relativePath.replaceAll(path.sep, "/");
+   const ext = path.extname(normalizedPath);
+   return normalizedPath.slice(0, normalizedPath.length - ext.length);
 }
 
 export default {
@@ -168,6 +162,6 @@ export default {
    dedent,
    isPathInside,
    extractFileHeader,
-   digestObject,
-   getChannelName,
+   digestData,
+   getImportPath,
 };
