@@ -157,13 +157,19 @@ describe("digestObject", () => {
 });
 
 describe("getChannelName", () => {
+   const option = {
+      mainHandlersDir: "ipcHandlers",
+      browserPreloadFile: "preload.js",
+      rendererTypesFile: "window.d.ts",
+   };
+
    it("should remove extensions from file names", () => {
-      const cn = utils.getChannelName({}, "handlers.ts", "getNodeVersion");
-      expect(cn).toStrictEqual("44136fa3.handlers.getNodeVersion");
+      const cn = utils.getChannelName(option, "handlers.ts", "getNodeVersion");
+      expect(cn).toStrictEqual("9c59c828.handlers.getNodeVersion");
    });
 
    it("should handle nested directory structures", () => {
-      const cn = utils.getChannelName({}, `general${path.sep}handlers.ts`, "getNodeVersion");
-      expect(cn).toStrictEqual("44136fa3.general.handlers.getNodeVersion");
+      const cn = utils.getChannelName(option, `general${path.sep}handlers.ts`, "getNodeVersion");
+      expect(cn).toStrictEqual("9c59c828.general.handlers.getNodeVersion");
    });
 });
