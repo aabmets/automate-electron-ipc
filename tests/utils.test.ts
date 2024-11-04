@@ -148,14 +148,22 @@ describe("extractFileHeader", () => {
    });
 });
 
+describe("digestObject", () => {
+   it("should return the SHA256 checksum of an object", () => {
+      const result = utils.digestObject({});
+      const expected = "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
+      expect(result).toStrictEqual(expected);
+   });
+});
+
 describe("getChannelName", () => {
    it("should remove extensions from file names", () => {
-      const cn = utils.getChannelName("handlers.ts", "getNodeVersion");
-      expect(cn).toStrictEqual("handlers.getNodeVersion");
+      const cn = utils.getChannelName({}, "handlers.ts", "getNodeVersion");
+      expect(cn).toStrictEqual("44136fa3.handlers.getNodeVersion");
    });
 
    it("should handle nested directory structures", () => {
-      const cn = utils.getChannelName(`general${path.sep}handlers.ts`, "getNodeVersion");
-      expect(cn).toStrictEqual("general.handlers.getNodeVersion");
+      const cn = utils.getChannelName({}, `general${path.sep}handlers.ts`, "getNodeVersion");
+      expect(cn).toStrictEqual("44136fa3.general.handlers.getNodeVersion");
    });
 });

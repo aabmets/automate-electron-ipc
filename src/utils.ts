@@ -9,10 +9,11 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import type { FileHeader } from "@types";
+import type { FileHeader, IPCAutomationOption } from "@types";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
@@ -129,18 +130,36 @@ export function extractFileHeader(fileContents: string): FileHeader {
 }
 
 /**
+ * Generates a SHA-256 hash of a given object.
+ *
+ * @param object - The object to be hashed.
+ * @returns The hexadecimal SHA-256 hash of the object.
+ */
+function digestObject(object: object): string {
+   const objStr = JSON.stringify(object);
+   const hash = crypto.createHash("sha256");
+   return hash.update(objStr).digest("hex");
+}
+
+/**
  * Constructs an IPC channel name based on the file path and function name.
  *
+ * @param option - The IPC automation option provided by the user.
  * @param filePath - The file path used to derive channel segments.
  * @param funcName - The function name to include in the channel name.
  * @returns A string representing the IPC channel name.
  */
-export function getChannelName(filePath: string, funcName: string): string {
+export function getChannelName(
+   option: IPCAutomationOption,
+   filePath: string,
+   funcName: string,
+): string {
+   const optionDigest = digestObject(option).slice(0, 8);
    const parts = filePath.split(path.sep).map((part) => {
       const ext = path.extname(part);
       return ext === "" ? part : part.slice(0, part.length - ext.length);
    });
-   return `${parts.join(".")}.${funcName}`;
+   return `${optionDigest}.${parts.join(".")}.${funcName}`;
 }
 
 export default {
@@ -149,5 +168,6 @@ export default {
    dedent,
    isPathInside,
    extractFileHeader,
+   digestObject,
    getChannelName,
 };
