@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import type { FuncSpec, ImportKind, ImportSpec, ParsedContents, TypeKind, TypeSpec } from "@types";
+import type { FuncSpec, ImportKind, ImportSpec, ParsedSpecs, TypeKind, TypeSpec } from "@types";
 import utils from "@utils";
 import ts from "typescript";
 
@@ -136,7 +136,7 @@ export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
    return funcSpecArray;
 }
 
-export function parseSpecs(contents: string): ParsedContents {
+export function parseSpecs(contents: string): ParsedSpecs {
    const normalizedContents = utils.dedent(contents);
    const regex = getParserRegex();
    const importSpecArray: ImportSpec[] = [];

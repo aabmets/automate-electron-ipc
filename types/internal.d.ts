@@ -51,7 +51,7 @@ export interface FuncSpec {
    customTypes: string[];
 }
 
-export interface ParsedContents {
+export interface ParsedSpecs {
    funcSpecArray: FuncSpec[];
    typeSpecArray: TypeSpec[];
    importSpecArray: ImportSpec[];
