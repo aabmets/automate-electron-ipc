@@ -42,6 +42,17 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
 }
 
 /**
+ * Finds, resolves and returns the users project directory,
+ * optionally concatenating it with a relative sub-path.
+ *
+ * @returns Resolved sub-path in the users project directory.
+ */
+export function resolveUserProjectPath(subPath = ""): string {
+   const basePath = path.dirname(searchUpwards(".git") || searchUpwards("package.json"));
+   return path.join(basePath, subPath);
+}
+
+/**
  * Concatenates an array of regular expressions into a single regular expression.
  *
  * @param parts - An array of smaller regex patterns to be concatenated.
@@ -158,6 +169,7 @@ export function getImportPath(relativePath: string): string {
 
 export default {
    searchUpwards,
+   resolveUserProjectPath,
    concatRegex,
    dedent,
    isPathInside,
