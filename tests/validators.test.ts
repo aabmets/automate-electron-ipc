@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import utils from "@src/utils";
+import { validateOptions } from "@src/validators";
 import type { IPCAutomationOption } from "@types";
-import utils from "@utils";
-import { validateOptions } from "@validators";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("validateOptions", () => {

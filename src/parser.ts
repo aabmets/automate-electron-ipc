@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import utils from "@src/utils";
 import type { FuncSpec, ImportKind, ImportSpec, ParsedSpecs, TypeKind, TypeSpec } from "@types";
-import utils from "@utils";
 import ts from "typescript";
 
 export function getParserRegex(): RegExp {

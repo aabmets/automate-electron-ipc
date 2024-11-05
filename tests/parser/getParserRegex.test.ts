@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import parser from "@parser";
-import utils from "@utils";
+import parser from "@src/parser";
+import utils from "@src/utils";
 import { describe, expect, it } from "vitest";
 
 describe("getParserRegex", () => {

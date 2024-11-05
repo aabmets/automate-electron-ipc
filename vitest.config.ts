@@ -23,11 +23,7 @@ export default defineConfig({
    resolve: {
       alias: {
          "@types": path.resolve(__dirname, "./types/internal.d.ts"),
-         "@plugin": path.resolve(__dirname, "./src/index.ts"),
-         "@validators": path.resolve(__dirname, "./src/validators.ts"),
-         "@parser": path.resolve(__dirname, "./src/parser.ts"),
-         "@utils": path.resolve(__dirname, "./src/utils.ts"),
-         "@ipc": path.resolve(__dirname, "./src/ipc.ts"),
+         "@src": path.resolve(__dirname, "./src"),
       },
    },
 });

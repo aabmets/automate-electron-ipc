@@ -11,11 +11,15 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import ipc from "@ipc";
-import parser from "@parser";
-import type { IPCAssuredConfig, IPCAutomationOption, IPCOptionalConfig } from "@types";
-import type { CollectedSpecs } from "@types";
-import validators from "@validators";
+import ipc from "@src/ipc";
+import parser from "@src/parser";
+import validators from "@src/validators";
+import type {
+   CollectedSpecs,
+   IPCAssuredConfig,
+   IPCAutomationOption,
+   IPCOptionalConfig,
+} from "@types";
 import type { Plugin } from "vite";
 
 async function optionProcessor(
@@ -40,7 +44,11 @@ async function optionProcessor(
          });
       }
    }
-   await ipc.writeMainBindings(option, config, collection);
+   await Promise.all([
+      ipc.writeMainBindings(option, config, collection),
+      ipc.writePreloadBindings(option, config, collection),
+      ipc.writeRendererTypes(option, config, collection),
+   ]);
 }
 
 export function ipcAutomation(

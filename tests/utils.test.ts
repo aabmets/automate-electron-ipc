@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import utils from "@utils";
+import utils from "@src/utils";
 import { describe, expect, it, vi } from "vitest";
 
 describe("searchUpwards", () => {

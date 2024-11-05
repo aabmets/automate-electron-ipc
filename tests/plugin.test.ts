@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import { ipcAutomation } from "@plugin";
-import validators from "@validators";
+import validators from "@src/validators";
 import { describe, expect, it, vi } from "vitest";
+import { ipcAutomation } from "../src";
 
 describe("ipcAutomation", () => {
    it("should call validator and throw error on empty options array", () => {

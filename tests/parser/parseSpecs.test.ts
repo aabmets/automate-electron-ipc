@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import parser from "@parser";
+import parser from "@src/parser";
 import { describe, expect, it } from "vitest";
 
 describe("parseContents", () => {
