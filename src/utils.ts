@@ -13,6 +13,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import { LRUCache } from "@src/cache";
 import type { FileHeader } from "@types";
 
 /**
@@ -25,11 +26,18 @@ import type { FileHeader } from "@types";
  * @returns The full resolved path if found, or an empty string.
  */
 export function searchUpwards(forPath: string, startFrom = import.meta.url): string {
+   const key = `${forPath}${startFrom}`;
+   const cache = LRUCache.getInstance("utils.searchUpwards");
+   const [exists, value] = cache.get(key);
+   if (exists) {
+      return value as string;
+   }
    const startPath = startFrom.startsWith("file://") ? url.fileURLToPath(startFrom) : startFrom;
    let currentDir = path.dirname(startPath);
    while (true) {
       const possiblePath = path.resolve(currentDir, forPath);
       if (fs.existsSync(possiblePath)) {
+         cache.put(key, possiblePath);
          return possiblePath;
       }
       const parentDir = path.dirname(currentDir);
@@ -38,6 +46,7 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
       }
       currentDir = parentDir;
    }
+   cache.put(key, "");
    return "";
 }
 
