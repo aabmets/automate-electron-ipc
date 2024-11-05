@@ -27,8 +27,8 @@ describe("searchUpwards", () => {
 
    it("should find an existing file in the specified starting directory", () => {
       const mockForPath = "testfile.txt";
-      const mockStartFrom = url.pathToFileURL("/mock/directory/start.js").href;
-      const expectedPath = path.resolve("/mock/directory", mockForPath);
+      const mockStartFrom = url.pathToFileURL("/mock1/directory/start.js").href;
+      const expectedPath = path.resolve("/mock1/directory", mockForPath);
 
       vi.spyOn(fs, "existsSync").mockImplementation((filePath) => filePath === expectedPath);
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
@@ -37,8 +37,8 @@ describe("searchUpwards", () => {
 
    it("should find an existing file in the parent directory when not found in the starting directory", () => {
       const mockForPath = "testfile.txt";
-      const mockStartFrom = url.pathToFileURL("/mock/directory/subdir/start.js").href;
-      const expectedPath = path.resolve("/mock/directory", mockForPath);
+      const mockStartFrom = url.pathToFileURL("/mock2/directory/subdir/start.js").href;
+      const expectedPath = path.resolve("/mock2/directory", mockForPath);
 
       vi.spyOn(fs, "existsSync").mockImplementation((filePath) => filePath === expectedPath);
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
@@ -47,11 +47,77 @@ describe("searchUpwards", () => {
 
    it("should return an empty string when the file does not exist in any directory upwards", () => {
       const mockForPath = "testfile.txt";
-      const mockStartFrom = url.pathToFileURL("/mock/directory/start.js").href;
+      const mockStartFrom = url.pathToFileURL("/mock3/directory/start.js").href;
 
       vi.spyOn(fs, "existsSync").mockReturnValue(false);
       const result = utils.searchUpwards(mockForPath, mockStartFrom);
       expect(result).toBe("");
+   });
+});
+
+describe("adjustImportPath", () => {
+   it("keeps import path unchanged in same directory", () => {
+      const importPath = "./fileC";
+      const sourceFilePath = "/project/src/folder1/fileA.ts";
+      const targetFilePath = "/project/src/folder1/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("./fileC");
+   });
+
+   it("adjusts import path from subdirectory to parent directory", () => {
+      const importPath = "./fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder1/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("./folder2/fileC");
+   });
+
+   it("adjusts import path from parent directory to subdirectory", () => {
+      const importPath = "./fileC";
+      const sourceFilePath = "/project/src/folder1/fileA.ts";
+      const targetFilePath = "/project/src/folder1/folder2/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../fileC");
+   });
+
+   it("keeps parent-relative import unchanged in same directory", () => {
+      const importPath = "../fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder1/folder2/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../fileC");
+   });
+
+   it("adjusts import path between unrelated directories at same nesting", () => {
+      const importPath = "./fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder3/folder4/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../../folder1/folder2/fileC");
+   });
+
+   it("adjusts parent-relative import between unrelated directories", () => {
+      const importPath = "../fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder3/folder4/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../../folder1/fileC");
+   });
+
+   it("adjusts import path when moving up directories", () => {
+      const importPath = "../fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder3/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../folder1/fileC");
+   });
+
+   it("adjusts deep parent-relative import at higher directory levels", () => {
+      const importPath = "../../fileC";
+      const sourceFilePath = "/project/src/folder1/folder2/fileA.ts";
+      const targetFilePath = "/project/src/folder3/fileB.ts";
+      const result = utils.adjustImportPath(importPath, sourceFilePath, targetFilePath);
+      expect(result).toBe("../fileC");
    });
 });
 

@@ -62,6 +62,32 @@ export function resolveUserProjectPath(subPath = ""): string {
 }
 
 /**
+ * Adjusts the relative path of an import statement when moving between two modules.
+ *
+ * @param importPath - The relative import path as a string.
+ * @param sourceFilePath - The fully resolved path of the module where the import originates.
+ * @param targetFilePath - The fully resolved path of the module where the import will be inserted.
+ * @returns The adjusted relative import path for the target module.
+ */
+export function adjustImportPath(
+   importPath: string,
+   sourceFilePath: string,
+   targetFilePath: string,
+): string {
+   const sourceDir = path.dirname(sourceFilePath);
+   const targetDir = path.dirname(targetFilePath);
+
+   const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
+   let adjustedPath = path.relative(targetDir, importAbsolutePath);
+   adjustedPath = adjustedPath.replace(/\\/g, "/");
+
+   if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
+      adjustedPath = `./${adjustedPath}`;
+   }
+   return adjustedPath;
+}
+
+/**
  * Concatenates an array of regular expressions into a single regular expression.
  *
  * @param parts - An array of smaller regex patterns to be concatenated.
@@ -178,6 +204,7 @@ export function getImportPath(relativePath: string): string {
 
 export default {
    searchUpwards,
+   adjustImportPath,
    resolveUserProjectPath,
    concatRegex,
    dedent,
