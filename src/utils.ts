@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
 import { LRUCache } from "@src/cache";
-import type { FileHeader } from "@types";
+import * as t from "@types";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
@@ -74,17 +74,20 @@ export function adjustImportPath(
    sourceFilePath: string,
    targetFilePath: string,
 ): string {
-   const sourceDir = path.dirname(sourceFilePath);
-   const targetDir = path.dirname(targetFilePath);
+   if (importPath.startsWith(".")) {
+      const sourceDir = path.dirname(sourceFilePath);
+      const targetDir = path.dirname(targetFilePath);
 
-   const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
-   let adjustedPath = path.relative(targetDir, importAbsolutePath);
-   adjustedPath = adjustedPath.replace(/\\/g, "/");
+      const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
+      let adjustedPath = path.relative(targetDir, importAbsolutePath);
+      adjustedPath = adjustedPath.replace(/\\/g, "/");
 
-   if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
-      adjustedPath = `./${adjustedPath}`;
+      if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
+         adjustedPath = `./${adjustedPath}`;
+      }
+      return adjustedPath;
    }
-   return adjustedPath;
+   return importPath;
 }
 
 /**
@@ -143,8 +146,8 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
  * @returns An object containing the shebang (if present) and license information
  *          extracted from the file header, or null for each if not present.
  */
-export function extractFileHeader(fileContents: string): FileHeader {
-   const header: FileHeader = { shebang: null, license: null };
+export function extractFileHeader(fileContents: string): t.FileHeader {
+   const header: t.FileHeader = { shebang: null, license: null };
    if (!fileContents) {
       return header;
    }
@@ -190,16 +193,30 @@ function digestData(...data: (object | string)[]): string {
 }
 
 /**
- * Converts a given filesystem path to a normalized import path by replacing
- * all path separators with forward slashes and removing the file extension.
+ * Joins multiple filesystem path segments, converts the result to a normalized
+ * import path by replacing all path separators with forward slashes, and removes
+ * the file extension.
  *
- * @param relativePath - The relative filesystem path to normalize.
- * @returns - The normalized import path without the file extension.
+ * @param paths - Multiple filesystem path segments to join and normalize.
+ * @returns The joined and normalized import path without the file extension.
  */
-export function getImportPath(relativePath: string): string {
-   const normalizedPath = relativePath.replaceAll(path.sep, "/");
+export function getImportPath(...paths: string[]): string {
+   const joined = path.join(...paths);
+   const normalizedPath = joined.replaceAll(path.sep, "/");
    const ext = path.extname(normalizedPath);
    return normalizedPath.slice(0, normalizedPath.length - ext.length);
+}
+
+/**
+ * Separates any namespace from the type name and returns both of them as an array.
+ *
+ * @param typeName - The type name, potentially being prefixed by a namespace
+ * @returns The namespace and the type name. If typeName was not prefixed with
+ *          any namespace, the first value in the array will be null.
+ */
+export function splitTypeNamespace(typeName: string): [string | null, string] {
+   const [value1, value2] = typeName.split(".", 2);
+   return value2 ? [value1, value2] : [null, value1];
 }
 
 export default {
@@ -212,4 +229,5 @@ export default {
    extractFileHeader,
    digestData,
    getImportPath,
+   splitTypeNamespace,
 };
