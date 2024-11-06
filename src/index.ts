@@ -14,20 +14,15 @@ import path from "node:path";
 import ipc from "@src/ipc";
 import parser from "@src/parser";
 import validators from "@src/validators";
-import type {
-   CollectedSpecs,
-   IPCAssuredConfig,
-   IPCAutomationOption,
-   IPCOptionalConfig,
-} from "@types";
+import * as t from "@types";
 import type { Plugin } from "vite";
 
 async function optionProcessor(
-   option: IPCAutomationOption,
-   config: IPCAssuredConfig,
+   option: t.IPCAutomationOption,
+   config: t.IPCAssuredConfig,
 ): Promise<void> {
    const files = await fsp.readdir(option.mainHandlersDir, { recursive: true });
-   const collection: CollectedSpecs[] = [];
+   const collection: t.CollectedSpecs[] = [];
    for (const file of files) {
       if (file.startsWith("index.ts")) {
          continue;
@@ -52,10 +47,10 @@ async function optionProcessor(
 }
 
 export function ipcAutomation(
-   options: IPCAutomationOption[],
-   config: IPCOptionalConfig = {},
+   options: t.IPCAutomationOption[],
+   config: t.IPCOptionalConfig = {},
 ): Plugin {
-   const assuredConfig: IPCAssuredConfig = {
+   const assuredConfig: t.IPCAssuredConfig = {
       codeIndent: 4,
       channelIdentifierLength: 16,
       namespaceLength: 8,
