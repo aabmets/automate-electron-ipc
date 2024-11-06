@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import utils from "@src/utils";
 import type { IPCAssuredConfig, IPCAutomationOption } from "@types";
-import utils from "@utils";
 import { assert, array, number, object, refine, string } from "superstruct";
 
 /**
@@ -40,15 +40,11 @@ export function validateOptions(options: IPCAutomationOption[]): void {
 
    for (const option of options) {
       const resolvedMainHandlersDir = utils.searchUpwards(option.mainHandlersDir);
-      const resolvedBrowserPreloadFile = utils.searchUpwards(option.browserPreloadFile);
-      const resolvedRendererTypesFile = utils.searchUpwards(option.rendererTypesFile);
+      const resolvedBrowserPreloadFile = utils.resolveUserProjectPath(option.browserPreloadFile);
+      const resolvedRendererTypesFile = utils.resolveUserProjectPath(option.rendererTypesFile);
 
       if (!resolvedMainHandlersDir) {
          throw new Error(`mainHandlersDir path not found: "${option.mainHandlersDir}"`);
-      } else if (!resolvedBrowserPreloadFile) {
-         throw new Error(`browserPreloadFile path not found: "${option.browserPreloadFile}"`);
-      } else if (!resolvedRendererTypesFile) {
-         throw new Error(`rendererTypesFile path not found: "${option.rendererTypesFile}"`);
       }
       option.mainHandlersDir = resolvedMainHandlersDir;
       option.browserPreloadFile = resolvedBrowserPreloadFile;

@@ -57,39 +57,6 @@ describe("validateOptions", () => {
       expect(() => validateOptions(options)).toThrow("mainHandlersDir path not found");
    });
 
-   it("should throw an error if browserPreloadFile is not found", () => {
-      vi.spyOn(utils, "searchUpwards")
-         .mockImplementationOnce(mockSearchUpwards)
-         .mockReturnValueOnce("");
-
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/invalid/preload.js",
-            rendererTypesFile: "/renderer/types.js",
-         },
-      ];
-
-      expect(() => validateOptions(options)).toThrow("browserPreloadFile path not found");
-   });
-
-   it("should throw an error if rendererTypesFile is not found", () => {
-      vi.spyOn(utils, "searchUpwards")
-         .mockImplementationOnce(mockSearchUpwards)
-         .mockImplementationOnce(mockSearchUpwards)
-         .mockReturnValueOnce("");
-
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/browser/preload.js",
-            rendererTypesFile: "/invalid/types.js",
-         },
-      ];
-
-      expect(() => validateOptions(options)).toThrow("rendererTypesFile path not found");
-   });
-
    it("should throw an error if browserPreloadFile and rendererTypesFile are the same", () => {
       const options: IPCAutomationOption[] = [
          {
