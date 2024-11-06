@@ -10,7 +10,7 @@
  */
 
 import utils from "@src/utils";
-import type { FuncSpec, ImportKind, ImportSpec, ParsedSpecs, TypeKind, TypeSpec } from "@types";
+import * as t from "@types";
 import ts from "typescript";
 
 export function getParserRegex(): RegExp {
@@ -27,8 +27,8 @@ export function getParserRegex(): RegExp {
       /\s+(?<typeName>\w+)\s*=\s*[\s\S]*?;\n/,
    ]);
    const importRegex = utils.concatRegex([
-      /|^(?<import>import\s+)[\s\S]*?from/,
-      /\s*['"](?<importPath>.*?)['"];?\n/,
+      /|^(?<import>import\s+)(\*\s+as\s+(?<namespace>\w+)\s+)?/,
+      /[\s\S]*?from\s*['"](?<importPath>.*?)['"];?\n/,
    ]);
    return utils.concatRegex([functionsRegex, interfaceRegex, typeRegex, importRegex], "gm");
 }
@@ -107,10 +107,10 @@ export function cctFromCode(code: string): Set<string> {
    return customTypes;
 }
 
-export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
+export function getFuncSpecs(code: string, skipDedent = false): t.FuncSpec[] {
    const normalizedCode = skipDedent ? code : utils.dedent(code);
    const sourceFile = ts.createSourceFile("temp.ts", normalizedCode, ts.ScriptTarget.Latest, true);
-   const funcSpecArray: FuncSpec[] = [];
+   const funcSpecArray: t.FuncSpec[] = [];
 
    ts.forEachChild(sourceFile, (node: ts.Node) => {
       if (ts.isFunctionDeclaration(node)) {
@@ -136,11 +136,11 @@ export function getFuncSpecs(code: string, skipDedent = false): FuncSpec[] {
    return funcSpecArray;
 }
 
-export function parseSpecs(contents: string): ParsedSpecs {
+export function parseSpecs(contents: string): t.ParsedSpecs {
    const normalizedContents = utils.dedent(contents);
    const regex = getParserRegex();
-   const importSpecArray: ImportSpec[] = [];
-   const typeSpecArray: TypeSpec[] = [];
+   const importSpecArray: t.ImportSpec[] = [];
+   const typeSpecArray: t.TypeSpec[] = [];
    const funcSignatures: string[] = [];
 
    let match: RegExpExecArray | null = regex.exec(normalizedContents);
@@ -151,22 +151,23 @@ export function parseSpecs(contents: string): ParsedSpecs {
          funcSignatures.push(`${match[0].trimEnd()}}\n`);
       } else if (["type", "interface"].includes(kind)) {
          typeSpecArray.push({
-            kind: kind as TypeKind,
+            kind: kind as t.TypeKind,
             name: mg?.interfaceName ?? mg?.typeName ?? "",
             isExported: [mg?.exportedInterface, mg?.exportedType].includes("export "),
             definition: match[0],
          });
       } else if (kind === "import") {
          importSpecArray.push({
-            kind: kind as ImportKind,
+            kind: kind as t.ImportKind,
             fromPath: mg?.importPath ?? "",
             definition: match[0],
             customTypes: Array.from(cctFromCode(match[0])),
+            namespace: mg?.namespace ?? null,
          });
       }
       match = regex.exec(normalizedContents);
    }
-   const funcSpecArray: FuncSpec[] = getFuncSpecs(funcSignatures.join(""), true);
+   const funcSpecArray: t.FuncSpec[] = getFuncSpecs(funcSignatures.join(""), true);
    return { funcSpecArray, typeSpecArray, importSpecArray };
 }
 

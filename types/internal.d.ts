@@ -47,6 +47,7 @@ export interface ImportSpec {
    fromPath: string;
    definition: string;
    customTypes: string[];
+   namespace: string | null;
 }
 
 export interface FuncParam {
