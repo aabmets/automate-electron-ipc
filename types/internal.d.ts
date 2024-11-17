@@ -9,22 +9,13 @@
  *   SPDX-License-Identifier: MIT
  */
 
-export interface IPCOptionalConfig {
-   codeIndent?: number;
-   channelIdentifierLength?: number;
-   namespaceLength?: number;
-}
+import type { IPCOptionalConfig } from "./index";
+export type { IPCOptionalConfig };
 
 export interface IPCAssuredConfig {
+   ipcSpecPath: string;
+   rendererDir: string;
    codeIndent: number;
-   channelIdentifierLength: number;
-   namespaceLength: number;
-}
-
-export interface IPCAutomationOption {
-   mainHandlersDir: string;
-   browserPreloadFile: string;
-   rendererTypesFile: string;
 }
 
 export interface FileHeader {
