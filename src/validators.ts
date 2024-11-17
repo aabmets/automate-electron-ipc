@@ -9,92 +9,64 @@
  *   SPDX-License-Identifier: MIT
  */
 
+import path from "node:path";
 import utils from "@src/utils";
-import type { IPCAssuredConfig, IPCAutomationOption } from "@types";
-import { assert, array, number, object, refine, string } from "superstruct";
+import * as t from "@types";
+import { assert, number, object, refine, string } from "superstruct";
 
 /**
- * Resolves all paths in an array of IPCAutomationOption objects using the searchUpwards function
- * and checks that browserPreloadFile is not the same as rendererTypesFile and neither are inside
- * mainHandlersDir or its subdirectories. Additionally, checks that no path is shared between
- * any IPCAutomationOption objects.
+ * Merges any optional config object with default config, then
+ * validates the merged IPC automation config. Returns the final
+ * config with all paths resolved to absolute paths.
  *
- * @param options - An array of IPCAutomationOption objects.
+ * - Validates:
+ *   - `ipcSpecPath` and `rendererDir` must:
+ *     - be relative paths to project root
+ *     - not be identical to each other
+ *     - must not reside within each other
+ *   - `codeIndent` must be between 2 and 4, inclusive.
+ *
+ * @param config - Optional configuration object.
+ * @returns The validated and resolved configuration.
  */
-export function validateOptions(options: IPCAutomationOption[]): void {
-   const msg = utils.dedent(`
-      IPC automation cannot work without valid configuration options.
-      Please read the documentation on the correct usage of this plugin.
-   `);
-   const IPCAutomationOptionStruct = object({
-      mainHandlersDir: string(),
-      browserPreloadFile: string(),
-      rendererTypesFile: string(),
-   });
-   const OptionsArray = refine(array(IPCAutomationOptionStruct), "OptionsArray", (value) => {
-      return Array.isArray(value) && value.length > 0;
-   });
-   assert(options, OptionsArray, msg);
-
-   const usedPaths = new Set<string>();
-
-   for (const option of options) {
-      const resolvedMainHandlersDir = utils.searchUpwards(option.mainHandlersDir);
-      const resolvedBrowserPreloadFile = utils.resolveUserProjectPath(option.browserPreloadFile);
-      const resolvedRendererTypesFile = utils.resolveUserProjectPath(option.rendererTypesFile);
-
-      if (!resolvedMainHandlersDir) {
-         throw new Error(`mainHandlersDir path not found: "${option.mainHandlersDir}"`);
-      }
-      option.mainHandlersDir = resolvedMainHandlersDir;
-      option.browserPreloadFile = resolvedBrowserPreloadFile;
-      option.rendererTypesFile = resolvedRendererTypesFile;
-
-      if (option.browserPreloadFile === option.rendererTypesFile) {
-         throw new Error(
-            utils.dedent(`browserPreloadFile and rendererTypesFile cannot be the same file:
-            "${option.browserPreloadFile}"`),
-         );
-      } else if (utils.isPathInside(option.browserPreloadFile, option.mainHandlersDir)) {
-         throw new Error(
-            utils.dedent(`browserPreloadFile (1) cannot be inside mainHandlersDir (2):
-            (1) "${option.browserPreloadFile}"
-            (2) "${option.mainHandlersDir}"`),
-         );
-      } else if (utils.isPathInside(option.rendererTypesFile, option.mainHandlersDir)) {
-         throw new Error(
-            utils.dedent(`rendererTypesFile (1) cannot be inside mainHandlersDir (2):
-            (1) "${option.rendererTypesFile}"
-            (2) "${option.mainHandlersDir}"`),
-         );
-      }
-
-      const pathsToCheck = [
-         option.mainHandlersDir,
-         option.browserPreloadFile,
-         option.rendererTypesFile,
-      ];
-      pathsToCheck.forEach((path) => {
-         if (usedPaths.has(path)) {
-            throw new Error(`Path is already used by another IPCAutomationOption:\n"${path}"`);
-         }
-         usedPaths.add(path);
-      });
-   }
-}
-
-export function validateConfig(config: IPCAssuredConfig): void {
-   const clampedNumberStruct = (min: number, max: number) => {
-      return refine(number(), `RefinedNumber-${min}-${max}`, (value) => {
-         return value >= min && value <= max;
-      });
+export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCAssuredConfig {
+   const mergedConfig: t.IPCAssuredConfig = {
+      ipcSpecPath: "src/ipc-spec.ts",
+      rendererDir: "src/renderer",
+      codeIndent: 3,
+      ...config,
    };
-   const IPCGeneralConfigStruct = object({
-      codeIndent: clampedNumberStruct(2, 4),
-      channelIdentifierLength: clampedNumberStruct(16, 64),
-      namespaceLength: clampedNumberStruct(8, 16),
+   const IPCAssuredConfigStruct = object({
+      ipcSpecPath: refine(string(), "relative", (value) => {
+         if (path.isAbsolute(value)) {
+            return "ipcSpecPath must be relative to the project root";
+         } else if (value === mergedConfig.rendererDir) {
+            return "ipcSpecPath and rendererDir cannot be identical";
+         } else if (utils.isPathInside(value, mergedConfig.rendererDir)) {
+            return "ipcSpecPath cannot be relative to rendererDir";
+         } else {
+            return true;
+         }
+      }),
+      rendererDir: refine(string(), "relative", (value) => {
+         if (path.isAbsolute(value)) {
+            return "rendererDir must be relative to the project root";
+         } else if (utils.isPathInside(value, mergedConfig.ipcSpecPath)) {
+            return "rendererDir cannot be relative to ipcSpecPath";
+         } else {
+            return true;
+         }
+      }),
+      codeIndent: refine(number(), "clamped", (value) => {
+         const errMsg = "value cannot be less than 2 or greater than 4";
+         return value >= 2 && value <= 4 ? true : errMsg;
+      }),
    });
-   assert(config, IPCGeneralConfigStruct);
+   assert(mergedConfig, IPCAssuredConfigStruct);
+   return Object.assign(mergedConfig, {
+      ipcSpecPath: utils.resolveUserProjectPath(mergedConfig.ipcSpecPath),
+      rendererDir: utils.resolveUserProjectPath(mergedConfig.rendererDir),
+   });
 }
 
-export default { validateOptions, validateConfig };
+export default { validateResolveConfig };

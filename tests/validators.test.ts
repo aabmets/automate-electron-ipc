@@ -10,111 +10,116 @@
  */
 
 import utils from "@src/utils";
-import { validateOptions } from "@src/validators";
-import type { IPCAutomationOption } from "@types";
+import * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { validateResolveConfig } from "../src/validators";
 
-describe("validateOptions", () => {
-   const mockSearchUpwards = (path: string) => path;
-
+describe("validateResolveConfig", () => {
    beforeEach(() => {
-      vi.spyOn(utils, "searchUpwards").mockImplementation(mockSearchUpwards);
+      const spy = vi.spyOn(utils, "resolveUserProjectPath");
+      spy.mockImplementation((path) => `/resolved/${path}`);
    });
 
    afterEach(() => {
       vi.restoreAllMocks();
    });
 
-   it("should pass with valid options", () => {
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/browser/preload.js",
-            rendererTypesFile: "/renderer/types.js",
-         },
-      ];
+   it("should validate and resolve configuration with valid inputs", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         ipcSpecPath: "src/custom-ipc-spec.ts",
+         rendererDir: "src/custom-renderer",
+         codeIndent: 4,
+      };
 
-      expect(() => validateOptions(options)).not.toThrow();
+      const result = validateResolveConfig(config);
+
+      expect(result).toEqual({
+         ipcSpecPath: "/resolved/src/custom-ipc-spec.ts",
+         rendererDir: "/resolved/src/custom-renderer",
+         codeIndent: 4,
+      });
    });
 
-   it("should throw errors when options array is not provided or empty", () => {
-      const options = null as unknown as IPCAutomationOption[];
-      expect(() => validateOptions(options)).toThrow("Please read the documentation");
-      expect(() => validateOptions([])).toThrow("Please read the documentation");
-   });
+   it("should throw an error if ipcSpecPath is absolute", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         ipcSpecPath: "/absolute/path/ipc-spec.ts",
+      };
 
-   it("should throw an error if mainHandlersDir is not found", () => {
-      vi.spyOn(utils, "searchUpwards").mockReturnValueOnce("");
-
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/invalid/path",
-            browserPreloadFile: "/browser/preload.js",
-            rendererTypesFile: "/renderer/types.js",
-         },
-      ];
-
-      expect(() => validateOptions(options)).toThrow("mainHandlersDir path not found");
-   });
-
-   it("should throw an error if browserPreloadFile and rendererTypesFile are the same", () => {
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/same/path/file.js",
-            rendererTypesFile: "/same/path/file.js",
-         },
-      ];
-
-      expect(() => validateOptions(options)).toThrow(
-         "browserPreloadFile and rendererTypesFile cannot be the same file",
+      expect(() => validateResolveConfig(config)).toThrow(
+         "ipcSpecPath must be relative to the project root",
       );
    });
 
-   it("should throw an error if browserPreloadFile is inside mainHandlersDir", () => {
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/main/handlers/preload.js",
-            rendererTypesFile: "/renderer/types.js",
-         },
-      ];
+   it("should throw an error if rendererDir is absolute", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         rendererDir: "/absolute/path/renderer",
+      };
 
-      expect(() => validateOptions(options)).toThrow(
-         "browserPreloadFile (1) cannot be inside mainHandlersDir (2):",
+      expect(() => validateResolveConfig(config)).toThrow(
+         "rendererDir must be relative to the project root",
       );
    });
 
-   it("should throw an error if rendererTypesFile is inside mainHandlersDir", () => {
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/browser/preload.js",
-            rendererTypesFile: "/main/handlers/types.js",
-         },
-      ];
+   it("should throw an error if ipcSpecPath and rendererDir are identical", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         ipcSpecPath: "src/shared-path",
+         rendererDir: "src/shared-path",
+      };
 
-      expect(() => validateOptions(options)).toThrow(
-         "rendererTypesFile (1) cannot be inside mainHandlersDir (2):",
+      expect(() => validateResolveConfig(config)).toThrow(
+         "ipcSpecPath and rendererDir cannot be identical",
       );
    });
 
-   it("should throw an error if any path is used by another IPCAutomationOption", () => {
-      const options: IPCAutomationOption[] = [
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/browser/preload.js",
-            rendererTypesFile: "/renderer/types.js",
-         },
-         {
-            mainHandlersDir: "/main/handlers",
-            browserPreloadFile: "/another/browser/preload.js",
-            rendererTypesFile: "/another/renderer/types.js",
-         },
-      ];
+   it("should throw an error if ipcSpecPath is inside rendererDir", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         ipcSpecPath: "src/renderer/ipc-spec.ts",
+         rendererDir: "src/renderer",
+      };
 
-      expect(() => validateOptions(options)).toThrow(
-         "Path is already used by another IPCAutomationOption:",
+      expect(() => validateResolveConfig(config)).toThrow(
+         "ipcSpecPath cannot be relative to rendererDir",
       );
+   });
+
+   it("should throw an error if rendererDir is inside ipcSpecPath", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         ipcSpecPath: "src",
+         rendererDir: "src/renderer",
+      };
+
+      expect(() => validateResolveConfig(config)).toThrow(
+         "rendererDir cannot be relative to ipcSpecPath",
+      );
+   });
+
+   it("should throw an error if codeIndent is less than 2", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         codeIndent: 1,
+      };
+
+      expect(() => validateResolveConfig(config)).toThrow(
+         "value cannot be less than 2 or greater than 4",
+      );
+   });
+
+   it("should throw an error if codeIndent is greater than 4", () => {
+      const config: Partial<t.IPCOptionalConfig> = {
+         codeIndent: 5,
+      };
+
+      expect(() => validateResolveConfig(config)).toThrow(
+         "value cannot be less than 2 or greater than 4",
+      );
+   });
+
+   it("should use default values when no configuration is provided", () => {
+      const result = validateResolveConfig();
+
+      expect(result).toEqual({
+         ipcSpecPath: "/resolved/src/ipc-spec.ts",
+         rendererDir: "/resolved/src/renderer",
+         codeIndent: 3,
+      });
    });
 });
