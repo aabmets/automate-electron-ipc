@@ -9,8 +9,9 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import type { IPCOptionalConfig } from "./index";
-export type { IPCOptionalConfig };
+import type { BroadcastConfig, Channels, IPCOptionalConfig, UnicastConfig } from "./index";
+
+export type { IPCOptionalConfig, BroadcastConfig, UnicastConfig, Channels };
 
 export interface IPCAssuredConfig {
    ipcSpecPath: string;
