@@ -78,13 +78,7 @@
             "useForOf": "error",
             "useFragmentSyntax": "off",
             "useImportType": "off",
-            "useNamingConvention": {
-               "level": "error",
-               "options": {
-                  "strictCase": false,
-                  "requireAscii": true
-               }
-            },
+            "useNamingConvention": "off",
             "useNodeAssertStrict": "error",
             "useShorthandAssign": "error",
             "useThrowNewError": "error",
@@ -94,6 +88,7 @@
             "noConsole": "warn",
             "noEmptyBlockStatements": "error",
             "noEvolvingTypes": "off",
+            "noExplicitAny": "off",
             "noMisplacedAssertion": "error",
             "noReactSpecificProps": "off",
             "noSkippedTests": "error",
