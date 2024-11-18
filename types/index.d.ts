@@ -161,27 +161,27 @@ declare module "vite-plugin-automate-electron-ipc" {
    export function ipcAutomation(config?: IPCOptionalConfig): Plugin;
 
    /**
-    * Collection of data about the browser preload environment.
+    * Collection of properties describing the browser preload environment.
     *
-    * @property path - Path to the browser environment preload file.
+    * @property filePath - Path to the browser environment preload file.
     */
    export const ipcPreload: {
       /**
        * Path to the browser environment preload file, which must be
        * fed into the BrowserWindow object upon its instantiation to
-       * link IPC channels between the main and the renderer process.
+       * bind IPC components between the main and the renderer process.
        *
        * @example
        * const bw = new BrowserWindow({
        *     webPreferences: {
-       *         preload: ipcPreload.path,
+       *         preload: ipcPreload.filePath,
        *         contextIsolation: true,
        *         nodeIntegration: false,
        *         sandbox: true,
        *     },
        * });
        */
-      path: string;
+      filePath: string;
    };
 
    /**
