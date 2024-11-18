@@ -147,21 +147,50 @@ export interface Channels {
    };
 }
 
+/**
+ * Vite plugin for automating the generation of IPC components for Electron apps.
+ */
 declare module "vite-plugin-automate-electron-ipc" {
    /**
     * Vite plugin which must be used to enable IPC automation for Electron projects.
     * IPC channels are regenerated on Vite server startup and on each hot reload event.
     *
     * @param config - Optional config that is merged into the default config object.
+    * @returns An object conforming to the Vite Plugin interface.
     */
    export function ipcAutomation(config?: IPCOptionalConfig): Plugin;
 
    /**
-    * Defines a channel with the given name.
-    * Returns an object of channel types, which must be accessed to further
-    * specify the channel definition. The provided name will be used to generate
-    * matching sender and listener or invoker and handler callables for the main
-    * and renderer processes.
+    * Collection of data about the browser preload environment.
+    *
+    * @property path - Path to the browser environment preload file.
+    */
+   export const ipcPreload: {
+      /**
+       * Path to the browser environment preload file, which must be
+       * fed into the BrowserWindow object upon its instantiation to
+       * link IPC channels between the main and the renderer process.
+       *
+       * @example
+       * const bw = new BrowserWindow({
+       *     webPreferences: {
+       *         preload: ipcPreload.path,
+       *         contextIsolation: true,
+       *         nodeIntegration: false,
+       *         sandbox: true,
+       *     },
+       * });
+       */
+      path: string;
+   };
+
+   /**
+    * Defines a channel with the given name, which will be used to
+    * generate matching sender and listener or invoker and handler
+    * callables for the main and renderer processes.
+    *
+    * @returns An object with properties of supported channel types,
+    *    which must be used to further specify the channel definition.
     */
    export function Channel(name: string): Channels;
 
