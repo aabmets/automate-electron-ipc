@@ -27,7 +27,6 @@
       "@types/bun": "^1.1.13",
       "@types/node": "^22.9.0",
       "lefthook": "^1.8.2",
-      "tsutils": "^3.21.0",
       "vitest": "^2.1.5"
    },
    "peerDependencies": {
@@ -35,6 +34,7 @@
       "typescript": "^5.6.3",
       "superstruct": "^2.0.2",
       "electron": "^32.2.2",
-      "electron-vite": "^2.3.0"
+      "electron-vite": "^2.3.0",
+      "ts-api-utils": "^1.4.0"
    }
 }
