@@ -13,8 +13,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import { LRUCache } from "@src/cache";
 import * as t from "@types";
+import { LRUCache } from "./cache.js";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
@@ -58,36 +58,7 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
  */
 export function resolveUserProjectPath(subPath = ""): string {
    const basePath = path.dirname(searchUpwards(".git") || searchUpwards("package.json"));
-   return path.join(basePath, subPath);
-}
-
-/**
- * Adjusts the relative path of an import statement when moving between two modules.
- *
- * @param importPath - The relative import path as a string.
- * @param sourceFilePath - The fully resolved path of the module where the import originates.
- * @param targetFilePath - The fully resolved path of the module where the import will be inserted.
- * @returns The adjusted relative import path for the target module.
- */
-export function adjustImportPath(
-   importPath: string,
-   sourceFilePath: string,
-   targetFilePath: string,
-): string {
-   if (importPath.startsWith(".")) {
-      const sourceDir = path.dirname(sourceFilePath);
-      const targetDir = path.dirname(targetFilePath);
-
-      const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
-      let adjustedPath = path.relative(targetDir, importAbsolutePath);
-      adjustedPath = adjustedPath.replace(/\\/g, "/");
-
-      if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
-         adjustedPath = `./${adjustedPath}`;
-      }
-      return adjustedPath;
-   }
-   return importPath;
+   return path.join(basePath, subPath).replaceAll("\\", "/");
 }
 
 /**
@@ -192,42 +163,12 @@ function digestData(...data: (object | string)[]): string {
    return hash.digest("hex");
 }
 
-/**
- * Joins multiple filesystem path segments, converts the result to a normalized
- * import path by replacing all path separators with forward slashes, and removes
- * the file extension.
- *
- * @param paths - Multiple filesystem path segments to join and normalize.
- * @returns The joined and normalized import path without the file extension.
- */
-export function getImportPath(...paths: string[]): string {
-   const joined = path.join(...paths);
-   const normalizedPath = joined.replaceAll(path.sep, "/");
-   const ext = path.extname(normalizedPath);
-   return normalizedPath.slice(0, normalizedPath.length - ext.length);
-}
-
-/**
- * Separates any namespace from the type name and returns both of them as an array.
- *
- * @param typeName - The type name, potentially being prefixed by a namespace
- * @returns The namespace and the type name. If typeName was not prefixed with
- *          any namespace, the first value in the array will be null.
- */
-export function splitTypeNamespace(typeName: string): [string | null, string] {
-   const [value1, value2] = typeName.split(".", 2);
-   return value2 ? [value1, value2] : [null, value1];
-}
-
 export default {
    searchUpwards,
-   adjustImportPath,
    resolveUserProjectPath,
    concatRegex,
    dedent,
    isPathInside,
    extractFileHeader,
    digestData,
-   getImportPath,
-   splitTypeNamespace,
 };
