@@ -10,13 +10,13 @@
       "url": "https://github.com/aabmets/vite-plugin-electron-auto-ipc.git"
    },
    "author": "Mattias Aabmets <mattias.aabmets@gmail.com>",
+   "files": ["dist", "types", "README.md", "LICENSE"],
    "types": "./types/index.d.ts",
    "module": "./dist/index.js",
    "exports": {
       "types": "./types/index.d.ts",
       "default": "./dist/index.js"
    },
-   "files": ["dist", "types", "README.md", "LICENSE"],
    "scripts": {
       "check": "tsc -p tsconfig.json --noEmit && biome check",
       "pubtest": "tsc -p tsconfig.json && bun pm pack --destination ./packages",
@@ -27,7 +27,7 @@
       "@types/bun": "^1.1.13",
       "@types/node": "^22.9.0",
       "lefthook": "^1.8.2",
-      "ts-node": "^10.9.2",
+      "tsutils": "^3.21.0",
       "vitest": "^2.1.5"
    },
    "peerDependencies": {

@@ -3,33 +3,31 @@
    "compilerOptions": {
       "lib": ["ESNext", "DOM"],
       "target": "ESNext",
-      "module": "ESNext",
+      "module": "NodeNext",
+      "moduleResolution": "nodenext",
       "moduleDetection": "force",
-      "jsx": "preserve",
-      "allowJs": false,
-      "composite": false,
       "outDir": "./dist",
-
-      "moduleResolution": "node",
-      "verbatimModuleSyntax": false,
-      "sourceMap": false,
-
-      "strict": true,
-      "skipLibCheck": true,
-      "esModuleInterop": true,
-      "noFallthroughCasesInSwitch": true,
-      "forceConsistentCasingInFileNames": true,
-
-      "noImplicitAny": true,
-      "noUnusedLocals": true,
-      "noImplicitReturns": true,
-      "noUnusedParameters": true,
-      "noPropertyAccessFromIndexSignature": false,
-
       "baseUrl": ".",
       "paths": {
          "@types": ["./types/internal.d.ts"],
-         "@src/*": ["./src/*"]
-      }
+         "@src/*": ["./src/*.js"]
+      },
+      "allowJs": true,
+      "allowImportingTsExtensions": false,
+      "allowSyntheticDefaultImports": true,
+      "composite": false,
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+      "noFallthroughCasesInSwitch": true,
+      "noImplicitAny": true,
+      "noImplicitReturns": true,
+      "noPropertyAccessFromIndexSignature": false,
+      "noUnusedLocals": true,
+      "noUnusedParameters": true,
+      "resolveJsonModule": true,
+      "skipLibCheck": true,
+      "sourceMap": false,
+      "strict": true,
+      "verbatimModuleSyntax": false
    }
 }
