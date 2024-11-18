@@ -10,9 +10,9 @@
  */
 
 import path from "node:path";
-import utils from "@src/utils";
 import * as t from "@types";
 import { assert, number, object, refine, string } from "superstruct";
+import utils from "./utils.js";
 
 /**
  * Merges any optional config object with default config, then

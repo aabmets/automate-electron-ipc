@@ -10,9 +10,9 @@
  */
 
 import utils from "@src/utils";
+import { validateResolveConfig } from "@src/validators";
 import * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { validateResolveConfig } from "../src/validators";
 
 describe("validateResolveConfig", () => {
    beforeEach(() => {
