@@ -30,11 +30,10 @@
       "vitest": "^2.1.5"
    },
    "peerDependencies": {
-      "vite": "^5.4.10",
-      "typescript": "^5.6.3",
-      "superstruct": "^2.0.2",
       "electron": "^32.2.2",
       "electron-vite": "^2.3.0",
-      "ts-api-utils": "^1.4.0"
+      "superstruct": "^2.0.2",
+      "typescript": "^5.6.3",
+      "vite": "^5.4.10"
    }
 }
