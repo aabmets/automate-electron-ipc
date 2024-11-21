@@ -62,6 +62,12 @@ export interface ParsedSpecs {
    importSpecArray: ImportSpec[];
 }
 
+export interface CollectedContents {
+   fullPath: string;
+   relativePath: string;
+   contents: string;
+}
+
 export interface CollectedSpecs {
    fullPath: string;
    relativePath: string;
