@@ -24,42 +24,48 @@ export interface FileHeader {
    license: string | null;
 }
 
-export type TypeKind = "type" | "interface";
-export type ImportKind = "import" | "require";
-
-export interface TypeSpec {
-   kind: TypeKind;
-   name: string;
-   isExported: boolean;
-   definition: string;
-}
-
 export interface ImportSpec {
-   kind: ImportKind;
    fromPath: string;
-   definition: string;
    customTypes: string[];
    namespace: string | null;
 }
 
-export interface FuncParam {
+export type TypeKind = "type" | "interface";
+
+export interface TypeSpec {
+   name: string;
+   kind: TypeKind;
+   isExported: boolean;
+}
+
+export interface CallableParam {
    name: string;
    type: string | null;
    defaultValue: string | null;
 }
 
-export interface FuncSpec {
-   name: string;
-   async: boolean;
-   params: FuncParam[];
+export interface CallableSignature {
+   params: CallableParam[];
    returnType: string;
    customTypes: string[];
+   async: boolean;
+}
+
+export type ChannelKind = "broadcast" | "unicast";
+export type ChannelDirection = "R2R" | "R2M" | "M2R";
+
+export interface ChannelSpec {
+   name: string;
+   kind: ChannelKind;
+   direction: ChannelDirection;
+   signature: CallableSignature;
+   listeners?: string[];
 }
 
 export interface ParsedSpecs {
-   funcSpecArray: FuncSpec[];
-   typeSpecArray: TypeSpec[];
+   channelSpecArray: ChannelSpec[];
    importSpecArray: ImportSpec[];
+   typeSpecArray: TypeSpec[];
 }
 
 export interface CollectedContents {
