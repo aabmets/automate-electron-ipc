@@ -40,8 +40,7 @@ export interface TypeSpec {
 
 export interface CallableParam {
    name: string;
-   type: string | null;
-   defaultValue: string | null;
+   type: string;
 }
 
 export interface CallableSignature {
