@@ -85,7 +85,8 @@
             "useThrowOnlyError": "error"
          },
          "suspicious": {
-            "noConsole": "warn",
+            "noConsole": "off",
+            "noConsoleLog": "error",
             "noEmptyBlockStatements": "error",
             "noEvolvingTypes": "off",
             "noExplicitAny": "off",
