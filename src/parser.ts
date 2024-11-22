@@ -12,6 +12,7 @@
 import * as t from "@types";
 import ts from "typescript";
 import utils from "./utils.js";
+import vld from "./validators.js";
 
 export function isBuiltinType(typeName: string): boolean {
    return new Set([
@@ -91,21 +92,11 @@ export function parseChannelExpressions(
    if (ts.isPropertyAccessExpression(node)) {
       const text = node.getText(src).replaceAll(/\s*/gm, "");
       const groups = text.match(channelPattern)?.groups;
-      if (groups) {
-         Object.assign(spec, {
-            ...groups,
-            direction: new Map([
-               ["RendererToMain", "R2M"],
-               ["MainToRenderer", "M2R"],
-               ["RendererToRenderer", "R2R"],
-            ]).get(groups.direction),
-         });
-      }
+      Object.assign(spec, groups);
    } else if (ts.isPropertyAssignment(node)) {
       const text = node.getText(src);
 
       if (isSignatureAssignment(text)) {
-         const sig: Partial<t.CallableSignature> = {};
          const child1 = node.getChildAt(2);
          const child2 = child1.getChildAt(2);
 
@@ -113,23 +104,27 @@ export function parseChannelExpressions(
             const set = new Set<string>();
             collectCustomTypes(child2, src, set);
 
-            sig.params = child2.parameters.map((param) => {
-               return {
-                  name: param.name.getText(),
-                  type: param?.type ? param.type.getText() : "any",
-               } as t.CallableParam;
-            });
-            sig.customTypes = Array.from(set);
-            sig.returnType = child2.type.getText(src) || "void";
-            sig.async = sig.returnType.startsWith("Promise");
-            spec.signature = sig as t.CallableSignature;
-            console.debug(sig);
+            const returnType = child2.type.getText(src) || "void";
+            const async = returnType.startsWith("Promise");
+
+            spec.signature = {
+               params: child2.parameters.map((param) => {
+                  return {
+                     name: param.name.getText(),
+                     type: param?.type ? param.type.getText() : "any",
+                     rest: !!param.dotDotDotToken,
+                     optional: !!param.questionToken,
+                  } as t.CallableParam;
+               }),
+               customTypes: Array.from(set),
+               returnType,
+               async,
+            } as t.CallableSignature;
          }
       } else if (isListenersAssignment(text)) {
          const regex = /(['"])(\w*)\1/g;
          const matches = [...text.matchAll(regex)];
          spec.listeners = matches.map((match) => match[2]);
-         // TODO: validate listeners format
       }
    }
    node.forEachChild((child) => parseChannelExpressions(child, src, spec));
@@ -195,10 +190,10 @@ export function parseSpecs(contents: string): t.ParsedSpecs {
    ts.forEachChild(src, (node: ts.Node) => {
       if (ts.isExpressionStatement(node)) {
          if (node.getText(src).startsWith("Channel")) {
-            const spec: Partial<t.ChannelSpec> = {};
-            parseChannelExpressions(node, src, spec);
-            // TODO: validate spec before pushing to array
-            channelSpecArray.push(spec as t.ChannelSpec);
+            const partialSpec: Partial<t.ChannelSpec> = {};
+            parseChannelExpressions(node, src, partialSpec);
+            const validatedSpec = vld.validateChannelSpec(partialSpec);
+            channelSpecArray.push(validatedSpec);
          }
       } else if (ts.isImportDeclaration(node)) {
          parseImportDeclarations(node, src, importSpecArray);
