@@ -11,7 +11,17 @@
 
 import path from "node:path";
 import * as t from "@types";
-import { assert, array, boolean, number, object, optional, refine, string } from "superstruct";
+import {
+   assert,
+   array,
+   boolean,
+   never,
+   number,
+   object,
+   optional,
+   refine,
+   string,
+} from "superstruct";
 import utils from "./utils.js";
 
 /**
@@ -70,6 +80,18 @@ export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCRe
 }
 
 export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec {
+   const ListenersStruct = refine(string(), "format", (value) => {
+      if (value.length < 5) {
+         const msg = "Channel listener names must be at least 5 characters in length";
+         return `'${value}'\n${msg}\n`;
+      } else if (!/^on[A-Z]\w+/.test(value)) {
+         const msg =
+            "Channel listener names must begin with " +
+            "lowercase 'on', followed by a capital letter";
+         return `'${value}'\n${msg}\n`;
+      }
+      return true;
+   });
    const ChannelSpecStruct = object({
       name: refine(string(), "pascalcase", (value) => {
          if (value.length < 3) {
@@ -111,22 +133,10 @@ export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec
          customTypes: array(string()),
          async: boolean(),
       }),
-      listeners: optional(
-         array(
-            refine(string(), "format", (value) => {
-               if (value.length < 5) {
-                  const msg = "Channel listener names must be at least 5 characters in length";
-                  return `'${value}'\n${msg}\n`;
-               } else if (!/^on[A-Z]\w+/.test(value)) {
-                  const msg =
-                     "Channel listener names must begin with " +
-                     "lowercase 'on', followed by a capital letter";
-                  return `'${value}'\n${msg}\n`;
-               }
-               return true;
-            }),
-         ),
-      ),
+      listeners:
+         spec?.kind === ("Broadcast" as t.ChannelKind)
+            ? optional(array(ListenersStruct))
+            : optional(never()),
    });
    assert(spec, ChannelSpecStruct);
    return spec as t.ChannelSpec;
