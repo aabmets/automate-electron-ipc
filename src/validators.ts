@@ -11,7 +11,7 @@
 
 import path from "node:path";
 import * as t from "@types";
-import { assert, array, boolean, number, object, refine, string } from "superstruct";
+import { assert, array, boolean, number, object, optional, refine, string } from "superstruct";
 import utils from "./utils.js";
 
 /**
@@ -111,19 +111,21 @@ export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec
          customTypes: array(string()),
          async: boolean(),
       }),
-      listeners: array(
-         refine(string(), "format", (value) => {
-            if (value.length < 5) {
-               const msg = "Channel listener names must be at least 5 characters in length";
-               return `'${value}'\n${msg}\n`;
-            } else if (!/^on[A-Z]\w+/.test(value)) {
-               const msg =
-                  "Channel listener names must begin with " +
-                  "lowercase 'on', followed by a capital letter";
-               return `'${value}'\n${msg}\n`;
-            }
-            return true;
-         }),
+      listeners: optional(
+         array(
+            refine(string(), "format", (value) => {
+               if (value.length < 5) {
+                  const msg = "Channel listener names must be at least 5 characters in length";
+                  return `'${value}'\n${msg}\n`;
+               } else if (!/^on[A-Z]\w+/.test(value)) {
+                  const msg =
+                     "Channel listener names must begin with " +
+                     "lowercase 'on', followed by a capital letter";
+                  return `'${value}'\n${msg}\n`;
+               }
+               return true;
+            }),
+         ),
       ),
    });
    assert(spec, ChannelSpecStruct);
