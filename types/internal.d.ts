@@ -13,7 +13,7 @@ import type { BroadcastConfig, Channels, IPCOptionalConfig, UnicastConfig } from
 
 export type { IPCOptionalConfig, BroadcastConfig, UnicastConfig, Channels };
 
-export interface IPCAssuredConfig {
+export interface IPCResolvedConfig {
    ipcSpecPath: string;
    rendererDir: string;
    codeIndent: number;
@@ -41,6 +41,8 @@ export interface TypeSpec {
 export interface CallableParam {
    name: string;
    type: string;
+   rest: boolean;
+   optional: boolean;
 }
 
 export interface CallableSignature {
@@ -51,7 +53,7 @@ export interface CallableSignature {
 }
 
 export type ChannelKind = "broadcast" | "unicast";
-export type ChannelDirection = "R2R" | "R2M" | "M2R";
+export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
 
 export interface ChannelSpec {
    name: string;
