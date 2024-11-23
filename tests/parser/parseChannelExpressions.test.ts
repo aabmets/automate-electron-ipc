@@ -18,7 +18,9 @@ function parseChannelExpressions(code: string): t.ChannelSpec {
    const src = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
    const spec: Partial<t.ChannelSpec> = {};
    ts.forEachChild(src, (node: ts.Node) => {
-      parser.parseChannelExpressions(node, src, spec);
+      if (ts.isExpressionStatement(node)) {
+         parser.parseChannelExpressions(node, src, spec);
+      }
    });
    return spec as t.ChannelSpec;
 }
@@ -154,6 +156,18 @@ describe("parseChannelExpressions", () => {
             expect(result.signature?.customTypes.sort()).toEqual(
                ["CustomType1", "CustomType2", "CustomType3"].sort(),
             );
+         });
+
+         it("should collect generic custom types used in parameters and return type", () => {
+            const result = parseChannelExpressions(`
+               Channel("SomeChannel").Broadcast.RendererToMain({
+                  signature: type as (param: CustomType1<string>) => CustomType2<number>
+               });
+            `);
+            expect(result.signature?.customTypes.sort()).toEqual([
+               "CustomType1<string>",
+               "CustomType2<number>",
+            ]);
          });
 
          it("should handle PropertyAssignment nodes missing child nodes gracefully", () => {
