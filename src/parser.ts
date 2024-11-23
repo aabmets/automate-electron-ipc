@@ -69,17 +69,17 @@ export function collectCustomTypes(node: ts.Node, src: ts.SourceFile, set: Set<s
    node.forEachChild((child) => collectCustomTypes(child, src, set));
 }
 
-const channelPattern = utils.concatRegex([
-   /^Channel\(['"](?<name>\w+)['"]\).(?<kind>Broadcast|Unicast+)/,
+export const channelPattern = utils.concatRegex([
+   /^Channel\(['"](?<name>\w+)['"]\).(?<kind>Broadcast|Unicast)/,
    /.(?<direction>RendererToMain|MainToRenderer|RendererToRenderer)$/,
 ]);
 
-function isSignatureAssignment(text: string): boolean {
+export function isSignatureAssignment(text: string): boolean {
    const regex = /^signature\s*:\s*type +as\s*\(/;
    return regex.test(text);
 }
 
-function isListenersAssignment(text: string): boolean {
+export function isListenersAssignment(text: string): boolean {
    const regex = /^listeners\s*:\s*\[\s*['"\w\s,]*]$/;
    return regex.test(text);
 }
@@ -209,6 +209,9 @@ export function parseSpecs(contents: string): t.ParsedSpecs {
 export default {
    isBuiltinType,
    collectCustomTypes,
+   channelPattern,
+   isSignatureAssignment,
+   isListenersAssignment,
    parseChannelExpressions,
    parseImportDeclarations,
    parseTypeDefinitions,
