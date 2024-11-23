@@ -40,11 +40,10 @@ describe("parseImportDeclarations", () => {
       });
 
       it("should handle multiple namespace imports", () => {
-         const code = `
+         const result = parseImportDeclarations(`
             import * as fs from 'fs';
             import * as path from 'path';
-         `;
-         const result = parseImportDeclarations(code);
+         `);
          expect(result).toEqual([
             {
                fromPath: "fs",
@@ -170,12 +169,11 @@ describe("parseImportDeclarations", () => {
       });
 
       it("should handle multiple named imports", () => {
-         const code = `
+         const result = parseImportDeclarations(`
             import { asdfg0 } from 'path0';
             import { asdfg1 } from 'path1';
             import { asdfg2 } from 'path2';
-         `;
-         const result = parseImportDeclarations(code);
+         `);
          expect(result).toEqual([
             {
                fromPath: "path0",
@@ -255,15 +253,14 @@ describe("parseImportDeclarations", () => {
       });
 
       it("should handle source code with comments and irrelevant code", () => {
-         const code = `
+         const result = parseImportDeclarations(`
             // This is a comment
             import { type SomeType1 } from 'path1'; // Importing readFile
             const x = 10;
             /* Multi-line
                comment */
             import type { SomeType2 } from 'path2';
-         `;
-         const result = parseImportDeclarations(code);
+         `);
          expect(result).toEqual([
             {
                fromPath: "path1",
@@ -279,12 +276,11 @@ describe("parseImportDeclarations", () => {
       });
 
       it("should handle imports with excessive whitespace", () => {
-         const code = `
+         const result = parseImportDeclarations(`
             import    *    as    asdfg    from    'path0'   ;
             import    {    type    SomeType1   }    from    './path1'   ;
             import    type    {    SomeType2   }    from    '../path2'   ;
-         `;
-         const result = parseImportDeclarations(code);
+         `);
          expect(result).toEqual([
             {
                fromPath: "path0",
