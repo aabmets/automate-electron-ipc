@@ -183,9 +183,16 @@ export function parseTypeDefinitions(
       ["InterfaceDeclaration", "interface"],
       ["TypeAliasDeclaration", "type"],
    ]).get(ts.SyntaxKind[node.kind]);
+
+   let generics: string | null = null;
+   if (node.typeParameters && node.typeParameters.length > 0) {
+      const typeParams = node.typeParameters.map((tp) => tp.getText(src)).join(", ");
+      generics = `<${typeParams}>`;
+   }
    array.push({
       name: node.name.getText(src),
       kind: kind as t.TypeKind,
+      generics,
       isExported,
    });
 }

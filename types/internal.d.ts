@@ -35,6 +35,7 @@ export type TypeKind = "type" | "interface";
 export interface TypeSpec {
    name: string;
    kind: TypeKind;
+   generics: string | null;
    isExported: boolean;
 }
 
