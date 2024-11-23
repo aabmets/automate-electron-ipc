@@ -156,9 +156,12 @@ export function parseImportDeclarations(
          array.push(importSpec);
       } else if (ts.isNamedImports(clause.namedBindings)) {
          clause.namedBindings.elements.forEach((element) => {
-            const name = element.name.getText(src);
-            if ((clause?.isTypeOnly || element.isTypeOnly) && !isBuiltinType(name)) {
-               customTypes.add(name);
+            const isTypeOnlyImport = clause.isTypeOnly || element.isTypeOnly;
+            const localName = element.name.getText(src);
+            const exportedName = element.propertyName ? element.propertyName.getText(src) : null;
+            if (isTypeOnlyImport && !isBuiltinType(exportedName || localName)) {
+               const typeName = exportedName ? `${exportedName} as ${localName}` : localName;
+               customTypes.add(typeName);
             }
          });
          importSpec.customTypes = Array.from(customTypes);
