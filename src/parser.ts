@@ -35,9 +35,15 @@ export function collectCustomTypes(node: ts.Node, src: ts.SourceFile, set: Set<s
    if (!node) {
       return;
    } else if (ts.isTypeReferenceNode(node)) {
-      const name = node.typeName.getText(src);
-      if (!isBuiltinType(name)) {
-         set.add(name);
+      const typeName = node.typeName.getText(src);
+      if (!isBuiltinType(typeName)) {
+         if (node.typeArguments && node.typeArguments.length > 0) {
+            const generics = node.typeArguments.map((arg) => arg.getText(src)).join(", ");
+            set.add(`${typeName}<${generics}>`);
+            return; // do not parse child nodes
+         } else {
+            set.add(typeName);
+         }
       }
    } else if (ts.isTypeLiteralNode(node)) {
       node.members.forEach((member) => {
