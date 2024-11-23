@@ -10,7 +10,7 @@
  */
 
 import path from "node:path";
-import * as t from "@types";
+import type * as t from "@types";
 import {
    assert,
    array,

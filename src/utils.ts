@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import * as t from "@types";
+import type * as t from "@types";
 import { LRUCache } from "./cache.js";
 
 /**

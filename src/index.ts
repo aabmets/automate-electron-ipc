@@ -11,7 +11,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import * as t from "@types";
+import type * as t from "@types";
 import type { Plugin } from "vite";
 import parser from "./parser.js";
 import utils from "./utils.js";

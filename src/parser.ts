@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: MIT
  */
 
-import * as t from "@types";
+import type * as t from "@types";
 import ts from "typescript";
 import utils from "./utils.js";
 import vld from "./validators.js";
