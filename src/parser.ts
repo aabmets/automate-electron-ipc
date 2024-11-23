@@ -124,7 +124,14 @@ export function parseChannelExpressions(
       } else if (isListenersAssignment(text)) {
          const regex = /(['"])(\w*)\1/g;
          const matches = [...text.matchAll(regex)];
-         spec.listeners = matches.map((match) => match[2]);
+         if (matches.length > 0) {
+            spec.listeners = [];
+            matches.forEach((match) => {
+               if (spec.listeners && match[2].length > 0) {
+                  spec.listeners.push(match[2]);
+               }
+            });
+         }
       }
    }
    node.forEachChild((child) => parseChannelExpressions(child, src, spec));
