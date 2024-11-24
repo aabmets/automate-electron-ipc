@@ -15,13 +15,14 @@ import type * as t from "@types";
 import type { Plugin } from "vite";
 import parser from "./parser.js";
 import utils from "./utils.js";
-import vld from "./validators.js";
+import valid from "./validators.js";
+import writer from "./writer.js";
 
 export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
    return {
       name: "vite-plugin-automate-electron-ipc",
       buildStart: async () => {
-         const finalConfig = vld.validateResolveConfig(config);
+         const finalConfig = valid.validateResolveConfig(config);
          const stat = await fsp.stat(finalConfig.ipcSpecPath).catch(() => null);
          const collectedSpecs: t.CollectedSpecs[] = [];
 
@@ -33,11 +34,14 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
             return;
          } else if (stat.isFile()) {
             const contents = await fsp.readFile(finalConfig.ipcSpecPath);
-            collectedSpecs.push({
-               fullPath: finalConfig.ipcSpecPath,
-               relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
-               parsedSpecs: parser.parseSpecs(contents.toString()),
-            });
+            const specs = parser.parseSpecs(contents.toString());
+            if (specs.channelSpecArray.length > 0) {
+               collectedSpecs.push({
+                  fullPath: finalConfig.ipcSpecPath,
+                  relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
+                  parsedSpecs: specs,
+               });
+            }
          } else if (stat.isDirectory()) {
             const files = await fsp.readdir(finalConfig.ipcSpecPath, { recursive: true });
             const collectedContents: t.CollectedContents[] = [];
@@ -56,23 +60,31 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                }),
             );
             for (const item of collectedContents) {
-               collectedSpecs.push({
-                  fullPath: item.fullPath,
-                  relativePath: item.relativePath,
-                  parsedSpecs: parser.parseSpecs(item.contents),
-               });
+               const specs = parser.parseSpecs(item.contents);
+               if (specs.channelSpecArray.length > 0) {
+                  collectedSpecs.push({
+                     fullPath: item.fullPath,
+                     relativePath: item.relativePath,
+                     parsedSpecs: specs,
+                  });
+               }
             }
          }
-         const results: boolean[] = await Promise.all([
-            (async () => true)(), // writeMainBindings(config, collectedFileSpecs),
-            (async () => true)(), // writePreloadBindings(config, collectedFileSpecs),
-            (async () => true)(), // writeRendererTypes(config, collectedFileSpecs),
-         ]);
-         if (results.includes(false)) {
+         if (collectedSpecs.length === 0) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because no Channel definitions",
                `were found at ipcSpecPath:\n      '${finalConfig.ipcSpecPath}'\n`,
             );
+            return;
+         }
+         try {
+            await Promise.all([
+               writer.writeMainBindings(config, collectedSpecs),
+               writer.writePreloadBindings(config, collectedSpecs),
+               writer.writeRendererTypes(config, collectedSpecs),
+            ]);
+         } catch {
+            // TODO: undo file changes
          }
       },
    };
