@@ -53,7 +53,7 @@ export interface CallableSignature {
    async: boolean;
 }
 
-export type ChannelKind = "broadcast" | "unicast";
+export type ChannelKind = "Broadcast" | "Unicast";
 export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
 
 export interface ChannelSpec {

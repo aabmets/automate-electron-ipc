@@ -63,9 +63,6 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                });
             }
          }
-         for (const item of collectedSpecs) {
-            console.debug(item);
-         }
          const results: boolean[] = await Promise.all([
             (async () => true)(), // writeMainBindings(config, collectedFileSpecs),
             (async () => true)(), // writePreloadBindings(config, collectedFileSpecs),
