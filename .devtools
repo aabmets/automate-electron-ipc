@@ -1,0 +1,18 @@
+{
+  "license_cmd": {
+    "header": {
+      "title": "Apache License 2.0",
+      "year": "2024",
+      "holder": "Mattias Aabmets",
+      "spdx_id": "Apache-2.0",
+      "spaces": 3,
+      "oss": true
+    },
+    "paths": [
+      "src",
+      "tests",
+      "types"
+    ],
+    "file_name": "apache-2.0.json"
+  }
+}
