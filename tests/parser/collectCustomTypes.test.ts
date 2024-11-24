@@ -108,11 +108,11 @@ describe("collectCustomTypes", () => {
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
    });
 
-   it("should collect generic custom types from arguments and return type", () => {
+   it("should not collect generics from argument and return custom types", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType1<T>) => CustomType2<T>
+         type as (arg: CustomType1<string>) => CustomType2<number>
       `);
-      expect(customTypes).toStrictEqual(new Set(["CustomType1<T>", "CustomType2<T>"]));
+      expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
    it("should collect custom types from named types import syntax", () => {

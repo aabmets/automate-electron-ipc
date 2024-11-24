@@ -156,10 +156,8 @@ describe("parseChannelExpressions", () => {
                   signature: type as (param: CustomType1<string>) => CustomType2<number>
                });
             `);
-            expect(result.signature?.customTypes.sort()).toEqual([
-               "CustomType1<string>",
-               "CustomType2<number>",
-            ]);
+            expect(result.signature?.params[0].type).toStrictEqual("CustomType1<string>");
+            expect(result.signature?.returnType).toStrictEqual("CustomType2<number>");
          });
 
          it("should handle PropertyAssignment nodes missing child nodes gracefully", () => {
