@@ -108,6 +108,7 @@ export function parseChannelExpressions(
             const async = returnType.startsWith("Promise");
 
             spec.signature = {
+               definition: child2.getText(src),
                params: child2.parameters.map((param) => {
                   return {
                      name: param.name.getText(),
@@ -197,7 +198,7 @@ export function parseTypeDefinitions(
    });
 }
 
-export function parseSpecs(contents: string): t.ParsedSpecs {
+export function parseSpecs(contents: string): t.FileSpecsCollection {
    const channelSpecArray: t.ChannelSpec[] = [];
    const importSpecArray: t.ImportSpec[] = [];
    const typeSpecArray: t.TypeSpec[] = [];

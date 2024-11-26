@@ -19,11 +19,6 @@ export interface IPCResolvedConfig {
    codeIndent: number;
 }
 
-export interface FileHeader {
-   shebang: string | null;
-   license: string | null;
-}
-
 export interface ImportSpec {
    fromPath: string;
    customTypes: string[];
@@ -47,6 +42,7 @@ export interface CallableParam {
 }
 
 export interface CallableSignature {
+   definition: string;
    params: CallableParam[];
    returnType: string;
    customTypes: string[];
@@ -64,20 +60,20 @@ export interface ChannelSpec {
    listeners?: string[];
 }
 
-export interface ParsedSpecs {
+export interface FileSpecsCollection {
    channelSpecArray: ChannelSpec[];
    importSpecArray: ImportSpec[];
    typeSpecArray: TypeSpec[];
 }
 
-export interface CollectedContents {
+export interface UnprocessedFileContents {
    fullPath: string;
    relativePath: string;
    contents: string;
 }
 
-export interface CollectedSpecs {
+export interface ParsedFileSpecs {
    fullPath: string;
    relativePath: string;
-   parsedSpecs: ParsedSpecs;
+   specs: FileSpecsCollection;
 }

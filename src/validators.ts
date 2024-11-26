@@ -121,6 +121,7 @@ export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec
          }
       }),
       signature: object({
+         definition: string(),
          params: array(
             object({
                name: string(),
