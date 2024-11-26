@@ -220,7 +220,13 @@ export function parseSpecs(contents: string): t.ParsedSpecs {
          parseTypeDefinitions(node, src, typeSpecArray);
       }
    });
-   return { channelSpecArray, typeSpecArray, importSpecArray };
+   return {
+      channelSpecArray,
+      typeSpecArray,
+      importSpecArray: importSpecArray.filter((item) => {
+         return item.customTypes.length > 0 || item.namespace !== null;
+      }),
+   };
 }
 
 export default {
