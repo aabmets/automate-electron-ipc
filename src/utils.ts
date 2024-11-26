@@ -13,7 +13,6 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import type * as t from "@types";
 import { LRUCache } from "./cache.js";
 
 /**
@@ -74,26 +73,6 @@ export function concatRegex(parts: RegExp[], flags = ""): RegExp {
 }
 
 /**
- * Removes the common leading whitespace from each line in a multiline string.
- *
- * This function calculates the minimum indentation level of all non-blank lines and
- * removes that amount of leading whitespace from every line. Useful for cleaning up
- * multiline strings without altering the relative indentation of lines.
- *
- * @param text - The multiline string to dedent.
- * @returns The de-dented string with common leading whitespace removed.
- */
-export function dedent(text: string): string {
-   const reducer = (minIndent: number, line: string) =>
-      Math.min(minIndent, line.match(/^(\s*)/)?.[0].length || 0);
-   const lines = text.split("\n");
-   const indent = lines
-      .filter((line) => line.trim()) // Exclude blank lines
-      .reduce(reducer, Number.POSITIVE_INFINITY);
-   return lines.map((line) => line.slice(indent)).join("\n");
-}
-
-/**
  * Checks if a given path is inside another path.
  *
  * @param childPath - The path to check.
@@ -108,45 +87,6 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
       !path.isAbsolute(relative) &&
       relative !== ""
    );
-}
-
-/**
- * Extracts the shebang and license header from the beginning of a file's content.
- *
- * @param fileContents - The full contents of the file as a string.
- * @returns An object containing the shebang (if present) and license information
- *          extracted from the file header, or null for each if not present.
- */
-export function extractFileHeader(fileContents: string): t.FileHeader {
-   const header: t.FileHeader = { shebang: null, license: null };
-   if (!fileContents) {
-      return header;
-   }
-   const lines = fileContents.split("\n");
-   const licenseLines: string[] = [];
-
-   for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      if (i === 0 && line.startsWith("#!")) {
-         header.shebang = line;
-      } else if (line.startsWith("// NOTICE:")) {
-         break;
-      } else if (
-         line === "" ||
-         line.startsWith("//") ||
-         line.startsWith("/*") ||
-         line.startsWith(" *")
-      ) {
-         licenseLines.push(line);
-      } else {
-         break;
-      }
-   }
-   if (licenseLines.length > 0) {
-      header.license = licenseLines.join("\n");
-   }
-   return header;
 }
 
 /**
@@ -167,8 +107,6 @@ export default {
    searchUpwards,
    resolveUserProjectPath,
    concatRegex,
-   dedent,
    isPathInside,
-   extractFileHeader,
    digestData,
 };
