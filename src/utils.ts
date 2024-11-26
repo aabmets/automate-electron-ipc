@@ -11,8 +11,10 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
+import type * as t from "@types";
 import { LRUCache } from "./cache.js";
 
 /**
@@ -103,10 +105,17 @@ function digestData(...data: (object | string)[]): string {
    return hash.digest("hex");
 }
 
+async function writeFile(data: t.WritableFileData): Promise<void> {
+   await fsp.mkdir(data.fileDirectory, { recursive: true });
+   const fullPath = path.join(data.fileDirectory, data.fileName);
+   await fsp.writeFile(fullPath, data.fileContents);
+}
+
 export default {
    searchUpwards,
    resolveUserProjectPath,
    concatRegex,
    isPathInside,
    digestData,
+   writeFile,
 };

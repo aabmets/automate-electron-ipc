@@ -77,3 +77,9 @@ export interface ParsedFileSpecs {
    relativePath: string;
    specs: FileSpecsCollection;
 }
+
+export interface WritableFileData {
+   fileName: string;
+   fileDirectory: string;
+   fileContents: string;
+}
