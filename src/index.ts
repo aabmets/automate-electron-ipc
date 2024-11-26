@@ -94,8 +94,25 @@ export const ipcPreload = {
    filePath: utils.searchUpwards("user-data/preload.js"),
 };
 
-export function Channel(): void {
-   throw new Error("IPC automation Channel functions cannot be executed by JavaScript.");
+export function Channel(): t.Channels {
+   const warning = () => {
+      if (!(global as any)?.warnedIncorrectUsageOnce) {
+         console.warn(
+            "IPC automation Channel expressions have no effect when executed by JavaScript.",
+         );
+         (global as any).warnedIncorrectUsageOnce = true;
+      }
+   };
+   return {
+      Unicast: {
+         RendererToMain: warning,
+         RendererToRenderer: warning,
+      },
+      Broadcast: {
+         RendererToMain: warning,
+         MainToRenderer: warning,
+      },
+   };
 }
 
 export const type = null;
