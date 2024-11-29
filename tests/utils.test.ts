@@ -10,6 +10,8 @@
  */
 
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import url from "node:url";
 import utils from "@src/utils";
@@ -108,10 +110,29 @@ describe("isPathInside", () => {
    });
 });
 
-describe("digestData", () => {
-   it("should return the SHA256 checksum of input objects and strings", () => {
-      const result = utils.digestData({ key: "value" }, "asdfg");
-      const expected = "c70299a6b9e2c95581e7051399c36ebc104a17ab4e6db68ff27a9a589165815b";
-      expect(result).toStrictEqual(expected);
+describe("writeFile", () => {
+   it("should create the directories and write the file with the given contents", async () => {
+      const tempFileName = "test-file.txt";
+      const tempFileContents = "Hello, Vitest!";
+      const tempFileDirectory = path.join(tmpdir(), "vitest-utils-test");
+      try {
+         await fsp.rm(tempFileDirectory, { recursive: true, force: true });
+         await utils.writeFile({
+            fileName: tempFileName,
+            fileContents: tempFileContents,
+            fileDirectory: tempFileDirectory,
+         });
+         const filePath = path.join(tempFileDirectory, tempFileName);
+         const fileExists = await fsp
+            .access(filePath)
+            .then(() => true)
+            .catch(() => false);
+
+         expect(fileExists).toBe(true);
+         const fileContents = await fsp.readFile(filePath, "utf-8");
+         expect(fileContents).toBe(tempFileContents);
+      } finally {
+         await fsp.rm(tempFileDirectory, { recursive: true, force: true });
+      }
    });
 });

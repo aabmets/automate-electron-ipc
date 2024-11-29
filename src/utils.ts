@@ -9,7 +9,6 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -92,20 +91,14 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
 }
 
 /**
- * Generates a SHA-256 hash of given objects and/or strings.
+ * Writes contents into file. Recursively creates directories up to the file path if they don't exist.
  *
- * @param data - A rest parameter of objects and/or strings to be hashed together.
- * @returns The hexadecimal SHAKE-256 hash of the data input.
+ * @param data - object with the following properties:
+ *   - fileName <string>: The name of the file where the contents will be written into.
+ *   - fileDirectory <string>: Absolute path to the directory where the file will be written.
+ *   - fileContents <string>: The contents that will be written into the file.
  */
-function digestData(...data: (object | string)[]): string {
-   const hash = crypto.createHash("shake256");
-   data.forEach((item) => {
-      hash.update(typeof item === "string" ? item : JSON.stringify(data));
-   });
-   return hash.digest("hex");
-}
-
-async function writeFile(data: t.WritableFileData): Promise<void> {
+export async function writeFile(data: t.WritableFileData): Promise<void> {
    await fsp.mkdir(data.fileDirectory, { recursive: true });
    const fullPath = path.join(data.fileDirectory, data.fileName);
    await fsp.writeFile(fullPath, data.fileContents);
@@ -116,6 +109,5 @@ export default {
    resolveUserProjectPath,
    concatRegex,
    isPathInside,
-   digestData,
    writeFile,
 };
