@@ -117,12 +117,9 @@ describe("writeFile", () => {
       const tempFileDirectory = path.join(tmpdir(), "vitest-utils-test");
       try {
          await fsp.rm(tempFileDirectory, { recursive: true, force: true });
-         await utils.writeFile({
-            fileName: tempFileName,
-            fileContents: tempFileContents,
-            fileDirectory: tempFileDirectory,
-         });
          const filePath = path.join(tempFileDirectory, tempFileName);
+         await utils.writeFile(filePath, tempFileContents);
+
          const fileExists = await fsp
             .access(filePath)
             .then(() => true)

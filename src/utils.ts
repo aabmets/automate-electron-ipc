@@ -13,7 +13,6 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
-import type * as t from "@types";
 import { LRUCache } from "./cache.js";
 
 /**
@@ -93,15 +92,13 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
 /**
  * Writes contents into file. Recursively creates directories up to the file path if they don't exist.
  *
- * @param data - object with the following properties:
- *   - fileName <string>: The name of the file where the contents will be written into.
- *   - fileDirectory <string>: Absolute path to the directory where the file will be written.
- *   - fileContents <string>: The contents that will be written into the file.
+ * @param absoluteFilePath - Absolute resolved path to the file being written to.
+ * @param fileContents - Contents that will be written into the target file.
  */
-export async function writeFile(data: t.WritableFileData): Promise<void> {
-   await fsp.mkdir(data.fileDirectory, { recursive: true });
-   const fullPath = path.join(data.fileDirectory, data.fileName);
-   await fsp.writeFile(fullPath, data.fileContents);
+export async function writeFile(absoluteFilePath: string, fileContents: string): Promise<void> {
+   const fileDirectory = path.dirname(absoluteFilePath);
+   await fsp.mkdir(fileDirectory, { recursive: true });
+   await fsp.writeFile(absoluteFilePath, fileContents);
 }
 
 export default {
