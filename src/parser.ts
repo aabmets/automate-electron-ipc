@@ -198,20 +198,19 @@ export function parseTypeDefinitions(
    });
 }
 
-export function parseSpecs(contents: string): t.FileSpecsCollection {
-   const channelSpecArray: t.ChannelSpec[] = [];
+export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
+   const channelSpecArray: Partial<t.ChannelSpec>[] = [];
    const importSpecArray: t.ImportSpec[] = [];
    const typeSpecArray: t.TypeSpec[] = [];
 
-   const src = ts.createSourceFile("temp.ts", contents, ts.ScriptTarget.Latest, true);
+   const src = ts.createSourceFile("temp.ts", fileData.contents, ts.ScriptTarget.Latest, true);
 
    ts.forEachChild(src, (node: ts.Node) => {
       if (ts.isExpressionStatement(node)) {
          if (node.getText(src).startsWith("Channel")) {
-            const partialSpec: Partial<t.ChannelSpec> = {};
-            parseChannelExpressions(node, src, partialSpec);
-            const validatedSpec = vld.validateChannelSpec(partialSpec);
-            channelSpecArray.push(validatedSpec);
+            const spec: Partial<t.ChannelSpec> = {};
+            parseChannelExpressions(node, src, spec);
+            channelSpecArray.push(spec);
          }
       } else if (ts.isImportDeclaration(node)) {
          parseImportDeclarations(node, src, importSpecArray);
@@ -221,9 +220,10 @@ export function parseSpecs(contents: string): t.FileSpecsCollection {
          parseTypeDefinitions(node, src, typeSpecArray);
       }
    });
+
    return {
-      channelSpecArray,
       typeSpecArray,
+      channelSpecArray: vld.validateChannelSpecs(channelSpecArray),
       importSpecArray: importSpecArray.filter((item) => {
          return item.customTypes.length > 0 || item.namespace !== null;
       }),

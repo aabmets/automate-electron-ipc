@@ -79,7 +79,7 @@ export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCRe
    });
 }
 
-export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec {
+export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
    const ListenersStruct = refine(string(), "format", (value) => {
       if (value.length < 5) {
          const msg = "Channel listener names must be at least 5 characters in length";
@@ -92,55 +92,76 @@ export function validateChannelSpec(spec: Partial<t.ChannelSpec>): t.ChannelSpec
       }
       return true;
    });
-   const ChannelSpecStruct = object({
-      name: refine(string(), "pascalcase", (value) => {
-         if (value.length < 3) {
-            return "Channel name must be at least 3 characters in length";
-         } else if (value.toLowerCase().startsWith("on")) {
-            return "Channel name must not begin with 'on'";
-         } else if (/^(?![A-Z])/.test(value)) {
-            return "Channel name must start with a capital letter";
+   const getChannelSpecStruct = (canHaveListeners: boolean) => {
+      return object({
+         name: refine(string(), "pascalcase", (value) => {
+            if (value.length < 3) {
+               return "Channel name must be at least 3 characters in length";
+            } else if (value.toLowerCase().startsWith("on")) {
+               return "Channel name must not begin with 'on'";
+            } else if (/^(?![A-Z])/.test(value)) {
+               return "Channel name must start with a capital letter";
+            } else {
+               return true;
+            }
+         }),
+         kind: refine(string(), "choice", (value) => {
+            const choices = ["Broadcast", "Unicast"];
+            if (choices.includes(value)) {
+               return true;
+            } else {
+               return `Channel kind must be one of '${choices}'`;
+            }
+         }),
+         direction: refine(string(), "choice", (value) => {
+            const choices = ["RendererToRenderer", "RendererToMain", "MainToRenderer"];
+            if (choices.includes(value)) {
+               return true;
+            } else {
+               return `Channel direction must be one of '${choices}'`;
+            }
+         }),
+         signature: object({
+            definition: string(),
+            params: array(
+               object({
+                  name: string(),
+                  type: string(),
+                  rest: boolean(),
+                  optional: boolean(),
+               }),
+            ),
+            returnType: string(),
+            customTypes: array(string()),
+            async: boolean(),
+         }),
+         listeners: canHaveListeners ? optional(array(ListenersStruct)) : optional(never()),
+      });
+   };
+   const ChannelSpecStruct = getChannelSpecStruct(false);
+   const ChannelSpecStructWithListeners = getChannelSpecStruct(true);
+   const ChannelSpecArrayStruct = refine(array() as any, "unique", (array: string[]) => {
+      const seen = new Set<string>();
+      for (const name of array) {
+         if (seen.has(name)) {
+            return `Channel name '${name}' is not unique across application.`;
          } else {
-            return true;
+            seen.add(name);
          }
-      }),
-      kind: refine(string(), "choice", (value) => {
-         const choices = ["Broadcast", "Unicast"];
-         if (choices.includes(value)) {
-            return true;
-         } else {
-            return `Channel kind must be one of '${choices}'`;
-         }
-      }),
-      direction: refine(string(), "choice", (value) => {
-         const choices = ["RendererToRenderer", "RendererToMain", "MainToRenderer"];
-         if (choices.includes(value)) {
-            return true;
-         } else {
-            return `Channel direction must be one of '${choices}'`;
-         }
-      }),
-      signature: object({
-         definition: string(),
-         params: array(
-            object({
-               name: string(),
-               type: string(),
-               rest: boolean(),
-               optional: boolean(),
-            }),
-         ),
-         returnType: string(),
-         customTypes: array(string()),
-         async: boolean(),
-      }),
-      listeners:
-         spec?.kind === ("Broadcast" as t.ChannelKind)
-            ? optional(array(ListenersStruct))
-            : optional(never()),
+      }
+      return true;
    });
-   assert(spec, ChannelSpecStruct);
-   return spec as t.ChannelSpec;
+   const channelNames: string[] = [];
+   for (const spec of specs) {
+      if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
+         assert(spec, ChannelSpecStructWithListeners);
+      } else {
+         assert(spec, ChannelSpecStruct);
+      }
+      channelNames.push(spec.name);
+   }
+   assert(channelNames, ChannelSpecArrayStruct);
+   return specs as t.ChannelSpec[];
 }
 
-export default { validateResolveConfig, validateChannelSpec };
+export default { validateResolveConfig, validateChannelSpecs };

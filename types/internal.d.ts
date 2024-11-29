@@ -60,22 +60,23 @@ export interface ChannelSpec {
    listeners?: string[];
 }
 
-export interface FileSpecsCollection {
+export interface SpecsCollection {
    channelSpecArray: ChannelSpec[];
    importSpecArray: ImportSpec[];
    typeSpecArray: TypeSpec[];
 }
 
-export interface UnprocessedFileContents {
+export interface FileMeta {
    fullPath: string;
    relativePath: string;
+}
+
+export interface RawFileContents extends FileMeta {
    contents: string;
 }
 
-export interface ParsedFileSpecs {
-   fullPath: string;
-   relativePath: string;
-   specs: FileSpecsCollection;
+export interface ParsedFileSpecs extends FileMeta {
+   specs: SpecsCollection;
 }
 
 export interface WritableFileData {
