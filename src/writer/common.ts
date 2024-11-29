@@ -93,7 +93,7 @@ export function splitTypeNamespace(typeName: string): [string | null, string] {
 
 export function getCodeIndents(config: t.IPCResolvedConfig): string[] {
    return [1, 2, 3, 4].map((value) => {
-      return "\u00A0".repeat(config.codeIndent).repeat(value);
+      return " ".repeat(config.codeIndent).repeat(value);
    });
 }
 

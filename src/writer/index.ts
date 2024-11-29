@@ -9,6 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { rendererFileContent } from "./renderer-types.js";
+import { writeMainBindings } from "./main-bindings.js";
+import { writePreloadBindings } from "./preload-bindings.js";
+import { writeRendererTypes } from "./renderer-types.js";
 
-export default { rendererFileContent };
+export default { writeMainBindings, writePreloadBindings, writeRendererTypes };
