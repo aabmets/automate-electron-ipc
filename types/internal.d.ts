@@ -14,9 +14,11 @@ import type { BroadcastConfig, Channels, IPCOptionalConfig, UnicastConfig } from
 export type { IPCOptionalConfig, BroadcastConfig, UnicastConfig, Channels };
 
 export interface IPCResolvedConfig {
-   ipcSpecPath: string;
-   rendererDir: string;
    codeIndent: number;
+   ipcSpecPath: string;
+   mainBindingsFilePath: string;
+   preloadBindingsFilePath: string;
+   rendererTypesFilePath: string;
 }
 
 export interface ImportSpec {
@@ -77,10 +79,4 @@ export interface RawFileContents extends FileMeta {
 
 export interface ParsedFileSpecs extends FileMeta {
    specs: SpecsCollection;
-}
-
-export interface WritableFileData {
-   fileName: string;
-   fileDirectory: string;
-   fileContents: string;
 }

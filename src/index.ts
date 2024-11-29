@@ -16,42 +16,45 @@ import type { Plugin } from "vite";
 import parser from "./parser.js";
 import utils from "./utils.js";
 import valid from "./validators.js";
-import writer from "./writer.js";
+import writer from "./writer/index.js";
 
 export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
    return {
       name: "vite-plugin-automate-electron-ipc",
       buildStart: async () => {
-         const finalConfig = valid.validateResolveConfig(config);
-         const stat = await fsp.stat(finalConfig.ipcSpecPath).catch(() => null);
-         const collectedSpecs: t.CollectedSpecs[] = [];
+         const resolvedConfig = valid.validateResolveConfig(config);
+         const stat = await fsp.stat(resolvedConfig.ipcSpecPath).catch(() => null);
+         const parsedFileSpecs: t.ParsedFileSpecs[] = [];
 
          if (!stat) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because the path pointed to by",
-               `ipcSpecPath does not exist:\n      '${finalConfig.ipcSpecPath}'\n`,
+               `ipcSpecPath does not exist:\n      '${resolvedConfig.ipcSpecPath}'\n`,
             );
             return;
          } else if (stat.isFile()) {
-            const contents = await fsp.readFile(finalConfig.ipcSpecPath);
-            const specs = parser.parseSpecs(contents.toString());
+            const contents = await fsp.readFile(resolvedConfig.ipcSpecPath);
+            const fileData: t.FileMeta = {
+               fullPath: resolvedConfig.ipcSpecPath,
+               relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
+            };
+            const specs = parser.parseSpecs({
+               contents: contents.toString(),
+               ...fileData,
+            });
             if (specs.channelSpecArray.length > 0) {
-               collectedSpecs.push({
-                  fullPath: finalConfig.ipcSpecPath,
-                  relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
-                  parsedSpecs: specs,
-               });
+               parsedFileSpecs.push({ specs: specs, ...fileData });
             }
          } else if (stat.isDirectory()) {
-            const files = await fsp.readdir(finalConfig.ipcSpecPath, { recursive: true });
-            const collectedContents: t.CollectedContents[] = [];
+            const files = await fsp.readdir(resolvedConfig.ipcSpecPath, { recursive: true });
+            const rawFileContents: t.RawFileContents[] = [];
             await Promise.all(
                files.map(async (file) => {
-                  const fullPath = path.join(finalConfig.ipcSpecPath, file);
+                  const fullPath = path.join(resolvedConfig.ipcSpecPath, file);
                   const stat = await fsp.stat(fullPath);
                   if (stat.isFile() && (await fsp.exists(fullPath))) {
                      const contents = await fsp.readFile(fullPath);
-                     collectedContents.push({
+                     rawFileContents.push({
                         fullPath,
                         relativePath: file,
                         contents: contents.toString(),
@@ -59,33 +62,30 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                   }
                }),
             );
-            for (const item of collectedContents) {
-               const specs = parser.parseSpecs(item.contents);
+            for (const item of rawFileContents) {
+               const specs = parser.parseSpecs(item);
                if (specs.channelSpecArray.length > 0) {
-                  collectedSpecs.push({
+                  parsedFileSpecs.push({
                      fullPath: item.fullPath,
                      relativePath: item.relativePath,
-                     parsedSpecs: specs,
+                     specs: specs,
                   });
                }
             }
          }
-         if (collectedSpecs.length === 0) {
+         if (parsedFileSpecs.length === 0) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because no Channel definitions",
-               `were found at ipcSpecPath:\n      '${finalConfig.ipcSpecPath}'\n`,
+               `were found at ipcSpecPath:\n      '${resolvedConfig.ipcSpecPath}'\n`,
             );
             return;
          }
-         try {
-            await Promise.all([
-               writer.writeMainBindings(config, collectedSpecs),
-               writer.writePreloadBindings(config, collectedSpecs),
-               writer.writeRendererTypes(config, collectedSpecs),
-            ]);
-         } catch {
-            // TODO: undo file changes
-         }
+         console.debug(JSON.stringify(parsedFileSpecs, null, 3));
+         await Promise.all([
+            writer.writeMainBindings(resolvedConfig, parsedFileSpecs),
+            writer.writePreloadBindings(resolvedConfig, parsedFileSpecs),
+            writer.writeRendererTypes(resolvedConfig, parsedFileSpecs),
+         ]);
       },
    };
 }

@@ -40,13 +40,13 @@ import utils from "./utils.js";
  * @returns The validated and resolved configuration.
  */
 export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCResolvedConfig {
-   const mergedConfig: t.IPCResolvedConfig = {
+   const mergedConfig: t.IPCOptionalConfig = {
       ipcSpecPath: "src/ipc-spec.ts",
       rendererDir: "src/renderer",
       codeIndent: 3,
       ...config,
    };
-   const IPCResolvedConfigStruct = object({
+   const IPCOptionalConfigStruct = object({
       ipcSpecPath: refine(string(), "relative", (value) => {
          if (path.isAbsolute(value)) {
             return "ipcSpecPath must be relative to the project root";
@@ -72,11 +72,15 @@ export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCRe
          return value >= 2 && value <= 4 ? true : errMsg;
       }),
    });
-   assert(mergedConfig, IPCResolvedConfigStruct);
-   return Object.assign(mergedConfig, {
+   assert(mergedConfig, IPCOptionalConfigStruct);
+   const resolvedRendererDir = utils.resolveUserProjectPath(mergedConfig.rendererDir);
+   return {
+      codeIndent: mergedConfig.codeIndent,
       ipcSpecPath: utils.resolveUserProjectPath(mergedConfig.ipcSpecPath),
-      rendererDir: utils.resolveUserProjectPath(mergedConfig.rendererDir),
-   });
+      mainBindingsFilePath: utils.searchUpwards("user-data/main.ts"),
+      preloadBindingsFilePath: utils.searchUpwards("user-data/preload.ts"),
+      rendererTypesFilePath: path.join(resolvedRendererDir, "window.d.ts"),
+   };
 }
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
