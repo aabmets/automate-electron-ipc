@@ -9,22 +9,13 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import type * as t from "@types";
-import utils from "../utils.js";
+import { BaseWriter } from "./base-writer.js";
 
-export function generatePreloadBindings(
-   _config: t.IPCResolvedConfig,
-   _fileSpecs: t.ParsedFileSpecs[],
-): string {
-   return "";
+export class PreloadBindingsWriter extends BaseWriter {
+   protected getTargetFilePath(): string {
+      return this.resolvedConfig.preloadBindingsFilePath;
+   }
+   protected renderFileContents(): string {
+      return ""; // TODO
+   }
 }
-
-export async function writePreloadBindings(
-   resolvedConfig: t.IPCResolvedConfig,
-   parsedFileSpecs: t.ParsedFileSpecs[],
-): Promise<void> {
-   const fileContents = generatePreloadBindings(resolvedConfig, parsedFileSpecs);
-   await utils.writeFile(resolvedConfig.preloadBindingsFilePath, fileContents);
-}
-
-export default { generatePreloadBindings, writePreloadBindings };

@@ -24,7 +24,7 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
       buildStart: async () => {
          const resolvedConfig = valid.validateResolveConfig(config);
          const stat = await fsp.stat(resolvedConfig.ipcSpecPath).catch(() => null);
-         const parsedFileSpecs: t.ParsedFileSpecs[] = [];
+         const pfsArray: t.ParsedFileSpecs[] = [];
 
          if (!stat) {
             console.warn(
@@ -43,7 +43,7 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                ...fileData,
             });
             if (specs.channelSpecArray.length > 0) {
-               parsedFileSpecs.push({ specs: specs, ...fileData });
+               pfsArray.push({ specs: specs, ...fileData });
             }
          } else if (stat.isDirectory()) {
             const files = await fsp.readdir(resolvedConfig.ipcSpecPath, { recursive: true });
@@ -65,7 +65,7 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
             for (const item of rawFileContents) {
                const specs = parser.parseSpecs(item);
                if (specs.channelSpecArray.length > 0) {
-                  parsedFileSpecs.push({
+                  pfsArray.push({
                      fullPath: item.fullPath,
                      relativePath: item.relativePath,
                      specs: specs,
@@ -73,18 +73,17 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                }
             }
          }
-         if (parsedFileSpecs.length === 0) {
+         if (pfsArray.length === 0) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because no Channel definitions",
                `were found at ipcSpecPath:\n      '${resolvedConfig.ipcSpecPath}'\n`,
             );
             return;
          }
-         console.debug(JSON.stringify(parsedFileSpecs, null, 3));
          await Promise.all([
-            writer.writeMainBindings(resolvedConfig, parsedFileSpecs),
-            writer.writePreloadBindings(resolvedConfig, parsedFileSpecs),
-            writer.writeRendererTypes(resolvedConfig, parsedFileSpecs),
+            new writer.MainBindingsWriter(resolvedConfig, pfsArray).write(),
+            new writer.PreloadBindingsWriter(resolvedConfig, pfsArray).write(),
+            new writer.RendererTypesWriter(resolvedConfig, pfsArray).write(),
          ]);
       },
    };

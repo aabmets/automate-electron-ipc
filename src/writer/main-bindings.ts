@@ -9,22 +9,13 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import type * as t from "@types";
-import utils from "../utils.js";
+import { BaseWriter } from "./base-writer.js";
 
-export function generateMainBindings(
-   _config: t.IPCResolvedConfig,
-   _fileSpecs: t.ParsedFileSpecs[],
-): string {
-   return "";
+export class MainBindingsWriter extends BaseWriter {
+   protected getTargetFilePath(): string {
+      return this.resolvedConfig.mainBindingsFilePath;
+   }
+   protected renderFileContents(): string {
+      return ""; // TODO
+   }
 }
-
-export async function writeMainBindings(
-   resolvedConfig: t.IPCResolvedConfig,
-   parsedFileSpecs: t.ParsedFileSpecs[],
-): Promise<void> {
-   const fileContents = generateMainBindings(resolvedConfig, parsedFileSpecs);
-   await utils.writeFile(resolvedConfig.mainBindingsFilePath, fileContents);
-}
-
-export default { generateMainBindings, writeMainBindings };

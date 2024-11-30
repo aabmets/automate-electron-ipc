@@ -80,3 +80,8 @@ export interface RawFileContents extends FileMeta {
 export interface ParsedFileSpecs extends FileMeta {
    specs: SpecsCollection;
 }
+
+export interface SeenImports {
+   customTypes: Set<string>;
+   nameSpaces: Set<string>;
+}
