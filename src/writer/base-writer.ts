@@ -69,12 +69,17 @@ export class BaseWriter {
       });
    }
 
-   protected getAnonymousParams(spec: t.ChannelSpec): string {
-      const params: string[] = [];
-      spec.signature.params.forEach(() => {
-         params.push(`arg${params.length + 1}`);
-      });
-      return params.join(", ");
+   protected injectEventTypehint(sigDef: string): string {
+      return sigDef.replace("(", "(event: IpcMainEvent, ");
+   }
+
+   protected getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
+      return spec.signature.params
+         .map((param) => {
+            const typeHint = withTypes ? `: ${param.type || "any"}` : "";
+            return `${param.name}${typeHint}`;
+         })
+         .join(", ");
    }
 
    public async write() {
