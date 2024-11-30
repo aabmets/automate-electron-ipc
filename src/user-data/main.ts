@@ -10,3 +10,5 @@
  */
 
 // NOTICE: CONTENTS OF THIS FILE ARE AUTOMATICALLY GENERATED.
+
+export const ipcMain = {};

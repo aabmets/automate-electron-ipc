@@ -14,6 +14,7 @@ import path from "node:path";
 import type * as t from "@types";
 import type { Plugin } from "vite";
 import parser from "./parser.js";
+import { ipcMain } from "./user-data/main.js";
 import utils from "./utils.js";
 import valid from "./validators.js";
 import writer from "./writer/index.js";
@@ -88,6 +89,8 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
       },
    };
 }
+
+export { ipcMain };
 
 export const ipcPreload = {
    filePath: utils.searchUpwards("user-data/preload.js"),
