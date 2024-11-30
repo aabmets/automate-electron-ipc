@@ -27,6 +27,7 @@
                   "maxAllowedComplexity": 25
                }
             },
+            "noBannedTypes": "off",
             "noUselessStringConcat": "error",
             "noUselessUndefinedInitialization": "error",
             "noVoid": "error",
