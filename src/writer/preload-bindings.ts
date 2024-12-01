@@ -40,7 +40,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       const bindingsExpression = [
          "\ncontextBridge.exposeInMainWorld('ipc', {",
          `\n${this.indents[0]}${sortedCallables},`,
-         "\n});",
+         "\n});\n",
       ].join("");
 
       out.push(bindingsExpression);
