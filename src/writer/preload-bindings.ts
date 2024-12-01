@@ -16,7 +16,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       return this.resolvedConfig.preloadBindingsFilePath;
    }
    protected renderFileContents(): string {
-      const out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron/renderer";'];
+      const out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron";'];
       const callables: string[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {

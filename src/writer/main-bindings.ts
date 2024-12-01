@@ -18,8 +18,8 @@ export class MainBindingsWriter extends BaseWriter {
    protected renderFileContents(): string {
       const out = [
          this.notice,
-         'import { ipcMain as electronIpcMain } from "electron/main";',
-         'import type { IpcMainEvent, BrowserWindow } from "electron/main";',
+         'import { ipcMain as electronIpcMain } from "electron";',
+         'import type { IpcMainEvent, BrowserWindow } from "electron";',
       ];
       const callables: string[] = [];
 
