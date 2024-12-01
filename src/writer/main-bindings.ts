@@ -32,14 +32,16 @@ export class MainBindingsWriter extends BaseWriter {
                const callback = "(event: any, ...args: any[]) => callback(event, ...args)";
                const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
                const modSigDef = this.injectEventTypehint(spec.signature.definition);
-               const callable = `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
-               callables.push(callable);
+               const ipcCallable = `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
+               callables.push(ipcCallable);
             } else if (spec.direction === "MainToRenderer") {
-               const params = this.getOriginalParams(spec, false);
-               const paramsWithTypes = this.getOriginalParams(spec, true);
-               const webContents = `\n${this.indents[1]}browserWindow.webContents.send('${spec.name}', ${params})`;
-               const callable = `send${spec.name}: (browserWindow: BrowserWindow, ${paramsWithTypes}) => ${webContents}`;
-               callables.push(callable);
+               const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
+               const senderParams = this.getOriginalParams(spec, false);
+               const sender = `${senderCall}('${spec.name}', ${senderParams})`;
+               const ipcParams = this.getOriginalParams(spec, true);
+               const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
+               const ipcCallable = `send${spec.name}: ${ipcSignature} => ${sender}`;
+               callables.push(ipcCallable);
             } else if (spec.direction === "RendererToRenderer") {
                // TODO: support
             }
