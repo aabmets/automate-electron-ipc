@@ -16,12 +16,10 @@ export class MainBindingsWriter extends BaseWriter {
       return this.resolvedConfig.mainBindingsFilePath;
    }
    protected renderFileContents(): string {
-      const out = [
-         this.notice,
-         'import { ipcMain as electronIpcMain } from "electron";',
-         'import type { IpcMainEvent, BrowserWindow } from "electron";',
-      ];
-      const callables: string[] = [];
+      const electronImportsSet = new Set<string>(["ipcMain as electronIpcMain"]);
+      const electronTypeImportsSet = new Set<string>(["IpcMainEvent"]);
+      const importDeclarationsArray: string[] = [];
+      const callablesArray: string[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
@@ -33,17 +31,33 @@ export class MainBindingsWriter extends BaseWriter {
                const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
                const modSigDef = this.injectEventTypehint(spec.signature.definition);
                const ipcCallable = `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
-               callables.push(ipcCallable);
+               callablesArray.push(ipcCallable);
             } else if (spec.direction === "MainToRenderer") {
+               electronTypeImportsSet.add("BrowserWindow");
                const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
                const senderParams = this.getOriginalParams(spec, false);
                const sender = `${senderCall}('${spec.name}', ${senderParams})`;
                const ipcParams = this.getOriginalParams(spec, true);
                const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
                const ipcCallable = `send${spec.name}: ${ipcSignature} => ${sender}`;
-               callables.push(ipcCallable);
+               callablesArray.push(ipcCallable);
             } else if (spec.direction === "RendererToRenderer") {
-               // TODO: support
+               electronImportsSet.add("MessageChannelMain");
+               electronTypeImportsSet.add("BrowserWindow");
+               const propagator = [
+                  "{",
+                  `${this.indents[1]}const { port1, port2 } = new MessageChannelMain();`,
+                  `${this.indents[1]}bwOne.once('ready-to-show', () => {`,
+                  `${this.indents[2]}bwOne.webContents.postMessage('${spec.name}', null, [port1]);`,
+                  `${this.indents[1]}});`,
+                  `${this.indents[1]}bwTwo.once('ready-to-show', () => {`,
+                  `${this.indents[2]}bwTwo.webContents.postMessage('${spec.name}', null, [port2]);`,
+                  `${this.indents[1]}});`,
+                  `${this.indents[0]}}`,
+               ].join("\n");
+               const ipcSignature = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
+               const ipcCallable = `propagate${spec.name}Ports: ${ipcSignature} => ${propagator}`;
+               callablesArray.push(ipcCallable);
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -54,11 +68,18 @@ export class MainBindingsWriter extends BaseWriter {
                customType,
             );
             if (importDeclaration) {
-               out.push(importDeclaration);
+               importDeclarationsArray.push(importDeclaration);
             }
          }
       }
-      const sortedCallables = this.sortCallablesByPrefix(callables).join(`,\n${this.indents[0]}`);
+      const out = [
+         this.notice,
+         `import { ${Array.from(electronImportsSet).join(", ")} } from "electron";`,
+         `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
+         ...importDeclarationsArray,
+      ];
+      const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
+      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [
          "\nexport const ipcMain = {",
          `\n${this.indents[0]}${sortedCallables},`,
