@@ -65,7 +65,7 @@ export async function validateResolveConfig(
       fsp.stat(schemaFile).catch(() => null),
    ]);
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
-   const resolvedConfig: t.IPCResolvedConfig = {
+   return {
       mainBindingsFilePath: path.join(ipcDataDir, "main.ts"),
       preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts"),
       rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts"),
@@ -75,10 +75,6 @@ export async function validateResolveConfig(
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,
       },
    };
-   if (!resolvedConfig.ipcSchema.stats) {
-      await fsp.writeFile(resolvedConfig.ipcSchema.path, "");
-   }
-   return resolvedConfig;
 }
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {

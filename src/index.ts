@@ -14,8 +14,6 @@ import path from "node:path";
 import type * as t from "@types";
 import type { Plugin } from "vite";
 import parser from "./parser.js";
-import { ipcMain } from "./user-data/main.js";
-import utils from "./utils.js";
 import valid from "./validators.js";
 import writer from "./writer/index.js";
 
@@ -23,20 +21,19 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
    return {
       name: "vite-plugin-automate-electron-ipc",
       buildStart: async () => {
-         const resolvedConfig = valid.validateResolveConfig(config);
-         const stat = await fsp.stat(resolvedConfig.ipcSpecPath).catch(() => null);
+         const resolvedConfig = await valid.validateResolveConfig(config);
          const pfsArray: t.ParsedFileSpecs[] = [];
 
-         if (!stat) {
+         if (!resolvedConfig.ipcSchema.stats) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because the path pointed to by",
-               `ipcSpecPath does not exist:\n      '${resolvedConfig.ipcSpecPath}'\n`,
+               `ipcSpecPath does not exist:\n      '${resolvedConfig.ipcSchema.path}'\n`,
             );
             return;
-         } else if (stat.isFile()) {
-            const contents = await fsp.readFile(resolvedConfig.ipcSpecPath);
+         } else if (resolvedConfig.ipcSchema.stats.isFile()) {
+            const contents = await fsp.readFile(resolvedConfig.ipcSchema.path);
             const fileData: t.FileMeta = {
-               fullPath: resolvedConfig.ipcSpecPath,
+               fullPath: resolvedConfig.ipcSchema.path,
                relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
             };
             const specs = parser.parseSpecs({
@@ -46,12 +43,12 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
             if (specs.channelSpecArray.length > 0) {
                pfsArray.push({ specs: specs, ...fileData });
             }
-         } else if (stat.isDirectory()) {
-            const files = await fsp.readdir(resolvedConfig.ipcSpecPath, { recursive: true });
+         } else if (resolvedConfig.ipcSchema.stats.isDirectory()) {
+            const files = await fsp.readdir(resolvedConfig.ipcSchema.path, { recursive: true });
             const rawFileContents: t.RawFileContents[] = [];
             await Promise.all(
                files.map(async (file) => {
-                  const fullPath = path.join(resolvedConfig.ipcSpecPath, file);
+                  const fullPath = path.join(resolvedConfig.ipcSchema.path, file);
                   const stat = await fsp.stat(fullPath);
                   if (stat.isFile() && (await fsp.exists(fullPath))) {
                      const contents = await fsp.readFile(fullPath);
@@ -77,7 +74,7 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
          if (pfsArray.length === 0) {
             console.warn(
                "\n ⚠️ - Skipping IPC automation, because no Channel definitions",
-               `were found at ipcSpecPath:\n      '${resolvedConfig.ipcSpecPath}'\n`,
+               `were found in IPC schema path:\n      '${resolvedConfig.ipcSchema.path}'\n`,
             );
             return;
          }
@@ -89,12 +86,6 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
       },
    };
 }
-
-export { ipcMain };
-
-export const ipcPreload = {
-   filePath: utils.searchUpwards("user-data/preload.js"),
-};
 
 export function Channel(): t.Channels {
    const warning = () => {
