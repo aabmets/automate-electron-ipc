@@ -14,22 +14,14 @@ import type { Plugin } from "vite";
 /**
  * Optional config for IPC automation plugin that is merged into the default config object.
  * The default config is defined as follows:
- * - `ipcSpecPath: "src/ipc-spec.ts"`
- * - `rendererDir: "src/renderer"`
+ * - `ipcDataDir: "src/auto-ipc"`
  * - `codeIndent: 3`
  *
- * @property ipcSpecPath - Relative path to a file or directory, which contains the IPC channel
- *    specifications. When the path points to a file, IPC specs will be parsed only from that file.
- *    When the path points to a directory, the directory structure will be recursively walked and
- *    all IPC specs will be parsed from all `.ts` files. The first option is useful for smaller
- *    applications, while the second option is beneficial for large quantities of IPC channels.
- * @property rendererDir - Relative path to the directory which contains the renderer source code.
- *    The `window.d.ts` file with types for the `window` object will be generated into this directory.
+ * @property ipcDataDir - Relative path to a directory which this plugin will use as its data directory.
  * @property codeIndent - Amount of spaces that will be used for indenting any generated code.
  */
 export interface IPCOptionalConfig {
-   ipcSpecPath?: string;
-   rendererDir?: string;
+   ipcDataDir?: string;
    codeIndent?: number;
 }
 

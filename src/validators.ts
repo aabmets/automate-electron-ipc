@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
 import {
@@ -30,42 +31,24 @@ import utils from "./utils.js";
  * config with all paths resolved to absolute paths.
  *
  * - Validates:
- *   - `ipcSpecPath` and `rendererDir` must:
- *     - be relative paths to project root
- *     - not be identical to each other
- *     - must not reside within each other
+ *   - `ipcDataDir` path must be relative to project root.
  *   - `codeIndent` must be between 2 and 4, inclusive.
  *
  * @param config - Optional configuration object.
  * @returns The validated and resolved configuration.
  */
-export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCResolvedConfig {
+export async function validateResolveConfig(
+   config: t.IPCOptionalConfig = {},
+): Promise<t.IPCResolvedConfig> {
    const mergedConfig: t.IPCOptionalConfig = {
-      ipcSpecPath: "src/ipc-spec.ts",
-      rendererDir: "src/renderer",
+      ipcDataDir: "src/auto-ipc",
       codeIndent: 3,
       ...config,
    };
    const IPCOptionalConfigStruct = object({
-      ipcSpecPath: refine(string(), "relative", (value) => {
-         if (path.isAbsolute(value)) {
-            return "ipcSpecPath must be relative to the project root";
-         } else if (value === mergedConfig.rendererDir) {
-            return "ipcSpecPath and rendererDir cannot be identical";
-         } else if (utils.isPathInside(value, mergedConfig.rendererDir)) {
-            return "ipcSpecPath cannot be relative to rendererDir";
-         } else {
-            return true;
-         }
-      }),
-      rendererDir: refine(string(), "relative", (value) => {
-         if (path.isAbsolute(value)) {
-            return "rendererDir must be relative to the project root";
-         } else if (utils.isPathInside(value, mergedConfig.ipcSpecPath)) {
-            return "rendererDir cannot be relative to ipcSpecPath";
-         } else {
-            return true;
-         }
+      ipcDataDir: refine(string(), "relative", (value) => {
+         const errMsg = "ipcSpecPath must be relative to the project root";
+         return path.isAbsolute(value) ? errMsg : true;
       }),
       codeIndent: refine(number(), "clamped", (value) => {
          const errMsg = "value cannot be less than 2 or greater than 4";
@@ -73,14 +56,29 @@ export function validateResolveConfig(config: t.IPCOptionalConfig = {}): t.IPCRe
       }),
    });
    assert(mergedConfig, IPCOptionalConfigStruct);
-   const resolvedRendererDir = utils.resolveUserProjectPath(mergedConfig.rendererDir);
-   return {
+
+   const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir);
+   const schemaDir = path.join(ipcDataDir, "schema");
+   const schemaFile = path.join(ipcDataDir, "schema.ts");
+   const [schemaDirStats, schemaFileStats] = await Promise.all([
+      fsp.stat(schemaDir).catch(() => null),
+      fsp.stat(schemaFile).catch(() => null),
+   ]);
+   const onlySchemaDir = schemaDirStats && !schemaFileStats;
+   const resolvedConfig: t.IPCResolvedConfig = {
+      mainBindingsFilePath: path.join(ipcDataDir, "main.ts"),
+      preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts"),
+      rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts"),
       codeIndent: mergedConfig.codeIndent,
-      ipcSpecPath: utils.resolveUserProjectPath(mergedConfig.ipcSpecPath),
-      mainBindingsFilePath: utils.searchUpwards("user-data/main.ts"),
-      preloadBindingsFilePath: utils.searchUpwards("user-data/preload.ts"),
-      rendererTypesFilePath: path.join(resolvedRendererDir, "window.d.ts"),
+      ipcSchema: {
+         path: onlySchemaDir ? schemaDir : schemaFile,
+         stats: onlySchemaDir ? schemaDirStats : schemaFileStats,
+      },
    };
+   if (!resolvedConfig.ipcSchema.stats) {
+      await fsp.writeFile(resolvedConfig.ipcSchema.path, "");
+   }
+   return resolvedConfig;
 }
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {

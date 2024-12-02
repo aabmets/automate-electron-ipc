@@ -9,16 +9,20 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Stats } from "node:fs";
 import type { BroadcastConfig, Channels, IPCOptionalConfig, UnicastConfig } from "./index";
 
 export type { IPCOptionalConfig, BroadcastConfig, UnicastConfig, Channels };
 
 export interface IPCResolvedConfig {
-   codeIndent: number;
-   ipcSpecPath: string;
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
+   codeIndent: number;
+   ipcSchema: {
+      path: string;
+      stats: Stats | null;
+   };
 }
 
 export interface ImportSpec {
