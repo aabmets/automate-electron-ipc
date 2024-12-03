@@ -41,11 +41,13 @@ export async function validateResolveConfig(
    config: t.IPCOptionalConfig = {},
 ): Promise<t.IPCResolvedConfig> {
    const mergedConfig: t.IPCOptionalConfig = {
+      projectUsesNodeNext: false,
       ipcDataDir: "src/ipc",
       codeIndent: 3,
       ...config,
    };
    const IPCOptionalConfigStruct = object({
+      projectUsesNodeNext: boolean(),
       ipcDataDir: refine(string(), "relative", (value) => {
          const errMsg = "ipcSpecPath must be relative to the project root";
          return path.isAbsolute(value) ? errMsg : true;
@@ -66,10 +68,10 @@ export async function validateResolveConfig(
    ]);
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
    return {
+      ...mergedConfig,
       mainBindingsFilePath: path.join(ipcDataDir, "main.ts"),
       preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts"),
       rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts"),
-      codeIndent: mergedConfig.codeIndent,
       ipcSchema: {
          path: onlySchemaDir ? schemaDir : schemaFile,
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,

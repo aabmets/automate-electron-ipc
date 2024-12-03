@@ -30,7 +30,10 @@ export class BaseWriter {
       }
       this.pfsArray = pfsArray;
       this.resolvedConfig = resolvedConfig;
-      this.importsGenerator = new ImportsGenerator(this.getTargetFilePath());
+      this.importsGenerator = new ImportsGenerator(
+         resolvedConfig.projectUsesNodeNext,
+         this.getTargetFilePath(),
+      );
       this.indents = this.getCodeIndents();
    }
 

@@ -13,10 +13,12 @@ import path from "node:path";
 import type * as t from "@types";
 
 export class ImportsGenerator {
+   private readonly projectUsesNodeNext: boolean;
    private readonly targetFilePath: string;
    private readonly seenImports: t.SeenImports;
 
-   public constructor(targetFilePath: string) {
+   public constructor(projectUsesNodeNext: boolean, targetFilePath: string) {
+      this.projectUsesNodeNext = projectUsesNodeNext;
       this.targetFilePath = targetFilePath;
       this.seenImports = {
          customTypes: new Set<string>(),
@@ -32,8 +34,9 @@ export class ImportsGenerator {
    private getImportPath(...paths: string[]): string {
       const joined = path.join(...paths);
       const normalizedPath = joined.replaceAll(path.sep, "/");
-      const ext = path.extname(normalizedPath);
-      return normalizedPath.slice(0, normalizedPath.length - ext.length);
+      const extLen = path.extname(normalizedPath).length;
+      const baseName = normalizedPath.slice(0, normalizedPath.length - extLen);
+      return this.projectUsesNodeNext ? `${baseName}.js` : normalizedPath;
    }
 
    private adjustImportPath(importPath: string, sourceFilePath: string): string {

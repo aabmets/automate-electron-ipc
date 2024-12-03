@@ -21,6 +21,7 @@ import type { Plugin } from "vite";
  * @property codeIndent - Amount of spaces that will be used for indenting any generated code.
  */
 export interface IPCOptionalConfig {
+   projectUsesNodeNext?: boolean;
    ipcDataDir?: string;
    codeIndent?: number;
 }

@@ -18,6 +18,8 @@ export interface IPCResolvedConfig {
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
+   projectUsesNodeNext: boolean;
+   ipcDataDir: string;
    codeIndent: number;
    ipcSchema: {
       path: string;
