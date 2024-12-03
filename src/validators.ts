@@ -41,7 +41,7 @@ export async function validateResolveConfig(
    config: t.IPCOptionalConfig = {},
 ): Promise<t.IPCResolvedConfig> {
    const mergedConfig: t.IPCOptionalConfig = {
-      ipcDataDir: "src/auto-ipc",
+      ipcDataDir: "src/ipc",
       codeIndent: 3,
       ...config,
    };
