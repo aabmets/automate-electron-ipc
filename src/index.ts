@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
 import type { Plugin } from "vite";
+import logger from "./logger.js";
 import parser from "./parser.js";
 import valid from "./validators.js";
 import writer from "./writer/index.js";
@@ -25,16 +26,13 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
          const pfsArray: t.ParsedFileSpecs[] = [];
 
          if (!resolvedConfig.ipcSchema.stats) {
-            console.warn(
-               "\n ⚠️ - Skipping IPC automation, because the path pointed to by",
-               `ipcSpecPath does not exist:\n      '${resolvedConfig.ipcSchema.path}'\n`,
-            );
+            logger.nonExistentSchemaPath(resolvedConfig.ipcSchema.path);
             return;
          } else if (resolvedConfig.ipcSchema.stats.isFile()) {
             const contents = await fsp.readFile(resolvedConfig.ipcSchema.path);
             const fileData: t.FileMeta = {
                fullPath: resolvedConfig.ipcSchema.path,
-               relativePath: config?.ipcSpecPath || "src/ipc-spec.ts",
+               relativePath: config?.ipcDataDir || "src/ipc",
             };
             const specs = parser.parseSpecs({
                contents: contents.toString(),
@@ -72,10 +70,7 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
             }
          }
          if (pfsArray.length === 0) {
-            console.warn(
-               "\n ⚠️ - Skipping IPC automation, because no Channel definitions",
-               `were found in IPC schema path:\n      '${resolvedConfig.ipcSchema.path}'\n`,
-            );
+            logger.noChannelExpressions(resolvedConfig.ipcSchema.path);
             return;
          }
          await Promise.all([
@@ -83,27 +78,20 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
             new writer.PreloadBindingsWriter(resolvedConfig, pfsArray).write(),
             new writer.RendererTypesWriter(resolvedConfig, pfsArray).write(),
          ]);
+         logger.reportSuccess(pfsArray);
       },
    };
 }
 
 export function Channel(): t.Channels {
-   const warning = () => {
-      if (!(global as any)?.warnedIncorrectUsageOnce) {
-         console.warn(
-            "IPC automation Channel expressions have no effect when executed by JavaScript.",
-         );
-         (global as any).warnedIncorrectUsageOnce = true;
-      }
-   };
    return {
       Unicast: {
-         RendererToMain: warning,
-         RendererToRenderer: warning,
+         RendererToMain: logger.cannotExecuteChannels,
+         RendererToRenderer: logger.cannotExecuteChannels,
       },
       Broadcast: {
-         RendererToMain: warning,
-         MainToRenderer: warning,
+         RendererToMain: logger.cannotExecuteChannels,
+         MainToRenderer: logger.cannotExecuteChannels,
       },
    };
 }
