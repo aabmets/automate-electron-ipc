@@ -52,7 +52,7 @@ export class BaseWriter {
    }
 
    protected getCodeIndents(): string[] {
-      return [1, 2, 3, 4].map((value) => {
+      return [1, 2, 3, 4, 5].map((value) => {
          return " ".repeat(this.resolvedConfig.codeIndent).repeat(value);
       });
    }

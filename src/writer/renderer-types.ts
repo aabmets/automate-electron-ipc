@@ -17,18 +17,28 @@ export class RendererTypesWriter extends BaseWriter {
    }
    protected renderFileContents(): string {
       const out = [this.notice];
-      const callables: string[] = [];
+      const portsArray: string[] = [];
+      const callablesArray: string[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
 
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               callables.push(`send${spec.name}: ${spec.signature.definition}`);
+               callablesArray.push(`send${spec.name}: ${spec.signature.definition};`);
             } else if (spec.direction === "MainToRenderer") {
-               callables.push(`on${spec.name}: (callback: ${spec.signature.definition}) => void`);
+               callablesArray.push(
+                  `on${spec.name}: (callback: ${spec.signature.definition}) => void;`,
+               );
             } else if (spec.direction === "RendererToRenderer") {
-               // TODO: support
+               portsArray.push(
+                  [
+                     `\n${this.indents[3]}${spec.name}: {`,
+                     `\n${this.indents[4]}sendMessage: ${spec.signature.definition};`,
+                     `\n${this.indents[4]}onMessage: (callback: ${spec.signature.definition}) => void;`,
+                     `\n${this.indents[3]}};`,
+                  ].join(""),
+               );
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -43,18 +53,22 @@ export class RendererTypesWriter extends BaseWriter {
             }
          }
       }
-      const sortedCallables = this.sortCallablesByPrefix(callables).join(`\n${this.indents[2]}`);
+      const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
+      const sortedCallables = sortedCallablesArray.join(`\n${this.indents[2]}`);
       const windowDeclaration = [
          "\ndeclare global {",
          `\n${this.indents[0]}interface Window {`,
          `\n${this.indents[1]}ipc: {`,
          `\n${this.indents[2]}${sortedCallables}`,
-         `\n${this.indents[1]}};`,
-         `\n${this.indents[0]}}`,
-         "\n}\n",
-      ].join("");
+      ];
+      if (portsArray.length > 0) {
+         windowDeclaration.push(
+            ...[`\n${this.indents[2]}ports: {`, ...portsArray, `\n${this.indents[2]}};`],
+         );
+      }
+      windowDeclaration.push(...[`\n${this.indents[1]}};`, `\n${this.indents[0]}}`, "\n}\n"]);
 
-      out.push(windowDeclaration);
+      out.push(windowDeclaration.join(""));
       return out.join("\n");
    }
 }
