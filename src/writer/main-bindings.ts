@@ -27,7 +27,7 @@ export class MainBindingsWriter extends BaseWriter {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
                const method = spec.kind === "Broadcast" ? "on" : "handle";
-               const callback = "(event: any, ...args: any[]) => callback(event, ...args)";
+               const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
                const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
                const modSigDef = this.injectEventTypehint(spec.signature.definition);
                const ipcCallable = `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
@@ -78,11 +78,9 @@ export class MainBindingsWriter extends BaseWriter {
          `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
          ...importDeclarationsArray,
       ];
-      const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [
          "\nexport const ipcMain = {",
-         `\n${this.indents[0]}${sortedCallables},`,
+         `\n${this.indents[0]}${this.stringifyCallablesArray(callablesArray, 0)},`,
          "\n}\n",
       ].join("");
 

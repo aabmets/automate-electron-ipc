@@ -57,21 +57,6 @@ export class BaseWriter {
       });
    }
 
-   protected sortCallablesByPrefix(callables: string[]): string[] {
-      return callables.sort((a, b) => {
-         const prefixOrder = ["on", "send", "port"];
-         const getPrefixRank = (value: string) => {
-            for (let i = 0; i < prefixOrder.length; i++) {
-               if (value.startsWith(prefixOrder[i])) {
-                  return i;
-               }
-            }
-            return prefixOrder.length;
-         };
-         return getPrefixRank(a) - getPrefixRank(b);
-      });
-   }
-
    protected injectEventTypehint(sigDef: string): string {
       return sigDef.replace("(", "(event: IpcMainEvent, ");
    }
@@ -83,6 +68,22 @@ export class BaseWriter {
             return `${param.name}${typeHint}`;
          })
          .join(", ");
+   }
+
+   protected stringifyCallablesArray(callablesArray: string[], indentLevel: number): string {
+      const sorted = callablesArray.sort((a, b) => {
+         const prefixOrder = ["on", "send", "port"];
+         const getPrefixRank = (value: string) => {
+            for (let i = 0; i < prefixOrder.length; i++) {
+               if (value.startsWith(prefixOrder[i])) {
+                  return i;
+               }
+            }
+            return prefixOrder.length;
+         };
+         return getPrefixRank(a) - getPrefixRank(b);
+      });
+      return sorted.join(`,\n${this.indents[indentLevel]}`);
    }
 
    public async write() {

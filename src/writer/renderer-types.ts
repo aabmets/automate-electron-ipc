@@ -53,13 +53,11 @@ export class RendererTypesWriter extends BaseWriter {
             }
          }
       }
-      const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`\n${this.indents[2]}`);
       const windowDeclaration = [
          "\ndeclare global {",
          `\n${this.indents[0]}interface Window {`,
          `\n${this.indents[1]}ipc: {`,
-         `\n${this.indents[2]}${sortedCallables}`,
+         `\n${this.indents[2]}${this.stringifyCallablesArray(callablesArray, 2)}`,
       ];
       if (portsArray.length > 0) {
          windowDeclaration.push(

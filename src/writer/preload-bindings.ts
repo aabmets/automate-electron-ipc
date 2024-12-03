@@ -38,11 +38,9 @@ export class PreloadBindingsWriter extends BaseWriter {
          }
       }
       const out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron";'];
-      const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [
          "\ncontextBridge.exposeInMainWorld('ipc', {",
-         `\n${this.indents[0]}${sortedCallables},`,
+         `\n${this.indents[0]}${this.stringifyCallablesArray(callablesArray, 0)},`,
       ];
       if (portNamesArray.length > 0) {
          const portComponents = [
