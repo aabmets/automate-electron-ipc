@@ -17,7 +17,6 @@ export class PreloadBindingsWriter extends BaseWriter {
       return this.resolvedConfig.preloadBindingsFilePath;
    }
    protected renderFileContents(): string {
-      const portInitializersArray: string[] = [];
       const portNamesArray: string[] = [];
       const callablesArray: string[] = [];
 
@@ -34,31 +33,30 @@ export class PreloadBindingsWriter extends BaseWriter {
                const callable = `on${spec.name}: (callback: Function) => ${ipcRenderer}`;
                callablesArray.push(callable);
             } else if (spec.direction === "RendererToRenderer") {
-               portInitializersArray.push(this.getPortInitializer(spec.name).trim());
                portNamesArray.push(spec.name);
             }
          }
       }
+      const out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron";'];
       const sortedCallablesArray = this.sortCallablesByPrefix(callablesArray);
       const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [
          "\ncontextBridge.exposeInMainWorld('ipc', {",
          `\n${this.indents[0]}${sortedCallables},`,
       ];
-      let out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron";'];
       if (portNamesArray.length > 0) {
-         out.push('import type { IpcRendererEvent } from "electron";');
-         out.push(this.getPortComponents());
-         out = out.concat(portInitializersArray);
-         const portNameProps = portNamesArray
-            .map((item) => `${item}: getPortObject('${item}')`)
-            .join(`,\n${this.indents[1]}`);
-         const ports = [
+         const portComponents = [
+            'import type { IpcRendererEvent } from "electron";',
+            this.getPortComponents(),
+            ...portNamesArray.map((portName) => this.getPortInitializer(portName).trim()),
+         ];
+         out.push(...portComponents);
+         const portBindings = [
             `\n${this.indents[0]}ports: {`,
-            `\n${this.indents[1]}${portNameProps},`,
+            ...portNamesArray.map((portName) => this.getPortProperty(portName)),
             `\n${this.indents[0]}},`,
-         ].join("");
-         bindingsExpression.push(ports);
+         ];
+         bindingsExpression.push(...portBindings);
       }
       bindingsExpression.push("\n});\n");
 
@@ -71,6 +69,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          const ports: { [key: string]: MessagePort } = {};
          
          type PortObject = { sendMessage: Function, onMessage: Function };
+         
          function getPortObject(portName: string): PortObject {
             return {
                sendMessage: (...args: any[]) => ports[portName].postMessage(args),
@@ -88,5 +87,9 @@ export class PreloadBindingsWriter extends BaseWriter {
             ports.${portName} = event.ports[0];
          });
       `);
+   }
+
+   private getPortProperty(portName: string) {
+      return `\n${this.indents[1]}${portName}: getPortObject('${portName}'),`;
    }
 }
