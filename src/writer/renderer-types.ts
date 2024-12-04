@@ -15,6 +15,9 @@ export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.resolvedConfig.rendererTypesFilePath;
    }
+   protected renderEmptyFileContents(): string {
+      return `${this.notice}\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
+   }
    protected renderFileContents(): string {
       const out = [this.notice];
       const portsArray: string[] = [];

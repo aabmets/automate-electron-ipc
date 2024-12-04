@@ -69,16 +69,16 @@ export function ipcAutomation(config?: t.IPCOptionalConfig): Plugin {
                }
             }
          }
-         if (pfsArray.length === 0) {
-            logger.noChannelExpressions(resolvedConfig.ipcSchema.path);
-            return;
-         }
          await Promise.all([
             new writer.MainBindingsWriter(resolvedConfig, pfsArray).write(),
             new writer.PreloadBindingsWriter(resolvedConfig, pfsArray).write(),
             new writer.RendererTypesWriter(resolvedConfig, pfsArray).write(),
          ]);
-         logger.reportSuccess(pfsArray);
+         if (pfsArray.length === 0) {
+            logger.noChannelExpressions(resolvedConfig.ipcSchema.path);
+         } else {
+            logger.reportSuccess(pfsArray);
+         }
       },
    };
 }

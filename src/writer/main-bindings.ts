@@ -15,6 +15,9 @@ export class MainBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.resolvedConfig.mainBindingsFilePath;
    }
+   protected renderEmptyFileContents(): string {
+      return `${this.notice}\nexport const ipcMain = {};`;
+   }
    protected renderFileContents(): string {
       const electronImportsSet = new Set<string>(["ipcMain as electronIpcMain"]);
       const electronTypeImportsSet = new Set<string>(["IpcMainEvent"]);

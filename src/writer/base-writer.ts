@@ -51,6 +51,11 @@ export class BaseWriter {
       return null as unknown as string;
    }
 
+   protected renderEmptyFileContents(): string {
+      this.throwAbstractError("renderEmptyFileContents");
+      return null as unknown as string;
+   }
+
    protected getCodeIndents(): string[] {
       return [1, 2, 3, 4, 5].map((value) => {
          return " ".repeat(this.resolvedConfig.codeIndent).repeat(value);
@@ -90,6 +95,12 @@ export class BaseWriter {
       const targetFilePath = this.getTargetFilePath();
       const fileDirectory = path.dirname(targetFilePath);
       await fsp.mkdir(fileDirectory, { recursive: true });
-      await fsp.writeFile(targetFilePath, this.renderFileContents());
+      let contents: string;
+      if (this.pfsArray.length === 0) {
+         contents = this.renderEmptyFileContents();
+      } else {
+         contents = this.renderFileContents();
+      }
+      await fsp.writeFile(targetFilePath, contents);
    }
 }

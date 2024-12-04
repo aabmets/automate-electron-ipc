@@ -16,6 +16,13 @@ export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.resolvedConfig.preloadBindingsFilePath;
    }
+   protected renderEmptyFileContents(): string {
+      return [
+         this.notice,
+         'import { contextBridge } from "electron";\n',
+         "contextBridge.exposeInMainWorld('ipc', {});",
+      ].join("\n");
+   }
    protected renderFileContents(): string {
       const portNamesArray: string[] = [];
       const callablesArray: string[] = [];
@@ -64,10 +71,8 @@ export class PreloadBindingsWriter extends BaseWriter {
 
    private getPortComponents() {
       return utils.dedent(`
-         const ports: { [key: string]: MessagePort } = {};
-         
-         type PortObject = { sendMessage: Function, onMessage: Function };
-         
+         const ports: { [key: string]: MessagePort } = {};\n
+         type PortObject = { sendMessage: Function, onMessage: Function };\n
          function getPortObject(portName: string): PortObject {
             return {
                sendMessage: (...args: any[]) => ports[portName].postMessage(args),
