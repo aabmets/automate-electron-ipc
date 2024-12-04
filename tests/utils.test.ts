@@ -133,3 +133,26 @@ describe("writeFile", () => {
       }
    });
 });
+
+describe("dedent", () => {
+   it("should dedent code written in template strings", () => {
+      const result = utils.dedent(`
+         const obj = {
+            nested: {
+               data: "asdfg",
+            },
+            data: 123,
+         }
+      `);
+      expect(result.trim()).toStrictEqual(
+         [
+            "const obj = {",
+            "   nested: {",
+            '      data: "asdfg",',
+            "   },",
+            "   data: 123,",
+            "}",
+         ].join("\n"),
+      );
+   });
+});
