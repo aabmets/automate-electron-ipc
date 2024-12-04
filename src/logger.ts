@@ -29,7 +29,7 @@ function warn(messages: string[]): void {
 
 function success(messages: string[]): void {
    const fmtMsg = formatOutput(messages, "✔");
-   console.warn(`\n\x1b[38;5;76m${fmtMsg}\x1b[0m\n`);
+   console.warn(`\n\x1b[38;5;34m${fmtMsg}\x1b[0m\n`);
 }
 
 export function nonExistentSchemaPath(path: string): void {
