@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser";
+import parser from "@src/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseSpecs", () => {

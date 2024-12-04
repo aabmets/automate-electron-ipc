@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import utils from "@src/utils";
-import { validateResolveConfig } from "@src/validators";
+import utils from "@src/utils.js";
+import { validateResolveConfig } from "@src/validators.js";
 import * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

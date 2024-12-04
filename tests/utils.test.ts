@@ -14,7 +14,7 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import url from "node:url";
-import utils from "@src/utils";
+import utils from "@src/utils.js";
 import { describe, expect, it, vi } from "vitest";
 
 describe("searchUpwards", () => {

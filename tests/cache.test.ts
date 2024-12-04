@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { LRUCache } from "@src/cache";
+import { LRUCache } from "@src/cache.js";
 import { describe, expect, it } from "vitest";
 
 describe("LRUCache Singleton Behavior", () => {

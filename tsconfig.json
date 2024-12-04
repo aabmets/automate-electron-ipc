@@ -10,7 +10,7 @@
       "baseUrl": ".",
       "paths": {
          "@types": ["./types/internal.d.ts"],
-         "@src/*": ["./src/*.js"]
+         "@src/*": ["./src/*"]
       },
       "allowJs": true,
       "allowImportingTsExtensions": false,
