@@ -66,6 +66,7 @@ describe("parseChannelExpressions", () => {
                });
             `);
             expect(result.signature).toStrictEqual({
+               definition: "(param1: string, param2: number, param3: boolean) => void",
                params: [
                   { name: "param1", type: "string", rest: false, optional: false },
                   { name: "param2", type: "number", rest: false, optional: false },

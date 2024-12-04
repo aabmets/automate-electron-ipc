@@ -14,12 +14,16 @@ import { describe, expect, it } from "vitest";
 
 describe("parseSpecs", () => {
    it("should parse interfaces and types", () => {
-      const { typeSpecArray } = parser.parseSpecs(`
-         export interface MyInterface {
-            property: string;
-         }
-         type MyType<T> = number | boolean | T;
-      `);
+      const { typeSpecArray } = parser.parseSpecs({
+         contents: `
+            export interface MyInterface {
+               property: string;
+            }
+            type MyType<T> = number | boolean | T;
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
       expect(typeSpecArray).toHaveLength(2);
       expect(typeSpecArray[0]).toMatchObject({
          name: "MyInterface",
@@ -36,48 +40,49 @@ describe("parseSpecs", () => {
    });
 
    it("should parse ES module import statements", () => {
-      const { importSpecArray } = parser.parseSpecs(`
-         import defaultExport1 from "module-name1";
-         import { namedExport2 } from 'module-name2';
-         import type { CustomType3 } from 'module-name3';
-         import { namedExport4, type CustomType4 } from 'module-name4';
-         import type * as Space5 from 'module-name5';
-         import * as Space6 from 'module-name6';
-      `);
-      expect(importSpecArray).toHaveLength(5);
+      const { importSpecArray } = parser.parseSpecs({
+         contents: `
+            import type { CustomType1 } from 'module-name1';
+            import { namedExport2, type CustomType2 } from 'module-name2';
+            import type * as Space3 from 'module-name3';
+            import * as Space4 from 'module-name4';
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
+      expect(importSpecArray).toHaveLength(4);
       expect(importSpecArray[0]).toMatchObject({
-         fromPath: "module-name2",
-         customTypes: [],
+         fromPath: "module-name1",
+         customTypes: ["CustomType1"],
          namespace: null,
       });
       expect(importSpecArray[1]).toMatchObject({
-         fromPath: "module-name3",
-         customTypes: ["CustomType3"],
+         fromPath: "module-name2",
+         customTypes: ["CustomType2"],
          namespace: null,
       });
       expect(importSpecArray[2]).toMatchObject({
-         fromPath: "module-name4",
-         customTypes: ["CustomType4"],
-         namespace: null,
+         fromPath: "module-name3",
+         customTypes: [],
+         namespace: "Space3",
       });
       expect(importSpecArray[3]).toMatchObject({
-         fromPath: "module-name5",
+         fromPath: "module-name4",
          customTypes: [],
-         namespace: "Space5",
-      });
-      expect(importSpecArray[4]).toMatchObject({
-         fromPath: "module-name6",
-         customTypes: [],
-         namespace: "Space6",
+         namespace: "Space4",
       });
    });
 
    it("should parse simple unicast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs(`
-         Channel("UserChannel").Unicast.RendererToMain({
-            signature: type as (arg1: string, arg2: number) => boolean,
-         })
-      `);
+      const { channelSpecArray } = parser.parseSpecs({
+         contents: `
+            Channel("UserChannel").Unicast.RendererToMain({
+               signature: type as (arg1: string, arg2: number) => boolean,
+            })
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
@@ -106,12 +111,16 @@ describe("parseSpecs", () => {
    });
 
    it("should parse simple broadcast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs(`
-         Channel("UserChannel").Broadcast.RendererToMain({
-            signature: type as (arg1: string, arg2: number) => boolean,
-            listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
-         })
-      `);
+      const { channelSpecArray } = parser.parseSpecs({
+         contents: `
+            Channel("UserChannel").Broadcast.RendererToMain({
+               signature: type as (arg1: string, arg2: number) => boolean,
+               listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
+            })
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
@@ -141,11 +150,15 @@ describe("parseSpecs", () => {
    });
 
    it("should parse complex unicast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs(`
-         Channel("UserChannel").Unicast.RendererToRenderer({
-            signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
-         })
-      `);
+      const { channelSpecArray } = parser.parseSpecs({
+         contents: `
+            Channel("UserChannel").Unicast.RendererToRenderer({
+               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
+            })
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
@@ -174,12 +187,16 @@ describe("parseSpecs", () => {
    });
 
    it("should parse complex broadcast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs(`
-         Channel("UserChannel").Broadcast.MainToRenderer({
-            signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
-            listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
-         })
-      `);
+      const { channelSpecArray } = parser.parseSpecs({
+         contents: `
+            Channel("UserChannel").Broadcast.MainToRenderer({
+               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
+               listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
+            })
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
