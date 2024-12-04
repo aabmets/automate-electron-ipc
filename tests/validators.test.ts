@@ -24,102 +24,78 @@ describe("validateResolveConfig", () => {
       vi.restoreAllMocks();
    });
 
-   it("should validate and resolve configuration with valid inputs", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         ipcSpecPath: "src/custom-ipc-spec.ts",
-         rendererDir: "src/custom-renderer",
+   it("should validate and resolve configuration with valid inputs", async () => {
+      const config: t.IPCOptionalConfig = {
+         projectUsesNodeNext: true,
+         ipcDataDir: "src/auto-ipc",
          codeIndent: 4,
       };
 
-      const result = validateResolveConfig(config);
-
-      expect(result).toEqual({
-         ipcSpecPath: "/resolved/src/custom-ipc-spec.ts",
-         rendererDir: "/resolved/src/custom-renderer",
+      const result = await validateResolveConfig(config);
+      expect(result).toStrictEqual({
+         ipcDataDir: "src/auto-ipc",
+         mainBindingsFilePath: "/resolved/src/auto-ipc/main.ts",
+         preloadBindingsFilePath: "/resolved/src/auto-ipc/preload.ts",
+         rendererTypesFilePath: "/resolved/src/auto-ipc/window.d.ts",
+         projectUsesNodeNext: true,
          codeIndent: 4,
+         ipcSchema: {
+            path: "/resolved/src/auto-ipc/schema.ts",
+            stats: null,
+         },
       });
    });
 
-   it("should throw an error if ipcSpecPath is absolute", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         ipcSpecPath: "/absolute/path/ipc-spec.ts",
-      };
+   it("should use default values when no configuration is provided", async () => {
+      const result = await validateResolveConfig();
 
-      expect(() => validateResolveConfig(config)).toThrow(
-         "ipcSpecPath must be relative to the project root",
-      );
+      expect(result).toStrictEqual({
+         ipcDataDir: "src/ipc",
+         mainBindingsFilePath: "/resolved/src/ipc/main.ts",
+         preloadBindingsFilePath: "/resolved/src/ipc/preload.ts",
+         rendererTypesFilePath: "/resolved/src/ipc/window.d.ts",
+         projectUsesNodeNext: false,
+         codeIndent: 3,
+         ipcSchema: {
+            path: "/resolved/src/ipc/schema.ts",
+            stats: null,
+         },
+      });
    });
 
-   it("should throw an error if rendererDir is absolute", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         rendererDir: "/absolute/path/renderer",
+   it("should throw an error if ipcDataDir path is absolute", async () => {
+      const config: t.IPCOptionalConfig = {
+         ipcDataDir: "/absolute/path/auto-ipc",
       };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "rendererDir must be relative to the project root",
-      );
+      try {
+         await validateResolveConfig(config);
+      } catch {
+         return;
+      }
+      throw new Error("Absolute ipcDataDir path must throw Struct error");
    });
 
-   it("should throw an error if ipcSpecPath and rendererDir are identical", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         ipcSpecPath: "src/shared-path",
-         rendererDir: "src/shared-path",
-      };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "ipcSpecPath and rendererDir cannot be identical",
-      );
-   });
-
-   it("should throw an error if ipcSpecPath is inside rendererDir", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         ipcSpecPath: "src/renderer/ipc-spec.ts",
-         rendererDir: "src/renderer",
-      };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "ipcSpecPath cannot be relative to rendererDir",
-      );
-   });
-
-   it("should throw an error if rendererDir is inside ipcSpecPath", () => {
-      const config: Partial<t.IPCOptionalConfig> = {
-         ipcSpecPath: "src",
-         rendererDir: "src/renderer",
-      };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "rendererDir cannot be relative to ipcSpecPath",
-      );
-   });
-
-   it("should throw an error if codeIndent is less than 2", () => {
+   it("should throw an error if codeIndent is less than 2", async () => {
       const config: Partial<t.IPCOptionalConfig> = {
          codeIndent: 1,
       };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "value cannot be less than 2 or greater than 4",
-      );
+      try {
+         await validateResolveConfig(config);
+      } catch {
+         return;
+      }
+      throw new Error("codeIndent cannot be less than 2");
    });
 
-   it("should throw an error if codeIndent is greater than 4", () => {
+   it("should throw an error if codeIndent is greater than 4", async () => {
       const config: Partial<t.IPCOptionalConfig> = {
          codeIndent: 5,
       };
-
-      expect(() => validateResolveConfig(config)).toThrow(
-         "value cannot be less than 2 or greater than 4",
-      );
-   });
-
-   it("should use default values when no configuration is provided", () => {
-      const result = validateResolveConfig();
-
-      expect(result).toEqual({
-         ipcSpecPath: "/resolved/src/ipc-spec.ts",
-         rendererDir: "/resolved/src/renderer",
-         codeIndent: 3,
-      });
+      try {
+         await validateResolveConfig(config);
+      } catch {
+         return;
+      }
+      throw new Error("codeIndent cannot be greater than 4");
    });
 });

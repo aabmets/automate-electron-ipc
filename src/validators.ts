@@ -49,7 +49,7 @@ export async function validateResolveConfig(
    const IPCOptionalConfigStruct = object({
       projectUsesNodeNext: boolean(),
       ipcDataDir: refine(string(), "relative", (value) => {
-         const errMsg = "ipcSpecPath must be relative to the project root";
+         const errMsg = "ipcDataDir must be relative to the project root";
          return path.isAbsolute(value) ? errMsg : true;
       }),
       codeIndent: refine(number(), "clamped", (value) => {
@@ -69,11 +69,11 @@ export async function validateResolveConfig(
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
    return {
       ...mergedConfig,
-      mainBindingsFilePath: path.join(ipcDataDir, "main.ts"),
-      preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts"),
-      rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts"),
+      mainBindingsFilePath: path.join(ipcDataDir, "main.ts").replace(/\\/g, "/"),
+      preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/"),
+      rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/"),
       ipcSchema: {
-         path: onlySchemaDir ? schemaDir : schemaFile,
+         path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,
       },
    };
