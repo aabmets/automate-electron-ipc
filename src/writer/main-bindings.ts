@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type * as t from "@types";
 import { BaseWriter } from "./base-writer.js";
 
 export class MainBindingsWriter extends BaseWriter {
@@ -23,44 +24,21 @@ export class MainBindingsWriter extends BaseWriter {
       const electronTypeImportsSet = new Set<string>(["IpcMainEvent"]);
       const importDeclarationsArray: string[] = [];
       const callablesArray: string[] = [];
+      const portsArray: string[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
 
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               const method = spec.kind === "Broadcast" ? "on" : "handle";
-               const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
-               const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
-               const modSigDef = this.injectEventTypehint(spec.signature.definition);
-               const ipcCallable = `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
-               callablesArray.push(ipcCallable);
+               callablesArray.push(this.buildRendererToMainCallable(spec));
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
-               const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
-               const senderParams = this.getOriginalParams(spec, false);
-               const sender = `${senderCall}('${spec.name}', ${senderParams})`;
-               const ipcParams = this.getOriginalParams(spec, true);
-               const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
-               const ipcCallable = `send${spec.name}: ${ipcSignature} => ${sender}`;
-               callablesArray.push(ipcCallable);
+               callablesArray.push(this.buildMainToRendererCallable(spec));
             } else if (spec.direction === "RendererToRenderer") {
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
-               const propagator = [
-                  "{",
-                  `${this.indents[1]}const { port1, port2 } = new MessageChannelMain();`,
-                  `${this.indents[1]}bwOne.once('ready-to-show', () => {`,
-                  `${this.indents[2]}bwOne.webContents.postMessage('${spec.name}', null, [port1]);`,
-                  `${this.indents[1]}});`,
-                  `${this.indents[1]}bwTwo.once('ready-to-show', () => {`,
-                  `${this.indents[2]}bwTwo.webContents.postMessage('${spec.name}', null, [port2]);`,
-                  `${this.indents[1]}});`,
-                  `${this.indents[0]}}`,
-               ].join("\n");
-               const ipcSignature = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
-               const ipcCallable = `propagate${spec.name}Ports: ${ipcSignature} => ${propagator}`;
-               callablesArray.push(ipcCallable);
+               portsArray.push(this.buildRendererToRendererCallable(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -86,10 +64,49 @@ export class MainBindingsWriter extends BaseWriter {
       const bindingsExpression = [
          "\nexport const ipcMain = {",
          `\n${this.indents[0]}${sortedCallables},`,
-         "\n}\n",
-      ].join("");
+      ];
+      if (portsArray.length > 0) {
+         bindingsExpression.push(
+            ...[`\n${this.indents[0]}ports: {`, ...portsArray, `\n${this.indents[0]}},`],
+         );
+      }
+      bindingsExpression.push("\n}\n");
 
-      out.push(bindingsExpression);
+      out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+   protected buildRendererToMainCallable(spec: t.ChannelSpec): string {
+      const method = spec.kind === "Broadcast" ? "on" : "handle";
+      const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
+      const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
+      const modSigDef = this.injectEventTypehint(spec.signature.definition);
+      return `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
+   }
+   protected buildMainToRendererCallable(spec: t.ChannelSpec): string {
+      const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
+      const senderParams = this.getOriginalParams(spec, false);
+      const sender = `${senderCall}('${spec.name}', ${senderParams})`;
+      const ipcParams = this.getOriginalParams(spec, true);
+      const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
+      return `send${spec.name}: ${ipcSignature} => ${sender}`;
+   }
+   protected buildRendererToRendererCallable(spec: t.ChannelSpec): string {
+      const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
+      const propagator = [
+         "{",
+         `${this.indents[3]}const { port1, port2 } = new MessageChannelMain();`,
+         `${this.indents[3]}bwOne.once('ready-to-show', () => {`,
+         `${this.indents[4]}bwOne.webContents.postMessage('${spec.name}', null, [port1]);`,
+         `${this.indents[3]}});`,
+         `${this.indents[3]}bwTwo.once('ready-to-show', () => {`,
+         `${this.indents[4]}bwTwo.webContents.postMessage('${spec.name}', null, [port2]);`,
+         `${this.indents[3]}});`,
+         `${this.indents[2]}}`,
+      ].join("\n");
+      return [
+         `\n${this.indents[1]}${spec.name}: {`,
+         `\n${this.indents[2]}propagate: ${ipcSig} => ${propagator}`,
+         `\n${this.indents[1]}},`,
+      ].join("");
    }
 }
