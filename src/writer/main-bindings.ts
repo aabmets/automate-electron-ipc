@@ -81,9 +81,11 @@ export class MainBindingsWriter extends BaseWriter {
          `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
          ...importDeclarationsArray,
       ];
+      const sortedCallablesArray = this.sortCallablesArray(callablesArray);
+      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [
          "\nexport const ipcMain = {",
-         `\n${this.indents[0]}${this.stringifyCallablesArray(callablesArray, 0)},`,
+         `\n${this.indents[0]}${sortedCallables},`,
          "\n}\n",
       ].join("");
 

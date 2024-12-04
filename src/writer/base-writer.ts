@@ -47,13 +47,13 @@ export class BaseWriter {
       return null as unknown as string;
    }
 
-   protected renderFileContents(): string {
-      this.throwAbstractError("generateFileContents");
+   protected renderEmptyFileContents(): string {
+      this.throwAbstractError("renderEmptyFileContents");
       return null as unknown as string;
    }
 
-   protected renderEmptyFileContents(): string {
-      this.throwAbstractError("renderEmptyFileContents");
+   protected renderFileContents(): string {
+      this.throwAbstractError("generateFileContents");
       return null as unknown as string;
    }
 
@@ -76,9 +76,9 @@ export class BaseWriter {
          .join(", ");
    }
 
-   protected stringifyCallablesArray(callablesArray: string[], indentLevel: number): string {
-      const sorted = callablesArray.sort((a, b) => {
-         const prefixOrder = ["on", "send", "port"];
+   protected sortCallablesArray(callablesArray: string[]): string[] {
+      return callablesArray.sort((a, b) => {
+         const prefixOrder = ["on", "send"];
          const getPrefixRank = (value: string) => {
             for (let i = 0; i < prefixOrder.length; i++) {
                if (value.startsWith(prefixOrder[i])) {
@@ -89,7 +89,6 @@ export class BaseWriter {
          };
          return getPrefixRank(a) - getPrefixRank(b);
       });
-      return sorted.join(`,\n${this.indents[indentLevel]}`);
    }
 
    public async write() {
