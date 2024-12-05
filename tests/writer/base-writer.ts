@@ -9,16 +9,27 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import crypto from "node:crypto";
+import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 class WriterSubclass extends BaseWriter {
+   tempFile: string;
+
+   constructor(resolvedConfig: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs[]) {
+      super(resolvedConfig, pfsArray);
+      const suffix = crypto.randomBytes(8).toString("hex");
+      this.tempFile = path.join(tmpdir(), `vitest-${suffix}`, "testfile.js");
+   }
    public getTargetFilePath(): string {
-      return "/abstract/file/path";
+      return this.tempFile;
    }
    public renderEmptyFileContents(): string {
-      return "";
+      return "EMPTY FILE";
    }
    public renderFileContents(): string {
       return "const asdfg = 123;";
@@ -86,5 +97,40 @@ describe("BaseWriter", () => {
       expect(result).toStrictEqual("arg1, arg2");
       result = WriterSubclass.prototype.getOriginalParams(spec as t.ChannelSpec, true);
       expect(result).toStrictEqual("arg1: number, arg2: string");
+   });
+
+   it("should sort callables array by prefixes and alphabetically", () => {
+      const result = WriterSubclass.prototype.sortCallablesArray([
+         "sendEvent3",
+         "onThirdEvent",
+         "sendEvent2",
+         "onFirstEvent",
+         "sendEvent1",
+         "onSecondEvent",
+      ]);
+      expect(result).toStrictEqual([
+         "onFirstEvent",
+         "onSecondEvent",
+         "onThirdEvent",
+         "sendEvent1",
+         "sendEvent2",
+         "sendEvent3",
+      ]);
+   });
+
+   it("should render empty file contents when pfsArray is empty", async () => {
+      const pfsArray = [] as t.ParsedFileSpecs[];
+      const obj = new WriterSubclass({} as t.IPCResolvedConfig, pfsArray);
+      await obj.write();
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      expect(buffer.toString()).toStrictEqual("EMPTY FILE");
+   });
+
+   it("should render file contents when pfsArray is not empty", async () => {
+      const pfsArray = [{}] as t.ParsedFileSpecs[];
+      const obj = new WriterSubclass({} as t.IPCResolvedConfig, pfsArray);
+      await obj.write();
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
    });
 });
