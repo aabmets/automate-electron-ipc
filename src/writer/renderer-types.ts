@@ -57,7 +57,7 @@ export class RendererTypesWriter extends BaseWriter {
          }
       }
       const sortedCallablesArray = this.sortCallablesArray(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[2]}`);
+      const sortedCallables = sortedCallablesArray.join(`\n${this.indents[2]}`);
       const windowDeclaration = [
          "\ndeclare global {",
          `\n${this.indents[0]}interface Window {`,

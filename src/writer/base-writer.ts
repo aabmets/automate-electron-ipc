@@ -87,7 +87,12 @@ export class BaseWriter {
             }
             return prefixOrder.length;
          };
-         return getPrefixRank(a) - getPrefixRank(b);
+         const prefixRankA = getPrefixRank(a);
+         const prefixRankB = getPrefixRank(b);
+         if (prefixRankA === prefixRankB) {
+            return a.localeCompare(b);
+         }
+         return prefixRankA - prefixRankB;
       });
    }
 
