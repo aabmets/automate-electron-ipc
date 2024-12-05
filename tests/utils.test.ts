@@ -10,8 +10,6 @@
  */
 
 import fs from "node:fs";
-import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import url from "node:url";
 import utils from "@src/utils.js";
@@ -107,30 +105,6 @@ describe("isPathInside", () => {
       const parentPath = path.join("home", "user");
       const childPath = path.join("home", "user", "documents", "file.txt");
       expect(utils.isPathInside(childPath, parentPath)).toBe(true);
-   });
-});
-
-describe("writeFile", () => {
-   it("should create the directories and write the file with the given contents", async () => {
-      const tempFileName = "test-file.txt";
-      const tempFileContents = "Hello, Vitest!";
-      const tempFileDirectory = path.join(tmpdir(), "vitest-utils-test");
-      try {
-         await fsp.rm(tempFileDirectory, { recursive: true, force: true });
-         const filePath = path.join(tempFileDirectory, tempFileName);
-         await utils.writeFile(filePath, tempFileContents);
-
-         const fileExists = await fsp
-            .access(filePath)
-            .then(() => true)
-            .catch(() => false);
-
-         expect(fileExists).toBe(true);
-         const fileContents = await fsp.readFile(filePath, "utf-8");
-         expect(fileContents).toBe(tempFileContents);
-      } finally {
-         await fsp.rm(tempFileDirectory, { recursive: true, force: true });
-      }
    });
 });
 

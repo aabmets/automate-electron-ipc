@@ -10,7 +10,6 @@
  */
 
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 import { LRUCache } from "./cache.js";
@@ -90,18 +89,6 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
 }
 
 /**
- * Writes contents into file. Recursively creates directories up to the file path if they don't exist.
- *
- * @param absoluteFilePath - Absolute resolved path to the file being written to.
- * @param fileContents - Contents that will be written into the target file.
- */
-export async function writeFile(absoluteFilePath: string, fileContents: string): Promise<void> {
-   const fileDirectory = path.dirname(absoluteFilePath);
-   await fsp.mkdir(fileDirectory, { recursive: true });
-   await fsp.writeFile(absoluteFilePath, fileContents);
-}
-
-/**
  * Removes the common leading whitespace from each line in a multiline string.
  *
  * This function calculates the minimum indentation level of all non-blank lines and
@@ -126,6 +113,5 @@ export default {
    resolveUserProjectPath,
    concatRegex,
    isPathInside,
-   writeFile,
    dedent,
 };
