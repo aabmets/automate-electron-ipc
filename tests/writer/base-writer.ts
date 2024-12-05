@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
+import { ParsedFileSpecs } from "@types";
 import { describe, expect, it } from "vitest";
 
 class WriterSubclass extends BaseWriter {
@@ -45,6 +46,9 @@ class WriterSubclass extends BaseWriter {
    }
    public sortCallablesArray(callablesArray: string[]): string[] {
       return super.sortCallablesArray(callablesArray);
+   }
+   public async vitestCleanup(): Promise<void> {
+      await fsp.rm(path.dirname(this.getTargetFilePath()), { recursive: true, force: true });
    }
 }
 
@@ -119,18 +123,24 @@ describe("BaseWriter", () => {
    });
 
    it("should render empty file contents when pfsArray is empty", async () => {
-      const pfsArray = [] as t.ParsedFileSpecs[];
-      const obj = new WriterSubclass({} as t.IPCResolvedConfig, pfsArray);
-      await obj.write();
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toStrictEqual("EMPTY FILE");
+      const obj = new WriterSubclass({} as t.IPCResolvedConfig, []);
+      try {
+         await obj.write();
+         const buffer = await fsp.readFile(obj.getTargetFilePath());
+         expect(buffer.toString()).toStrictEqual("EMPTY FILE");
+      } finally {
+         await obj.vitestCleanup();
+      }
    });
 
    it("should render file contents when pfsArray is not empty", async () => {
-      const pfsArray = [{}] as t.ParsedFileSpecs[];
-      const obj = new WriterSubclass({} as t.IPCResolvedConfig, pfsArray);
-      await obj.write();
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
+      const obj = new WriterSubclass({} as t.IPCResolvedConfig, [{} as ParsedFileSpecs]);
+      try {
+         await obj.write();
+         const buffer = await fsp.readFile(obj.getTargetFilePath());
+         expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
+      } finally {
+         await obj.vitestCleanup();
+      }
    });
 });
