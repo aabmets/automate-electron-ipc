@@ -75,10 +75,53 @@ export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWrit
    });
 }
 
+export function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): Partial<t.ParsedFileSpecs>[] {
+   const sigParamsArray: t.CallableParam[] = [1, 2].map((index) => {
+      return {
+         name: `arg${index}`,
+         type: vcs.paramType,
+         rest: vcs.paramRest && index === 2,
+         optional: vcs.paramOptional && index === 2,
+      };
+   });
+   const sigParams = sigParamsArray.map((param) => {
+      const paramName = param.rest
+         ? `...${param.name}`
+         : param.optional
+           ? `${param.name}?`
+           : param.name;
+      return `${paramName}: ${param.type}`;
+   });
+   const sigDefinition = `(${sigParams.join(", ")}) => ${vcs.sigReturnType}`;
+   return [
+      {
+         specs: {
+            typeSpecArray: [],
+            importSpecArray: [],
+            channelSpecArray: [
+               {
+                  name: "VitestChannel",
+                  kind: vcs.channelKind as t.ChannelKind,
+                  direction: vcs.channelDirection as t.ChannelDirection,
+                  listeners: vcs.channelListeners,
+                  signature: {
+                     definition: sigDefinition,
+                     params: sigParamsArray,
+                     returnType: vcs.sigReturnType,
+                     customTypes: vcs.sigCustomTypes,
+                  } as t.CallableSignature,
+               } as Partial<t.ChannelSpec>,
+            ] as Partial<t.ChannelSpec>[],
+         } as Partial<t.SpecsCollection>,
+      } as Partial<t.ParsedFileSpecs>,
+   ] as Partial<t.ParsedFileSpecs>[];
+}
+
 export default {
    VitestBaseWriter,
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,
    VitestRendererTypesWriter,
    mockGetTargetFilePath,
+   getParsedFileSpecsArray,
 };
