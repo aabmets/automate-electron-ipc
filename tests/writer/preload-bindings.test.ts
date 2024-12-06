@@ -19,7 +19,10 @@ describe("PreloadBindingsWriter", () => {
    shared.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
 
    it("should write empty ipc object into exposeInMainWorld when pfsArray is empty", async () => {
-      const obj = new shared.VitestPreloadBindingsWriter({} as t.IPCResolvedConfig, []);
+      const obj = new shared.VitestPreloadBindingsWriter(
+         { codeIndent: 3 } as t.IPCResolvedConfig,
+         [],
+      );
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
