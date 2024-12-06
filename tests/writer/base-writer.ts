@@ -16,18 +16,20 @@ import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
 import { ParsedFileSpecs } from "@types";
-import { describe, expect, it } from "vitest";
+import {
+   MockInstance,
+   afterAll,
+   afterEach,
+   beforeEach,
+   describe,
+   expect,
+   it,
+   vitest,
+} from "vitest";
 
-class WriterSubclass extends BaseWriter {
-   tempFile: string;
-
-   constructor(resolvedConfig: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs[]) {
-      super(resolvedConfig, pfsArray);
-      const suffix = crypto.randomBytes(8).toString("hex");
-      this.tempFile = path.join(tmpdir(), `vitest-${suffix}`, "testfile.js");
-   }
+class VitestBaseWriter extends BaseWriter {
    public getTargetFilePath(): string {
-      return this.tempFile;
+      return "";
    }
    public renderEmptyFileContents(): string {
       return "EMPTY FILE";
@@ -47,12 +49,25 @@ class WriterSubclass extends BaseWriter {
    public sortCallablesArray(callablesArray: string[]): string[] {
       return super.sortCallablesArray(callablesArray);
    }
-   public async vitestCleanup(): Promise<void> {
-      await fsp.rm(path.dirname(this.getTargetFilePath()), { recursive: true, force: true });
-   }
 }
 
 describe("BaseWriter", () => {
+   let spy: MockInstance;
+   const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
+
+   beforeEach(() => {
+      spy = vitest.spyOn(VitestBaseWriter.prototype, "getTargetFilePath");
+      const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
+      spy.mockImplementation(() => {
+         return path.join(tmpdir(), dirName, fileName);
+      });
+   });
+   afterEach(() => spy.mockRestore());
+   afterAll(async () => {
+      const dirPath = path.join(tmpdir(), dirName);
+      await fsp.rm(dirPath, { recursive: true, force: true });
+   });
+
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {
          new BaseWriter({} as t.IPCResolvedConfig, []);
@@ -60,12 +75,12 @@ describe("BaseWriter", () => {
    });
 
    it("should not throw an error on subclass instantiation", () => {
-      new WriterSubclass({} as t.IPCResolvedConfig, []);
+      new VitestBaseWriter({} as t.IPCResolvedConfig, []);
    });
 
    it("should generate code indents array", () => {
       for (const value of [2, 3, 4]) {
-         const obj = new WriterSubclass({ codeIndent: value } as t.IPCResolvedConfig, []);
+         const obj = new VitestBaseWriter({ codeIndent: value } as t.IPCResolvedConfig, []);
          expect(obj.getCodeIndents()).toStrictEqual([
             " ".repeat(value),
             "  ".repeat(value),
@@ -78,7 +93,7 @@ describe("BaseWriter", () => {
 
    it("should inject IpcMainEvent typehint", () => {
       const sigDef = "(arg1: number, arg2: string) => boolean";
-      const result = WriterSubclass.prototype.injectEventTypehint(sigDef);
+      const result = VitestBaseWriter.prototype.injectEventTypehint(sigDef);
       expect(result).toStrictEqual("(event: IpcMainEvent, arg1: number, arg2: string) => boolean");
    });
 
@@ -97,14 +112,14 @@ describe("BaseWriter", () => {
             ] as Partial<t.CallableParam>[],
          } as Partial<t.CallableSignature>,
       } as Partial<t.ChannelSpec>;
-      let result = WriterSubclass.prototype.getOriginalParams(spec as t.ChannelSpec, false);
+      let result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, false);
       expect(result).toStrictEqual("arg1, arg2");
-      result = WriterSubclass.prototype.getOriginalParams(spec as t.ChannelSpec, true);
+      result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
       expect(result).toStrictEqual("arg1: number, arg2: string");
    });
 
    it("should sort callables array by prefixes and alphabetically", () => {
-      const result = WriterSubclass.prototype.sortCallablesArray([
+      const result = VitestBaseWriter.prototype.sortCallablesArray([
          "sendEvent3",
          "onThirdEvent",
          "sendEvent2",
@@ -123,24 +138,16 @@ describe("BaseWriter", () => {
    });
 
    it("should render empty file contents when pfsArray is empty", async () => {
-      const obj = new WriterSubclass({} as t.IPCResolvedConfig, []);
-      try {
-         await obj.write();
-         const buffer = await fsp.readFile(obj.getTargetFilePath());
-         expect(buffer.toString()).toStrictEqual("EMPTY FILE");
-      } finally {
-         await obj.vitestCleanup();
-      }
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, []);
+      await obj.write();
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      expect(buffer.toString()).toStrictEqual("EMPTY FILE");
    });
 
    it("should render file contents when pfsArray is not empty", async () => {
-      const obj = new WriterSubclass({} as t.IPCResolvedConfig, [{} as ParsedFileSpecs]);
-      try {
-         await obj.write();
-         const buffer = await fsp.readFile(obj.getTargetFilePath());
-         expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
-      } finally {
-         await obj.vitestCleanup();
-      }
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as ParsedFileSpecs]);
+      await obj.write();
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
    });
 });
