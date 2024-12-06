@@ -12,33 +12,11 @@
 import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
-import { ParsedFileSpecs } from "@types";
 import { describe, expect, it } from "vitest";
 import shared from "./shared.js";
 
-class VitestBaseWriter extends shared.BaseWriterSubclass {
-   public renderEmptyFileContents(): string {
-      return "EMPTY FILE";
-   }
-   public renderFileContents(): string {
-      return "const asdfg = 123;";
-   }
-   public getCodeIndents(): string[] {
-      return super.getCodeIndents();
-   }
-   public injectEventTypehint(sigDef: string): string {
-      return super.injectEventTypehint(sigDef);
-   }
-   public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
-      return super.getOriginalParams(spec, withTypes);
-   }
-   public sortCallablesArray(callablesArray: string[]): string[] {
-      return super.sortCallablesArray(callablesArray);
-   }
-}
-
 describe("BaseWriter", () => {
-   shared.mockGetTargetFilePath(VitestBaseWriter);
+   shared.mockGetTargetFilePath(shared.VitestBaseWriter);
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {
@@ -47,12 +25,12 @@ describe("BaseWriter", () => {
    });
 
    it("should not throw an error on subclass instantiation", () => {
-      new VitestBaseWriter({} as t.IPCResolvedConfig, []);
+      new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
    });
 
    it("should generate code indents array", () => {
       for (const value of [2, 3, 4]) {
-         const obj = new VitestBaseWriter({ codeIndent: value } as t.IPCResolvedConfig, []);
+         const obj = new shared.VitestBaseWriter({ codeIndent: value } as t.IPCResolvedConfig, []);
          expect(obj.getCodeIndents()).toStrictEqual([
             " ".repeat(value),
             "  ".repeat(value),
@@ -65,7 +43,7 @@ describe("BaseWriter", () => {
 
    it("should inject IpcMainEvent typehint", () => {
       const sigDef = "(arg1: number, arg2: string) => boolean";
-      const result = VitestBaseWriter.prototype.injectEventTypehint(sigDef);
+      const result = shared.VitestBaseWriter.prototype.injectEventTypehint(sigDef);
       expect(result).toStrictEqual("(event: IpcMainEvent, arg1: number, arg2: string) => boolean");
    });
 
@@ -84,14 +62,17 @@ describe("BaseWriter", () => {
             ] as Partial<t.CallableParam>[],
          } as Partial<t.CallableSignature>,
       } as Partial<t.ChannelSpec>;
-      let result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, false);
+      let result = shared.VitestBaseWriter.prototype.getOriginalParams(
+         spec as t.ChannelSpec,
+         false,
+      );
       expect(result).toStrictEqual("arg1, arg2");
-      result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
+      result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
       expect(result).toStrictEqual("arg1: number, arg2: string");
    });
 
    it("should sort callables array by prefixes and alphabetically", () => {
-      const result = VitestBaseWriter.prototype.sortCallablesArray([
+      const result = shared.VitestBaseWriter.prototype.sortCallablesArray([
          "sendEvent3",
          "onThirdEvent",
          "sendEvent2",
@@ -110,15 +91,15 @@ describe("BaseWriter", () => {
    });
 
    it("should render empty file contents when pfsArray is empty", async () => {
-      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, []);
-      await obj.write();
+      const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
+      await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       expect(buffer.toString()).toStrictEqual("EMPTY FILE");
    });
 
    it("should render file contents when pfsArray is not empty", async () => {
-      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as ParsedFileSpecs]);
-      await obj.write();
+      const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
+      await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
    });

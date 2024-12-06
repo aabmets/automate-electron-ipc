@@ -14,15 +14,50 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
+import writer from "@src/writer/index.js";
+import type * as t from "@types";
 import { MockInstance, afterAll, afterEach, beforeEach, vitest } from "vitest";
 
-export class BaseWriterSubclass extends BaseWriter {
+export class VitestBaseWriter extends BaseWriter {
+   public getTargetFilePath(): string {
+      return "";
+   }
+   public renderEmptyFileContents(): string {
+      return "EMPTY FILE";
+   }
+   public renderFileContents(): string {
+      return "const asdfg = 123;";
+   }
+   public getCodeIndents(): string[] {
+      return super.getCodeIndents();
+   }
+   public injectEventTypehint(sigDef: string): string {
+      return super.injectEventTypehint(sigDef);
+   }
+   public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
+      return super.getOriginalParams(spec, withTypes);
+   }
+   public sortCallablesArray(callablesArray: string[]): string[] {
+      return super.sortCallablesArray(callablesArray);
+   }
+}
+export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
+   public getTargetFilePath(): string {
+      return "";
+   }
+}
+export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
+   public getTargetFilePath(): string {
+      return "";
+   }
+}
+export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
    public getTargetFilePath(): string {
       return "";
    }
 }
 
-export function mockGetTargetFilePath(cls: typeof BaseWriterSubclass) {
+export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWriter>(cls: T) {
    let spy: MockInstance;
    const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
 
@@ -40,4 +75,10 @@ export function mockGetTargetFilePath(cls: typeof BaseWriterSubclass) {
    });
 }
 
-export default { BaseWriterSubclass, mockGetTargetFilePath };
+export default {
+   VitestBaseWriter,
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+   VitestRendererTypesWriter,
+   mockGetTargetFilePath,
+};
