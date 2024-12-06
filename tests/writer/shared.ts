@@ -41,17 +41,29 @@ export class VitestBaseWriter extends BaseWriter {
       return super.sortCallablesArray(callablesArray);
    }
 }
+
 export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
+   constructor(pfsArray: t.ParsedFileSpecs[]) {
+      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   }
    public getTargetFilePath(): string {
       return "";
    }
 }
+
 export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
+   constructor(pfsArray: t.ParsedFileSpecs[]) {
+      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   }
    public getTargetFilePath(): string {
       return "";
    }
 }
+
 export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
+   constructor(pfsArray: t.ParsedFileSpecs[]) {
+      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   }
    public getTargetFilePath(): string {
       return "";
    }
@@ -75,7 +87,7 @@ export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWrit
    });
 }
 
-export function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): Partial<t.ParsedFileSpecs>[] {
+function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] {
    const sigParamsArray: t.CallableParam[] = [1, 2].map((index) => {
       return {
          name: `arg${index}`,
@@ -114,7 +126,7 @@ export function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): Partial<t.Par
             ] as Partial<t.ChannelSpec>[],
          } as Partial<t.SpecsCollection>,
       } as Partial<t.ParsedFileSpecs>,
-   ] as Partial<t.ParsedFileSpecs>[];
+   ] as t.ParsedFileSpecs[];
 }
 
 export default {
@@ -123,5 +135,36 @@ export default {
    VitestPreloadBindingsWriter,
    VitestRendererTypesWriter,
    mockGetTargetFilePath,
-   getParsedFileSpecsArray,
+   vitestChannelSpecs: {
+      Unicast_RendererToMain: getParsedFileSpecsArray({
+         channelKind: "Unicast",
+         channelDirection: "RendererToMain",
+         channelListeners: [],
+         paramType: "CustomType",
+         paramRest: false,
+         paramOptional: true,
+         sigReturnType: "Promise<string>",
+         sigCustomTypes: ["CustomType"],
+      }),
+      Broadcast_RendererToMain: getParsedFileSpecsArray({
+         channelKind: "Broadcast",
+         channelDirection: "RendererToMain",
+         channelListeners: [],
+         paramType: "string",
+         paramRest: false,
+         paramOptional: false,
+         sigReturnType: "void",
+         sigCustomTypes: [],
+      }),
+      Broadcast_MainToRenderer: getParsedFileSpecsArray({
+         channelKind: "Broadcast",
+         channelDirection: "MainToRenderer",
+         channelListeners: [],
+         paramType: "number",
+         paramRest: true,
+         paramOptional: false,
+         sigReturnType: "Promise<CustomType>",
+         sigCustomTypes: ["CustomType"],
+      }),
+   },
 };

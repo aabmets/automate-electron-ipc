@@ -11,7 +11,6 @@
 
 import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
-import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 import shared from "./shared.js";
 
@@ -19,7 +18,7 @@ describe("MainBindingsWriter", () => {
    shared.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
 
    it("should write empty ipcMain object when pfsArray is empty", async () => {
-      const obj = new shared.VitestMainBindingsWriter({ codeIndent: 3 } as t.IPCResolvedConfig, []);
+      const obj = new shared.VitestMainBindingsWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = "\nexport const ipcMain = {};";
@@ -27,20 +26,8 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should write Unicast RendererToMain callables into ipcMain object", async () => {
-      const pfsArray = shared.getParsedFileSpecsArray({
-         channelKind: "Unicast",
-         channelDirection: "RendererToMain",
-         channelListeners: [],
-         paramType: "CustomType",
-         paramRest: false,
-         paramOptional: true,
-         sigReturnType: "Promise<string>",
-         sigCustomTypes: ["CustomType"],
-      });
-      const obj = new shared.VitestMainBindingsWriter(
-         { codeIndent: 3 } as t.IPCResolvedConfig,
-         pfsArray as t.ParsedFileSpecs[],
-      );
+      const pfsArray = shared.vitestChannelSpecs.Unicast_RendererToMain;
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
@@ -56,20 +43,8 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should write Broadcast RendererToMain callables into ipcMain object", async () => {
-      const pfsArray = shared.getParsedFileSpecsArray({
-         channelKind: "Broadcast",
-         channelDirection: "RendererToMain",
-         channelListeners: [],
-         paramType: "string",
-         paramRest: false,
-         paramOptional: false,
-         sigReturnType: "void",
-         sigCustomTypes: [],
-      });
-      const obj = new shared.VitestMainBindingsWriter(
-         { codeIndent: 3 } as t.IPCResolvedConfig,
-         pfsArray as t.ParsedFileSpecs[],
-      );
+      const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
@@ -85,20 +60,8 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should write Broadcast MainToRenderer callables into ipcMain object", async () => {
-      const pfsArray = shared.getParsedFileSpecsArray({
-         channelKind: "Broadcast",
-         channelDirection: "MainToRenderer",
-         channelListeners: [],
-         paramType: "number",
-         paramRest: true,
-         paramOptional: false,
-         sigReturnType: "Promise<CustomType>",
-         sigCustomTypes: ["CustomType"],
-      });
-      const obj = new shared.VitestMainBindingsWriter(
-         { codeIndent: 3 } as t.IPCResolvedConfig,
-         pfsArray as t.ParsedFileSpecs[],
-      );
+      const pfsArray = shared.vitestChannelSpecs.Broadcast_MainToRenderer;
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
