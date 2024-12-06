@@ -9,28 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import crypto from "node:crypto";
 import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
 import { ParsedFileSpecs } from "@types";
-import {
-   MockInstance,
-   afterAll,
-   afterEach,
-   beforeEach,
-   describe,
-   expect,
-   it,
-   vitest,
-} from "vitest";
+import { describe, expect, it } from "vitest";
+import shared from "./shared.js";
 
-class VitestBaseWriter extends BaseWriter {
-   public getTargetFilePath(): string {
-      return "";
-   }
+class VitestBaseWriter extends shared.MockedBaseWriter {
    public renderEmptyFileContents(): string {
       return "EMPTY FILE";
    }
@@ -52,21 +38,7 @@ class VitestBaseWriter extends BaseWriter {
 }
 
 describe("BaseWriter", () => {
-   let spy: MockInstance;
-   const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
-
-   beforeEach(() => {
-      spy = vitest.spyOn(VitestBaseWriter.prototype, "getTargetFilePath");
-      const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
-      spy.mockImplementation(() => {
-         return path.join(tmpdir(), dirName, fileName);
-      });
-   });
-   afterEach(() => spy.mockRestore());
-   afterAll(async () => {
-      const dirPath = path.join(tmpdir(), dirName);
-      await fsp.rm(dirPath, { recursive: true, force: true });
-   });
+   shared.mockGetTargetFilePath();
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {
