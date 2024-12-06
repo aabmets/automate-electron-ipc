@@ -17,7 +17,7 @@ export class MainBindingsWriter extends BaseWriter {
       return this.resolvedConfig.mainBindingsFilePath;
    }
    protected renderEmptyFileContents(): string {
-      return `${this.notice}\nexport const ipcMain = {};`;
+      return "\nexport const ipcMain = {};";
    }
    protected renderFileContents(): string {
       const electronImportsSet = new Set<string>(["ipcMain as electronIpcMain"]);
@@ -53,8 +53,7 @@ export class MainBindingsWriter extends BaseWriter {
             }
          }
       }
-      const out = [
-         this.notice,
+      const out: string[] = [
          `import { ${Array.from(electronImportsSet).join(", ")} } from "electron";`,
          `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
          ...importDeclarationsArray,

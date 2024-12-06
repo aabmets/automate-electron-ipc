@@ -16,10 +16,10 @@ export class RendererTypesWriter extends BaseWriter {
       return this.resolvedConfig.rendererTypesFilePath;
    }
    protected renderEmptyFileContents(): string {
-      return `${this.notice}\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
+      return `\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
    }
    protected renderFileContents(): string {
-      const out = [this.notice];
+      const out: string[] = [];
       const portsArray: string[] = [];
       const callablesArray: string[] = [];
 

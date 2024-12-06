@@ -18,7 +18,6 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
    protected renderEmptyFileContents(): string {
       return [
-         this.notice,
          'import { contextBridge } from "electron";\n',
          "contextBridge.exposeInMainWorld('ipc', {});",
       ].join("\n");
@@ -44,7 +43,7 @@ export class PreloadBindingsWriter extends BaseWriter {
             }
          }
       }
-      const out = [this.notice, 'import { contextBridge, ipcRenderer } from "electron";'];
+      const out: string[] = ['import { contextBridge, ipcRenderer } from "electron";'];
       const sortedCallablesArray = this.sortCallablesArray(callablesArray);
       const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
       const bindingsExpression = [

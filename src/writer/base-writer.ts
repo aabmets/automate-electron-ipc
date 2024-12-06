@@ -96,7 +96,7 @@ export class BaseWriter {
       });
    }
 
-   public async write() {
+   public async write(withNotice = true) {
       const targetFilePath = this.getTargetFilePath();
       const fileDirectory = path.dirname(targetFilePath);
       await fsp.mkdir(fileDirectory, { recursive: true });
@@ -105,6 +105,9 @@ export class BaseWriter {
          contents = this.renderEmptyFileContents();
       } else {
          contents = this.renderFileContents();
+      }
+      if (withNotice) {
+         contents = `${this.notice}${contents}`;
       }
       await fsp.writeFile(targetFilePath, contents);
    }
