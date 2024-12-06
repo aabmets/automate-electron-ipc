@@ -15,18 +15,21 @@ import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 import shared from "./shared.js";
 
-describe("MainBindingsWriter", () => {
-   shared.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+describe("PreloadBindingsWriter", () => {
+   shared.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
 
-   it("should write empty ipcMain object when pfsArray is empty", async () => {
-      const obj = new shared.VitestMainBindingsWriter({} as t.IPCResolvedConfig, []);
+   it("should write empty ipc object into exposeInMainWorld when pfsArray is empty", async () => {
+      const obj = new shared.VitestPreloadBindingsWriter({} as t.IPCResolvedConfig, []);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "\nexport const ipcMain = {};";
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      const expectedOutput = utils.dedent(`
+         import { contextBridge } from "electron";\n
+         contextBridge.exposeInMainWorld('ipc', {});
+      `);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trim());
    });
 
-   it("should write Unicast RendererToMain callables into ipcMain object", async () => {
+   it("should write Unicast RendererToMain callables into exposeInMainWorld ipc object", async () => {
       const pfsArray = shared.getParsedFileSpecsArray({
          channelKind: "Unicast",
          channelDirection: "RendererToMain",
@@ -37,25 +40,23 @@ describe("MainBindingsWriter", () => {
          sigReturnType: "Promise<string>",
          sigCustomTypes: ["CustomType"],
       });
-      const obj = new shared.VitestMainBindingsWriter(
+      const obj = new shared.VitestPreloadBindingsWriter(
          { codeIndent: 3 } as t.IPCResolvedConfig,
          pfsArray as t.ParsedFileSpecs[],
       );
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent } from "electron";
+         import { contextBridge, ipcRenderer } from "electron";
          
-         export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => 
-               electronIpcMain.handle('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
-         }
+         contextBridge.exposeInMainWorld('ipc', {
+            sendVitestChannel: (...args: any[]) => ipcRenderer.invoke('VitestChannel', ...args),
+         });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write Broadcast RendererToMain callables into ipcMain object", async () => {
+   it("should write Broadcast RendererToMain callables into exposeInMainWorld ipc object", async () => {
       const pfsArray = shared.getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "RendererToMain",
@@ -66,25 +67,23 @@ describe("MainBindingsWriter", () => {
          sigReturnType: "void",
          sigCustomTypes: [],
       });
-      const obj = new shared.VitestMainBindingsWriter(
+      const obj = new shared.VitestPreloadBindingsWriter(
          { codeIndent: 3 } as t.IPCResolvedConfig,
          pfsArray as t.ParsedFileSpecs[],
       );
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent } from "electron";
-
-         export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
-         }
+         import { contextBridge, ipcRenderer } from "electron";
+         
+         contextBridge.exposeInMainWorld('ipc', {
+            sendVitestChannel: (...args: any[]) => ipcRenderer.send('VitestChannel', ...args),
+         });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write Broadcast MainToRenderer callables into ipcMain object", async () => {
+   it("should write Broadcast MainToRenderer callables into exposeInMainWorld ipc object", async () => {
       const pfsArray = shared.getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "MainToRenderer",
@@ -95,20 +94,18 @@ describe("MainBindingsWriter", () => {
          sigReturnType: "Promise<CustomType>",
          sigCustomTypes: ["CustomType"],
       });
-      const obj = new shared.VitestMainBindingsWriter(
+      const obj = new shared.VitestPreloadBindingsWriter(
          { codeIndent: 3 } as t.IPCResolvedConfig,
          pfsArray as t.ParsedFileSpecs[],
       );
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent, BrowserWindow } from "electron";
+         import { contextBridge, ipcRenderer } from "electron";
          
-         export const ipcMain = {
-            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, arg2: number) => 
-               browserWindow.webContents.send('VitestChannel', arg1, arg2),
-         }
+         contextBridge.exposeInMainWorld('ipc', {
+            onVitestChannel: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+         });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
