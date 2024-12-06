@@ -107,7 +107,7 @@ export class BaseWriter {
          contents = this.renderFileContents();
       }
       if (withNotice) {
-         contents = `${this.notice}${contents}`;
+         contents = `${this.notice}\n${contents}`;
       }
       await fsp.writeFile(targetFilePath, contents);
    }
