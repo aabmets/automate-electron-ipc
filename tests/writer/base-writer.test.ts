@@ -16,7 +16,7 @@ import { ParsedFileSpecs } from "@types";
 import { describe, expect, it } from "vitest";
 import shared from "./shared.js";
 
-class VitestBaseWriter extends shared.MockedBaseWriter {
+class VitestBaseWriter extends shared.BaseWriterSubclass {
    public renderEmptyFileContents(): string {
       return "EMPTY FILE";
    }
@@ -38,7 +38,7 @@ class VitestBaseWriter extends shared.MockedBaseWriter {
 }
 
 describe("BaseWriter", () => {
-   shared.mockGetTargetFilePath();
+   shared.mockGetTargetFilePath(VitestBaseWriter);
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {

@@ -16,18 +16,18 @@ import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import { MockInstance, afterAll, afterEach, beforeEach, vitest } from "vitest";
 
-export class MockedBaseWriter extends BaseWriter {
+export class BaseWriterSubclass extends BaseWriter {
    public getTargetFilePath(): string {
       return "";
    }
 }
 
-export function mockGetTargetFilePath() {
+export function mockGetTargetFilePath(cls: typeof BaseWriterSubclass) {
    let spy: MockInstance;
    const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
 
    beforeEach(() => {
-      spy = vitest.spyOn(MockedBaseWriter.prototype, "getTargetFilePath");
+      spy = vitest.spyOn(cls.prototype, "getTargetFilePath");
       const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
       spy.mockImplementation(() => {
          return path.join(tmpdir(), dirName, fileName);
@@ -40,4 +40,4 @@ export function mockGetTargetFilePath() {
    });
 }
 
-export default { MockedBaseWriter, mockGetTargetFilePath };
+export default { BaseWriterSubclass, mockGetTargetFilePath };
