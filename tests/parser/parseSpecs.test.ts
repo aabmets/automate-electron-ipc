@@ -76,7 +76,7 @@ describe("parseSpecs", () => {
    it("should parse simple unicast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").Unicast.RendererToMain({
+            Channel("UserChannel").RendererToMain.Unicast({
                signature: type as (arg1: string, arg2: number) => boolean,
             })
          `,
