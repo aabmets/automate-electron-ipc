@@ -28,7 +28,7 @@ function parseChannelExpressions(code: string): t.ChannelSpec {
 describe("parseChannelExpressions", () => {
    describe("PropertyAccessExpression Handling", () => {
       it("should assign all groups for a valid PropertyAccessExpression that matches channelPattern", () => {
-         const code = `Channel('SomeChannel').Broadcast.RendererToMain;`;
+         const code = `Channel('SomeChannel').RendererToMain.Broadcast;`;
          const result = parseChannelExpressions(code);
          expect(result).toEqual({
             name: "SomeChannel",
@@ -41,12 +41,12 @@ describe("parseChannelExpressions", () => {
          let result = parseChannelExpressions("foo.bar.baz;");
          expect(result).toEqual({});
 
-         for (const kind of ["Broadcast", "Unicast"]) {
+         for (const kind of ["Broadcast", "Unicast", "Port"]) {
             for (const direction of ["RendererToRenderer", "RendererToMain", "MainToRenderer"]) {
                const invalidExpressions = [
                   `Channel("SomeChannel").${kind};`,
                   `Channel("SomeChannel").${direction};`,
-                  `Channel().${kind}.${direction}`,
+                  `Channel().${direction}.${kind}`,
                ];
                for (const expr of invalidExpressions) {
                   result = parseChannelExpressions(expr);
@@ -61,7 +61,7 @@ describe("parseChannelExpressions", () => {
       describe("Signature Assignment", () => {
          it("should parse a valid FunctionTypeNode with multiple parameters of different types", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as (param1: string, param2: number, param3: boolean) => void
                });
             `);
@@ -80,7 +80,7 @@ describe("parseChannelExpressions", () => {
 
          it("should correctly set the optional flag for parameters with optional tokens", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as (param?: string) => void
                });
             `);
@@ -91,7 +91,7 @@ describe("parseChannelExpressions", () => {
 
          it("should correctly set the rest flag for parameters with rest tokens", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as (...params: string[]) => void
                });
             `);
@@ -112,7 +112,7 @@ describe("parseChannelExpressions", () => {
 
          it("should handle FunctionTypeNode with no parameters", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as () => void
                });
             `);
@@ -122,7 +122,7 @@ describe("parseChannelExpressions", () => {
 
          it("should set the async flag to false for functions returning a non-Promise type", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as () => number
                });
             `);
@@ -163,7 +163,7 @@ describe("parseChannelExpressions", () => {
 
          it("should handle PropertyAssignment nodes missing child nodes gracefully", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   signature: type as string
                });
             `);
@@ -175,7 +175,7 @@ describe("parseChannelExpressions", () => {
          it("should correctly parse multiple listeners enclosed in single or double quotes", () => {
             for (const c of `'"`) {
                const result = parseChannelExpressions(`
-                  Channel("SomeChannel").Broadcast.RendererToMain({
+                  Channel("SomeChannel").RendererToMain.Broadcast({
                      listeners: [${c}listenerOne${c}, ${c}listenerTwo${c}, ${c}listenerThree${c}]
                   });
                `);
@@ -185,7 +185,7 @@ describe("parseChannelExpressions", () => {
 
          it("should set listeners to an empty array when no listeners are assigned", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   listeners: []
                });
             `);
@@ -195,7 +195,7 @@ describe("parseChannelExpressions", () => {
          it("should not parse listeners with non-word characters", () => {
             for (const c of "!#$%&()*+,-./:;<=>?@[\\]^{|}~") {
                const result = parseChannelExpressions(`
-                  Channel("SomeChannel").Broadcast.RendererToMain({
+                  Channel("SomeChannel").RendererToMain.Broadcast({
                      listeners: ["valid_listener", 'invalid${c}listener', '', 123];
                   });
                `);
@@ -209,7 +209,7 @@ describe("parseChannelExpressions", () => {
 
          it("should handle listeners assignment with excessive whitespace", () => {
             const result = parseChannelExpressions(`
-               Channel("SomeChannel").Broadcast.RendererToMain({
+               Channel("SomeChannel").RendererToMain.Broadcast({
                   listeners: [  'listenerOne'  ,  "listenerTwo"  ,   'listenerThree'  ];
                });
             `);
