@@ -37,7 +37,8 @@ describe("PreloadBindingsWriter", () => {
                   sendVitestChannel: (arg1: CustomType, arg2?: CustomType) => Promise<string>;
                };
             }
-         }
+         }\n
+         export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
@@ -54,7 +55,8 @@ describe("PreloadBindingsWriter", () => {
                   sendVitestChannel: (arg1: string, arg2: string) => void;
                };
             }
-         }
+         }\n
+         export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
@@ -71,7 +73,8 @@ describe("PreloadBindingsWriter", () => {
                   onVitestChannel: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
                };
             }
-         }
+         }\n
+         export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
