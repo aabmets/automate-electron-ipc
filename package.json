@@ -17,6 +17,9 @@
       "types": "./types/index.d.ts",
       "default": "./dist/index.js"
    },
+   "bin": {
+      "ipcgen": "./dist/cli.js"
+   },
    "scripts": {
       "check": "tsc -p tsconfig.json --noEmit && biome check",
       "pubtest": "tsc -p tsconfig.json && bun pm pack --destination ./packages",
@@ -26,10 +29,12 @@
       "@biomejs/biome": "^1.9.4",
       "@types/bun": "^1.1.14",
       "@types/node": "^22.10.1",
-      "lefthook": "^1.8.4",
-      "vitest": "^2.1.6"
+      "lefthook": "^1.9.0",
+      "vitest": "^2.1.8"
    },
    "peerDependencies": {
+      "chalk": "^5.3.0",
+      "commander": "^12.1.0",
       "electron": "^33.2.1",
       "electron-vite": "^2.3.0",
       "superstruct": "^2.0.2",
