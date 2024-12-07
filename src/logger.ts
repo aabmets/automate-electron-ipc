@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import chalk from "chalk";
 
 function formatOutput(messages: string[], icon: string): string {
    const leadingIcon = `${icon.length === 1 ? "  " : " "}${icon} – `;
@@ -23,13 +24,11 @@ function formatOutput(messages: string[], icon: string): string {
 }
 
 function warn(messages: string[]): void {
-   const fmtMsg = formatOutput(messages, "⚠️");
-   console.warn(`\n\x1b[38;5;214m${fmtMsg}\x1b[0m\n`);
+   console.warn(chalk.yellow(formatOutput(messages, "⚠️")));
 }
 
 function success(messages: string[]): void {
-   const fmtMsg = formatOutput(messages, "✔");
-   console.warn(`\n\x1b[38;5;34m${fmtMsg}\x1b[0m\n`);
+   console.warn(chalk.green(formatOutput(messages, "✔")));
 }
 
 export function nonExistentSchemaPath(path: string): void {
@@ -52,7 +51,10 @@ export function reportSuccess(pfsArray: t.ParsedFileSpecs[]): void {
       "Successfully generated IPC bindings:",
       ...pfsArray.map((pfs) => {
          const count = pfs.specs.channelSpecArray.length;
-         return `${count} channels from ${pfs.relativePath}`;
+         const resultPath = pfs.fullPath.includes(pfs.relativePath)
+            ? pfs.fullPath.substring(pfs.fullPath.indexOf(pfs.relativePath))
+            : pfs.fullPath;
+         return `${count} channels from path '${resultPath}'`;
       }),
    ]);
 }
