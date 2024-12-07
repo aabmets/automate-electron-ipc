@@ -9,7 +9,6 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
 import {
@@ -23,26 +22,8 @@ import {
    refine,
    string,
 } from "superstruct";
-import utils from "./utils.js";
 
-/**
- * Merges any optional config object with default config, then
- * validates the merged IPC automation config. Returns the final
- * config with all paths resolved to absolute paths.
- *
- * - Validates:
- *   - `ipcDataDir` path must be relative to project root.
- *   - `codeIndent` must be between 2 and 4, inclusive.
- *
- * @returns The validated and resolved configuration.
- */
-export async function validateResolveConfig(): Promise<t.IPCResolvedConfig> {
-   const mergedConfig: t.IPCOptionalConfig = {
-      projectUsesNodeNext: false,
-      ipcDataDir: "src/autoipc",
-      codeIndent: 3,
-      ...utils.getIpcAutomationConfig(),
-   };
+export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    const IPCOptionalConfigStruct = object({
       projectUsesNodeNext: boolean(),
       ipcDataDir: refine(string(), "relative", (value) => {
@@ -54,26 +35,7 @@ export async function validateResolveConfig(): Promise<t.IPCResolvedConfig> {
          return value >= 2 && value <= 4 ? true : errMsg;
       }),
    });
-   assert(mergedConfig, IPCOptionalConfigStruct);
-
-   const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir);
-   const schemaDir = path.join(ipcDataDir, "schema");
-   const schemaFile = path.join(ipcDataDir, "schema.ts");
-   const [schemaDirStats, schemaFileStats] = await Promise.all([
-      fsp.stat(schemaDir).catch(() => null),
-      fsp.stat(schemaFile).catch(() => null),
-   ]);
-   const onlySchemaDir = schemaDirStats && !schemaFileStats;
-   return {
-      ...mergedConfig,
-      mainBindingsFilePath: path.join(ipcDataDir, "main.ts").replace(/\\/g, "/"),
-      preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/"),
-      rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/"),
-      ipcSchema: {
-         path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
-         stats: onlySchemaDir ? schemaDirStats : schemaFileStats,
-      },
-   };
+   assert(config, IPCOptionalConfigStruct);
 }
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
@@ -103,7 +65,7 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
             }
          }),
          kind: refine(string(), "choice", (value) => {
-            const choices = ["Broadcast", "Unicast"];
+            const choices = ["Broadcast", "Unicast", "Port"];
             if (choices.includes(value)) {
                return true;
             } else {
@@ -137,7 +99,7 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
    };
    const ChannelSpecStruct = getChannelSpecStruct(false);
    const ChannelSpecStructWithListeners = getChannelSpecStruct(true);
-   const ChannelSpecArrayStruct = refine(array() as any, "unique", (array: string[]) => {
+   const ChannelSpecArrayStruct = refine(array() as any, "constraints", (array: string[]) => {
       const seen = new Set<string>();
       for (const name of array) {
          if (seen.has(name)) {
@@ -161,4 +123,4 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
    return specs as t.ChannelSpec[];
 }
 
-export default { validateResolveConfig, validateChannelSpecs };
+export default { validateOptionalConfig, validateChannelSpecs };
