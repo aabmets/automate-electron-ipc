@@ -40,5 +40,12 @@
       "superstruct": "^2.0.2",
       "typescript": "^5.6.3",
       "vite": "^5.4.10"
+   },
+   "config": {
+      "autoipc": {
+         "projectUsesNodeNext": true,
+         "ipcDataDir": ".exclude/autoipc",
+         "codeIndent": 3
+      }
    }
 }

@@ -70,8 +70,9 @@ export function collectCustomTypes(node: ts.Node, src: ts.SourceFile, set: Set<s
 }
 
 export const channelPattern = utils.concatRegex([
-   /^Channel\(['"](?<name>\w+)['"]\).(?<kind>Broadcast|Unicast)/,
-   /.(?<direction>RendererToMain|MainToRenderer|RendererToRenderer)$/,
+   /^Channel\(['"](?<name>\w+)['"]\)/,
+   /.(?<direction>RendererToMain|MainToRenderer|RendererToRenderer)/,
+   /.(?<kind>Broadcast|Unicast|Port)$/,
 ]);
 
 export function isSignatureAssignment(text: string): boolean {

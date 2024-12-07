@@ -84,13 +84,15 @@ export function ipcAutomation(): t.IpcAutomationPlugin {
 
 export function Channel(): t.Channels {
    return {
-      Unicast: {
-         RendererToMain: logger.cannotExecuteChannels,
-         RendererToRenderer: logger.cannotExecuteChannels,
+      RendererToMain: {
+         Unicast: logger.cannotExecuteChannels,
+         Broadcast: logger.cannotExecuteChannels,
       },
-      Broadcast: {
-         RendererToMain: logger.cannotExecuteChannels,
-         MainToRenderer: logger.cannotExecuteChannels,
+      MainToRenderer: {
+         Broadcast: logger.cannotExecuteChannels,
+      },
+      RendererToRenderer: {
+         Port: logger.cannotExecuteChannels,
       },
    };
 }
