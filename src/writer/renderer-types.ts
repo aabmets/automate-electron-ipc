@@ -73,7 +73,7 @@ export class RendererTypesWriter extends BaseWriter {
          ...[
             `\n${this.indents[1]}};`,
             `\n${this.indents[0]}}`,
-            "\n}\n",
+            "\n}\n\n",
             "export default Window;\n",
          ],
       );

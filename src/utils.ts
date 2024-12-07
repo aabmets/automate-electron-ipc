@@ -78,7 +78,7 @@ export function resolveUserProjectPath(subPath = ""): string {
 export function getIpcAutomationConfig(): t.IPCOptionalConfig {
    const filePath = resolveUserProjectPath("package.json");
    const data = JSON.parse(fs.readFileSync(filePath).toString());
-   return data?.config["vite-plugin-automate-electron-ipc"] || {};
+   return data?.config?.autoipc || {};
 }
 
 /**

@@ -39,7 +39,7 @@ import utils from "./utils.js";
 export async function validateResolveConfig(): Promise<t.IPCResolvedConfig> {
    const mergedConfig: t.IPCOptionalConfig = {
       projectUsesNodeNext: false,
-      ipcDataDir: "src/ipc-gen",
+      ipcDataDir: "src/autoipc",
       codeIndent: 3,
       ...utils.getIpcAutomationConfig(),
    };
