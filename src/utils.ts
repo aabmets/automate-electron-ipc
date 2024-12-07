@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import type * as t from "@types";
 import { LRUCache } from "./cache.js";
 
 /**
@@ -21,9 +22,14 @@ import { LRUCache } from "./cache.js";
  *
  * @param forPath - The relative path to search for.
  * @param [startFrom=import.meta.url] - The file URL or filesystem path to start the search from.
+ * @param [skipNodeModules=false] - Skips matched paths which exist inside 'node_modules' path.
  * @returns The full resolved path if found, or an empty string.
  */
-export function searchUpwards(forPath: string, startFrom = import.meta.url): string {
+export function searchUpwards(
+   forPath: string,
+   startFrom = import.meta.url,
+   skipNodeModules = false,
+): string {
    const key = `${forPath}${startFrom}`;
    const cache = LRUCache.getInstance("utils.searchUpwards");
    const [exists, value] = cache.get(key);
@@ -32,9 +38,13 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
    }
    const startPath = startFrom.startsWith("file://") ? url.fileURLToPath(startFrom) : startFrom;
    let currentDir = path.dirname(startPath);
+
    while (true) {
       const possiblePath = path.resolve(currentDir, forPath);
       if (fs.existsSync(possiblePath)) {
+         if (skipNodeModules && possiblePath.includes("node_modules")) {
+            continue;
+         }
          cache.put(key, possiblePath);
          return possiblePath;
       }
@@ -55,8 +65,20 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
  * @returns Resolved sub-path in the users project directory.
  */
 export function resolveUserProjectPath(subPath = ""): string {
-   const basePath = path.dirname(searchUpwards(".git") || searchUpwards("package.json"));
+   const gitPath = searchUpwards(".git");
+   const pkgPath = searchUpwards("package.json", import.meta.url, true);
+   const basePath = path.dirname(gitPath || pkgPath);
    return path.join(basePath, subPath).replaceAll("\\", "/");
+}
+
+/**
+ * Reads the contents of package.json from user project and returns the object
+ * from path 'config.vite-plugin-automate-electron-ipc' or an empty object.
+ */
+export function getIpcAutomationConfig(): t.IPCOptionalConfig {
+   const filePath = resolveUserProjectPath("package.json");
+   const data = JSON.parse(fs.readFileSync(filePath).toString());
+   return data?.config["vite-plugin-automate-electron-ipc"] || {};
 }
 
 /**
@@ -111,6 +133,7 @@ export function dedent(text: string): string {
 export default {
    searchUpwards,
    resolveUserProjectPath,
+   getIpcAutomationConfig,
    concatRegex,
    isPathInside,
    dedent,
