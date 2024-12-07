@@ -76,7 +76,7 @@ describe("parseSpecs", () => {
    it("should parse simple unicast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").Unicast.RendererToMain({
+            Channel("UserChannel").RendererToMain.Unicast({
                signature: type as (arg1: string, arg2: number) => boolean,
             })
          `,
@@ -113,7 +113,7 @@ describe("parseSpecs", () => {
    it("should parse simple broadcast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").Broadcast.RendererToMain({
+            Channel("UserChannel").RendererToMain.Broadcast({
                signature: type as (arg1: string, arg2: number) => boolean,
                listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
             })
@@ -152,7 +152,7 @@ describe("parseSpecs", () => {
    it("should parse complex unicast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").Unicast.RendererToRenderer({
+            Channel("UserChannel").RendererToRenderer.Port({
                signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
             })
          `,
@@ -162,7 +162,7 @@ describe("parseSpecs", () => {
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
-         kind: "Unicast",
+         kind: "Port",
          direction: "RendererToRenderer",
          signature: {
             params: [
@@ -189,7 +189,7 @@ describe("parseSpecs", () => {
    it("should parse complex broadcast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").Broadcast.MainToRenderer({
+            Channel("UserChannel").MainToRenderer.Broadcast({
                signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
                listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
             })
