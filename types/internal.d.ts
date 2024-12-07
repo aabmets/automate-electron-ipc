@@ -10,9 +10,15 @@
  */
 
 import type { Stats } from "node:fs";
-import type { BroadcastConfig, Channels, IPCOptionalConfig, UnicastConfig } from "./index";
 
-export type { IPCOptionalConfig, BroadcastConfig, UnicastConfig, Channels };
+import { BroadcastConfig, Channels, IpcAutomationPlugin, UnicastConfig } from "./index";
+export type { BroadcastConfig, IpcAutomationPlugin, UnicastConfig, Channels };
+
+export interface IPCOptionalConfig {
+   projectUsesNodeNext?: boolean;
+   ipcDataDir?: string;
+   codeIndent?: number;
+}
 
 export interface IPCResolvedConfig {
    mainBindingsFilePath: string;

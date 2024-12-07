@@ -12,21 +12,6 @@
 import type { Plugin } from "vite";
 
 /**
- * Optional config for IPC automation plugin that is merged into the default config object.
- * The default config is defined as follows:
- * - `ipcDataDir: "src/auto-ipc"`
- * - `codeIndent: 3`
- *
- * @property ipcDataDir - Relative path to a directory which this plugin will use as its data directory.
- * @property codeIndent - Amount of spaces that will be used for indenting any generated code.
- */
-export interface IPCOptionalConfig {
-   projectUsesNodeNext?: boolean;
-   ipcDataDir?: string;
-   codeIndent?: number;
-}
-
-/**
  * Configuration object for broadcast-type channels.
  *
  * @example
@@ -141,6 +126,14 @@ export interface Channels {
 }
 
 /**
+ * Object returned by calling the ipcAutomation() plugin builder function.
+ */
+export interface IpcAutomationPlugin extends Plugin {
+   name: string;
+   buildStart: () => Promise<void>;
+}
+
+/**
  * Vite plugin for automating the generation of IPC components for Electron apps.
  */
 declare module "vite-plugin-automate-electron-ipc" {
@@ -148,34 +141,9 @@ declare module "vite-plugin-automate-electron-ipc" {
     * Vite plugin which must be used to enable IPC automation for Electron projects.
     * IPC channels are regenerated on Vite server startup and on each hot reload event.
     *
-    * @param config - Optional config that is merged into the default config object.
     * @returns An object conforming to the Vite Plugin interface.
     */
-   export function ipcAutomation(config?: IPCOptionalConfig): Plugin;
-
-   /**
-    * Collection of properties describing the browser preload environment.
-    *
-    * @property filePath - Path to the browser environment preload file.
-    */
-   export const ipcPreload: {
-      /**
-       * Path to the browser environment preload file, which must be
-       * fed into the BrowserWindow object upon its instantiation to
-       * bind IPC components between the main and the renderer process.
-       *
-       * @example
-       * const bw = new BrowserWindow({
-       *     webPreferences: {
-       *         preload: ipcPreload.filePath,
-       *         contextIsolation: true,
-       *         nodeIntegration: false,
-       *         sandbox: true,
-       *     },
-       * });
-       */
-      filePath: string;
-   };
+   export function ipcAutomation(): IpcAutomationPlugin;
 
    /**
     * Defines a channel with the given name, which will be used to

@@ -12,13 +12,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
-import type { Plugin } from "vite";
 import logger from "./logger.js";
 import parser from "./parser.js";
 import valid from "./validators.js";
 import writer from "./writer/index.js";
 
-export function ipcAutomation(): Plugin {
+export function ipcAutomation(): t.IpcAutomationPlugin {
    return {
       name: "vite-plugin-automate-electron-ipc",
       buildStart: async () => {
