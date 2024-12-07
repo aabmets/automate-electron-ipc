@@ -14,7 +14,7 @@ import { BaseWriter } from "./base-writer.js";
 
 export class MainBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
-      return this.resolvedConfig.mainBindingsFilePath;
+      return this.config.mainBindingsFilePath;
    }
    protected renderEmptyFileContents(): string {
       return "\nexport const ipcMain = {};";

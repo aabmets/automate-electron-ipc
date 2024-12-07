@@ -14,7 +14,7 @@ import { BaseWriter } from "./base-writer.js";
 
 export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
-      return this.resolvedConfig.preloadBindingsFilePath;
+      return this.config.preloadBindingsFilePath;
    }
    protected renderEmptyFileContents(): string {
       return [

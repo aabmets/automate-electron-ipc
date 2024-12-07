@@ -34,17 +34,14 @@ import utils from "./utils.js";
  *   - `ipcDataDir` path must be relative to project root.
  *   - `codeIndent` must be between 2 and 4, inclusive.
  *
- * @param config - Optional configuration object.
  * @returns The validated and resolved configuration.
  */
-export async function validateResolveConfig(
-   config: t.IPCOptionalConfig = {},
-): Promise<t.IPCResolvedConfig> {
+export async function validateResolveConfig(): Promise<t.IPCResolvedConfig> {
    const mergedConfig: t.IPCOptionalConfig = {
       projectUsesNodeNext: false,
       ipcDataDir: "src/ipc-gen",
       codeIndent: 3,
-      ...config,
+      ...utils.getIpcAutomationConfig(),
    };
    const IPCOptionalConfigStruct = object({
       projectUsesNodeNext: boolean(),

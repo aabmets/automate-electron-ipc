@@ -13,7 +13,7 @@ import { BaseWriter } from "./base-writer.js";
 
 export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
-      return this.resolvedConfig.rendererTypesFilePath;
+      return this.config.rendererTypesFilePath;
    }
    protected renderEmptyFileContents(): string {
       return `\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
