@@ -11,6 +11,7 @@
 
 import path from "node:path";
 import type * as t from "@types";
+import type { Struct } from "superstruct";
 import {
    assert,
    array,
@@ -38,7 +39,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    assert(config, IPCOptionalConfigStruct);
 }
 
-export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
+export function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
    const ListenersStruct = refine(string(), "format", (value) => {
       if (value.length < 5) {
          const msg = "Channel listener names must be at least 5 characters in length";
@@ -51,55 +52,77 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
       }
       return true;
    });
-   const getChannelSpecStruct = (canHaveListeners: boolean) => {
-      return object({
-         name: refine(string(), "pascalcase", (value) => {
-            if (value.length < 3) {
-               return "Channel name must be at least 3 characters in length";
-            } else if (value.toLowerCase().startsWith("on")) {
-               return "Channel name must not begin with 'on'";
-            } else if (/^(?![A-Z])/.test(value)) {
-               return "Channel name must start with a capital letter";
-            } else {
-               return true;
-            }
-         }),
-         kind: refine(string(), "choice", (value) => {
-            const choices = ["Broadcast", "Unicast", "Port"];
-            if (choices.includes(value)) {
-               return true;
-            } else {
-               return `Channel kind must be one of '${choices}'`;
-            }
-         }),
-         direction: refine(string(), "choice", (value) => {
-            const choices = ["RendererToRenderer", "RendererToMain", "MainToRenderer"];
-            if (choices.includes(value)) {
-               return true;
-            } else {
-               return `Channel direction must be one of '${choices}'`;
-            }
-         }),
-         signature: object({
-            definition: string(),
-            params: array(
-               object({
-                  name: string(),
-                  type: string(),
-                  rest: boolean(),
-                  optional: boolean(),
-               }),
-            ),
-            returnType: string(),
-            customTypes: array(string()),
-            async: boolean(),
-         }),
-         listeners: canHaveListeners ? optional(array(ListenersStruct)) : optional(never()),
-      });
+   return object({
+      name: refine(string(), "pascalcase", (value) => {
+         if (value.length < 3) {
+            return "Channel name must be at least 3 characters in length";
+         } else if (value.toLowerCase().startsWith("on")) {
+            return "Channel name must not begin with 'on'";
+         } else if (/^(?![A-Z])/.test(value)) {
+            return "Channel name must start with a capital letter";
+         } else {
+            return true;
+         }
+      }),
+      kind: refine(string(), "choice", (value) => {
+         const choices = ["Broadcast", "Unicast", "Port"];
+         if (choices.includes(value)) {
+            return true;
+         } else {
+            return `Channel kind must be one of '${choices}'`;
+         }
+      }),
+      direction: refine(string(), "choice", (value) => {
+         const choices = [];
+         if (kind === "Broadcast") {
+            choices.push("RendererToMain", "MainToRenderer");
+         } else if (kind === "Unicast") {
+            choices.push("RendererToMain");
+         } else if (kind === "Port") {
+            choices.push("RendererToRenderer");
+         }
+         return choices.includes(value)
+            ? true
+            : `Channel kind '${kind}' is not allowed when channel direction is '${value}'.`;
+      }),
+      signature: object({
+         definition: string(),
+         params: array(
+            object({
+               name: string(),
+               type: string(),
+               rest: boolean(),
+               optional: boolean(),
+            }),
+         ),
+         returnType: string(),
+         customTypes: array(string()),
+         async: boolean(),
+      }),
+      listeners: kind === "Broadcast" ? optional(array(ListenersStruct)) : optional(never()),
+   });
+}
+
+export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
+   const structMap = {
+      BroadcastStruct: getChannelSpecStruct("Broadcast"),
+      UnicastStruct: getChannelSpecStruct("Unicast"),
+      PortStruct: getChannelSpecStruct("Port"),
    };
-   const ChannelSpecStruct = getChannelSpecStruct(false);
-   const ChannelSpecStructWithListeners = getChannelSpecStruct(true);
-   const ChannelSpecArrayStruct = refine(array() as any, "constraints", (array: string[]) => {
+   const channelNames: string[] = [];
+   for (const spec of specs) {
+      if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
+         assert(spec, structMap.BroadcastStruct);
+      } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
+         assert(spec, structMap.UnicastStruct);
+      } else if (spec?.kind === ("Port" as t.ChannelKind)) {
+         assert(spec, structMap.PortStruct);
+      }
+      if (spec.name) {
+         channelNames.push(spec.name);
+      }
+   }
+   const ChannelNamesArrayStruct = refine(array() as any, "unique", (array: string[]) => {
       const seen = new Set<string>();
       for (const name of array) {
          if (seen.has(name)) {
@@ -110,17 +133,8 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
       }
       return true;
    });
-   const channelNames: string[] = [];
-   for (const spec of specs) {
-      if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
-         assert(spec, ChannelSpecStructWithListeners);
-      } else {
-         assert(spec, ChannelSpecStruct);
-      }
-      channelNames.push(spec.name);
-   }
-   assert(channelNames, ChannelSpecArrayStruct);
+   assert(channelNames, ChannelNamesArrayStruct);
    return specs as t.ChannelSpec[];
 }
 
-export default { validateOptionalConfig, validateChannelSpecs };
+export default { validateOptionalConfig, getChannelSpecStruct, validateChannelSpecs };
