@@ -69,7 +69,14 @@ export class RendererTypesWriter extends BaseWriter {
             ...[`\n${this.indents[2]}ports: {`, ...portsArray, `\n${this.indents[2]}};`],
          );
       }
-      windowDeclaration.push(...[`\n${this.indents[1]}};`, `\n${this.indents[0]}}`, "\n}\n"]);
+      windowDeclaration.push(
+         ...[
+            `\n${this.indents[1]}};`,
+            `\n${this.indents[0]}}`,
+            "\n}\n",
+            "export default Window;\n",
+         ],
+      );
 
       out.push(windowDeclaration.join(""));
       return out.join("\n");
