@@ -16,7 +16,7 @@ describe("channelPattern", () => {
    it("should match valid channel patterns and extract correct groups", () => {
       const validInputs = [
          {
-            input: 'Channel("CustomName1").Broadcast.RendererToMain',
+            input: 'Channel("CustomName1").RendererToMain.Broadcast',
             expected: {
                name: "CustomName1",
                kind: "Broadcast",
@@ -24,7 +24,7 @@ describe("channelPattern", () => {
             },
          },
          {
-            input: 'Channel("AnyName2").Broadcast.MainToRenderer',
+            input: 'Channel("AnyName2").MainToRenderer.Broadcast',
             expected: {
                name: "AnyName2",
                kind: "Broadcast",
@@ -32,15 +32,15 @@ describe("channelPattern", () => {
             },
          },
          {
-            input: "Channel('NamedChannel3').Unicast.RendererToRenderer",
+            input: "Channel('NamedChannel3').RendererToRenderer.Port",
             expected: {
                name: "NamedChannel3",
-               kind: "Unicast",
+               kind: "Port",
                direction: "RendererToRenderer",
             },
          },
          {
-            input: "Channel('OtherName4').Unicast.RendererToMain",
+            input: "Channel('OtherName4').RendererToMain.Unicast",
             expected: {
                name: "OtherName4",
                kind: "Unicast",
@@ -57,16 +57,16 @@ describe("channelPattern", () => {
 
    it("should not match invalid channel patterns", () => {
       const invalidInputs = [
-         'Channel("test")Broadcast.RendererToMain', // Missing dot before Broadcast
-         'Channel("test").Unicast.RendererToOther', // Invalid direction
-         'Channel("test").Multicast.RendererToMain', // Invalid kind
+         'Channel("test")RendererToMain.Broadcast', // Missing dot before Broadcast
+         'Channel("test").RendererToOther.Unicast', // Invalid direction
+         'Channel("test").RendererToMain.Multicast', // Invalid kind
          'Channel("test").Broadcast', // Missing direction
-         "Channel(test).Broadcast.RendererToMain", // Missing quotes around name
-         'Channel("test").Broadcast.RendererToMainExtra', // Extra text at the end
-         'Channel("test").Broadcast.RendererToMain.', // Trailing dot
-         'Channel("test").Broadcast..RendererToMain', // Double dot
-         'Channel("test").BroadcastRendererToMain', // Missing dot before direction
-         'Channel("").Broadcast.RendererToMain', // Empty name
+         "Channel(test).RendererToMain.Broadcast", // Missing quotes around name
+         'Channel("test").RendererToMainExtra.Broadcast', // Extra text at the end
+         'Channel("test").RendererToMain.Broadcast.', // Trailing dot
+         'Channel("test").RendererToMain..Broadcast', // Double dot
+         'Channel("test").RendererToMainBroadcast', // Missing dot before direction
+         'Channel("").RendererToMain.Broadcast', // Empty name
       ];
 
       invalidInputs.forEach((input) => {
@@ -76,20 +76,20 @@ describe("channelPattern", () => {
    });
 
    it("should match names with underscores and numbers", () => {
-      const input = 'Channel("user_123").Broadcast.RendererToMain';
+      const input = 'Channel("user_123").RendererToMain.Broadcast';
       const match = input.match(parser.channelPattern);
       expect(match).not.toBeNull();
       expect(match?.groups?.name).toBe("user_123");
    });
 
    it("should not match names with special characters", () => {
-      const input = 'Channel("user-name").Broadcast.RendererToMain';
+      const input = 'Channel("user-name").RendererToMain.Broadcast';
       const match = input.match(parser.channelPattern);
       expect(match).toBeNull();
    });
 
    it("should be case-sensitive for kind and direction", () => {
-      const input = 'Channel("test").broadcast.RendererToMain';
+      const input = 'Channel("test").RendererToMain.broadcast';
       const match = input.match(parser.channelPattern);
       expect(match).toBeNull();
    });
