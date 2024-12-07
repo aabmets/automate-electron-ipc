@@ -22,14 +22,9 @@ import { LRUCache } from "./cache.js";
  *
  * @param forPath - The relative path to search for.
  * @param [startFrom=import.meta.url] - The file URL or filesystem path to start the search from.
- * @param [skipNodeModules=false] - Skips matched paths which exist inside 'node_modules' path.
  * @returns The full resolved path if found, or an empty string.
  */
-export function searchUpwards(
-   forPath: string,
-   startFrom = import.meta.url,
-   skipNodeModules = false,
-): string {
+export function searchUpwards(forPath: string, startFrom = import.meta.url): string {
    const key = `${forPath}${startFrom}`;
    const cache = LRUCache.getInstance("utils.searchUpwards");
    const [exists, value] = cache.get(key);
@@ -42,9 +37,6 @@ export function searchUpwards(
    while (true) {
       const possiblePath = path.resolve(currentDir, forPath);
       if (fs.existsSync(possiblePath)) {
-         if (skipNodeModules && possiblePath.includes("node_modules")) {
-            continue;
-         }
          cache.put(key, possiblePath);
          return possiblePath;
       }
@@ -65,9 +57,7 @@ export function searchUpwards(
  * @returns Resolved sub-path in the users project directory.
  */
 export function resolveUserProjectPath(subPath = ""): string {
-   const gitPath = searchUpwards(".git");
-   const pkgPath = searchUpwards("package.json", import.meta.url, true);
-   const basePath = path.dirname(gitPath || pkgPath);
+   const basePath = path.dirname(searchUpwards(".git") || searchUpwards("node_modules"));
    return path.join(basePath, subPath).replaceAll("\\", "/");
 }
 
