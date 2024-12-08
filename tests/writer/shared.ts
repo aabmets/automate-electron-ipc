@@ -16,7 +16,7 @@ import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import writer from "@src/writer/index.js";
 import type * as t from "@types";
-import { MockInstance, afterAll, afterEach, beforeEach, vitest } from "vitest";
+import { MockInstance, afterAll, afterEach, beforeEach, vi } from "vitest";
 
 export class VitestBaseWriter extends BaseWriter {
    public getTargetFilePath(): string {
@@ -74,7 +74,7 @@ export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWrit
    const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
 
    beforeEach(() => {
-      spy = vitest.spyOn(cls.prototype, "getTargetFilePath");
+      spy = vi.spyOn(cls.prototype, "getTargetFilePath");
       const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
       spy.mockImplementation(() => {
          return path.join(tmpdir(), dirName, fileName);
