@@ -53,7 +53,9 @@ describe("MainBindingsWriter", () => {
          import type { IpcMainEvent } from "electron";
 
          export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
+            onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
+               electronIpcMain.on('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+            onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
                electronIpcMain.on('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
          }
       `);

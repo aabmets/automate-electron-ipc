@@ -71,7 +71,8 @@ describe("PreloadBindingsWriter", () => {
          declare global {
             interface Window {
                ipc: {
-                  onVitestChannel: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
+                  onCustomListener1: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
+                  onCustomListener2: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
                };
             }
          }\n

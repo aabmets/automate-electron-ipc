@@ -82,25 +82,26 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
       return `${paramName}: ${param.type}`;
    });
    const sigDefinition = `(${sigParams.join(", ")}) => ${vcs.sigReturnType}`;
+   const channelSpec: Partial<t.ChannelSpec> = {
+      name: "VitestChannel",
+      kind: vcs.channelKind as t.ChannelKind,
+      direction: vcs.channelDirection as t.ChannelDirection,
+      signature: {
+         definition: sigDefinition,
+         params: sigParamsArray,
+         returnType: vcs.sigReturnType,
+         customTypes: vcs.sigCustomTypes,
+      } as t.CallableSignature,
+   };
+   if (vcs.channelListeners.length > 0) {
+      Object.assign(channelSpec, { listeners: vcs.channelListeners });
+   }
    return [
       {
          specs: {
             typeSpecArray: [],
             importSpecArray: [],
-            channelSpecArray: [
-               {
-                  name: "VitestChannel",
-                  kind: vcs.channelKind as t.ChannelKind,
-                  direction: vcs.channelDirection as t.ChannelDirection,
-                  listeners: vcs.channelListeners,
-                  signature: {
-                     definition: sigDefinition,
-                     params: sigParamsArray,
-                     returnType: vcs.sigReturnType,
-                     customTypes: vcs.sigCustomTypes,
-                  } as t.CallableSignature,
-               } as Partial<t.ChannelSpec>,
-            ] as Partial<t.ChannelSpec>[],
+            channelSpecArray: [channelSpec] as Partial<t.ChannelSpec>[],
          } as Partial<t.SpecsCollection>,
       } as Partial<t.ParsedFileSpecs>,
    ] as t.ParsedFileSpecs[];
@@ -125,7 +126,7 @@ export default {
       Broadcast_RendererToMain: getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "RendererToMain",
-         channelListeners: [],
+         channelListeners: ["onCustomListener1", "onCustomListener2"],
          paramType: "string",
          paramRest: false,
          paramOptional: false,
@@ -135,7 +136,7 @@ export default {
       Broadcast_MainToRenderer: getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "MainToRenderer",
-         channelListeners: [],
+         channelListeners: ["onCustomListener1", "onCustomListener2"],
          paramType: "number",
          paramRest: true,
          paramOptional: false,

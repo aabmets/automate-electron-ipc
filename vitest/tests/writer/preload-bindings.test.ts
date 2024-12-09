@@ -68,7 +68,8 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            onVitestChannel: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            onCustomListener1: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            onCustomListener2: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
