@@ -101,7 +101,7 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
  */
 export function dedent(text: string): string {
    const reducer = (minIndent: number, line: string) =>
-      Math.min(minIndent, line.match(/^(\s*)/)?.[0].length || 0);
+      Math.min(minIndent, /^(\s*)/.exec(line)?.[0].length ?? 0);
    const lines = text.split("\n");
    const indent = lines
       .filter((line) => line.trim()) // Exclude blank lines

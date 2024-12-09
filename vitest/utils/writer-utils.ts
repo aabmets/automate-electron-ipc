@@ -74,11 +74,12 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
       };
    });
    const sigParams = sigParamsArray.map((param) => {
-      const paramName = param.rest
-         ? `...${param.name}`
-         : param.optional
-           ? `${param.name}?`
-           : param.name;
+      let paramName = param.name;
+      if (param.rest) {
+         paramName = `...${param.name}`;
+      } else if (param.optional) {
+         paramName = `${param.name}?`;
+      }
       return `${paramName}: ${param.type}`;
    });
    const sigDefinition = `(${sigParams.join(", ")}) => ${vcs.sigReturnType}`;

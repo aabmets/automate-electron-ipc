@@ -21,21 +21,17 @@ import { MockInstance, afterAll, afterEach, beforeEach, vi } from "vitest";
 export function mockFspReadFile(data: any): void {
    const spy = vi.spyOn(fsp, "readFile");
    spy.mockImplementation(() => {
-      return new Promise((resolve, _) => {
-         resolve(JSON.stringify(data));
-      });
+      return Promise.resolve(JSON.stringify(data));
    });
 }
 
 export function mockFspStats(isDirectory: boolean): void {
    const spy = vi.spyOn(fsp, "stat");
    spy.mockImplementation(() => {
-      return new Promise((resolve, _) => {
-         resolve({
-            isDirectory: () => isDirectory,
-            isFile: () => !isDirectory,
-         } as Stats);
-      });
+      return Promise.resolve({
+         isDirectory: () => isDirectory,
+         isFile: () => !isDirectory,
+      } as Stats);
    });
 }
 

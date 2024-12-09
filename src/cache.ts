@@ -22,7 +22,7 @@
  * - put(key: unknown, value: unknown): void - Inserts a key-value pair, evicting the least recently used item if necessary.
  */
 export class LRUCache {
-   private static instances: Map<string, LRUCache> = new Map();
+   private static readonly instances: Map<string, LRUCache> = new Map();
    private readonly cache: Map<unknown, unknown>;
    private readonly limit: number;
 

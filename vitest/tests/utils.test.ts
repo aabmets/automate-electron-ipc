@@ -61,7 +61,7 @@ describe("concatRegex", () => {
          /^/, // Start of string
          /[a-zA-Z]+/, // One or more letters
          /\s+/, // Whitespace
-         /[0-9]+/, // One or more digits
+         /\d+/, // One or more digits
          /\s+/, // Whitespace
          /[a-zA-Z]+/, // One or more letters
          /$/, // End of string

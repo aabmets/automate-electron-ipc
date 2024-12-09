@@ -133,7 +133,7 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
       }
 
       if (spec?.kind) {
-         const returnType = spec?.signature?.returnType || "";
+         const returnType = spec?.signature?.returnType ?? "";
          const isVoid = ["void", "Promise<void>"].includes(returnType);
          const isLimited = ["Broadcast", "Port"].includes(spec.kind);
          if (isLimited && !isVoid) {
