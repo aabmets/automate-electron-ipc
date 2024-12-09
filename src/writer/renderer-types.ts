@@ -30,9 +30,10 @@ export class RendererTypesWriter extends BaseWriter {
             if (spec.direction === "RendererToMain") {
                callablesArray.push(`send${spec.name}: ${spec.signature.definition};`);
             } else if (spec.direction === "MainToRenderer") {
-               callablesArray.push(
-                  `on${spec.name}: (callback: ${spec.signature.definition}) => void;`,
-               );
+               const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+               callableNames.forEach((name) => {
+                  callablesArray.push(`${name}: (callback: ${spec.signature.definition}) => void;`);
+               });
             } else if (spec.direction === "RendererToRenderer") {
                portsArray.push(
                   [
