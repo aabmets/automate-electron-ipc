@@ -21,12 +21,12 @@ describe("BaseWriter", () => {
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {
-         new BaseWriter({} as t.IPCResolvedConfig, []);
+         new BaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
       }).toThrowError("Cannot instantiate abstract base class");
    });
 
    it("should not throw an error on subclass instantiation", () => {
-      new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
+      new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
    });
 
    it("should generate code indents array", () => {
