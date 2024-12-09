@@ -31,7 +31,7 @@ export class MainBindingsWriter extends BaseWriter {
 
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               callablesArray.push(this.buildRendererToMainCallable(spec));
+               this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
                callablesArray.push(this.buildMainToRendererCallable(spec));
@@ -74,12 +74,15 @@ export class MainBindingsWriter extends BaseWriter {
       out.push(bindingsExpression.join(""));
       return out.join("\n");
    }
-   protected buildRendererToMainCallable(spec: t.ChannelSpec): string {
+   protected addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       const method = spec.kind === "Broadcast" ? "on" : "handle";
       const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
       const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
       const modSigDef = this.injectEventTypehint(spec.signature.definition);
-      return `on${spec.name}: (callback: ${modSigDef}) => ${ipcMain}`;
+      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      callableNames.forEach((name) => {
+         callablesArray.push(`${name}: (callback: ${modSigDef}) => ${ipcMain}`);
+      });
    }
    protected buildMainToRendererCallable(spec: t.ChannelSpec): string {
       const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
