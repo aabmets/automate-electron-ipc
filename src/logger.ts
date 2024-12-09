@@ -13,7 +13,7 @@ import type * as t from "@types";
 import chalk from "chalk";
 
 function formatOutput(messages: string[], icon: string): string {
-   const leadingIcon = `${icon.length === 1 ? "  " : " "}${icon} – `;
+   const leadingIcon = `${icon.length === 1 ? " " : ""}${icon} – `;
    const leadingSpace = " ".repeat(leadingIcon.length);
    return messages
       .map((row, index) => {
@@ -50,10 +50,11 @@ export function reportSuccess(pfsArray: t.ParsedFileSpecs[]): void {
    success([
       "Successfully generated IPC bindings:",
       ...pfsArray.map((pfs) => {
-         const count = pfs.specs.channelSpecArray.length;
-         const resultPath = pfs.fullPath.includes(pfs.relativePath)
-            ? pfs.fullPath.substring(pfs.fullPath.indexOf(pfs.relativePath))
+         const sanitizedRelPath = pfs.relativePath.replace(/^\.+\//, "");
+         const resultPath = pfs.fullPath.includes(sanitizedRelPath)
+            ? pfs.fullPath.substring(pfs.fullPath.indexOf(sanitizedRelPath))
             : pfs.fullPath;
+         const count = pfs.specs.channelSpecArray.length;
          return `${count} channels from path '${resultPath}'`;
       }),
    ]);

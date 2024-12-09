@@ -7,10 +7,7 @@ import utils from "./utils.js";
 
 program
    .name("ipcgen")
-   .description(
-      "CLI tool for regenerating IPC bindings for Electron projects,\n" +
-         "provided by the 'automate-electron-ipc' library.",
-   )
+   .description("CLI tool for generating IPC bindings for Electron applications.")
    .version(
       (() => {
          const filePath = utils.searchUpwards("package.json");
@@ -18,6 +15,6 @@ program
       })(),
       "-v, --version",
    )
-   .action(async () => await ipcAutomation());
+   .action(ipcAutomation);
 
 program.parse();
