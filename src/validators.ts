@@ -23,6 +23,7 @@ import {
    refine,
    string,
 } from "superstruct";
+import utils from "./utils.js";
 
 export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    const IPCOptionalConfigStruct = object({
@@ -105,12 +106,15 @@ function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
    const seenChannelNames = new Set<string>();
+   const listenerNames: string[] = [];
    const structMap = {
       BroadcastStruct: getChannelSpecStruct("Broadcast"),
       UnicastStruct: getChannelSpecStruct("Unicast"),
       PortStruct: getChannelSpecStruct("Port"),
    };
    for (const spec of specs) {
+      listenerNames.push(...(spec.listeners || []));
+
       if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
          assert(spec, structMap.BroadcastStruct);
       } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
@@ -118,13 +122,16 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
       } else {
          assert(spec, structMap.PortStruct);
       }
+
       if (spec?.name) {
          if (seenChannelNames.has(spec.name)) {
             throw new Error(`Channel name '${spec.name}' is not unique across application.`);
          } else {
             seenChannelNames.add((spec as t.ChannelSpec).name);
          }
+         listenerNames.push(`on${spec.name}`);
       }
+
       if (spec?.kind) {
          const returnType = spec?.signature?.returnType || "";
          const isVoid = ["void", "Promise<void>"].includes(returnType);
@@ -135,6 +142,11 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
             );
          }
       }
+   }
+   const duplicates = utils.findDuplicates(listenerNames);
+   if (duplicates.length > 0) {
+      const dupes = duplicates.join("', '");
+      throw new Error(`Duplicate listener names not allowed: ['${dupes}']`);
    }
    return specs as t.ChannelSpec[];
 }
