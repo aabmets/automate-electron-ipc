@@ -74,7 +74,7 @@ export class MainBindingsWriter extends BaseWriter {
       out.push(bindingsExpression.join(""));
       return out.join("\n");
    }
-   protected addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+   private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       const method = spec.kind === "Broadcast" ? "on" : "handle";
       const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
       const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
@@ -84,7 +84,7 @@ export class MainBindingsWriter extends BaseWriter {
          callablesArray.push(`${name}: (callback: ${modSigDef}) => ${ipcMain}`);
       });
    }
-   protected buildMainToRendererCallable(spec: t.ChannelSpec): string {
+   private buildMainToRendererCallable(spec: t.ChannelSpec): string {
       const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
       const senderParams = this.getOriginalParams(spec, false);
       const sender = `${senderCall}('${spec.name}', ${senderParams})`;
@@ -92,7 +92,7 @@ export class MainBindingsWriter extends BaseWriter {
       const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
       return `send${spec.name}: ${ipcSignature} => ${sender}`;
    }
-   protected buildRendererToRendererCallable(spec: t.ChannelSpec): string {
+   private buildRendererToRendererCallable(spec: t.ChannelSpec): string {
       const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
       const propagator = [
          "{",

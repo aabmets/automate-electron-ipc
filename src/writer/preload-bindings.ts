@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
@@ -29,15 +30,9 @@ export class PreloadBindingsWriter extends BaseWriter {
       for (const parsedFileSpecs of this.pfsArray) {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               const method = spec.kind === "Broadcast" ? "send" : "invoke";
-               const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
-               const callable = `send${spec.name}: (...args: any[]) => ${ipcRenderer}`;
-               callablesArray.push(callable);
+               callablesArray.push(this.buildRendererToMainCallable(spec));
             } else if (spec.direction === "MainToRenderer") {
-               const callback = "(_event: any, ...args: any[]) => callback(...args)";
-               const ipcRenderer = `ipcRenderer.on('${spec.name}', ${callback})`;
-               const callable = `on${spec.name}: (callback: Function) => ${ipcRenderer}`;
-               callablesArray.push(callable);
+               this.addMainToRendererCallables(spec, callablesArray);
             } else if (spec.direction === "RendererToRenderer") {
                portNamesArray.push(spec.name);
             }
@@ -68,6 +63,21 @@ export class PreloadBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+
+   private buildRendererToMainCallable(spec: t.ChannelSpec): string {
+      const method = spec.kind === "Broadcast" ? "send" : "invoke";
+      const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
+      return `send${spec.name}: (...args: any[]) => ${ipcRenderer}`;
+   }
+
+   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+      const callback = "(_event: any, ...args: any[]) => callback(...args)";
+      const ipcRenderer = `ipcRenderer.on('${spec.name}', ${callback})`;
+      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      callableNames.forEach((name) => {
+         callablesArray.push(`${name}: (callback: Function) => ${ipcRenderer}`);
+      });
    }
 
    private getPortComponents() {
