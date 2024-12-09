@@ -13,10 +13,11 @@ import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
+import mocks from "../mocks.js";
 import shared from "./shared.js";
 
 describe("BaseWriter", () => {
-   shared.mockGetTargetFilePath(shared.VitestBaseWriter);
+   mocks.mockGetTargetFilePath(shared.VitestBaseWriter);
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {

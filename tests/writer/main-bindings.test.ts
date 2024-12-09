@@ -12,10 +12,11 @@
 import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import { describe, expect, it } from "vitest";
+import mocks from "../mocks.js";
 import shared from "./shared.js";
 
 describe("MainBindingsWriter", () => {
-   shared.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
 
    it("should write empty ipcMain object when pfsArray is empty", async () => {
       const obj = new shared.VitestMainBindingsWriter([]);

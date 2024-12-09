@@ -9,14 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import crypto from "node:crypto";
-import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import writer from "@src/writer/index.js";
 import type * as t from "@types";
-import { MockInstance, afterAll, afterEach, beforeEach, vi } from "vitest";
 
 export class VitestBaseWriter extends BaseWriter {
    public getTargetFilePath(): string {
@@ -69,24 +64,6 @@ export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
    }
 }
 
-export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWriter>(cls: T) {
-   let spy: MockInstance;
-   const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
-
-   beforeEach(() => {
-      spy = vi.spyOn(cls.prototype, "getTargetFilePath");
-      const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
-      spy.mockImplementation(() => {
-         return path.join(tmpdir(), dirName, fileName);
-      });
-   });
-   afterEach(() => spy.mockRestore());
-   afterAll(async () => {
-      const dirPath = path.join(tmpdir(), dirName);
-      await fsp.rm(dirPath, { recursive: true, force: true });
-   });
-}
-
 function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] {
    const sigParamsArray: t.CallableParam[] = [1, 2].map((index) => {
       return {
@@ -134,7 +111,6 @@ export default {
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,
    VitestRendererTypesWriter,
-   mockGetTargetFilePath,
    vitestChannelSpecs: {
       Unicast_RendererToMain: getParsedFileSpecsArray({
          channelKind: "Unicast",

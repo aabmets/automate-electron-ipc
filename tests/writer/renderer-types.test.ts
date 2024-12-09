@@ -12,10 +12,11 @@
 import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import { describe, expect, it } from "vitest";
+import mocks from "../mocks.js";
 import shared from "./shared.js";
 
 describe("PreloadBindingsWriter", () => {
-   shared.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
 
    it("should write empty Window declaration when pfsArray is empty", async () => {
       const obj = new shared.VitestRendererTypesWriter([]);

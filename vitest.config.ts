@@ -15,7 +15,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
    test: {
       include: ["tests/**/*"],
-      exclude: ["tests/**/shared.ts"],
+      exclude: ["tests/**/shared.ts", "tests/**/mocks.ts"],
       server: {
          deps: {
             external: ["typescript"],

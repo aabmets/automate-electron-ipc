@@ -12,10 +12,11 @@
 import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import { describe, expect, it } from "vitest";
+import mocks from "../mocks.js";
 import shared from "./shared.js";
 
 describe("PreloadBindingsWriter", () => {
-   shared.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
 
    it("should write empty ipc object into exposeInMainWorld when pfsArray is empty", async () => {
       const obj = new shared.VitestPreloadBindingsWriter([]);
