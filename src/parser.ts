@@ -81,7 +81,7 @@ export function isSignatureAssignment(text: string): boolean {
 }
 
 export function isListenersAssignment(text: string): boolean {
-   const regex = /^listeners\s*:\s*\[\s*['"\w\s,]*]$/;
+   const regex = /^listeners\s*:\s*\[\s*['"\w\s,]{0,1000}]$/;
    return regex.test(text);
 }
 
