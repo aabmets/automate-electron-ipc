@@ -10,9 +10,9 @@
  */
 
 import cfg from "@src/config.js";
+import mocks from "@testutils/shared-mocks.js";
 import type * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import mocks from "./mocks.js";
 
 describe("getConfigFromUserPackage", () => {
    afterEach(vi.restoreAllMocks);

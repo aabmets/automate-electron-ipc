@@ -114,7 +114,7 @@ describe("parseSpecs", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
             Channel("UserChannel").RendererToMain.Broadcast({
-               signature: type as (arg1: string, arg2: number) => boolean,
+               signature: type as (arg1: string, arg2: number) => void,
                listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
             })
          `,
@@ -142,7 +142,7 @@ describe("parseSpecs", () => {
                   optional: false,
                },
             ],
-            returnType: "boolean",
+            returnType: "void",
             customTypes: [],
             async: false,
          },
@@ -152,7 +152,7 @@ describe("parseSpecs", () => {
    it("should parse complex unicast channel expressions", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").RendererToRenderer.Port({
+            Channel("UserChannel").RendererToMain.Unicast({
                signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
             })
          `,
@@ -162,8 +162,8 @@ describe("parseSpecs", () => {
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
-         kind: "Port",
-         direction: "RendererToRenderer",
+         kind: "Unicast",
+         direction: "RendererToMain",
          signature: {
             params: [
                {
@@ -190,7 +190,7 @@ describe("parseSpecs", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
             Channel("UserChannel").MainToRenderer.Broadcast({
-               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
+               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<void>,
                listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
             })
          `,
@@ -218,8 +218,8 @@ describe("parseSpecs", () => {
                   optional: false,
                },
             ],
-            returnType: "Promise<CustomType3>",
-            customTypes: ["CustomType1", "CustomType2", "CustomType3"],
+            returnType: "Promise<void>",
+            customTypes: ["CustomType1", "CustomType2"],
             async: true,
          },
       });

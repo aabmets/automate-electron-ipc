@@ -39,7 +39,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    assert(config, IPCOptionalConfigStruct);
 }
 
-export function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
+function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
    const ListenersStruct = refine(string(), "format", (value) => {
       if (value.length < 5) {
          const msg = "Channel listener names must be at least 5 characters in length";
@@ -69,7 +69,7 @@ export function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
          if (choices.includes(value)) {
             return true;
          } else {
-            return `Channel kind must be one of '${choices}'`;
+            return `Channel kind must be one of: ['${choices.join("', '")}']`;
          }
       }),
       direction: refine(string(), "choice", (value) => {
@@ -104,37 +104,39 @@ export function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
 }
 
 export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
+   const seenChannelNames = new Set<string>();
    const structMap = {
       BroadcastStruct: getChannelSpecStruct("Broadcast"),
       UnicastStruct: getChannelSpecStruct("Unicast"),
       PortStruct: getChannelSpecStruct("Port"),
    };
-   const channelNames: string[] = [];
    for (const spec of specs) {
       if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
          assert(spec, structMap.BroadcastStruct);
       } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
          assert(spec, structMap.UnicastStruct);
-      } else if (spec?.kind === ("Port" as t.ChannelKind)) {
+      } else {
          assert(spec, structMap.PortStruct);
       }
-      if (spec.name) {
-         channelNames.push(spec.name);
-      }
-   }
-   const ChannelNamesArrayStruct = refine(array() as any, "unique", (array: string[]) => {
-      const seen = new Set<string>();
-      for (const name of array) {
-         if (seen.has(name)) {
-            return `Channel name '${name}' is not unique across application.`;
+      if (spec?.name) {
+         if (seenChannelNames.has(spec.name)) {
+            throw new Error(`Channel name '${spec.name}' is not unique across application.`);
          } else {
-            seen.add(name);
+            seenChannelNames.add((spec as t.ChannelSpec).name);
          }
       }
-      return true;
-   });
-   assert(channelNames, ChannelNamesArrayStruct);
+      if (spec?.kind) {
+         const returnType = spec?.signature?.returnType || "";
+         const isVoid = ["void", "Promise<void>"].includes(returnType);
+         const isLimited = ["Broadcast", "Port"].includes(spec.kind);
+         if (isLimited && !isVoid) {
+            throw new Error(
+               `Channel return type '${returnType}' not allowed when channel kind is '${spec.kind}'`,
+            );
+         }
+      }
+   }
    return specs as t.ChannelSpec[];
 }
 
-export default { validateOptionalConfig, getChannelSpecStruct, validateChannelSpecs };
+export default { validateOptionalConfig, validateChannelSpecs };

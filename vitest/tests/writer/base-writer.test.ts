@@ -11,10 +11,10 @@
 
 import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
+import mocks from "@testutils/shared-mocks.js";
+import shared from "@testutils/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
-import mocks from "../mocks.js";
-import shared from "./shared.js";
 
 describe("BaseWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestBaseWriter);

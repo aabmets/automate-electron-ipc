@@ -14,8 +14,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
    test: {
-      include: ["tests/**/*"],
-      exclude: ["tests/**/shared.ts", "tests/**/mocks.ts"],
+      include: ["vitest/tests/**/*"],
       server: {
          deps: {
             external: ["typescript"],
@@ -25,6 +24,7 @@ export default defineConfig({
    resolve: {
       alias: {
          "@types": path.resolve(__dirname, "./types/internal.d.ts"),
+         "@testutils": path.resolve(__dirname, "./vitest/utils"),
          "@src": path.resolve(__dirname, "./src"),
       },
    },

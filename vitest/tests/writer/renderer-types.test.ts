@@ -11,9 +11,9 @@
 
 import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
+import mocks from "@testutils/shared-mocks.js";
+import shared from "@testutils/writer-utils.js";
 import { describe, expect, it } from "vitest";
-import mocks from "../mocks.js";
-import shared from "./shared.js";
 
 describe("PreloadBindingsWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
