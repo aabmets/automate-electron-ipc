@@ -1,13 +1,22 @@
 {
    "name": "automate-electron-ipc",
-   "version": "0.0.0",
-   "description": "A Vite plugin for Electron apps that automates the generation of IPC components into source code files",
-   "keywords": ["vite", "plugin", "automate", "electron", "ipc"],
+   "version": "0.1.0",
+   "description": "Node library for automating the generation of IPC components for Electron apps.",
+   "keywords": [
+      "electron",
+      "ipc",
+      "automation",
+      "generator",
+      "ipc-generator",
+      "ipc-automation",
+      "electron-ipc",
+      "electron-automation"
+   ],
    "type": "module",
    "license": "MIT",
    "repository": {
       "type": "git",
-      "url": "https://github.com/aabmets/vite-plugin-electron-auto-ipc.git"
+      "url": "https://github.com/aabmets/automate-electron-ipc.git"
    },
    "author": "Mattias Aabmets <mattias.aabmets@gmail.com>",
    "files": ["dist", "types", "README.md", "LICENSE"],

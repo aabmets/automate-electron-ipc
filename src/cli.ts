@@ -7,7 +7,7 @@ import utils from "./utils.js";
 
 program
    .name("ipcgen")
-   .description("CLI tool for generating IPC bindings for Electron applications.")
+   .description("CLI tool for generating IPC components for Electron apps.")
    .version(
       (() => {
          const filePath = utils.searchUpwards("package.json");
