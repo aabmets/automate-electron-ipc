@@ -1,16 +1,3 @@
-/*
- *   Apache License 2.0
- *
- *   Copyright (c) 2024, Mattias Aabmets
- *
- *   The contents of this file are subject to the terms and conditions defined in the License.
- *   You may not use, modify, or distribute this file except in compliance with the License.
- *
- *   SPDX-License-Identifier: Apache-2.0
- */
-
-import type { Plugin } from "vite";
-
 /**
  * Configuration object for unicast-type IPC channels.
  * The signature type supports all TypeScript syntax for function types with
@@ -136,25 +123,9 @@ export interface Channels {
 }
 
 /**
- * Object returned by calling the ipcAutomation() plugin builder function.
+ * Library for automating the generation of IPC components for Electron apps.
  */
-export interface IpcAutomationPlugin extends Plugin {
-   name: string;
-   buildStart: () => Promise<void>;
-}
-
-/**
- * Vite plugin for automating the generation of IPC components for Electron apps.
- */
-declare module "vite-plugin-automate-electron-ipc" {
-   /**
-    * Vite plugin which must be used to enable IPC automation for Electron projects.
-    * IPC channels are regenerated on Vite server startup and on each hot reload event.
-    *
-    * @returns An object conforming to the Vite Plugin interface.
-    */
-   export function ipcAutomation(): IpcAutomationPlugin;
-
+declare module "automate-electron-ipc" {
    /**
     * Defines a channel with the given name, which will be used to
     * generate matching sender and listener or invoker and handler

@@ -1,5 +1,5 @@
 {
-   "name": "vite-plugin-automate-electron-ipc",
+   "name": "automate-electron-ipc",
    "version": "0.0.0",
    "description": "A Vite plugin for Electron apps that automates the generation of IPC components into source code files",
    "keywords": ["vite", "plugin", "automate", "electron", "ipc"],
@@ -36,16 +36,7 @@
       "chalk": "^5.3.0",
       "commander": "^12.1.0",
       "electron": "^33.2.1",
-      "electron-vite": "^2.3.0",
       "superstruct": "^2.0.2",
-      "typescript": "^5.6.3",
-      "vite": "^5.4.10"
-   },
-   "config": {
-      "autoipc": {
-         "projectUsesNodeNext": true,
-         "ipcDataDir": ".exclude/autoipc",
-         "codeIndent": 3
-      }
+      "typescript": "^5.6.3"
    }
 }

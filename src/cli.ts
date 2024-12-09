@@ -2,14 +2,14 @@
 
 import fs from "node:fs";
 import { program } from "commander";
-import { ipcAutomation } from "./index.js";
+import { ipcAutomation } from "./automation.js";
 import utils from "./utils.js";
 
 program
    .name("ipcgen")
    .description(
       "CLI tool for regenerating IPC bindings for Electron projects,\n" +
-         "provided by the 'vite-plugin-automate-electron-ipc' library.",
+         "provided by the 'automate-electron-ipc' library.",
    )
    .version(
       (() => {
@@ -18,6 +18,6 @@ program
       })(),
       "-v, --version",
    )
-   .action(async () => await ipcAutomation().buildStart());
+   .action(async () => await ipcAutomation());
 
 program.parse();
