@@ -109,10 +109,26 @@ export function dedent(text: string): string {
    return lines.map((line) => line.slice(indent)).join("\n");
 }
 
+/**
+ * Finds and returns duplicates from an array.
+ *
+ * @param array - Collection of objects in an array.
+ * @returns Found duplicates array.
+ */
+export function findDuplicates<T>(array: T[]): T[] {
+   return array.reduce((acc, item, index, originalArray) => {
+      if (originalArray.indexOf(item) !== index && !acc.includes(item)) {
+         acc.push(item);
+      }
+      return acc;
+   }, [] as T[]);
+}
+
 export default {
    searchUpwards,
    resolveUserProjectPath,
    concatRegex,
    isPathInside,
    dedent,
+   findDuplicates,
 };
