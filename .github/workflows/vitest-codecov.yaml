@@ -1,4 +1,4 @@
-name: Run Vitest and Upload Coverage
+name: Run Vitest and Upload Code Coverage
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   test:
-    name: Run tests and collect coverage
+    name: vitest-codecov
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -14,11 +14,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
       - name: Install dependencies
-        run: |
-          npm install -g bun &&
-          bun install &&
-          bunx vitest run --coverage
+        run: npm install -g bun && bun install
+
+      - name: Run Vitest
+        run: bunx vitest run --coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

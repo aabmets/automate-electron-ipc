@@ -66,7 +66,7 @@ describe("concatRegex", () => {
          /[a-zA-Z]+/, // One or more letters
          /$/, // End of string
       ]);
-      expect(pattern.source).toEqual("^[a-zA-Z]+\\s+[0-9]+\\s+[a-zA-Z]+$");
+      expect(pattern.source).toEqual("^[a-zA-Z]+\\s+\\d+\\s+[a-zA-Z]+$");
    });
 });
 
