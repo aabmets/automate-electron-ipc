@@ -21,13 +21,13 @@ Node library for generating IPC components for Electron apps.
 
 ### Installation
 
-#### Bun: `bun add automate-electron-ipc --dev`
+`bun add automate-electron-ipc --dev`
 
-#### Pnpm: `pnpm add automate-electron-ipc --save-dev`
+`pnpm add automate-electron-ipc --save-dev`
 
-#### Yarn: `yarn add automate-electron-ipc --dev`
+`yarn add automate-electron-ipc --dev`
 
-#### NPM: `npm install automate-electron-ipc --save-dev`
+`npm install automate-electron-ipc --save-dev`
 
 
 ### Optional Configuration
@@ -69,7 +69,7 @@ to structure and segment channel expressions according to the needs of larger ap
 ### Channel Expressions
 
 IPC automation uses its own Domain-Specific Language to generate IPC bindings. We call this language `CHEX`, 
-which masquerades itself as regular JavaScript/TypeScript, but it's code is never executed by Node. Instead,  
+which masquerades itself as regular JavaScript/TypeScript, but it's code is never executed by Node. Instead, 
 this library uses the TypeScript library internally to parse the channel expressions from schema files to 
 deduce the meanings behind their definitions.
 
