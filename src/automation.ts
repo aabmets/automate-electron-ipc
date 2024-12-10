@@ -22,6 +22,7 @@ export async function ipcAutomation(): Promise<void> {
    const pfsArray: t.ParsedFileSpecs[] = [];
 
    if (!config.ipcSchema.stats) {
+      await fsp.mkdir(path.dirname(config.ipcSchema.path), { recursive: true });
       logger.nonExistentSchemaPath(config.ipcSchema.path);
       return;
    } else if (config.ipcSchema.stats.isFile()) {
