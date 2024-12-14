@@ -37,6 +37,66 @@ export interface BroadcastConfig {
 }
 
 /**
+ * Configuration object for triggerable broadcast-type IPC channels.
+ * The signature type supports all TypeScript syntax for function types with any
+ * number of arguments. The return type of the function type must be `void` or
+ * `Promise<void>`. If any valid callable names are provided in the listeners array,
+ * then listener callback bindings will be generated using these names instead.
+ * If a trigger is provided, then the sender callable will be automatically invoked
+ * when that trigger in the target process fires.
+ *
+ * @example
+ * {
+ *    signature: type as (arg: any) => void,
+ *    listeners: ["onFirstListener", "onSecondListener"]  // optional
+ *    trigger: "ready-to-show"  // optional
+ * }
+ *
+ * @property signature - Common signature of all listener functions, mandatory.
+ * @property listeners - An optional array of callable names for one or multiple listeners
+ *    that replace the default listener. Each name must begin with lowercase `on`.
+ * @property trigger - An optional string value representing the name of the trigger.
+ */
+export interface TriggerableBroadcastConfig {
+   signature: (...args: any[]) => any;
+   listeners?: string[];
+   trigger?:
+      | "show"
+      | "ready-to-show"
+      | "app-command"
+      | "blur"
+      | "close"
+      | "always-on-top-changed"
+      | "closed"
+      | "enter-full-screen"
+      | "enter-html-full-screen"
+      | "focus"
+      | "hide"
+      | "leave-full-screen"
+      | "leave-html-full-screen"
+      | "maximize"
+      | "minimize"
+      | "move"
+      | "moved"
+      | "new-window-for-tab"
+      | "page-title-updated"
+      | "resize"
+      | "resized"
+      | "responsive"
+      | "restore"
+      | "rotate-gesture"
+      | "session-end"
+      | "sheet-begin"
+      | "sheet-end"
+      | "swipe"
+      | "system-context-menu"
+      | "unmaximize"
+      | "unresponsive"
+      | "will-move"
+      | "will-resize";
+}
+
+/**
  * Configuration object for port-type channels.
  * The signature type supports all TypeScript syntax for function types
  * with any number of arguments. The return type of the function type
@@ -93,15 +153,16 @@ export interface Channels {
       /**
        * One-way channel from one sender to at least one listener.
        * No responses are returned from listeners back to the caller.
-       * This function call must be passed a valid `BroadcastConfig` object.
+       * This function call must be passed a valid `TriggerableBroadcastConfig` object.
        *
        * @example
        * Broadcast({
        *    signature: type as (arg: any) => void,
        *    listeners: ["onListenerOne", "onListenerTwo"]  // optional
+       *    trigger: "ready-to-show"  // optional
        * });
        */
-      Broadcast: (config: BroadcastConfig) => void;
+      Broadcast: (config: TriggerableBroadcastConfig) => void;
    };
 
    /**
