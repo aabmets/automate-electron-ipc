@@ -1,6 +1,6 @@
 {
    "name": "automate-electron-ipc",
-   "version": "0.2.1",
+   "version": "0.2.2",
    "description": "Node library for automating the generation of IPC components for Electron apps.",
    "keywords": [
       "electron",
@@ -45,11 +45,11 @@
       "vitest": "^2.1.8"
    },
    "peerDependencies": {
-      "chalk": "^5.0.0",
-      "commander": "^12.0.0",
-      "electron": "^30.0.0",
-      "superstruct": "^2.0.0",
-      "typescript": "^5.0.0"
+      "chalk": ">=4.0.0",
+      "commander": ">=10.0.0",
+      "electron": ">=30.0.0",
+      "superstruct": ">=2.0.0",
+      "typescript": ">=5.0.0"
    },
    "engines": {
       "node": ">=22.0.0"
