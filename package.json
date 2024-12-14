@@ -1,6 +1,6 @@
 {
    "name": "automate-electron-ipc",
-   "version": "0.1.4",
+   "version": "0.2.0",
    "description": "Node library for automating the generation of IPC components for Electron apps.",
    "keywords": [
       "electron",
