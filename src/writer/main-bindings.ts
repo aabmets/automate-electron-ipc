@@ -85,12 +85,14 @@ export class MainBindingsWriter extends BaseWriter {
       });
    }
    private buildMainToRendererCallable(spec: t.ChannelSpec): string {
-      const senderCall = `\n${this.indents[1]}browserWindow.webContents.send`;
       const senderParams = this.getOriginalParams(spec, false);
-      const sender = `${senderCall}('${spec.name}', ${senderParams})`;
+      let sender = `browserWindow.webContents.send('${spec.name}', ${senderParams})`;
+      if (spec.trigger) {
+         sender = `browserWindow.on("${spec.trigger}", () => ${sender})`;
+      }
       const ipcParams = this.getOriginalParams(spec, true);
       const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
-      return `send${spec.name}: ${ipcSignature} => ${sender}`;
+      return `send${spec.name}: ${ipcSignature} => \n${this.indents[1]}${sender}`;
    }
    private buildRendererToRendererCallable(spec: t.ChannelSpec): string {
       const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
@@ -103,7 +105,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${this.indents[3]}bwTwo.once('ready-to-show', () => {`,
          `${this.indents[4]}bwTwo.webContents.postMessage('${spec.name}', null, [port2]);`,
          `${this.indents[3]}});`,
-         `${this.indents[2]}}`,
+         `${this.indents[2]}},`,
       ].join("\n");
       return [
          `\n${this.indents[1]}${spec.name}: {`,

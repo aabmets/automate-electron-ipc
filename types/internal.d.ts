@@ -72,6 +72,7 @@ export interface ChannelSpec {
    direction: ChannelDirection;
    signature: CallableSignature;
    listeners?: string[];
+   trigger?: string;
 }
 
 export interface SpecsCollection {

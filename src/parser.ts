@@ -85,6 +85,11 @@ export function isListenersAssignment(text: string): boolean {
    return regex.test(text);
 }
 
+export function isTriggerAssignment(text: string): boolean {
+   const regex = /^trigger\s*:\s*['"][\w-]*['"]\s*,?/;
+   return regex.test(text);
+}
+
 export function parseChannelExpressions(
    node: ts.Node,
    src: ts.SourceFile,
@@ -133,6 +138,12 @@ export function parseChannelExpressions(
                   spec.listeners.push(match[2]);
                }
             });
+         }
+      } else if (isTriggerAssignment(text)) {
+         const regex = /['"](?<trigger>[\w-]*)['"]/;
+         const match = text.match(regex);
+         if (match) {
+            spec.trigger = match?.groups?.trigger;
          }
       }
    }

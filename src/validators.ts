@@ -40,7 +40,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    assert(config, IPCOptionalConfigStruct);
 }
 
-function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
+function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<any, any> {
    const ListenersStruct = refine(string(), "format", (value) => {
       if (value.length < 5) {
          const msg = "Channel listener names must be at least 5 characters in length";
@@ -101,6 +101,7 @@ function getChannelSpecStruct(kind: t.ChannelKind): Struct<any, any> {
          async: boolean(),
       }),
       listeners: kind === "Broadcast" ? optional(array(ListenersStruct)) : optional(never()),
+      trigger: triggerable ? optional(string()) : optional(never()),
    });
 }
 
@@ -108,6 +109,7 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
    const seenChannelNames = new Set<string>();
    const listenerNames: string[] = [];
    const structMap = {
+      TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", true),
       BroadcastStruct: getChannelSpecStruct("Broadcast"),
       UnicastStruct: getChannelSpecStruct("Unicast"),
       PortStruct: getChannelSpecStruct("Port"),
@@ -116,7 +118,11 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
       listenerNames.push(...(spec.listeners || []));
 
       if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
-         assert(spec, structMap.BroadcastStruct);
+         if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
+            assert(spec, structMap.TriggerableBroadcastStruct);
+         } else {
+            assert(spec, structMap.BroadcastStruct);
+         }
       } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
          assert(spec, structMap.UnicastStruct);
       } else {
