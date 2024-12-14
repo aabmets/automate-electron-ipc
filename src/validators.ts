@@ -105,29 +105,32 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
    });
 }
 
-export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
-   const seenChannelNames = new Set<string>();
-   const listenerNames: string[] = [];
+export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): void {
    const structMap = {
       TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", true),
       BroadcastStruct: getChannelSpecStruct("Broadcast"),
       UnicastStruct: getChannelSpecStruct("Unicast"),
       PortStruct: getChannelSpecStruct("Port"),
    };
-   for (const spec of specs) {
-      listenerNames.push(...(spec.listeners || []));
-
-      if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
-         if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
-            assert(spec, structMap.TriggerableBroadcastStruct);
-         } else {
-            assert(spec, structMap.BroadcastStruct);
-         }
-      } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
-         assert(spec, structMap.UnicastStruct);
+   if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
+      if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
+         assert(spec, structMap.TriggerableBroadcastStruct);
       } else {
-         assert(spec, structMap.PortStruct);
+         assert(spec, structMap.BroadcastStruct);
       }
+   } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
+      assert(spec, structMap.UnicastStruct);
+   } else {
+      assert(spec, structMap.PortStruct);
+   }
+}
+
+export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
+   const seenChannelNames = new Set<string>();
+   const listenerNames: string[] = [];
+   for (const spec of specs) {
+      validateChannelSpecWithStruct(spec);
+      listenerNames.push(...(spec.listeners || []));
 
       if (spec?.name) {
          if (seenChannelNames.has(spec.name)) {
