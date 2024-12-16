@@ -19,6 +19,16 @@
 Node library for generating IPC components for Electron apps.
 
 
+### Features
+
+1) Declarative IPC schema using channel expressions
+2) Generation of sender and listener callables for the main process
+3) Generation of preload bindings for renderer processes
+4) Generation of typehints for the renderer Window object
+5) Automatic import of user-defined types for generated components
+6) BrowserWindow event triggers for MainToRenderer Broadcast channels
+
+
 ### Installation
 
 `bun add automate-electron-ipc --dev`
@@ -73,8 +83,16 @@ which masquerades itself as regular JavaScript/TypeScript, but it's code is neve
 this library uses the TypeScript library internally to parse the channel expressions from schema files to 
 deduce the meanings behind their definitions.
 
-Since this library is well-documented through its type definitions, the developer is encouraged 
-to use an IDE which facilitates easy type inference and hints within its user interface.
+Since this library is well-documented through its type definitions, the developer is encouraged to use an IDE 
+which facilitates easy type inference and hints within its user interface. To that end, you should configure your 
+`tsconfig.node.json` to include the generated `main.ts` and `preload.ts` files from within the IPC data directory.
+For the renderer process, you should include the generated `window.d.ts` file into your `tsconfig.web.json` file.
+
+_Note: IPC automation does not make a distinction between senders/listeners and invokers/handlers as they are 
+defined in the IPC documentation of the Electron library. Whether an IPC component is generated as a sender/listener
+or invoker/handler under the hood depends on the direction and the kind of the channel expression. The reason
+behind this design choice was to allow the user to focus on IPC arguments and return types without having to
+concern themselves with IPC internals._
 
 
 ### Simple Example
