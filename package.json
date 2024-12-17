@@ -1,6 +1,6 @@
 {
    "name": "automate-electron-ipc",
-   "version": "0.2.3",
+   "version": "0.2.4",
    "description": "Node library for automating the generation of IPC components for Electron apps.",
    "keywords": [
       "electron",
@@ -53,5 +53,10 @@
    },
    "engines": {
       "node": ">=22.0.0"
+   },
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "./.exclude/autoipc"
+      }
    }
 }
