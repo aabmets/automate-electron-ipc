@@ -17,6 +17,7 @@ import {
    array,
    boolean,
    never,
+   nullable,
    number,
    object,
    optional,
@@ -160,4 +161,19 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
    return specs as t.ChannelSpec[];
 }
 
-export default { validateOptionalConfig, validateChannelSpecs };
+export function validateTypeSpecs(specs: Partial<t.TypeSpec>[]): t.TypeSpec[] {
+   const TypeSpecStruct = object({
+      name: string(),
+      kind: string(),
+      generics: nullable(string()),
+      isExported: refine(boolean(), "mandatory", (value) => {
+         return value ? true : "User-defined types must be exported";
+      }),
+   });
+   for (const spec of specs) {
+      assert(spec, TypeSpecStruct);
+   }
+   return specs as t.TypeSpec[];
+}
+
+export default { validateOptionalConfig, validateChannelSpecs, validateTypeSpecs };

@@ -234,7 +234,7 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
    });
 
    return {
-      typeSpecArray,
+      typeSpecArray: vld.validateTypeSpecs(typeSpecArray),
       channelSpecArray: vld.validateChannelSpecs(channelSpecArray),
       importSpecArray: importSpecArray.filter((item) => {
          return item.customTypes.length > 0 || item.namespace !== null;
