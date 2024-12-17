@@ -36,7 +36,7 @@ export class ImportsGenerator {
       const normalizedPath = joined.replaceAll(path.sep, "/");
       const extLen = path.extname(normalizedPath).length;
       const baseName = normalizedPath.slice(0, normalizedPath.length - extLen);
-      return this.projectUsesNodeNext ? `${baseName}.js` : normalizedPath;
+      return this.projectUsesNodeNext ? `${baseName}.js` : baseName;
    }
 
    private adjustImportPath(importPath: string, sourceFilePath: string): string {
@@ -77,7 +77,7 @@ export class ImportsGenerator {
          }
       } else if (importSpec) {
          const adjustedImportPath = this.adjustImportPath(
-            importSpec.fromPath,
+            this.getImportPath(importSpec.fromPath),
             parsedFileSpecs.fullPath,
          );
          if (nameSpace && !this.seenImports.nameSpaces.has(nameSpace)) {

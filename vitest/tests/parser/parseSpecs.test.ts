@@ -19,7 +19,7 @@ describe("parseSpecs", () => {
             export interface MyInterface {
                property: string;
             }
-            type MyType<T> = number | boolean | T;
+            export type MyType<T> = number | boolean | T;
          `,
          relativePath: "",
          fullPath: "",
@@ -35,7 +35,7 @@ describe("parseSpecs", () => {
          name: "MyType",
          kind: "type",
          generics: "<T>",
-         isExported: false,
+         isExported: true,
       });
    });
 
