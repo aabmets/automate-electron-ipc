@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import valid from "@src/validators.js";
+import vld from "@src/validators.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
@@ -17,12 +17,12 @@ import { describe, expect, it } from "vitest";
 describe("validateOptionalConfig", () => {
    it("should throw an error if ipcDataDir path is absolute", () => {
       const config: t.IPCOptionalConfig = { ipcDataDir: "/absolute/path/auto-ipc" };
-      expect(() => valid.validateOptionalConfig(config)).toThrowError();
+      expect(() => vld.validateOptionalConfig(config)).toThrowError();
    });
 
    it("should throw errors if codeIndent value is out of range", () => {
-      expect(() => valid.validateOptionalConfig({ codeIndent: 1 })).toThrowError();
-      expect(() => valid.validateOptionalConfig({ codeIndent: 5 })).toThrowError();
+      expect(() => vld.validateOptionalConfig({ codeIndent: 1 })).toThrowError();
+      expect(() => vld.validateOptionalConfig({ codeIndent: 5 })).toThrowError();
    });
 });
 
@@ -36,7 +36,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToRenderer", "Port"),
       ];
       try {
-         const retVal = valid.validateChannelSpecs(channelSpecsArray);
+         const retVal = vld.validateChannelSpecs(channelSpecsArray);
          expect(retVal).toMatchObject(channelSpecsArray);
       } catch {
          throw new Error(
@@ -61,7 +61,7 @@ describe("validateChannelSpecs", () => {
          },
       ];
       for (const { spec, err } of collection) {
-         expect(() => valid.validateChannelSpecs([spec as t.ChannelSpec])).toThrowError(err);
+         expect(() => vld.validateChannelSpecs([spec as t.ChannelSpec])).toThrowError(err);
       }
    });
 
@@ -75,7 +75,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToMain", "Port"),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => valid.validateChannelSpecs([spec])).toThrowError(
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
             `Channel kind '${spec.kind}' is not allowed when channel direction is '${spec.direction}'.`,
          );
       }
@@ -90,7 +90,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToRenderer", "Port", "Promise<string>"),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => valid.validateChannelSpecs([spec])).toThrowError(
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
             `Channel return type '${spec.signature.returnType}' not allowed when channel kind is '${spec.kind}'`,
          );
       }
@@ -103,7 +103,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToRenderer", "Port", "void", ["onChannel"]),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => valid.validateChannelSpecs([spec])).toThrowError();
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError();
       }
    });
 
@@ -114,8 +114,35 @@ describe("validateChannelSpecs", () => {
          csg.generate("MainToRenderer", "Broadcast", "void", ["onChannel"]),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         const retVal = valid.validateChannelSpecs([spec]);
+         const retVal = vld.validateChannelSpecs([spec]);
          expect(retVal).toMatchObject([spec]);
       }
+   });
+});
+
+describe("validateTypeSpecs", () => {
+   it("should accept exported types", () => {
+      vld.validateTypeSpecs([
+         {
+            name: "VitestInterface",
+            kind: "interface" as t.TypeKind,
+            generics: null,
+            isExported: true,
+         },
+      ]);
+   });
+
+   it("should throw struct error on non-exported types", () => {
+      const specs = [
+         {
+            name: "VitestInterface",
+            kind: "interface" as t.TypeKind,
+            generics: null,
+            isExported: false,
+         },
+      ];
+      expect(() => vld.validateTypeSpecs(specs)).toThrowError(
+         "User-defined types must be exported",
+      );
    });
 });
