@@ -67,11 +67,13 @@ export class BaseWriter {
       return sigDef.replace("(", "(event: IpcMainEvent, ");
    }
 
-   protected getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
+   protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {
       return spec.signature.params
          .map((param) => {
-            const typeHint = withTypes ? `: ${param.type || "any"}` : "";
-            return `${param.name}${typeHint}`;
+            const typeHint = onlyNames ? "" : `: ${param.type || "any"}`;
+            const optional = !onlyNames && param.optional ? "?" : "";
+            const rest = !onlyNames && param.rest ? "..." : "";
+            return `${rest}${param.name}${optional}${typeHint}`;
          })
          .join(", ");
    }

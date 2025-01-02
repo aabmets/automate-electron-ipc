@@ -63,12 +63,9 @@ describe("BaseWriter", () => {
             ] as Partial<t.CallableParam>[],
          } as Partial<t.CallableSignature>,
       } as Partial<t.ChannelSpec>;
-      let result = shared.VitestBaseWriter.prototype.getOriginalParams(
-         spec as t.ChannelSpec,
-         false,
-      );
+      let result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
       expect(result).toStrictEqual("arg1, arg2");
-      result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
+      result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, false);
       expect(result).toStrictEqual("arg1: number, arg2: string");
    });
 

@@ -72,7 +72,7 @@ describe("MainBindingsWriter", () => {
          import type { IpcMainEvent, BrowserWindow } from "electron";
          
          export const ipcMain = {
-            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, arg2: number) => 
+            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number) => 
                browserWindow.webContents.send('VitestChannel', arg1, arg2),
          }
       `);
