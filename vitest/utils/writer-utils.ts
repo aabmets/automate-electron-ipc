@@ -92,6 +92,7 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
          params: sigParamsArray,
          returnType: vcs.sigReturnType,
          customTypes: vcs.sigCustomTypes,
+         async: vcs.sigReturnType.includes("Promise"),
       } as t.CallableSignature,
    };
    if (vcs.channelListeners.length > 0) {

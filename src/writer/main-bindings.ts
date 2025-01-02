@@ -38,7 +38,7 @@ export class MainBindingsWriter extends BaseWriter {
             } else if (spec.direction === "RendererToRenderer") {
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
-               portsArray.push(this.buildRendererToRendererCallable(spec));
+               portsArray.push(this.buildRendererToRendererPort(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -94,7 +94,7 @@ export class MainBindingsWriter extends BaseWriter {
       const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
       return `send${spec.name}: ${ipcSignature} => \n${this.indents[1]}${sender}`;
    }
-   private buildRendererToRendererCallable(spec: t.ChannelSpec): string {
+   private buildRendererToRendererPort(spec: t.ChannelSpec): string {
       const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
       const propagator = [
          "{",

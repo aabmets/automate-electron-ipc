@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type * as t from "@types";
 import { BaseWriter } from "./base-writer.js";
 
 export class RendererTypesWriter extends BaseWriter {
@@ -28,21 +29,11 @@ export class RendererTypesWriter extends BaseWriter {
 
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               callablesArray.push(`send${spec.name}: ${spec.signature.definition};`);
+               this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {
-               const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
-               callableNames.forEach((name) => {
-                  callablesArray.push(`${name}: (callback: ${spec.signature.definition}) => void;`);
-               });
+               this.addMainToRendererCallables(spec, callablesArray);
             } else if (spec.direction === "RendererToRenderer") {
-               portsArray.push(
-                  [
-                     `\n${this.indents[3]}${spec.name}: {`,
-                     `\n${this.indents[4]}sendMessage: ${spec.signature.definition};`,
-                     `\n${this.indents[4]}onMessage: (callback: ${spec.signature.definition}) => void;`,
-                     `\n${this.indents[3]}};`,
-                  ].join(""),
-               );
+               portsArray.push(this.buildRendererToRendererPort(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -81,5 +72,27 @@ export class RendererTypesWriter extends BaseWriter {
 
       out.push(windowDeclaration.join(""));
       return out.join("\n");
+   }
+   private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+      let ipcSignature = spec.signature.definition;
+      if (!spec.signature.async) {
+         const ipcParams = this.getOriginalParams(spec, false);
+         ipcSignature = `(${ipcParams}) => Promise<${spec.signature.returnType}>`;
+      }
+      callablesArray.push(`send${spec.name}: ${ipcSignature};`);
+   }
+   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      callableNames.forEach((name) => {
+         callablesArray.push(`${name}: (callback: ${spec.signature.definition}) => void;`);
+      });
+   }
+   private buildRendererToRendererPort(spec: t.ChannelSpec): string {
+      return [
+         `\n${this.indents[3]}${spec.name}: {`,
+         `\n${this.indents[4]}sendMessage: ${spec.signature.definition};`,
+         `\n${this.indents[4]}onMessage: (callback: ${spec.signature.definition}) => void;`,
+         `\n${this.indents[3]}};`,
+      ].join("");
    }
 }

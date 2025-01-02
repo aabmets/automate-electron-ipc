@@ -53,7 +53,7 @@ describe("PreloadBindingsWriter", () => {
          declare global {
             interface Window {
                ipc: {
-                  sendVitestChannel: (arg1: string, arg2: string) => void;
+                  sendVitestChannel: (arg1: string, arg2: string) => Promise<void>;
                };
             }
          }\n
