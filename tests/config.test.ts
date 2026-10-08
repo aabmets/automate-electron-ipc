@@ -10,6 +10,7 @@
  */
 
 import cfg from "@src/config.js";
+import utils from "@src/utils.js";
 import mocks from "@testutils/shared-mocks.js";
 import type * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +46,16 @@ describe("getConfigFromUserPackage", () => {
 describe("getResolvedConfig", () => {
    beforeEach(mocks.mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
+
+   it("should resolve the manifest and the data dir from the given cwd", async () => {
+      // Regression for T07: the project root was found from the library install location.
+      mocks.mockFspStats(false);
+      mocks.mockFspReadFile({ config: { autoipc: { ipcDataDir: "ipc" } } });
+      const resolve = vi.spyOn(utils, "resolveUserProjectPath");
+      await cfg.getResolvedConfig("/home/user/workspace/packages/app");
+      expect(resolve).toHaveBeenCalledWith("package.json", "/home/user/workspace/packages/app");
+      expect(resolve).toHaveBeenCalledWith("ipc", "/home/user/workspace/packages/app");
+   });
 
    it("should resolve missing optional config to expected default config", async () => {
       mocks.mockFspStats(false);

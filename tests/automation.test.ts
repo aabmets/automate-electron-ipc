@@ -40,6 +40,16 @@ describe("ipcAutomation", () => {
       } as t.IPCResolvedConfig);
    };
 
+   it("resolves the config from the given cwd", async () => {
+      const schemaPath = path.join(dir, "schema.ts");
+      mockConfig({ ipcSchema: { path: schemaPath, stats: null } } as never);
+      vi.spyOn(logger, "nonExistentSchemaPath").mockImplementation(() => undefined);
+
+      await ipcAutomation("/work/packages/app");
+
+      expect(cfg.getResolvedConfig).toHaveBeenCalledWith("/work/packages/app");
+   });
+
    it("creates the schema directory and skips when the schema path does not exist", async () => {
       const schemaPath = path.join(dir, "ipc/schema.ts");
       mockConfig({ ipcSchema: { path: schemaPath, stats: null } } as never);

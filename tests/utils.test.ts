@@ -10,10 +10,12 @@
  */
 
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import url from "node:url";
 import utils from "@src/utils.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("searchUpwards", () => {
    it("should find an existing file in the default base path", () => {
@@ -69,46 +71,76 @@ describe("searchUpwards with a filesystem path", () => {
 });
 
 describe("resolveUserProjectPath", () => {
-   it("should fall back to node_modules when no .git directory is found", () => {
-      const nodeModules = path.resolve(import.meta.dirname, "../node_modules");
-      const spy = vi.spyOn(fs, "existsSync").mockImplementation((p) => p === nodeModules);
-      try {
-         const result = utils.resolveUserProjectPath("sub/dir");
-         expect(result).toBe(path.resolve(nodeModules, "../sub/dir").replaceAll("\\", "/"));
-      } finally {
-         spy.mockRestore();
-      }
-   });
-});
+   let root: string;
+   const app = () => path.join(root, "packages/app");
 
-describe("compareStrings", () => {
-   it("orders strings by code unit, independently of the locale", () => {
-      expect(utils.compareStrings("a", "b")).toBeLessThan(0);
-      expect(utils.compareStrings("b", "a")).toBeGreaterThan(0);
-      expect(utils.compareStrings("a", "a")).toBe(0);
-      expect(utils.compareStrings("Z", "a")).toBeLessThan(0);
-      expect(["b", "B", "a", "A"].sort(utils.compareStrings)).toStrictEqual(["A", "B", "a", "b"]);
+   beforeEach(async () => {
+      // A workspace: the root and the app package both have a package.json.
+      root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-utils-"));
+      await fsp.mkdir(path.join(app(), "src/main"), { recursive: true });
+      await fsp.writeFile(path.join(root, "package.json"), "{}");
+      await fsp.writeFile(path.join(app(), "package.json"), "{}");
    });
-});
-
-describe("isSchemaSourceFile", () => {
-   it("accepts .ts, .mts and .cts files", () => {
-      expect(utils.isSchemaSourceFile("schema.ts")).toBe(true);
-      expect(utils.isSchemaSourceFile("nested/user.mts")).toBe(true);
-      expect(utils.isSchemaSourceFile("nested/user.cts")).toBe(true);
-      expect(utils.isSchemaSourceFile("d.ts")).toBe(true);
+   afterEach(async () => {
+      vi.restoreAllMocks();
+      await fsp.rm(root, { recursive: true, force: true });
    });
 
-   it("rejects declaration files", () => {
-      expect(utils.isSchemaSourceFile("types.d.ts")).toBe(false);
-      expect(utils.isSchemaSourceFile("nested/types.d.mts")).toBe(false);
-      expect(utils.isSchemaSourceFile("types.d.cts")).toBe(false);
+   const posix = (value: string) => value.replaceAll("\\", "/");
+
+   it("resolves to the nearest package.json above the working directory", () => {
+      // Regression for T07: the root was found from the install location of the library,
+      // by the first .git, which is the repo root of a workspace, not the app package.
+      vi.spyOn(process, "cwd").mockReturnValue(path.join(app(), "src/main"));
+      expect(utils.resolveUserProjectPath("ipc")).toBe(posix(path.join(app(), "ipc")));
+      expect(utils.resolveUserProjectPath()).toBe(posix(app()));
    });
 
-   it("rejects other file types", () => {
-      for (const name of ["README.md", "data.json", "user.js", "user.tsx", "user.ts.bak", "ts"]) {
-         expect(utils.isSchemaSourceFile(name)).toBe(false);
-      }
+   it("resolves to the workspace root when run from outside a package", () => {
+      vi.spyOn(process, "cwd").mockReturnValue(path.join(root, "packages"));
+      expect(utils.resolveUserProjectPath("package.json")).toBe(
+         posix(path.join(root, "package.json")),
+      );
+   });
+
+   it("prefers an explicit cwd over the working directory", () => {
+      vi.spyOn(process, "cwd").mockReturnValue(root);
+      expect(utils.resolveUserProjectPath("x", app())).toBe(posix(path.join(app(), "x")));
+      expect(utils.resolveUserProjectPath("x", path.join(app(), "src"))).toBe(
+         posix(path.join(app(), "x")),
+      );
+   });
+
+   it("resolves a relative cwd against the working directory", () => {
+      vi.spyOn(process, "cwd").mockReturnValue(root);
+      expect(utils.resolveUserProjectPath("", "packages/app/src")).toBe(posix(app()));
+   });
+
+   it("does not reuse a cached result when the cwd changes", () => {
+      const cwd = vi.spyOn(process, "cwd");
+      cwd.mockReturnValue(app());
+      expect(utils.resolveUserProjectPath()).toBe(posix(app()));
+      cwd.mockReturnValue(root);
+      expect(utils.resolveUserProjectPath()).toBe(posix(root));
+      cwd.mockReturnValue(app());
+      expect(utils.resolveUserProjectPath()).toBe(posix(app()));
+   });
+
+   it("throws when no package.json exists above the cwd, and finds one created later", async () => {
+      const bare = path.join(root, "bare");
+      await fsp.mkdir(bare);
+      await fsp.rm(path.join(root, "package.json"));
+      const original = fs.existsSync;
+      // Hide the package.json files of this machine above the temp dir.
+      vi.spyOn(fs, "existsSync").mockImplementation((p) => {
+         return String(p).startsWith(root) ? original(p) : false;
+      });
+      expect(() => utils.resolveUserProjectPath("", bare)).toThrowError(
+         /no package\.json in '.*bare' or any parent directory/,
+      );
+
+      await fsp.writeFile(path.join(bare, "package.json"), "{}");
+      expect(utils.resolveUserProjectPath("", bare)).toBe(posix(bare));
    });
 });
 

@@ -176,6 +176,30 @@ describe("ipcAutomation, import order", () => {
    });
 });
 
+describe("ipcAutomation, workspace", () => {
+   // Regression for T07: the project root was the first .git above the library, which is the
+   // repo root of a workspace. The root package.json here points at a different, wrong dir.
+   it("generates into the app package when run from one of its sub-directories", async () => {
+      project = await runFixture("workspace", {
+         project: "packages/app",
+         cwd: "packages/app/src/main",
+      });
+
+      expect(project.generated["main.ts"]).toContain("getUser");
+      expect(project.generated["preload.ts"]).toContain("sendEchoUserName");
+      expect(project.generated["window.d.ts"]).toContain("User");
+      await expect(fsp.stat(path.join(project.root, "wrong"))).rejects.toThrowError();
+      await expect(
+         fsp.stat(path.join(project.root, "packages/app/src/main/ipc")),
+      ).rejects.toThrowError();
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("workspace", { project: "packages/app" });
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

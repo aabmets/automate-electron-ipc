@@ -19,8 +19,14 @@ import utils from "./utils.js";
 import vld from "./validators.js";
 import writer from "./writer/index.js";
 
-export async function ipcAutomation(): Promise<void> {
-   const config = await cfg.getResolvedConfig();
+/**
+ * Generates the IPC bindings of the project that contains `cwd`.
+ *
+ * @param [cwd=process.cwd()] - Directory to find the project root from, which is the directory
+ * of the nearest `package.json` at or above it.
+ */
+export async function ipcAutomation(cwd?: string): Promise<void> {
+   const config = await cfg.getResolvedConfig(cwd);
    const pfsArray: t.ParsedFileSpecs[] = [];
 
    if (!config.ipcSchema.stats) {

@@ -13,15 +13,23 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
-import utils from "@src/utils.js";
 import { vi } from "vitest";
 import { runTsc } from "./tsc-utils.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const fixturesDir = path.join(root, "tests/fixtures");
 
+export interface RunFixtureOptions {
+   /** Sub-directory of the fixture that is the project root. Defaults to the fixture root. */
+   project?: string;
+   /** Directory, relative to the fixture root, that the run starts from. Defaults to `project`. */
+   cwd?: string;
+}
+
 export interface E2EProject {
-   /** Absolute path of the temp copy of the fixture, used as the project root. */
+   /** Absolute path of the temp copy of the fixture. */
+   root: string;
+   /** Absolute path of the project root inside the copy, where the generated files go. */
    dir: string;
    /** Directory of the generated files, relative to `dir`. */
    ipcDataDir: string;
@@ -41,22 +49,23 @@ async function listFiles(dir: string): Promise<string[]> {
 }
 
 /**
- * Copies the fixture project into a temp dir, points the project root of the library at it,
- * runs `ipcAutomation` and reads back the generated files.
+ * Copies the fixture project into a temp dir, runs `ipcAutomation` from inside it, so that
+ * the project root is resolved from the copy, and reads back the generated files.
  */
-export async function runFixture(fixture: string): Promise<E2EProject> {
-   const dir = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
-   await fsp.cp(path.join(fixturesDir, fixture), dir, { recursive: true });
+export async function runFixture(
+   fixture: string,
+   options: RunFixtureOptions = {},
+): Promise<E2EProject> {
+   const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
+   await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
+   const dir = path.join(root, options.project ?? ".");
    const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
    const ipcDataDir: string = manifest.config.autoipc.ipcDataDir;
 
-   const rootSpy = vi.spyOn(utils, "resolveUserProjectPath");
-   rootSpy.mockImplementation((subPath = "") => path.join(dir, subPath).replaceAll("\\", "/"));
    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
    try {
-      await ipcAutomation();
+      await ipcAutomation(path.join(root, options.cwd ?? options.project ?? "."));
    } finally {
-      rootSpy.mockRestore();
       warnSpy.mockRestore();
    }
 
@@ -67,11 +76,12 @@ export async function runFixture(fixture: string): Promise<E2EProject> {
       "window.d.ts": await read("window.d.ts"),
    };
    return {
+      root,
       dir,
       ipcDataDir,
       generated,
       typecheck: () => typecheckProject(dir, ipcDataDir),
-      cleanup: () => fsp.rm(dir, { recursive: true, force: true }),
+      cleanup: () => fsp.rm(root, { recursive: true, force: true }),
    };
 }
 

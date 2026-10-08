@@ -1,0 +1,9 @@
+{
+   "name": "fixture-workspace-app",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

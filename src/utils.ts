@@ -24,7 +24,9 @@ import { LRUCache } from "./cache.js";
  * @returns The full resolved path if found, or an empty string.
  */
 export function searchUpwards(forPath: string, startFrom = import.meta.url): string {
-   const key = `${forPath}${startFrom}`;
+   // The start path is part of the key, so that a different cwd never reuses the result of
+   // another one. Misses are not cached, so that a file which appears later is still found.
+   const key = `${forPath}\0${startFrom}`;
    const cache = LRUCache.getInstance("utils.searchUpwards");
    const [exists, value] = cache.get(key);
    if (exists) {
@@ -45,19 +47,30 @@ export function searchUpwards(forPath: string, startFrom = import.meta.url): str
       }
       currentDir = parentDir;
    }
-   cache.put(key, "");
    return "";
 }
 
 /**
- * Finds, resolves and returns the users project directory,
- * optionally concatenating it with a relative sub-path.
+ * Finds, resolves and returns the users project directory, which is the directory of the
+ * nearest `package.json` at or above the working directory, optionally concatenating it
+ * with a relative sub-path.
  *
+ * @param [subPath=''] - Relative sub-path in the users project directory.
+ * @param [cwd=process.cwd()] - Directory to start the search from. Relative paths are
+ * resolved against the process working directory.
  * @returns Resolved sub-path in the users project directory.
+ * @throws If no `package.json` exists in `cwd` or any of its parent directories.
  */
-export function resolveUserProjectPath(subPath = ""): string {
-   const basePath = path.dirname(searchUpwards(".git") || searchUpwards("node_modules"));
-   return path.join(basePath, subPath).replaceAll("\\", "/");
+export function resolveUserProjectPath(subPath = "", cwd: string = process.cwd()): string {
+   const startDir = path.resolve(cwd);
+   // `searchUpwards` starts from the directory of the given file, so name a file in `startDir`.
+   const manifest = searchUpwards("package.json", path.join(startDir, "package.json"));
+   if (!manifest) {
+      throw new Error(
+         `Cannot find the project root: no package.json in '${startDir}' or any parent directory.`,
+      );
+   }
+   return path.join(path.dirname(manifest), subPath).replaceAll("\\", "/");
 }
 
 /**

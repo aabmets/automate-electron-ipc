@@ -1,0 +1,12 @@
+{
+   "name": "fixture-workspace-root",
+   "private": true,
+   "workspaces": [
+      "packages/*"
+   ],
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "wrong"
+      }
+   }
+}

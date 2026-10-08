@@ -15,15 +15,19 @@ import type * as t from "@types";
 import utils from "./utils.js";
 import valid from "./validators.js";
 
-export async function getConfigFromUserPackage(): Promise<t.IPCOptionalConfig> {
-   const filePath = utils.resolveUserProjectPath("package.json");
+export async function getConfigFromUserPackage(cwd?: string): Promise<t.IPCOptionalConfig> {
+   const filePath = utils.resolveUserProjectPath("package.json", cwd);
    const fileContents = await fsp.readFile(filePath);
    const data = JSON.parse(fileContents.toString());
    return data?.config?.autoipc || {};
 }
 
-export async function getResolvedConfig(): Promise<t.IPCResolvedConfig> {
-   const userConfig = await getConfigFromUserPackage();
+/**
+ * Reads the config of the project that contains `cwd`, which is the directory of the nearest
+ * `package.json` at or above it. Defaults to the process working directory.
+ */
+export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConfig> {
+   const userConfig = await getConfigFromUserPackage(cwd);
    const mergedConfig: t.IPCOptionalConfig = {
       projectUsesNodeNext: false,
       ipcDataDir: "src/autoipc",
@@ -32,7 +36,7 @@ export async function getResolvedConfig(): Promise<t.IPCResolvedConfig> {
    };
    valid.validateOptionalConfig(mergedConfig);
 
-   const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir);
+   const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir, cwd);
    const schemaDir = path.join(ipcDataDir, "schema");
    const schemaFile = path.join(ipcDataDir, "schema.ts");
    const [schemaDirStats, schemaFileStats] = await Promise.all([
