@@ -21,4 +21,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - Tests may be marked `it.fails`/`todo` for B2–B7 until those tasks land, with a comment
     referencing the task.
   - Fixtures use the T00 syntax.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Removed `fsp.exists`; added `tests/test_e2e/`, the `single-file` and `schema-dir` fixtures, and `tests/utils/e2e-utils.ts` (`runFixture`, tsc check against the repo's `electron` types). The project root is pointed at the temp dir by mocking `utils.resolveUserProjectPath`; T07 may replace this with a real root option. No `it.fails` tests were needed yet, since the fixtures avoid the B2–B7 cases.

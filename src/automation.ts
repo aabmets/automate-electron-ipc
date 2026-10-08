@@ -45,7 +45,7 @@ export async function ipcAutomation(): Promise<void> {
          files.map(async (file) => {
             const fullPath = path.join(config.ipcSchema.path, file);
             const stat = await fsp.stat(fullPath);
-            if (stat.isFile() && (await fsp.exists(fullPath))) {
+            if (stat.isFile()) {
                const contents = await fsp.readFile(fullPath);
                rawFileContents.push({
                   fullPath,

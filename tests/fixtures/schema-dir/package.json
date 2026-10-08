@@ -1,0 +1,9 @@
+{
+   "name": "fixture-schema-dir",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

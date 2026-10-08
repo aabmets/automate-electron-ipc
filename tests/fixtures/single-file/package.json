@@ -1,0 +1,9 @@
+{
+   "name": "fixture-single-file",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

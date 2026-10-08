@@ -1,0 +1,74 @@
+/*
+ *   Apache License 2.0
+ *
+ *   Copyright (c) 2024, Mattias Aabmets
+ *
+ *   The contents of this file are subject to the terms and conditions defined in the License.
+ *   You may not use, modify, or distribute this file except in compliance with the License.
+ *
+ *   SPDX-License-Identifier: Apache-2.0
+ */
+
+import fsp from "node:fs/promises";
+import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { afterEach, describe, expect, it } from "vitest";
+
+let project: E2EProject | undefined;
+
+afterEach(async () => {
+   await project?.cleanup();
+   project = undefined;
+});
+
+describe("ipcAutomation, single schema file", () => {
+   it("generates the three files from the channels of schema.ts", async () => {
+      project = await runFixture("single-file");
+      const { generated } = project;
+
+      expect(generated["main.ts"]).toContain("getUser");
+      expect(generated["main.ts"]).toContain("echoUserName");
+      expect(generated["main.ts"]).toContain("windowFocused");
+      expect(generated["preload.ts"]).toContain("sendEchoUserName");
+      expect(generated["window.d.ts"]).toContain("sendEchoUserName");
+      expect(generated["window.d.ts"]).toContain("User");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("single-file");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
+describe("ipcAutomation, schema directory", () => {
+   it("reads channels from nested files, without relying on Bun-only fs APIs", async () => {
+      // Regression for B1: `fsp.exists` exists only in Bun, so directory mode threw on Node.
+      const original = Object.getOwnPropertyDescriptor(fsp, "exists");
+      Object.defineProperty(fsp, "exists", {
+         configurable: true,
+         value: () => {
+            throw new TypeError("fsp.exists is not a function");
+         },
+      });
+      try {
+         project = await runFixture("schema-dir");
+      } finally {
+         if (original) {
+            Object.defineProperty(fsp, "exists", original);
+         } else {
+            Reflect.deleteProperty(fsp, "exists");
+         }
+      }
+      const { generated } = project;
+
+      expect(generated["main.ts"]).toContain("getUser");
+      expect(generated["main.ts"]).toContain("renameUser");
+      expect(generated["main.ts"]).toContain("windowBlurred");
+      expect(generated["preload.ts"]).toContain("sendRenameUser");
+      expect(generated["window.d.ts"]).toContain("logStream");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("schema-dir");
+      expect(await project.typecheck()).toBe("");
+   });
+});

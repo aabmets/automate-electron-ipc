@@ -16,6 +16,12 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
+export function runTsc(dir: string): string {
+   const tsc = path.join(root, "node_modules/.bin/tsc");
+   const result = spawnSync(tsc, ["-p", dir, "--pretty", "false"], { encoding: "utf8" });
+   return `${result.stdout}${result.stderr}`.trim();
+}
+
 /**
  * Type-checks the given source files against the public types of this library,
  * which are importable as "automate-electron-ipc". Returns the tsc diagnostics.
@@ -42,9 +48,7 @@ export async function typecheck(files: Record<string, string>): Promise<string> 
          files: Object.keys(files),
       };
       await fsp.writeFile(path.join(dir, "tsconfig.json"), JSON.stringify(tsconfig));
-      const tsc = path.join(root, "node_modules/.bin/tsc");
-      const result = spawnSync(tsc, ["-p", dir, "--pretty", "false"], { encoding: "utf8" });
-      return `${result.stdout}${result.stderr}`.trim();
+      return runTsc(dir);
    } finally {
       await fsp.rm(dir, { recursive: true, force: true });
    }
