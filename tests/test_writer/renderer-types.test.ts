@@ -23,8 +23,8 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestRendererTypesWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "\nexport {};\n\ndeclare global {\n   interface Window {}\n}";
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      const expectedOutput = "export {};\n\ndeclare global {\n   interface Window {}\n}";
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
    it("should write Unicast RendererToMain callables into Window declaration", async () => {
@@ -42,7 +42,7 @@ describe("PreloadBindingsWriter", () => {
          }\n
          export default Window;
       `);
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
    it("should write Broadcast RendererToMain callables into Window declaration", async () => {
@@ -60,7 +60,7 @@ describe("PreloadBindingsWriter", () => {
          }\n
          export default Window;
       `);
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
    it("should write Broadcast MainToRenderer callables into Window declaration", async () => {
@@ -79,7 +79,7 @@ describe("PreloadBindingsWriter", () => {
          }\n
          export default Window;
       `);
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
    it("should type senders by channel kind, not by the declared return type", async () => {
@@ -139,7 +139,7 @@ describe("PreloadBindingsWriter", () => {
          }\n
          export default Window;
       `);
-      expect(buffer.toString()).toStrictEqual(expectedOutput);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
    it("should import colliding type names under distinct names and use them in signatures", async () => {

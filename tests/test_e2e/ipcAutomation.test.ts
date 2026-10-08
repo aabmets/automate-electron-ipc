@@ -523,6 +523,20 @@ describe("ipcAutomation, schema types named like globals", () => {
    });
 });
 
+describe("ipcAutomation, generated file start", () => {
+   // Regression for T65: every generated file started with a blank line.
+   it.each(["single-file", "no-channels", "port-only"])(
+      "starts every generated file of '%s' with the notice",
+      async (fixture) => {
+         project = await runFixture(fixture);
+         for (const contents of Object.values(project.generated)) {
+            expect(contents.startsWith("// NOTICE: THIS FILE WAS GENERATED")).toBe(true);
+            expect(contents).not.toMatch(/\n\n\n/);
+         }
+      },
+   );
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.
@@ -554,6 +568,16 @@ describe("ipcAutomation, schema with only port channels", () => {
    it("generates files that type-check", async () => {
       project = await runFixture("port-only");
       expect(await project.typecheck()).toBe("");
+   });
+
+   // Regression for T65: main.ts imported `ipcMain` without using it.
+   it("imports nothing unused, so the files type-check under noUnusedLocals", async () => {
+      project = await runFixture("port-only");
+      expect(project.generated["main.ts"]).not.toContain("electronIpcMain");
+      expect(project.generated["main.ts"]).toContain(
+         'import { MessageChannelMain } from "electron";',
+      );
+      expect(await project.typecheck({ noUnusedLocals: true })).toBe("");
    });
 });
 

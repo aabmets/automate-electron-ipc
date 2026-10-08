@@ -12,4 +12,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   code uses.
 - **Tests:** writer unit tests on the text, plus an e2e type-check of the port-only fixture with
   `noUnusedLocals` enabled.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `write()` now strips leading newlines from the contents and the notice is
+  trimmed, so no generated file starts with a blank line. `main.ts` imports `ipcMain as
+  electronIpcMain` only when a RendererToMain channel exists (and no value import at all when nothing
+  needs one). `preload.ts` needed no change, as every non-empty output uses both of its imports.
+  The e2e `typecheck()` helper takes optional compiler options.

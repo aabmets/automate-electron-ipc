@@ -30,10 +30,12 @@ export class MainBindingsWriter extends BaseWriter {
       ];
    }
    protected renderEmptyFileContents(): string {
-      return "\nexport const ipcMain = {};";
+      return "export const ipcMain = {};";
    }
    protected renderFileContents(): string {
-      const electronImportsSet = new Set<string>(["ipcMain as electronIpcMain"]);
+      // Only the imports that the generated code uses.
+      let usesIpcMain = false;
+      const electronImportsSet = new Set<string>();
       const electronTypeImportsSet = new Set<string>();
       const importDeclarationsArray: string[] = [];
       const callablesArray: string[] = [];
@@ -44,6 +46,7 @@ export class MainBindingsWriter extends BaseWriter {
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
             if (spec.direction === "RendererToMain") {
+               usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
                this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {
@@ -67,8 +70,14 @@ export class MainBindingsWriter extends BaseWriter {
             }
          }
       }
+      const electronImports = [
+         ...(usesIpcMain ? ["ipcMain as electronIpcMain"] : []),
+         ...electronImportsSet,
+      ];
       const out: string[] = [
-         `import { ${Array.from(electronImportsSet).join(", ")} } from "electron";`,
+         ...(electronImports.length > 0
+            ? [`import { ${electronImports.join(", ")} } from "electron";`]
+            : []),
          ...(electronTypeImportsSet.size > 0
             ? [`import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`]
             : []),

@@ -22,7 +22,7 @@ describe("MainBindingsWriter", () => {
       const obj = new shared.VitestMainBindingsWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "\nexport const ipcMain = {};";
+      const expectedOutput = "export const ipcMain = {};";
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
 
@@ -68,7 +68,6 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { ipcMain as electronIpcMain } from "electron";
          import type { BrowserWindow } from "electron";
          
          export const ipcMain = {
@@ -153,7 +152,6 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { ipcMain as electronIpcMain } from "electron";
          import type { BrowserWindow } from "electron";
 
          export const ipcMain = {
@@ -192,5 +190,36 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       expect(buffer.toString()).toContain("export const ipcMain = {\n   ports: {");
       expect(buffer.toString()).not.toMatch(/\{\s*,/);
+   });
+
+   it("should import ipcMain from electron only for RendererToMain channels", async () => {
+      // Regression for T65: the import was unused, and failed under noUnusedLocals, without them.
+      const render = async (...channels: shared.SimpleChannel[]) => {
+         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const toRenderer = await render({
+         name: "a",
+         kind: "Broadcast",
+         direction: "MainToRenderer",
+      });
+      const port = await render({ name: "p", kind: "Port", direction: "RendererToRenderer" });
+      const toMain = await render({ name: "b", kind: "Broadcast", direction: "RendererToMain" });
+      const both = await render(
+         { name: "p", kind: "Port", direction: "RendererToRenderer" },
+         { name: "b", kind: "Broadcast", direction: "RendererToMain" },
+      );
+
+      expect(toRenderer).not.toContain("electronIpcMain");
+      expect(toRenderer.startsWith('import type { BrowserWindow } from "electron";')).toBe(true);
+      expect(port).not.toContain("electronIpcMain");
+      expect(port.startsWith('import { MessageChannelMain } from "electron";')).toBe(true);
+      expect(toMain.startsWith('import { ipcMain as electronIpcMain } from "electron";')).toBe(
+         true,
+      );
+      expect(
+         both.startsWith("import { ipcMain as electronIpcMain, MessageChannelMain } from"),
+      ).toBe(true);
    });
 });

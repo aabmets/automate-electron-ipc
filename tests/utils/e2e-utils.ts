@@ -35,8 +35,11 @@ export interface E2EProject {
    ipcDataDir: string;
    /** The generated files, keyed by file name. */
    generated: { "main.ts": string; "preload.ts": string; "window.d.ts": string };
-   /** Type-checks the schema files and generated files, returns the tsc diagnostics. */
-   typecheck: () => Promise<string>;
+   /**
+    * Type-checks the schema files and generated files, returns the tsc diagnostics.
+    * `compilerOptions` are added to the ones of the generated tsconfig.
+    */
+   typecheck: (compilerOptions?: Record<string, unknown>) => Promise<string>;
    /** Deletes the temp dir. */
    cleanup: () => Promise<void>;
 }
@@ -83,7 +86,7 @@ export async function runFixture(
          dir,
          ipcDataDir,
          generated,
-         typecheck: () => typecheckProject(dir, ipcDataDir),
+         typecheck: (compilerOptions) => typecheckProject(dir, ipcDataDir, compilerOptions),
          cleanup,
       };
    } catch (error) {
@@ -104,7 +107,11 @@ const windowCheckFile = "window.dts-check.ts";
  * is compiled as a `.ts` copy instead. The copy replaces the original in the compiled files,
  * which avoids declaring the global `Window` members twice.
  */
-async function typecheckProject(dir: string, ipcDataDir: string): Promise<string> {
+async function typecheckProject(
+   dir: string,
+   ipcDataDir: string,
+   compilerOptions: Record<string, unknown> = {},
+): Promise<string> {
    const ipcDir = path.join(dir, ipcDataDir);
    const schemaFiles = (await listFiles(ipcDir))
       .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
@@ -124,6 +131,7 @@ async function typecheckProject(dir: string, ipcDataDir: string): Promise<string
             electron: [path.join(root, "node_modules/electron/electron.d.ts")],
             "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
          },
+         ...compilerOptions,
       },
       files: [
          ...["main.ts", "preload.ts", windowCheckFile].map((name) => `${ipcDataDir}/${name}`),

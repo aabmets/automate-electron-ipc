@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 29 delivered, 36 remaining, 1 dropped.
+**Progress:** 30 delivered, 35 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -50,7 +50,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T62: `typeof` of a value declared in the schema file](./tasks/T62-typeof-schema-local-values.md) · depends on: T54
 - [x] [T63: Errors thrown by `bind<X>` providers](./tasks/T63-bind-provider-errors.md) · depends on: T12
 - [x] [T64: E2E fixtures leave temp dirs behind on failure](./tasks/T64-e2e-temp-dir-cleanup-on-failure.md) · depends on: T50
-- [ ] [T65: Leading blank line and unused imports in generated files](./tasks/T65-leading-blank-line-and-unused-imports.md) · depends on: T52
+- [x] [T65: Leading blank line and unused imports in generated files](./tasks/T65-leading-blank-line-and-unused-imports.md) · depends on: T52
 
 ## Phase 2: Core API, listener lifecycle and security
 
