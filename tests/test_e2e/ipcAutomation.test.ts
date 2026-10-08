@@ -238,6 +238,25 @@ describe("ipcAutomation, type definition edge cases", () => {
    });
 });
 
+describe("ipcAutomation, import paths with dots in the file name", () => {
+   // Regression for T55: "./types/user.model" was imported as "./types/user" (TS2307).
+   it("keeps the dotted file names, and maps script extensions for NodeNext", async () => {
+      project = await runFixture("dotted-imports");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(generated[file]).toContain('import type { User } from "./types/user.model.js";');
+         expect(generated[file]).toContain('import type { Api } from "./types/api.v2.js";');
+         expect(generated[file]).toContain('import type { Legacy } from "./types/legacy.js";');
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("dotted-imports");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

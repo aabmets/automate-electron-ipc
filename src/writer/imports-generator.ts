@@ -12,6 +12,20 @@
 import path from "node:path";
 import type * as t from "@types";
 
+const SCRIPT_EXTENSION = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/;
+
+/** The extension of the compiled file for each script extension, as NodeNext imports need it. */
+const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
+   ts: ".js",
+   tsx: ".js",
+   js: ".js",
+   jsx: ".js",
+   mts: ".mjs",
+   mjs: ".mjs",
+   cts: ".cjs",
+   cjs: ".cjs",
+};
+
 export class ImportsGenerator {
    private readonly projectUsesNodeNext: boolean;
    private readonly targetFilePath: string;
@@ -31,12 +45,17 @@ export class ImportsGenerator {
       return value2 ? [value1, value2] : [null, value1];
    }
 
+   /**
+    * Turns the path of a source file into an import specifier. Only script extensions are
+    * replaced: with NodeNext by the extension of the compiled file, otherwise they are dropped.
+    * Dots in a file name such as `user.model` belong to the name and are kept.
+    */
    private getImportPath(...paths: string[]): string {
-      const joined = path.join(...paths);
-      const normalizedPath = joined.replaceAll(path.sep, "/");
-      const extLen = path.extname(normalizedPath).length;
-      const baseName = normalizedPath.slice(0, normalizedPath.length - extLen);
-      return this.projectUsesNodeNext ? `${baseName}.js` : baseName;
+      const normalizedPath = path.join(...paths).replaceAll(path.sep, "/");
+      const match = SCRIPT_EXTENSION.exec(normalizedPath);
+      const baseName = match ? normalizedPath.slice(0, match.index) : normalizedPath;
+      const outputExt = match ? SCRIPT_OUTPUT_EXTENSIONS[match[1]] : ".js";
+      return this.projectUsesNodeNext ? `${baseName}${outputExt}` : baseName;
    }
 
    private resolveImportPath(fromPath: string, sourceFilePath: string): string {

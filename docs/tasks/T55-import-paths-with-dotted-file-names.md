@@ -8,4 +8,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** strip only real script extensions (`.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`,
   `.mjs`, `.cjs`), mapping each to the right output extension under NodeNext.
 - **Tests:** imports-generator unit tests, plus an e2e fixture that type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. As scoped. Local schema file names with dots (`user.model.ts`) are handled too.

@@ -178,6 +178,78 @@ describe("ImportsGenerator", () => {
       });
    });
 
+   describe("import paths", () => {
+      const pfsOf = (fromPath: string): t.ParsedFileSpecs => ({
+         fullPath: "/project/src/autoipc/schema.ts",
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: [{ fromPath, customTypes: ["Foo"], namespace: null }],
+            typeSpecArray: [],
+         },
+      });
+      const importOf = (fromPath: string, nodeNext: boolean) =>
+         new ImportsGenerator(nodeNext, "/project/src/autoipc/main.ts").getDeclaration(
+            pfsOf(fromPath),
+            "Foo",
+         );
+
+      // Regression for T55: everything after the last dot was stripped, "user.model" -> "user".
+      it("keeps dots that belong to the file name", () => {
+         expect(importOf("./types/user.model", false)).toStrictEqual(
+            'import type { Foo } from "./types/user.model";',
+         );
+         expect(importOf("./types/user.model", true)).toStrictEqual(
+            'import type { Foo } from "./types/user.model.js";',
+         );
+         expect(importOf("./api.v2", false)).toStrictEqual('import type { Foo } from "./api.v2";');
+         expect(importOf("../shared/a.b.c", true)).toStrictEqual(
+            'import type { Foo } from "../shared/a.b.c.js";',
+         );
+      });
+
+      it("strips script extensions, and maps them to the compiled extension for NodeNext", () => {
+         const cases: [string, string, string][] = [
+            ["./a.ts", "./a", "./a.js"],
+            ["./a.tsx", "./a", "./a.js"],
+            ["./a.js", "./a", "./a.js"],
+            ["./a.jsx", "./a", "./a.js"],
+            ["./a.mts", "./a", "./a.mjs"],
+            ["./a.mjs", "./a", "./a.mjs"],
+            ["./a.cts", "./a", "./a.cjs"],
+            ["./a.cjs", "./a", "./a.cjs"],
+            ["./a.model.ts", "./a.model", "./a.model.js"],
+            ["./a", "./a", "./a.js"],
+         ];
+         for (const [fromPath, plain, nodeNext] of cases) {
+            expect(importOf(fromPath, false)).toStrictEqual(`import type { Foo } from "${plain}";`);
+            expect(importOf(fromPath, true)).toStrictEqual(
+               `import type { Foo } from "${nodeNext}";`,
+            );
+         }
+      });
+
+      it("keeps the dots of the name of a local schema file", () => {
+         const pfs: t.ParsedFileSpecs = {
+            fullPath: "/project/src/autoipc/schema/user.model.ts",
+            relativePath: "",
+            specs: {
+               channelSpecArray: [],
+               channelMapExport: null,
+               importSpecArray: [],
+               typeSpecArray: [
+                  { name: "Foo", kind: "type" as t.TypeKind, generics: null, isExported: true },
+               ],
+            },
+         };
+         const ig = new ImportsGenerator(true, "/project/src/autoipc/main.ts");
+         expect(ig.getDeclaration(pfs, "Foo")).toStrictEqual(
+            'import type { Foo } from "./schema/user.model.js";',
+         );
+      });
+   });
+
    describe("namespace imports", () => {
       const nsSpec: t.ImportSpec = { fromPath: "./t", customTypes: [], namespace: "NS" };
       const pfsOf = (extra: Partial<t.SpecsCollection> = {}): t.ParsedFileSpecs => ({
