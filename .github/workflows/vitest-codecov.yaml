@@ -26,7 +26,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run Vitest
-        run: bunx vitest run --coverage
+        run: bunx vitest run
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
