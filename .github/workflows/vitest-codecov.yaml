@@ -1,9 +1,6 @@
 name: Run Checks, Vitest and Upload Code Coverage
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
   workflow_call:
 
