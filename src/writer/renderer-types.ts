@@ -15,6 +15,8 @@ import { BaseWriter } from "./base-writer.js";
 
 interface ChannelEntry {
    name: string;
+   /** Whether the promise of the channel can be rejected with an `IpcError`. */
+   throws?: boolean;
    /** The methods of the channel, one per line, starting with a newline. */
    methods: string[];
 }
@@ -26,7 +28,7 @@ export class RendererTypesWriter extends BaseWriter {
    protected getReservedNames(): string[] {
       // `IpcApi` is declared by the generated file. `Promise` and `Awaited` are globals
       // that the generated code uses.
-      return ["IpcApi", "Promise", "Awaited"];
+      return ["IpcApi", "IpcError", "Error", "Promise", "Awaited"];
    }
    protected renderEmptyFileContents(): string {
       return this.renderDeclaration([]);
@@ -46,7 +48,10 @@ export class RendererTypesWriter extends BaseWriter {
             } else if (spec.direction === "RendererToRenderer") {
                channels.push(this.buildPortChannel(spec));
             }
-            const specCustomTypes = new Set(spec.signature.customTypes);
+            const specCustomTypes = new Set([
+               ...spec.signature.customTypes,
+               ...(spec.errors?.customTypes ?? []),
+            ]);
             customTypes = customTypes.union(specCustomTypes);
          }
          for (const customType of customTypes) {
@@ -70,15 +75,33 @@ export class RendererTypesWriter extends BaseWriter {
     */
    private renderDeclaration(channels: ChannelEntry[]): string {
       const i0 = this.indents[0];
+      const [, i1, i2] = this.indents;
       const members = this.sortChannels(channels).flatMap((channel) => [
          `\n${i0}${channel.name}: {`,
          ...channel.methods,
          `\n${i0}};`,
       ]);
       const body = members.length > 0 ? `${members.join("")}\n` : "";
+      // The error type is declared only if a rejected invoke can carry one.
+      const errorType = channels.some((channel) => channel.throws)
+         ? [
+              `${i0}/**`,
+              `${i0} * The object that the promise of \`ipc.<name>.invoke\` is rejected with when the handler`,
+              `${i0} * throws. It is a plain object, since contextBridge does not keep the fields of an \`Error\`.`,
+              `${i0} */`,
+              `${i0}type IpcError<E extends Error = Error> = E extends unknown`,
+              `${i1}? { name: E['name']; message: string } & (E extends { code: infer C extends string | number }`,
+              `${i2}? { code: C }`,
+              `${i2}: { code?: string | number }) & (E extends { data: infer D }`,
+              `${i2}? { data: D }`,
+              `${i2}: { data?: unknown })`,
+              `${i1}: never;`,
+           ].join("\n")
+         : "";
+      const globals = [`${i0}var ipc: IpcApi;`, ...(errorType ? [errorType] : [])];
       return [
          `\ninterface IpcApi {${body}}`,
-         `\ndeclare global {\n${i0}var ipc: IpcApi;\n}`,
+         `\ndeclare global {\n${globals.join("\n")}\n}`,
          "\nexport {};\n",
       ].join("\n");
    }
@@ -94,7 +117,12 @@ export class RendererTypesWriter extends BaseWriter {
          ipcSignature = `${signatureHead} => Promise<Awaited<${spec.signature.returnType}>>`;
       }
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
-      return { name: spec.name, methods: [this.method(method, ipcSignature)] };
+      if (spec.kind === "Broadcast" || this.config.rawErrors) {
+         return { name: spec.name, methods: [this.method(method, ipcSignature)] };
+      }
+      const errorType = spec.errors ? `IpcError<${spec.errors.definition}>` : "IpcError";
+      const doc = `/** @throws {${errorType}} */`;
+      return { name: spec.name, throws: true, methods: [this.method(method, ipcSignature, doc)] };
    }
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
       // Subscribing returns a function which removes that one listener.
@@ -114,7 +142,8 @@ export class RendererTypesWriter extends BaseWriter {
          ],
       };
    }
-   private method(name: string, type: string): string {
-      return `\n${this.indents[1]}${name}: ${type};`;
+   private method(name: string, type: string, doc?: string): string {
+      const i1 = this.indents[1];
+      return `${doc ? `\n${i1}${doc}` : ""}\n${i1}${name}: ${type};`;
    }
 }

@@ -32,6 +32,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       projectUsesNodeNext: false,
       ipcDataDir: "src/autoipc",
       codeIndent: 3,
+      rawErrors: false,
       ...userConfig,
    };
    valid.validateOptionalConfig(mergedConfig);

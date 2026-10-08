@@ -15,6 +15,7 @@
  */
 
 declare const channelDef: unique symbol;
+declare const channelErrors: unique symbol;
 
 /**
  * Any function type. Signatures of channels must be function types.
@@ -23,19 +24,21 @@ export type ChannelSignature = (...args: any[]) => any;
 
 /**
  * Branded value returned by the verb helpers when a signature type argument is given.
- * It carries the signature at the type level only, nothing exists at runtime.
+ * It carries the signature, and the error types of an `invoke` channel, at the type level
+ * only, nothing exists at runtime.
  */
-export interface ChannelDef<S extends ChannelSignature = ChannelSignature> {
+export interface ChannelDef<S extends ChannelSignature = ChannelSignature, E = never> {
    readonly [channelDef]: S;
+   readonly [channelErrors]?: E;
 }
 
 /**
  * The type returned by verb helpers: a `ChannelDef<S>` when the signature `S` is given
  * as a type argument, otherwise `unknown`, so that `verb(config) as Signature` type-checks.
  */
-export type ChannelResult<S extends ChannelSignature> = [S] extends [never]
+export type ChannelResult<S extends ChannelSignature, E = never> = [S] extends [never]
    ? unknown
-   : ChannelDef<S>;
+   : ChannelDef<S, E>;
 
 /**
  * The Standard Schema interface (https://standardschema.dev), which zod, valibot, arktype and
@@ -174,14 +177,20 @@ export function defineChannels<T extends Record<string, unknown>>(channels: T): 
  * The main process handles the call and its result is returned to the invoker.
  * The signature may return any value, or a promise of it.
  *
+ * An error that the handler throws reaches the renderer as a plain object
+ * `{ name, message, code?, data? }`, which rejects the promise of `ipc.<name>.invoke`.
+ * The optional second type argument lists the error types that the handler may throw. It
+ * documents them in the generated `window.d.ts`. It needs the generic form of the signature.
+ *
  * @example
- * getUser: invoke<(id: number) => Promise<User>>()
- * // Alternative form, which does not check the config against the signature:
+ * getUser: invoke<(id: number) => Promise<User>, NotFoundError | AuthError>()
+ * // Alternative form, which does not check the config against the signature, and
+ * // cannot declare error types:
  * getUser: invoke() as (id: number) => Promise<User>
  */
-export function invoke<S extends ChannelSignature = never>(
+export function invoke<S extends ChannelSignature = never, E extends Error = never>(
    config?: InvokeConfig<NoInfer<S>>,
-): ChannelResult<S>;
+): ChannelResult<S, E>;
 
 /**
  * One-way message from a renderer process to the main process.

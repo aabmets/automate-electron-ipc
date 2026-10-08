@@ -34,6 +34,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          const errMsg = "ipcDataDir must be relative to the project root";
          return path.isAbsolute(value) ? errMsg : true;
       }),
+      rawErrors: optional(boolean()),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";
@@ -145,6 +146,18 @@ function getChannelSpecStruct(
          async: boolean(),
          typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
       }),
+      errors:
+         kind === "Unicast"
+            ? optional(
+                 object({
+                    definition: string(),
+                    customTypes: array(string()),
+                    typeRefs: optional(
+                       array(object({ name: string(), start: number(), end: number() })),
+                    ),
+                 }),
+              )
+            : optional(never()),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
@@ -269,7 +282,9 @@ export function validateTypeSpecs(
          continue;
       }
       const channel = channelSpecs.find((cs) =>
-         cs.signature.customTypes.some((name) => name.split(".")[0] === spec.name),
+         [...cs.signature.customTypes, ...(cs.errors?.customTypes ?? [])].some(
+            (name) => name.split(".")[0] === spec.name,
+         ),
       );
       if (channel) {
          const subject =

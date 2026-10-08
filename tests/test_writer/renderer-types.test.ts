@@ -43,12 +43,24 @@ describe("RendererTypesWriter", () => {
       const expectedOutput = utils.dedent(`
          interface IpcApi {
             vitestChannel: {
+               /** @throws {IpcError} */
                invoke: (arg1: CustomType, arg2?: CustomType) => Promise<string>;
             };
          }
 
          declare global {
             var ipc: IpcApi;
+            /**
+             * The object that the promise of \`ipc.<name>.invoke\` is rejected with when the handler
+             * throws. It is a plain object, since contextBridge does not keep the fields of an \`Error\`.
+             */
+            type IpcError<E extends Error = Error> = E extends unknown
+               ? { name: E['name']; message: string } & (E extends { code: infer C extends string | number }
+                  ? { code: C }
+                  : { code?: string | number }) & (E extends { data: infer D }
+                  ? { data: D }
+                  : { data?: unknown })
+               : never;
          }
 
          export {};
@@ -129,12 +141,16 @@ describe("RendererTypesWriter", () => {
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
-      expect(output).toContain("asyncIt: {\n      invoke: (id: number) => Promise<string>;");
+      expect(output).toContain(
+         "asyncIt: {\n      /** @throws {IpcError} */\n      invoke: (id: number) => Promise<string>;",
+      );
       expect(output).toContain("sendIt: {\n      send: (text: string) => void;");
-      expect(output).toContain("syncIt: {\n      invoke: () => Promise<Awaited<number>>;");
+      expect(output).toContain(
+         "syncIt: {\n      /** @throws {IpcError} */\n      invoke: () => Promise<Awaited<number>>;",
+      );
       // Regression for T56: a user type whose name starts with "Promise" is not a promise.
       expect(output).toContain(
-         "lookalikeIt: {\n      invoke: () => Promise<Awaited<PromiseResult>>;",
+         "lookalikeIt: {\n      /** @throws {IpcError} */\n      invoke: () => Promise<Awaited<PromiseResult>>;",
       );
    });
 
@@ -235,5 +251,69 @@ describe("RendererTypesWriter", () => {
       expect(output).toMatch(/^import type \{ User as User_2 \} from ".*\/b";$/m);
       expect(output).toContain("invoke: () => Promise<User>;");
       expect(output).toContain("invoke: () => Promise<User_2>;");
+   });
+
+   describe("error types", () => {
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = async (
+         channels: shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestRendererTypesWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("documents the declared errors of an invoke", async () => {
+         const output = await render([{ ...unicast, errors: "NotFoundError | AuthError" }]);
+
+         expect(output).toContain(
+            "getIt: {\n      /** @throws {IpcError<NotFoundError | AuthError>} */\n      invoke:",
+         );
+      });
+
+      it("documents the general error shape for an invoke without declared errors", async () => {
+         const output = await render([unicast]);
+
+         expect(output).toContain("/** @throws {IpcError} */");
+      });
+
+      it("declares the IpcError type once, only when an invoke can reject", async () => {
+         expect(
+            (await render([unicast, { ...unicast, name: "getOther" }])).match(/type IpcError</g),
+         ).toHaveLength(1);
+         expect(await render([broadcast])).not.toContain("IpcError");
+         expect(await render([])).not.toContain("IpcError");
+      });
+
+      it("declares IpcError among the globals, next to ipc", async () => {
+         const output = await render([unicast]);
+
+         expect(output).toMatch(/declare global \{\n {3}var ipc: IpcApi;\n {3}\/\*\*/);
+         expect(output).toContain("name: E['name']; message: string");
+         expect(output).toContain("{ code: C }");
+         expect(output).toContain("{ data: D }");
+      });
+
+      it("documents and declares nothing when rawErrors is set", async () => {
+         const output = await render([{ ...unicast, errors: "NotFoundError" }], {
+            rawErrors: true,
+         });
+
+         expect(output).not.toContain("IpcError");
+         expect(output).not.toContain("@throws");
+         expect(output).toContain("invoke: () => Promise<Awaited<void>>;");
+      });
+
+      it("reserves IpcError and Error for the declared type", () => {
+         const obj = new shared.VitestRendererTypesWriter([]);
+         const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
+
+         expect(names).toEqual(expect.arrayContaining(["IpcError", "Error", "IpcApi"]));
+      });
    });
 });

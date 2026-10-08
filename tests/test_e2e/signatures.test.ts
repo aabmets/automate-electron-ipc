@@ -293,7 +293,7 @@ describe("ipcAutomation, async return types", () => {
 
       const invokeOf = (channel: string) => {
          const lines = windowTypes.split("\n");
-         return lines[lines.indexOf(`   ${channel}: {`) + 1].trim();
+         return lines[lines.indexOf(`   ${channel}: {`) + 2].trim();
       };
       expect(invokeOf("plain")).toBe("invoke: () => Promise<Awaited<number>>;");
       expect(invokeOf("userType")).toBe("invoke: () => Promise<Awaited<PromiseResult>>;");

@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
+import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
@@ -39,7 +40,13 @@ describe("PreloadBindingsWriter", () => {
          
          contextBridge.exposeInMainWorld('ipc', {
             vitestChannel: {
-               invoke: (...args: any[]) => ipcRenderer.invoke('vitestChannel', ...args),
+               invoke: async (...args: any[]) => {
+                  const result = await ipcRenderer.invoke('vitestChannel', ...args);
+                  if (result.ok) {
+                     return result.value;
+                  }
+                  throw result.error;
+               },
             },
          });
       `);
@@ -126,8 +133,55 @@ describe("PreloadBindingsWriter", () => {
          "gamma",
          "zeta",
       ]);
-      expect(exposed).toContain("Beta: {\n      invoke: (...args: any[]) =>");
+      expect(exposed).toContain("Beta: {\n      invoke: async (...args: any[]) => {");
       expect(exposed).toContain("gamma: {\n      send: (...args: any[]) =>");
       expect(exposed).toContain("zeta: {\n      on: (callback: Function) => {");
+   });
+
+   describe("error envelope", () => {
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = async (
+         channels: shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("unwraps the envelope of an invoke, and rejects with the error object", async () => {
+         const output = await render([unicast]);
+
+         expect(output).toContain("const result = await ipcRenderer.invoke('getIt', ...args);");
+         expect(output).toContain("if (result.ok) {\n            return result.value;\n         }");
+         expect(output).toContain("throw result.error;");
+      });
+
+      it("does not wrap the error in an Error, which contextBridge would strip of its fields", async () => {
+         const output = await render([unicast]);
+
+         expect(output).not.toContain("new Error");
+         expect(output).not.toContain("class ");
+      });
+
+      it("forwards the reply untouched when rawErrors is set", async () => {
+         const output = await render([unicast], { rawErrors: true });
+
+         expect(output).toContain(
+            "invoke: (...args: any[]) => ipcRenderer.invoke('getIt', ...args),",
+         );
+         expect(output).not.toContain("result");
+      });
+
+      it("leaves send channels as they are", async () => {
+         const output = await render([broadcast]);
+
+         expect(output).toContain("send: (...args: any[]) => ipcRenderer.send('sendIt', ...args),");
+         expect(output).not.toContain("result");
+      });
    });
 });

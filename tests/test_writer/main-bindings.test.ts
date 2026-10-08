@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
+import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
@@ -36,6 +37,7 @@ describe("MainBindingsWriter", () => {
          import type { IpcMainInvokeEvent } from "electron";
 
          export class IpcForbiddenError extends Error {
+            readonly code = 'IPC_FORBIDDEN';
             readonly channel: string;
             constructor(channel: string) {
                super(\`The sender of the message is not allowed to use the channel '\${channel}'\`);
@@ -81,6 +83,45 @@ describe("MainBindingsWriter", () => {
             return allowed;
          }
 
+         interface IpcErrorInfo {
+            name: string;
+            message: string;
+            code?: string | number;
+            data?: unknown;
+         }
+
+         type IpcEnvelope = { ok: true; value: unknown } | { ok: false; error: IpcErrorInfo };
+
+         function toIpcError(error: unknown): IpcErrorInfo {
+            try {
+               const source = typeof error === 'object' && error !== null ? (error as { [key: string]: unknown }) : null;
+               const name = source && typeof source.name === 'string' && source.name ? source.name : 'Error';
+               const message = source && typeof source.message === 'string' ? source.message : String(error);
+               const info: IpcErrorInfo = { name, message };
+               if (source && (typeof source.code === 'string' || typeof source.code === 'number')) {
+                  info.code = source.code;
+               }
+               if (source && source.data !== undefined) {
+                  try {
+                     info.data = structuredClone(source.data);
+                  } catch {
+                     // Data that cannot be cloned is left out.
+                  }
+               }
+               return info;
+            } catch {
+               return { name: 'Error', message: 'The handler failed with an unreadable error' };
+            }
+         }
+
+         async function settleInvoke(run: () => unknown): Promise<IpcEnvelope> {
+            try {
+               return { ok: true, value: await run() };
+            } catch (error) {
+               return { ok: false, error: toIpcError(error) };
+            }
+         }
+
          const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
 
          export const ipc = {
@@ -97,10 +138,12 @@ describe("MainBindingsWriter", () => {
                         electronIpcMain.removeHandler('vitestChannel');
                      }
                   };
-                  const listener = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
+                  const handler = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
                      guard(event);
                      return callback(event, arg1, arg2);
                   };
+                  const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>
+                     settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));
                   electronIpcMain.removeHandler('vitestChannel');
                   electronIpcMain.handle('vitestChannel', listener);
                   registeredHandlers['vitestChannel'] = listener;
@@ -118,11 +161,13 @@ describe("MainBindingsWriter", () => {
                         electronIpcMain.removeHandler('vitestChannel');
                      }
                   };
-                  const listener = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
+                  const handler = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
                      guard(event);
                      remove();
                      return callback(event, arg1, arg2);
                   };
+                  const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>
+                     settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));
                   electronIpcMain.removeHandler('vitestChannel');
                   electronIpcMain.handle('vitestChannel', listener);
                   registeredHandlers['vitestChannel'] = listener;
@@ -144,6 +189,7 @@ describe("MainBindingsWriter", () => {
          import type { IpcMainEvent } from "electron";
 
          export class IpcForbiddenError extends Error {
+            readonly code = 'IPC_FORBIDDEN';
             readonly channel: string;
             constructor(channel: string) {
                super(\`The sender of the message is not allowed to use the channel '\${channel}'\`);
@@ -281,7 +327,7 @@ describe("MainBindingsWriter", () => {
          "const listener = (event: IpcMainEvent, label: string, flag?: boolean, ...rest: number[]) => {",
       );
       expect(output).toContain("return callback(event, label, flag, ...rest);");
-      expect(output).toContain("const listener = (event: IpcMainInvokeEvent) => {");
+      expect(output).toContain("const handler = (event: IpcMainInvokeEvent) => {");
       expect(output).toContain("return callback(event);");
       expect(output).not.toMatch(/\bany\b/);
    });
@@ -381,7 +427,7 @@ describe("MainBindingsWriter", () => {
          const output = await render(unicast);
 
          expect(output).toContain(
-            "const listener = (event: IpcMainInvokeEvent, ...received: unknown[]) => {",
+            "const handler = (event: IpcMainInvokeEvent, ...received: unknown[]) => {",
          );
          expect(output).toMatch(
             /guard\(event\);\n\s+return validateArguments\(event, 'getIt', idArgs, received, false, \(args\) => \{\n\s+return call\(event, \.\.\.args\);/,
@@ -568,7 +614,7 @@ describe("MainBindingsWriter", () => {
          });
 
          // The listener only calls local functions, whose names the parameters do not take.
-         const listener = /const listener = \((.*)\) => \{\n([\s\S]*?)\n\s+\};/.exec(output);
+         const listener = /const handler = \((.*)\) => \{\n([\s\S]*?)\n\s+\};/.exec(output);
          expect(listener?.[1]).toContain("guard: string, remove: string");
          expect(listener?.[2]).toContain("_guard(event);");
          // Only the forwarded call names the parameters.
@@ -590,7 +636,8 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
-      expect(output).toContain("const _listener = (event: IpcMainInvokeEvent, listener: string)");
+      expect(output).toContain("const handler = (event: IpcMainInvokeEvent, listener: string)");
+      expect(output).toContain("const _listener = (event: IpcMainInvokeEvent, ...rest: unknown[])");
       expect(output).toContain("electronIpcMain.handle('clashIt', _listener);");
       expect(output).toContain("if (registeredHandlers['clashIt'] === _listener) {");
    });
@@ -722,5 +769,127 @@ describe("MainBindingsWriter", () => {
       expect(
          both.startsWith("import { ipcMain as electronIpcMain, MessageChannelMain } from"),
       ).toBe(true);
+   });
+
+   describe("error envelope", () => {
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = async (
+         channels: shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestMainBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("answers every invoke through settleInvoke by default", async () => {
+         const output = await render([unicast]);
+
+         expect(output).toContain(
+            "async function settleInvoke(run: () => unknown): Promise<IpcEnvelope>",
+         );
+         expect(output).toContain("const handler = (event: IpcMainInvokeEvent) => {");
+         expect(output).toContain(
+            "settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));",
+         );
+         expect(output).toContain("electronIpcMain.handle('getIt', listener);");
+         expect(output).toContain("registeredHandlers['getIt'] = listener;");
+      });
+
+      it("registers the wrapper, not the inner handler, so the disposer compares the right function", async () => {
+         const output = await render([unicast]);
+
+         expect(output).toContain("if (registeredHandlers['getIt'] === listener) {");
+         expect(output).not.toContain("=== handler");
+      });
+
+      it("writes the envelope helpers once, however many invoke channels there are", async () => {
+         const output = await render([unicast, { ...unicast, name: "getOther" }]);
+
+         expect(output.match(/function settleInvoke/g)).toHaveLength(1);
+         expect(output.match(/function toIpcError/g)).toHaveLength(1);
+         expect(output.match(/settleInvoke\(\(\) =>/g)).toHaveLength(4);
+      });
+
+      it("writes no envelope helper when there is no invoke channel", async () => {
+         const output = await render([broadcast]);
+
+         expect(output).not.toContain("settleInvoke");
+         expect(output).not.toContain("IpcErrorInfo");
+         expect(output).not.toContain("structuredClone");
+      });
+
+      it("leaves the listener of a send channel without the envelope", async () => {
+         const output = await render([unicast, broadcast]);
+
+         expect(output).toContain("electronIpcMain.on('sendIt', listener);");
+         expect(output.match(/settleInvoke\(\(\) =>/g)).toHaveLength(2);
+      });
+
+      it("registers the plain listener of an invoke channel when rawErrors is set", async () => {
+         const output = await render([unicast], { rawErrors: true });
+
+         expect(output).not.toContain("settleInvoke");
+         expect(output).not.toContain("toIpcError");
+         expect(output).toContain("const listener = (event: IpcMainInvokeEvent) => {");
+         expect(output).toContain("electronIpcMain.handle('getIt', listener);");
+      });
+
+      it("treats rawErrors: false like the default", async () => {
+         expect(await render([unicast], { rawErrors: false })).toBe(await render([unicast]));
+      });
+
+      it("sends only the name, message, code and data of an error, never the stack", async () => {
+         const output = await render([unicast]);
+
+         expect(output).not.toMatch(/\.stack\b/);
+         expect(output).toContain("const info: IpcErrorInfo = { name, message };");
+      });
+
+      it("gives the errors of the library a code and plain data", async () => {
+         const output = await render([
+            { ...unicast, validate: { name: "idArgs", exported: "idArgs", fromPath: "./v" } },
+         ]);
+
+         expect(output).toContain("readonly code = 'IPC_VALIDATION';");
+         expect(output).toContain("readonly code = 'IPC_FORBIDDEN';");
+         expect(output).toContain("return typeof key === 'symbol' ? String(key) : key;");
+      });
+
+      it("does not let a parameter of the signature shadow the names of the wrapper", async () => {
+         const output = await render([
+            { ...unicast, params: ["handler: string", "rest: number", "listener: boolean"] },
+         ]);
+
+         expect(output).toContain("const _handler = (event: IpcMainInvokeEvent, handler: string");
+         expect(output).toContain(
+            "const _listener = (event: IpcMainInvokeEvent, ..._rest: unknown[])",
+         );
+         expect(output).toContain(
+            "(_handler as (..._rest: unknown[]) => unknown)(event, ..._rest)",
+         );
+      });
+
+      it("reserves the names of the generated helpers, so that a schema type is renamed", () => {
+         const reserved = [
+            "IpcErrorInfo",
+            "IpcEnvelope",
+            "toIpcError",
+            "settleInvoke",
+            "structuredClone",
+         ];
+         const generator = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(unicast));
+         const names = (
+            generator as unknown as { getReservedNames(): string[] }
+         ).getReservedNames();
+
+         for (const name of reserved) {
+            expect(names).toContain(name);
+         }
+      });
    });
 });

@@ -61,10 +61,15 @@ export class MainBindingsWriter extends BaseWriter {
          "IpcArgumentsSchema",
          "IpcSchemaResult",
          "validateArguments",
+         "IpcErrorInfo",
+         "IpcEnvelope",
+         "toIpcError",
+         "settleInvoke",
          // Globals that the generated code uses.
          "Promise",
          "Error",
          "Array",
+         "structuredClone",
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -79,6 +84,7 @@ export class MainBindingsWriter extends BaseWriter {
       const channels: ChannelEntry[] = [];
       let usesHandlers = false;
       let usesValidation = false;
+      let usesEnvelope = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -90,6 +96,7 @@ export class MainBindingsWriter extends BaseWriter {
                electronTypeImportsSet.add(this.getEventType(spec));
                eventTypes.add(this.getEventType(spec));
                usesHandlers ||= spec.kind !== "Broadcast";
+               usesEnvelope ||= this.usesEnvelope(spec);
                const validator = this.importValidator(
                   parsedFileSpecs,
                   spec,
@@ -143,6 +150,9 @@ export class MainBindingsWriter extends BaseWriter {
             this.buildArgumentValidation([...eventTypes].sort(utils.compareStrings)),
          );
       }
+      if (usesEnvelope) {
+         bindingsExpression.push(this.buildErrorEnvelope());
+      }
       if (usesHandlers) {
          // The handler that each invoke channel has now, which its disposer compares against.
          // It uses no global, which a schema type could shadow, and has no prototype.
@@ -177,6 +187,64 @@ export class MainBindingsWriter extends BaseWriter {
       }
       return imported.local;
    }
+   /** Whether the results and errors of the handler of the channel are sent as an envelope. */
+   private usesEnvelope(spec: t.ChannelSpec): boolean {
+      return spec.kind === "Unicast" && !this.config.rawErrors;
+   }
+   /**
+    * The envelope of `invoke` channels: `settleInvoke` runs the handler and answers with
+    * `{ ok: true, value }`, or with `{ ok: false, error }` when anything fails, including the
+    * rejection of the sender and the validation of the arguments. `toIpcError` reduces what was
+    * thrown to `{ name, message, code?, data? }`. Electron reports a rejected handler to the
+    * renderer as the text `Error invoking remote method`, so these fields would be lost, and the
+    * stack never leaves the main process. `data` is dropped when it cannot be cloned, since it
+    * would otherwise fail the whole reply.
+    */
+   private buildErrorEnvelope(): string {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "",
+         "interface IpcErrorInfo {",
+         `${i1}name: string;`,
+         `${i1}message: string;`,
+         `${i1}code?: string | number;`,
+         `${i1}data?: unknown;`,
+         "}",
+         "",
+         "type IpcEnvelope = { ok: true; value: unknown } | { ok: false; error: IpcErrorInfo };",
+         "",
+         "function toIpcError(error: unknown): IpcErrorInfo {",
+         `${i1}try {`,
+         `${i2}const source = typeof error === 'object' && error !== null ? (error as { [key: string]: unknown }) : null;`,
+         `${i2}const name = source && typeof source.name === 'string' && source.name ? source.name : 'Error';`,
+         `${i2}const message = source && typeof source.message === 'string' ? source.message : String(error);`,
+         `${i2}const info: IpcErrorInfo = { name, message };`,
+         `${i2}if (source && (typeof source.code === 'string' || typeof source.code === 'number')) {`,
+         `${i3}info.code = source.code;`,
+         `${i2}}`,
+         `${i2}if (source && source.data !== undefined) {`,
+         `${i3}try {`,
+         `${i3}${i1}info.data = structuredClone(source.data);`,
+         `${i3}} catch {`,
+         `${i3}${i1}// Data that cannot be cloned is left out.`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i2}return info;`,
+         `${i1}} catch {`,
+         `${i2}return { name: 'Error', message: 'The handler failed with an unreadable error' };`,
+         `${i1}}`,
+         "}",
+         "",
+         "async function settleInvoke(run: () => unknown): Promise<IpcEnvelope> {",
+         `${i1}try {`,
+         `${i2}return { ok: true, value: await run() };`,
+         `${i1}} catch (error) {`,
+         `${i2}return { ok: false, error: toIpcError(error) };`,
+         `${i1}}`,
+         "}",
+         "",
+      ].join("\n");
+   }
    /**
     * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
     * to `on` listeners.
@@ -204,6 +272,7 @@ export class MainBindingsWriter extends BaseWriter {
       return [
          "",
          "export class IpcForbiddenError extends Error {",
+         `${i1}readonly code = 'IPC_FORBIDDEN';`,
          `${i1}readonly channel: string;`,
          `${i1}constructor(channel: string) {`,
          `${i2}super(\`The sender of the message is not allowed to use the channel '\${channel}'\`);`,
@@ -284,13 +353,23 @@ export class MainBindingsWriter extends BaseWriter {
          "}",
          "",
          "export class IpcValidationError extends Error {",
+         `${i1}readonly code = 'IPC_VALIDATION';`,
          `${i1}readonly channel: string;`,
          `${i1}readonly issues: readonly IpcValidationIssue[];`,
+         `${i1}/** The issues with plain paths, which can be sent to the renderer. */`,
+         `${i1}readonly data: { message: string; path?: (string | number)[] }[];`,
          `${i1}constructor(channel: string, issues: readonly IpcValidationIssue[]) {`,
          `${i2}super(\`The arguments of the channel '\${channel}' are invalid: \${issues.map((issue) => issue.message).join('; ')}\`);`,
          `${i2}this.name = 'IpcValidationError';`,
          `${i2}this.channel = channel;`,
          `${i2}this.issues = issues;`,
+         `${i2}this.data = issues.map((issue) => ({`,
+         `${i3}message: issue.message,`,
+         `${i3}path: issue.path?.map((segment) => {`,
+         `${i3}${i1}const key = typeof segment === 'object' ? segment.key : segment;`,
+         `${i3}${i1}return typeof key === 'symbol' ? String(key) : key;`,
+         `${i3}}),`,
+         `${i2}}));`,
          `${i1}}`,
          "}",
          "",
@@ -402,20 +481,31 @@ export class MainBindingsWriter extends BaseWriter {
          call: this.uniqueName("call", taken),
          spent: this.uniqueName("spent", taken),
       };
+      const envelope = this.usesEnvelope(spec);
+      const argsName = this.uniqueName("rest", taken);
+      const innerName = envelope ? this.uniqueName("handler", taken) : listenerName;
       const register = (method: string, once: boolean) => {
          const params = wrapperParams.filter(Boolean).join(", ");
          const check = isBroadcast
             ? [`${i3}if (!${guardName}(${eventName})) {`, `${i4}return;`, `${i3}}`]
             : [`${i3}${guardName}(${eventName});`];
-         const listener = validator
-            ? this.buildValidatedListener(names, check, once)
+         // With the envelope, the registered listener wraps the one that runs the handler.
+         const inner = validator
+            ? this.buildValidatedListener({ ...names, listener: innerName }, check, once)
             : [
-                 `${i2}const ${listenerName} = ${typeParams}(${params}) => {`,
+                 `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
                  ...check,
                  ...(once ? [`${i3}${removeName}();`] : []),
                  `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
                  `${i2}};`,
               ];
+         const listener = envelope
+            ? [
+                 ...inner,
+                 `${i2}const ${listenerName} = (${eventName}: ${eventType}, ...${argsName}: unknown[]) =>`,
+                 `${i3}settleInvoke(() => (${innerName} as (...${argsName}: unknown[]) => unknown)(${eventName}, ...${argsName}));`,
+              ]
+            : inner;
          const lines = [
             `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
             ...guard,

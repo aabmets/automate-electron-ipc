@@ -49,8 +49,8 @@ export class VitestBaseWriter extends BaseWriter {
 }
 
 export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[]) {
-      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
    public getTargetFilePath(): string {
       return "";
@@ -58,8 +58,8 @@ export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
 }
 
 export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[]) {
-      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
    public getTargetFilePath(): string {
       return "";
@@ -67,8 +67,8 @@ export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
 }
 
 export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[]) {
-      super({ codeIndent: 3 } as t.IPCResolvedConfig, pfsArray);
+   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
    public getTargetFilePath(): string {
       return "";
@@ -120,6 +120,8 @@ export interface SimpleChannel {
    trigger?: string;
    allowedOrigins?: string[];
    validate?: t.ValidatorRef;
+   /** The error types of an invoke channel, such as `"NotFoundError | AuthError"`. */
+   errors?: string;
 }
 
 /**
@@ -131,8 +133,13 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
       const definition = `(${(channel.params ?? []).join(", ")}) => ${channel.returnType ?? "void"}`;
       const { module, src } = parser.parseModule(`type T = ${definition};`);
       const alias = (module.body[0] as any).typeAnnotation;
-      const { trigger, params: _params, returnType: _returnType, ...rest } = channel;
-      return { ...rest, signature: parser.parseSignature(alias, src), ...(trigger && { trigger }) };
+      const { trigger, errors, params: _params, returnType: _returnType, ...rest } = channel;
+      return {
+         ...rest,
+         signature: parser.parseSignature(alias, src),
+         ...(trigger && { trigger }),
+         ...(errors && { errors: { definition: errors, customTypes: [] } }),
+      };
    });
    return [
       {

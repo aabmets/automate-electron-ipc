@@ -74,6 +74,7 @@ describe("getResolvedConfig", () => {
          projectUsesNodeNext: false,
          ipcDataDir: "src/autoipc",
          codeIndent: 3,
+         rawErrors: false,
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -92,6 +93,7 @@ describe("getResolvedConfig", () => {
                projectUsesNodeNext: true,
                ipcDataDir: "src/subpath/autoipc",
                codeIndent: 4,
+               rawErrors: true,
             },
          },
       });
@@ -103,6 +105,7 @@ describe("getResolvedConfig", () => {
          projectUsesNodeNext: true,
          ipcDataDir: "src/subpath/autoipc",
          codeIndent: 4,
+         rawErrors: true,
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,

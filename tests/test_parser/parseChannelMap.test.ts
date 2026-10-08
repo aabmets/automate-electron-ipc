@@ -541,9 +541,26 @@ describe("parseChannelMapModule", () => {
          expect(msg).toContain("given twice");
       });
 
-      it("rejects more than one type argument", () => {
-         const msg = parseError(wrap("chan: invoke<() => void, string>()"));
-         expect(msg).toContain("exactly one type argument");
+      it("rejects more than two type arguments of invoke, and a second one of the other verbs", () => {
+         expect(parseError(wrap("chan: invoke<() => void, Error, string>()"))).toContain(
+            "at most two type arguments",
+         );
+         for (const verb of ["send", "emit", "port"]) {
+            const msg = parseError(wrap(`chan: ${verb}<() => void, Error>()`));
+            expect(msg).toContain("exactly one type argument");
+         }
+      });
+
+      it("rejects the second type argument together with the as form", () => {
+         for (const entry of [
+            "chan: invoke<() => void, Error>() as () => void",
+            "chan: invoke<() => void>() as () => void",
+         ]) {
+            expect(parseError(wrap(entry))).toContain("Use only one of them");
+         }
+         expect(parseError(wrap("chan: invoke<() => void, Error>() as () => void"))).toContain(
+            "Error types need the type argument form",
+         );
       });
 
       it("rejects a signature that is not a function type", () => {
@@ -648,5 +665,78 @@ describe("parseChannelMapModule", () => {
          const out = parseMap('Channel("userChannel").RendererToMain.Broadcast({});');
          expect(out).toStrictEqual({ channelSpecs: [], channelMapExport: null });
       });
+   });
+});
+
+describe("parseChannelMapModule, error types", () => {
+   const withImports = (code: string) =>
+      parseMap(`import type { NotFoundError, AuthError } from "./errors";\n${code}`);
+   const one = (entry: string): Partial<t.ChannelSpec> =>
+      withImports(`export default defineChannels({ ${entry} });`).channelSpecs[0];
+
+   it("takes the second type argument of invoke as the error types", () => {
+      const spec = one(
+         "getUser: invoke<(id: number) => Promise<string>, NotFoundError | AuthError>()",
+      );
+
+      expect(spec.signature?.definition).toBe("(id: number) => Promise<string>");
+      expect(spec.errors).toMatchObject({
+         definition: "NotFoundError | AuthError",
+         customTypes: ["NotFoundError", "AuthError"],
+      });
+   });
+
+   it("has no errors without the second type argument", () => {
+      expect(one("getUser: invoke<() => void>()").errors).toBeUndefined();
+      expect(one("getUser: invoke() as () => void").errors).toBeUndefined();
+   });
+
+   it("keeps the text of the type as written, without the parentheses around it", () => {
+      const spec = one("getUser: invoke<() => void, ( NotFoundError | AuthError )>()");
+      expect(spec.errors?.definition).toBe("NotFoundError | AuthError");
+   });
+
+   it("records the position of each type name, for the writers to rename", () => {
+      const spec = one("getUser: invoke<() => void, NotFoundError | AuthError>()");
+
+      expect(spec.errors?.typeRefs).toStrictEqual([
+         { name: "NotFoundError", start: 0, end: 13 },
+         { name: "AuthError", start: 16, end: 25 },
+      ]);
+   });
+
+   it("collects the leftmost name of a qualified error type", () => {
+      const out = parseMap(
+         'import type * as Errors from "./errors";\n' +
+            "export default defineChannels({ getUser: invoke<() => void, Errors.NotFound>() });",
+      );
+
+      expect(out.channelSpecs[0].errors?.customTypes).toStrictEqual(["Errors.NotFound"]);
+      expect(out.channelSpecs[0].errors?.typeRefs).toStrictEqual([
+         { name: "Errors", start: 0, end: 6 },
+      ]);
+   });
+
+   it("collects an error class which the schema file declares", () => {
+      const out = parseMap(
+         "export class NotFound extends Error {}\n" +
+            "export default defineChannels({ getUser: invoke<() => void, NotFound>() });",
+      );
+
+      expect(out.channelSpecs[0].errors?.customTypes).toStrictEqual(["NotFound"]);
+   });
+
+   it("does not collect the built-in Error as a custom type", () => {
+      const spec = one("getUser: invoke<() => void, Error>()");
+
+      expect(spec.errors?.customTypes).toStrictEqual([]);
+      expect(spec.errors?.definition).toBe("Error");
+   });
+
+   it("keeps the errors apart from the types of the signature", () => {
+      const spec = one("getUser: invoke<(id: NotFoundError) => void, AuthError>()");
+
+      expect(spec.signature?.customTypes).toStrictEqual(["NotFoundError"]);
+      expect(spec.errors?.customTypes).toStrictEqual(["AuthError"]);
    });
 });

@@ -15,6 +15,12 @@ export interface IPCOptionalConfig {
    projectUsesNodeNext?: boolean;
    ipcDataDir?: string;
    codeIndent?: number;
+   /**
+    * Leaves the errors of `invoke` handlers to Electron, which reports them to the renderer as
+    * `Error invoking remote method 'X': Error: message`. Off by default: the error then reaches
+    * the renderer as an object with its name, message, code and data.
+    */
+   rawErrors?: boolean;
 }
 
 export interface IPCResolvedConfig {
@@ -26,6 +32,7 @@ export interface IPCResolvedConfig {
    projectUsesNodeNext: boolean;
    ipcDataDir: string;
    codeIndent: number;
+   rawErrors: boolean;
    ipcSchema: {
       path: string;
       stats: Stats | null;
@@ -85,6 +92,15 @@ export interface CallableSignature {
    typeRefs?: TypeRef[];
 }
 
+/** The error types that an `invoke` channel declares in its second type argument. */
+export interface ErrorsSpec {
+   /** The type as written, such as `NotFoundError | AuthError`. */
+   definition: string;
+   customTypes: string[];
+   /** The type references of `definition`, ordered by position, which writers may rename. */
+   typeRefs?: TypeRef[];
+}
+
 export type ChannelKind = "Broadcast" | "Unicast" | "Port";
 export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
 
@@ -103,6 +119,8 @@ export interface ChannelSpec {
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;
+   /** The error types that a RendererToMain Unicast channel may reject with. */
+   errors?: ErrorsSpec;
    trigger?: string;
    /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */
    allowedOrigins?: string[];

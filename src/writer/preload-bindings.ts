@@ -66,10 +66,29 @@ export class PreloadBindingsWriter extends BaseWriter {
       return out.join("\n");
    }
 
-   /** `ipc.<name>.invoke(...args)` for `invoke` channels and `ipc.<name>.send(...args)` for `send`. */
+   /**
+    * `ipc.<name>.invoke(...args)` for `invoke` channels and `ipc.<name>.send(...args)` for `send`.
+    * An invoke gets the envelope of the main process: it returns the value of a successful reply
+    * and rejects with the error object of a failed one. It rejects with the plain object
+    * `{ name, message, code?, data? }`, not with an `Error`, since contextBridge copies a thrown
+    * `Error` as a new `Error` with only the message and the stack, and loses the other fields.
+    */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
       const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
+      if (spec.kind === "Unicast" && !this.config.rawErrors) {
+         const [, i1, i2, i3] = this.indents;
+         const implementation = [
+            "async (...args: any[]) => {",
+            `${i2}const result = await ${ipcRenderer};`,
+            `${i2}if (result.ok) {`,
+            `${i3}return result.value;`,
+            `${i2}}`,
+            `${i2}throw result.error;`,
+            `${i1}}`,
+         ].join("\n");
+         return this.buildChannel(spec.name, method, implementation);
+      }
       return this.buildChannel(spec.name, method, `(...args: any[]) => ${ipcRenderer}`);
    }
 

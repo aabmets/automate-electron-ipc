@@ -112,8 +112,19 @@ export class BaseWriter {
          const refs = spec.signature.typeRefs ?? [];
          const rename = (text: string, offset: number | undefined) =>
             offset === undefined ? text : renameTypeReferences(text, offset, refs, renames);
+         const errors = spec.errors && {
+            ...spec.errors,
+            definition: renameTypeReferences(
+               spec.errors.definition,
+               0,
+               spec.errors.typeRefs ?? [],
+               renames,
+            ),
+            typeRefs: [],
+         };
          return {
             ...spec,
+            ...(errors ? { errors } : {}),
             signature: {
                ...spec.signature,
                definition: rename(definition, 0),

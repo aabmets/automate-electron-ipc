@@ -194,6 +194,73 @@ describe("validateChannelSpecs", () => {
    });
 });
 
+describe("validateOptionalConfig, rawErrors", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+
+   it("accepts a boolean, and no value at all", () => {
+      for (const rawErrors of [true, false, undefined]) {
+         expect(() => vld.validateOptionalConfig({ ...config, rawErrors })).not.toThrowError();
+      }
+   });
+
+   it.each(["true", 1, null, {}])("rejects %j, since it is not a boolean", (rawErrors) => {
+      const value = rawErrors as unknown as boolean;
+      expect(() => vld.validateOptionalConfig({ ...config, rawErrors: value })).toThrowError(
+         /rawErrors/,
+      );
+   });
+});
+
+describe("validateChannelSpecs, errors", () => {
+   const errors = { definition: "NotFoundError | AuthError", customTypes: ["NotFoundError"] };
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      value: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      return [{ ...spec, errors: value } as Partial<t.ChannelSpec>];
+   };
+
+   it("accepts the error types of a Unicast channel", () => {
+      const specs = make("RendererToMain", "Unicast", errors);
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
+
+   it("rejects error types on every other channel", () => {
+      for (const [direction, kind] of [
+         ["RendererToMain", "Broadcast"],
+         ["MainToRenderer", "Broadcast"],
+         ["RendererToRenderer", "Port"],
+      ] as const) {
+         const specs = make(direction, kind, errors);
+         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/errors/);
+      }
+   });
+
+   it("rejects error types which lack the text or the custom types", () => {
+      for (const value of [{ definition: "X" }, { customTypes: [] }, "X", 5]) {
+         const specs = make("RendererToMain", "Unicast", value);
+         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/errors/);
+      }
+   });
+});
+
+describe("validateTypeSpecs, error types", () => {
+   it("requires a type that only the error types of a channel use to be exported", () => {
+      const channel = {
+         ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"),
+         errors: { definition: "Hidden.Kind", customTypes: ["Hidden.Kind"] },
+      } as t.ChannelSpec;
+      const spec = { name: "Hidden", kind: "type", generics: null, isExported: false };
+
+      expect(() => vld.validateTypeSpecs([spec], [channel])).toThrowError(
+         /Type 'Hidden' is used by channel .* must be exported/,
+      );
+      expect(() => vld.validateTypeSpecs([{ ...spec, isExported: true }], [channel])).not.toThrow();
+   });
+});
+
 describe("validateChannelSpecs, allowedOrigins", () => {
    const make = (
       direction: t.ChannelDirection,

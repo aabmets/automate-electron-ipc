@@ -78,7 +78,7 @@ describe("generated preload script", () => {
 
    it("forwards invoke channels to ipcRenderer.invoke and returns its promise", async () => {
       const { exposed, electron } = await loadPreload("all-kinds");
-      electron.ipcRenderer.invoke.mockResolvedValue("Ann");
+      electron.ipcRenderer.invoke.mockResolvedValue({ ok: true, value: "Ann" });
 
       await expect(exposed.ipc.getUser.invoke(7)).resolves.toBe("Ann");
       expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith("getUser", 7);
@@ -223,6 +223,24 @@ describe("generated main process bindings", () => {
       };
    }
 
+   /**
+    * Turns the reply of a generated invoke handler into what the renderer sees: the value of an
+    * ok envelope, or a rejection carrying `name`, `message`, `code` and `data` of the error.
+    */
+   function unwrapEnvelope(handler: (...args: unknown[]) => unknown) {
+      return async (...args: unknown[]) => {
+         const reply = (await handler(...args)) as {
+            ok: boolean;
+            value?: unknown;
+            error?: { name: string; message: string };
+         };
+         if (reply.ok) {
+            return reply.value;
+         }
+         throw Object.assign(new Error(reply.error?.message), reply.error);
+      };
+   }
+
    /** Backs the fake ipcMain with a real emitter, so that registrations are observable. */
    async function loadMainWithEmitter(
       fixture = "all-kinds",
@@ -230,31 +248,37 @@ describe("generated main process bindings", () => {
    ) {
       const { EventEmitter } = await import("node:events");
       const emitter = new EventEmitter();
+      // What the renderer gets: the value of an ok envelope, or a rejection which carries the
+      // fields of the error object. `envelopes` holds the replies as the main process sends them.
       const handlers = new Map<string, (...args: unknown[]) => unknown>();
+      const envelopes = new Map<string, (...args: unknown[]) => unknown>();
       const electron = createFakeElectron();
       Object.assign(electron.ipcMain, {
          on: emitter.on.bind(emitter),
          once: emitter.once.bind(emitter),
          off: emitter.off.bind(emitter),
          handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
-            if (handlers.has(channel)) {
+            if (envelopes.has(channel)) {
                throw new Error(`Attempted to register a second handler for '${channel}'`);
             }
-            handlers.set(channel, handler);
+            envelopes.set(channel, handler);
+            handlers.set(channel, unwrapEnvelope(handler));
          },
          handleOnce: (channel: string, handler: (...args: unknown[]) => unknown) => {
             electron.ipcMain.handle(channel, (...args: unknown[]) => {
                handlers.delete(channel);
+               envelopes.delete(channel);
                return handler(...args);
             });
          },
          removeHandler: (channel: string) => {
             handlers.delete(channel);
+            envelopes.delete(channel);
          },
       });
       project = await runFixture(fixture);
       const generated = loadGenerated(project.generated["main.ts"], { electron, ...modules });
-      return { emitter, handlers, ipc: generated.ipc, generated };
+      return { emitter, handlers, envelopes, ipc: generated.ipc, generated };
    }
 
    it("registers a handle wrapper which passes the event and arguments to the callback", async () => {
@@ -267,7 +291,7 @@ describe("generated main process bindings", () => {
       const [channel, wrapper] = electron.ipcMain.handle.mock.calls[0];
       expect(channel).toBe("getUser");
       const event = { sender: "renderer" };
-      await expect(wrapper(event, 3)).resolves.toBe("user 3");
+      await expect(wrapper(event, 3)).resolves.toStrictEqual({ ok: true, value: "user 3" });
       expect(callback).toHaveBeenCalledWith(event, 3);
       expect(electron.ipcMain.on).not.toHaveBeenCalled();
    });
@@ -277,7 +301,10 @@ describe("generated main process bindings", () => {
       ipc.getTime.handle(() => Promise.reject(new Error("no clock")));
 
       const [, wrapper] = electron.ipcMain.handle.mock.calls[0];
-      await expect(wrapper({})).rejects.toThrowError("no clock");
+      await expect(wrapper({})).resolves.toStrictEqual({
+         ok: false,
+         error: { name: "Error", message: "no clock" },
+      });
    });
 
    it("registers an on wrapper which spreads rest arguments", async () => {
@@ -505,9 +532,12 @@ describe("generated main process bindings", () => {
          const callback = vi.fn(async () => "secret");
          ipc.getSecret.handle(callback);
 
-         const call = () => secret(handlers, frame("https://example.com"));
-         expect(call).toThrowError(generated.IpcForbiddenError);
-         expect(call).toThrowError(expect.objectContaining({ channel: "getSecret" }));
+         await expect(secret(handlers, frame("https://example.com"))).rejects.toMatchObject({
+            name: "IpcForbiddenError",
+            code: "IPC_FORBIDDEN",
+            message: expect.stringContaining("'getSecret'"),
+         });
+         expect(generated.IpcForbiddenError).toBeTypeOf("function");
          expect(callback).not.toHaveBeenCalled();
       });
 
@@ -549,7 +579,8 @@ describe("generated main process bindings", () => {
             frame(["app://."]),
          ]) {
             emitter.emit("logLine", event, "text");
-            expect(() => secret(handlers, event)).toThrowError(/not allowed/);
+            // biome-ignore lint/performance/noAwaitInLoops: the cases are checked in order
+            await expect(secret(handlers, event)).rejects.toThrowError(/not allowed/);
          }
          expect(callback).not.toHaveBeenCalled();
       });
@@ -574,7 +605,7 @@ describe("generated main process bindings", () => {
             const { handlers, ipc } = await load();
             ipc.getSecret.handle(async () => "secret");
 
-            expect(() => secret(handlers, frame(origin))).toThrowError(/not allowed/);
+            await expect(secret(handlers, frame(origin))).rejects.toThrowError(/not allowed/);
          },
       );
 
@@ -621,8 +652,10 @@ describe("generated main process bindings", () => {
          ipc.getSecret.handle(async () => "secret");
          ipc.getPublic.handle(async () => 7);
 
-         expect(() => secret(handlers, frame("app://."))).toThrowError(/not allowed/);
-         expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+         await expect(secret(handlers, frame("app://."))).rejects.toThrowError(/not allowed/);
+         await expect(handlers.get("getPublic")?.(frame("app://."))).rejects.toThrowError(
+            /not allowed/,
+         );
       });
 
       it("rejects an origin which the channel does not allow, even when the global validator says yes", async () => {
@@ -630,7 +663,9 @@ describe("generated main process bindings", () => {
          generated.configureIpc({ validateSender: () => true });
          ipc.getSecret.handle(async () => "secret");
 
-         expect(() => secret(handlers, frame("https://example.com"))).toThrowError(/not allowed/);
+         await expect(secret(handlers, frame("https://example.com"))).rejects.toThrowError(
+            /not allowed/,
+         );
          await expect(secret(handlers, frame("app://."))).resolves.toBe("secret");
       });
 
@@ -640,7 +675,7 @@ describe("generated main process bindings", () => {
          generated.configureIpc({ validateSender });
          ipc.getPublic.handle(async () => 7);
 
-         expect(() => handlers.get("getPublic")?.({ senderFrame: null })).toThrowError(
+         await expect(handlers.get("getPublic")?.({ senderFrame: null })).rejects.toThrowError(
             /not allowed/,
          );
          expect(validateSender).not.toHaveBeenCalled();
@@ -659,7 +694,10 @@ describe("generated main process bindings", () => {
             () => undefined,
          ]) {
             generated.configureIpc({ validateSender });
-            expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+            // biome-ignore lint/performance/noAwaitInLoops: each case replaces the validator
+            await expect(handlers.get("getPublic")?.(frame("app://."))).rejects.toThrowError(
+               /not allowed/,
+            );
          }
       });
 
@@ -671,7 +709,7 @@ describe("generated main process bindings", () => {
          ipc.logLine.on(vi.fn());
 
          const bad = frame("https://example.com");
-         expect(() => secret(handlers, bad)).toThrowError(/not allowed/);
+         await expect(secret(handlers, bad)).rejects.toThrowError(/not allowed/);
          emitter.emit("logLine", bad, "text");
          await secret(handlers, frame("app://."));
          emitter.emit("logLine", frame("app://."), "text");
@@ -693,7 +731,9 @@ describe("generated main process bindings", () => {
          ipc.getSecret.handle(async () => "secret");
          ipc.logLine.on(callback);
 
-         expect(() => secret(handlers, frame("https://example.com"))).toThrowError(/not allowed/);
+         await expect(secret(handlers, frame("https://example.com"))).rejects.toThrowError(
+            /not allowed/,
+         );
          expect(() => emitter.emit("logLine", frame("https://example.com"), "x")).not.toThrow();
          expect(callback).not.toHaveBeenCalled();
       });
@@ -702,7 +742,9 @@ describe("generated main process bindings", () => {
          const { generated, handlers, ipc } = await load();
          ipc.getPublic.handle(async () => 7);
          generated.configureIpc({ validateSender: () => false });
-         expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+         await expect(handlers.get("getPublic")?.(frame("app://."))).rejects.toThrowError(
+            /not allowed/,
+         );
 
          generated.configureIpc({});
 
@@ -717,7 +759,7 @@ describe("generated main process bindings", () => {
          ipc.logLine.once(heard);
          const bad = frame("https://example.com");
 
-         expect(() => secret(handlers, bad)).toThrowError(/not allowed/);
+         await expect(secret(handlers, bad)).rejects.toThrowError(/not allowed/);
          emitter.emit("logLine", bad, "x");
          expect(handlers.has("getSecret")).toBe(true);
          expect(emitter.listenerCount("logLine")).toBe(1);
@@ -787,7 +829,7 @@ describe("generated main process bindings", () => {
          const callback = vi.fn((_event: unknown, value: number) => value + 1);
          ipc.getCount.handle(callback);
 
-         expect(call(handlers, 4)).toBe(5);
+         await expect(call(handlers, 4)).resolves.toBe(5);
          expect(id.validate).toHaveBeenCalledWith([4]);
          expect(callback).toHaveBeenCalledWith({}, 4);
       });
@@ -796,8 +838,8 @@ describe("generated main process bindings", () => {
          const { handlers, ipc, id } = await load();
          ipc.getCount.handle(vi.fn());
 
-         expect(() => call(handlers, 4, "extra")).toThrowError(/expected one number/);
-         expect(() => call(handlers)).toThrowError(/expected one number/);
+         await expect(call(handlers, 4, "extra")).rejects.toThrowError(/expected one number/);
+         await expect(call(handlers)).rejects.toThrowError(/expected one number/);
          expect(id.validate.mock.calls).toStrictEqual([[[4, "extra"]], [[]]]);
       });
 
@@ -808,7 +850,7 @@ describe("generated main process bindings", () => {
          const callback = vi.fn();
          ipc.getCount.handle(callback);
 
-         call(handlers, "21");
+         await call(handlers, "21");
 
          expect(callback).toHaveBeenCalledWith({}, 42);
       });
@@ -820,22 +862,33 @@ describe("generated main process bindings", () => {
          const callback = vi.fn();
          ipc.getCount.handle(callback);
 
-         const error = (() => {
-            try {
-               call(handlers, "x");
-            } catch (thrown) {
-               return thrown as InstanceType<typeof generated.IpcValidationError>;
-            }
-         })();
+         const error = await call(handlers, "x").catch((thrown: unknown) => thrown);
 
-         expect(error).toBeInstanceOf(generated.IpcValidationError);
-         expect(error?.channel).toBe("getCount");
-         expect(error?.issues).toStrictEqual([
-            { message: "bad id", path: ["0"] },
-            { message: "again" },
-         ]);
-         expect(error?.message).toContain("bad id; again");
+         expect(generated.IpcValidationError).toBeTypeOf("function");
+         expect(error).toMatchObject({
+            name: "IpcValidationError",
+            code: "IPC_VALIDATION",
+            data: [{ message: "bad id", path: ["0"] }, { message: "again" }],
+         });
+         expect((error as Error).message).toContain("bad id; again");
          expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("sends the paths of the issues as plain strings and numbers, which can be cloned", async () => {
+         const symbol = Symbol("secret");
+         const { handlers, ipc } = await load({
+            id: () => ({
+               issues: [{ message: "bad", path: [symbol, { key: 2 }, { key: symbol }, "name"] }],
+            }),
+         });
+         ipc.getCount.handle(vi.fn());
+
+         const error = await call(handlers, "x").catch((thrown: unknown) => thrown);
+
+         expect((error as { data: unknown }).data).toStrictEqual([
+            { message: "bad", path: ["Symbol(secret)", 2, "Symbol(secret)", "name"] },
+         ]);
+         expect(() => structuredClone((error as { data: unknown }).data)).not.toThrow();
       });
 
       it("drops an invalid send, and delivers a valid one with its rest arguments", async () => {
@@ -909,11 +962,10 @@ describe("generated main process bindings", () => {
          const callback = vi.fn();
          ipc.getCount.handle(callback);
 
-         const result = await Promise.resolve()
-            .then(() => call(handlers, 1))
-            .catch((error: unknown) => error);
+         const result = await call(handlers, 1).catch((error: unknown) => error);
 
-         expect(result).toBeInstanceOf(generated.IpcValidationError);
+         expect(generated.IpcValidationError).toBeTypeOf("function");
+         expect(result).toMatchObject({ name: "IpcValidationError" });
          expect(String((result as Error).message)).not.toContain("secret");
          expect(callback).not.toHaveBeenCalled();
       });
@@ -927,7 +979,7 @@ describe("generated main process bindings", () => {
          const callback = vi.fn();
          ipc.getCount.handle(callback);
 
-         expect(() => call(handlers, 1)).toThrowError(/invalid/);
+         await expect(call(handlers, 1)).rejects.toThrowError(/invalid/);
          expect(callback).not.toHaveBeenCalled();
       });
 
@@ -935,13 +987,14 @@ describe("generated main process bindings", () => {
          const { generated, handlers, ipc, id } = await load();
          ipc.getSecret.handle(vi.fn());
 
-         const forbidden = () =>
-            handlers.get("getSecret")?.({ senderFrame: { origin: "https://evil" } }, 1);
-         expect(forbidden).toThrowError(generated.IpcForbiddenError);
+         await expect(
+            handlers.get("getSecret")?.({ senderFrame: { origin: "https://evil" } }, 1),
+         ).rejects.toMatchObject({ name: "IpcForbiddenError" });
+         expect(generated.IpcForbiddenError).toBeTypeOf("function");
          expect(id.validate).not.toHaveBeenCalled();
-         expect(() => handlers.get("getSecret")?.(inApp, "bad")).toThrowError(
-            generated.IpcValidationError,
-         );
+         await expect(handlers.get("getSecret")?.(inApp, "bad")).rejects.toMatchObject({
+            name: "IpcValidationError",
+         });
       });
 
       it("reports each rejection to onRejected, with the reason, and never an accepted call", async () => {
@@ -953,9 +1006,9 @@ describe("generated main process bindings", () => {
          ipc.getCount.handle(vi.fn());
          ipc.logLine.on(vi.fn());
 
-         call(handlers, 1);
+         await call(handlers, 1);
          expect(onRejected).not.toHaveBeenCalled();
-         expect(() => call(handlers, "bad")).toThrowError();
+         await expect(call(handlers, "bad")).rejects.toThrowError();
          emitter.emit("logLine", { id: "evt" }, "x");
 
          expect(onRejected).toHaveBeenCalledTimes(2);
@@ -973,7 +1026,7 @@ describe("generated main process bindings", () => {
          generated.configureIpc({ onRejected });
          ipc.getSecret.handle(vi.fn());
 
-         expect(() => handlers.get("getSecret")?.({ senderFrame: null }, 1)).toThrowError();
+         await expect(handlers.get("getSecret")?.({ senderFrame: null }, 1)).rejects.toThrowError();
 
          expect(onRejected.mock.calls[0][2]).toBeInstanceOf(generated.IpcForbiddenError);
       });
@@ -989,7 +1042,8 @@ describe("generated main process bindings", () => {
          ipc.getCount.handle(callback);
          ipc.logLine.on(callback);
 
-         expect(() => call(handlers, "bad")).toThrowError(generated.IpcValidationError);
+         await expect(call(handlers, "bad")).rejects.toMatchObject({ name: "IpcValidationError" });
+         expect(generated.IpcValidationError).toBeTypeOf("function");
          expect(() => emitter.emit("logLine", {}, "x")).not.toThrow();
          expect(callback).not.toHaveBeenCalled();
       });
@@ -1014,12 +1068,12 @@ describe("generated main process bindings", () => {
          ipc.getCount.handleOnce(answer);
          ipc.logLine.once(heard);
 
-         expect(() => call(handlers, "bad")).toThrowError(/invalid/);
+         await expect(call(handlers, "bad")).rejects.toThrowError(/invalid/);
          emitter.emit("logLine", {}, 5);
          expect(handlers.has("getCount")).toBe(true);
          expect(emitter.listenerCount("logLine")).toBe(1);
 
-         expect(call(handlers, 1)).toBe("done");
+         await expect(call(handlers, 1)).resolves.toBe("done");
          emitter.emit("logLine", {}, "y");
          emitter.emit("logLine", {}, "z");
 

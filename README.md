@@ -51,7 +51,8 @@ If no configuration is provided, IPC automation will use the default values as s
       "autoipc": {
          "projectUsesNodeNext": false,
          "ipcDataDir": "src/autoipc",
-         "codeIndent": 3
+         "codeIndent": 3,
+         "rawErrors": false
       }
    }
 }
@@ -61,6 +62,7 @@ Config explanation:
  - `projectUsesNodeNext` - Must be set to true when `moduleResolution` in `tsconfig.json` is `nodenext`.
  - `ipcDataDir` - Relative path to a directory within the users project which will contain the IPC schema expressions and where the IPC bindings will be generated into.
  - `codeIndent` - How many spaces will one code indentation level have within the generated IPC bindings.
+ - `rawErrors` - Set to true to leave the errors of `invoke` handlers to Electron. See [Errors](#errors).
 
 
 ### Getting Started
@@ -278,7 +280,8 @@ The generated `main.ts` imports `getUserArgs` and runs it on the arguments as th
 the sender check and before your handler. The handler receives the output of the schema, so a
 transforming schema (a default, a coercion, stripped keys) is honored. An invalid `invoke` throws an
 `IpcValidationError` with the `issues` of the schema, which the renderer sees as a rejected promise
-(Electron passes on the message only). An invalid `send` is dropped. `onRejected` is called for both
+with the code `IPC_VALIDATION` and the issues as `data` (see [Errors](#errors)). An invalid `send`
+is dropped. `onRejected` is called for both
 and receives the error as its third argument, an `IpcValidationError` or an `IpcForbiddenError`.
 A schema which throws, rejects or answers with anything but an array of arguments counts as a
 failure, and the message of such an error is not passed on. A synchronous schema keeps the call
@@ -287,6 +290,72 @@ call. The generated code does not depend on any validation library.
 
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
+
+#### Errors
+
+Electron reports an error that an `invoke` handler throws to the renderer as the text
+`Error invoking remote method 'getUser': Error: not found`. The class, the `code` and any other
+field are lost. The generated bindings keep them: the main process answers every `invoke` with
+`{ ok: true, value }` or `{ ok: false, error }`, and the renderer's `ipc.<name>.invoke` returns the
+value or rejects with the error:
+
+```typescript
+class NotFoundError extends Error {
+   name = "NotFoundError";
+   code = "NOT_FOUND";
+   constructor(readonly data: { id: number }) {
+      super("User not found");
+   }
+}
+
+ipc.getUser.handle(async (_event, id) => {
+   throw new NotFoundError({ id });
+});
+```
+
+```typescript
+try {
+   await ipc.getUser.invoke(7);
+} catch (error) {
+   // { name: "NotFoundError", message: "User not found", code: "NOT_FOUND", data: { id: 7 } }
+}
+```
+
+The rejection value is a plain object with `name`, `message`, and, when the thrown error has them,
+`code` (a string or a number) and `data`. It is not an `Error` and has no stack, since `contextBridge`
+copies a thrown `Error` with only its message and stack, and so loses `name`, `code` and `data`.
+Check `error.name` or `error.code` instead of `instanceof`. `data` is copied with the structured
+clone algorithm, and is left out when it cannot be cloned (it holds a function, for example). Anything
+that is thrown but is not an object, such as a string, becomes the `message`. A call from a sender
+that is not allowed, and one with invalid arguments, reject the same way, with the codes
+`IPC_FORBIDDEN` and `IPC_VALIDATION`. A call to a channel with no registered handler still fails with
+the message of Electron.
+
+Declare the errors that a handler may throw in a second type argument of `invoke`. They are
+documented in the generated `window.d.ts`, and the global type `IpcError<E>` describes the object
+that the promise is rejected with:
+
+```typescript
+export default defineChannels({
+   getUser: invoke<(id: number) => Promise<User>, NotFoundError | AuthError>(),
+});
+```
+
+```typescript
+catch (error) {
+   const failure = error as IpcError<NotFoundError | AuthError>;
+   if (failure.name === "NotFoundError") {
+      console.log(failure.data.id); // typed from NotFoundError
+   }
+}
+```
+
+`IpcError` follows the `name`, `code` and `data` types of the declared classes, so give them literal
+types, as `NotFoundError` above does with `name = "NotFoundError"`, to tell them apart by `name`. The
+`as` form cannot declare error types.
+
+Set `rawErrors` to `true` in the config to turn all of this off: handlers then answer with their value
+and Electron reports their errors as it always did.
 
 #### Migrating from 0.2
 
@@ -310,6 +379,11 @@ subscribers, call `.on()` more than once.
 
 `window.ipc` keeps working, since `ipc` is a global variable.
 
+An `invoke` that fails now rejects with the error object described in [Errors](#errors), not with an
+`Error` whose message is Electron's `Error invoking remote method`. Code that reads that message
+needs to read `error.message`, which now holds the message of the handler's error. Set `rawErrors` to
+keep the old behavior.
+
 
 ### The `as` Form
 
@@ -324,5 +398,5 @@ export default defineChannels({
 ```
 
 What it loses: the type argument form lets TypeScript check the config against the signature,
-and it is the only form which will be able to carry error types. In the `as` form the config is not
-checked against the signature.
+and it is the only form which can declare error types. In the `as` form the config is not checked
+against the signature.

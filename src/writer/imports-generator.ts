@@ -235,7 +235,10 @@ export class ImportsGenerator {
     */
    public getRenames(pfs: t.ParsedFileSpecs): ReadonlyMap<string, string> {
       for (const spec of pfs.specs.channelSpecArray) {
-         for (const customType of spec.signature.customTypes) {
+         for (const customType of [
+            ...spec.signature.customTypes,
+            ...(spec.errors?.customTypes ?? []),
+         ]) {
             this.resolve(pfs, customType);
          }
       }

@@ -40,7 +40,7 @@ describe("ipcAutomation, single schema file", () => {
       expect(generated["window.d.ts"]).toContain("echoUserName: {\n      send:");
       expect(generated["window.d.ts"]).toContain('import type { User } from "./schema";');
       expect(generated["window.d.ts"]).toContain(
-         "getUser: {\n      invoke: (id: number) => Promise<User>;",
+         "getUser: {\n      /** @throws {IpcError} */\n      invoke: (id: number) => Promise<User>;",
       );
    });
 
@@ -716,7 +716,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
          '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
       );
       expect(generated["main.ts"]).toContain(
-         `const listener = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => {`,
+         `const handler = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => {`,
       );
       expect(methodLine(generated["window.d.ts"], "getÜser", "invoke")).toContain(
          '(id: "ñ", size: Größe) => Promise<Üser>',
@@ -738,7 +738,10 @@ describe("ipcAutomation, locale-independent output order", () => {
    // Regression for T67: members were ordered with `localeCompare`, which depends on the locale
    // of the process and compared the whole callable, so `sendItem` and `sendItem2` swapped places.
    const members = (text: string): string[] =>
-      Array.from(text.matchAll(/^ {3}([\p{L}\p{N}_$]+): /gmu), (match) => match[1]);
+      Array.from(
+         text.matchAll(/^ {3}([\p{L}\p{N}_$]+): (?=\{|getPortObject)/gmu),
+         (match) => match[1],
+      );
 
    // Order of the code units: `L` < `l`, `2` < `X` < `_`, and `ö` after all ASCII letters.
    const names = [

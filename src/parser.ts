@@ -284,12 +284,19 @@ interface VerbInfo {
    kind: t.ChannelKind;
    direction: t.ChannelDirection;
    options: string[];
+   /** Whether the verb takes the error types as a second type argument. */
+   errors?: boolean;
 }
 
 const VERBS = new Map<string, VerbInfo>([
    [
       "invoke",
-      { kind: "Unicast", direction: "RendererToMain", options: ["allowedOrigins", "validate"] },
+      {
+         kind: "Unicast",
+         direction: "RendererToMain",
+         options: ["allowedOrigins", "validate"],
+         errors: true,
+      },
    ],
    [
       "send",
@@ -775,6 +782,27 @@ function parseChannelConfig(
 }
 
 /**
+ * Parses the second type argument of `invoke`, the error types of the channel. The text is kept
+ * as written, and the types that it names are collected like the types of a signature, so that
+ * the generated `window.d.ts` imports them.
+ */
+function parseErrors(node: AstNode, ctx: ParseContext): t.ErrorsSpec {
+   const type = unwrapTypeParentheses(node);
+   const set = new Set<string>();
+   const spanRefs: SpanRef[] = [];
+   collectCustomTypes(type, ctx.src, set, new Set(), ctx.locals, spanRefs);
+   const offsetOf = (position: number) =>
+      ctx.src.text({ span: { ...type.span, end: position } }).length;
+   return {
+      definition: ctx.src.text(type as { span: Span }),
+      customTypes: Array.from(set),
+      typeRefs: spanRefs
+         .map(({ name, span }) => ({ name, start: offsetOf(span.start), end: offsetOf(span.end) }))
+         .sort((a, b) => a.start - b.start),
+   };
+}
+
+/**
  * Parses one `Name: verb<Sig>(config?)` or `Name: verb(config?) as Sig` property.
  */
 function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.ChannelSpec> {
@@ -811,15 +839,20 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
 
    const config = parseChannelConfig(value, verb, info, name, ctx);
    const typeArgs: AstNode[] = value.typeArguments?.params ?? [];
-   if (typeArgs.length > 1) {
-      throw fail(`'${verb}' takes exactly one type argument, the signature.`);
-   } else if (typeArgs.length === 1 && asType) {
+   const maxTypeArgs = info.errors ? 2 : 1;
+   if (typeArgs.length > maxTypeArgs) {
+      throw fail(
+         info.errors
+            ? `'${verb}' takes at most two type arguments, the signature and the error types.`
+            : `'${verb}' takes exactly one type argument, the signature.`,
+      );
+   } else if (typeArgs.length > 0 && asType) {
       throw fail(
          `the signature is given twice, as a type argument and with 'as'. ` +
-            `Use only one of them.`,
+            `Use only one of them. Error types need the type argument form.`,
       );
    }
-   const signature = asType ?? (typeArgs.length === 1 ? unwrapTypeParentheses(typeArgs[0]) : null);
+   const signature = asType ?? (typeArgs.length > 0 ? unwrapTypeParentheses(typeArgs[0]) : null);
    if (!signature) {
       throw fail(
          `no signature. Write ${verb}<(arg: string) => void>() ` +
@@ -838,6 +871,7 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       kind: info.kind,
       direction: info.direction,
       signature: parseSignature(signature as unknown as TsFunctionType, ctx.src, ctx.locals),
+      ...(typeArgs.length === 2 ? { errors: parseErrors(typeArgs[1], ctx) } : {}),
       ...config,
    };
 }

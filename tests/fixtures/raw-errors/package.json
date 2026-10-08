@@ -1,0 +1,10 @@
+{
+   "name": "fixture-raw-errors",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "rawErrors": true
+      }
+   }
+}
