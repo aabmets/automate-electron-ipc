@@ -1,0 +1,9 @@
+{
+   "name": "fixture-no-channels",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -18,7 +18,8 @@ export class RendererTypesWriter extends BaseWriter {
       return this.config.rendererTypesFilePath;
    }
    protected renderEmptyFileContents(): string {
-      return `\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
+      // `declare global` is only valid inside a module, hence the empty export.
+      return `\nexport {};\n\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
    }
    protected renderFileContents(): string {
       const out: string[] = [];

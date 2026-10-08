@@ -18,11 +18,11 @@ import { describe, expect, it } from "vitest";
 describe("PreloadBindingsWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
 
-   it("should write empty Window declaration when pfsArray is empty", async () => {
+   it("should write empty Window declaration as a module when pfsArray is empty", async () => {
       const obj = new shared.VitestRendererTypesWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "\ndeclare global {\n   interface Window {}\n}";
+      const expectedOutput = "\nexport {};\n\ndeclare global {\n   interface Window {}\n}";
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
 

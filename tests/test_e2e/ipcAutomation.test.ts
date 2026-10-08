@@ -146,3 +146,18 @@ describe("ipcAutomation, namespace imports", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, schema without channels", () => {
+   // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
+   // global augmentation with TS2669.
+   it("generates an empty window.d.ts that is a module", async () => {
+      project = await runFixture("no-channels");
+      expect(project.generated["window.d.ts"]).toContain("export {};");
+      expect(project.generated["window.d.ts"]).toContain("interface Window {}");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("no-channels");
+      expect(await project.typecheck()).toBe("");
+   });
+});

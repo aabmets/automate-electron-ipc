@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 6 delivered, 52 remaining, 1 dropped.
+**Progress:** 7 delivered, 51 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -36,7 +36,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T12: Redesign `trigger` (B5)](./tasks/T12-redesign-trigger.md) · depends on: T04
 - [x] [T49: Repeated use of a namespace import generates a bogus import](./tasks/T49-repeated-namespace-type-imports.md) · depends on: T03
 - [x] [T50: E2E type-check must cover `window.d.ts`](./tasks/T50-e2e-typecheck-covers-window-dts.md) · depends on: T01
-- [ ] [T51: The empty `window.d.ts` is invalid](./tasks/T51-empty-window-dts-is-invalid.md) · depends on: T50
+- [x] [T51: The empty `window.d.ts` is invalid](./tasks/T51-empty-window-dts-is-invalid.md) · depends on: T50
 - [ ] [T52: A schema with only `port` channels generates invalid code](./tasks/T52-port-only-schema-generates-invalid-code.md) · depends on: T50
 - [ ] [T53: Type names that collide across schema files](./tasks/T53-cross-file-type-name-collisions.md) · depends on: T50
 - [ ] [T54: Qualified names, `typeof` and destructuring in signatures](./tasks/T54-qualified-names-and-typeof-in-signatures.md) · depends on: T50
