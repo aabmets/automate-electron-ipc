@@ -36,6 +36,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
    };
    valid.validateOptionalConfig(mergedConfig);
 
+   const projectRoot = utils.resolveUserProjectPath("", cwd);
    const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir, cwd);
    const schemaDir = path.join(ipcDataDir, "schema");
    const schemaFile = path.join(ipcDataDir, "schema.ts");
@@ -46,6 +47,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
    return {
       ...mergedConfig,
+      projectRoot,
       mainBindingsFilePath: path.join(ipcDataDir, "main.ts").replace(/\\/g, "/"),
       preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/"),
       rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/"),

@@ -183,6 +183,28 @@ describe("ipcAutomation", () => {
       ]);
    });
 
+   it("passes the project root to the success report", async () => {
+      // Regression for T71: the report cut paths at the first occurrence of the data dir name.
+      const schemaPath = path.join(dir, "schema.ts");
+      await fsp.writeFile(
+         schemaPath,
+         [
+            'import { defineChannels, invoke } from "automate-electron-ipc";',
+            "export default defineChannels({ getUser: invoke<() => Promise<string>>() });",
+         ].join("\n"),
+      );
+      mockConfig({
+         projectRoot: dir,
+         ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+      } as never);
+      const success = vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+
+      await ipcAutomation();
+
+      expect(success).toHaveBeenCalledOnce();
+      expect(success.mock.calls[0][1]).toBe(dir);
+   });
+
    it("reads only .ts, .mts and .cts files, ignoring declaration files", async () => {
       // Regression for T08: every file under schema/ was read and parsed.
       const schemaDir = path.join(dir, "schema");

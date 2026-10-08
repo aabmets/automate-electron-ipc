@@ -56,22 +56,52 @@ describe("logger", () => {
       expect(output()).toContain("have no effect when executed by JavaScript");
    });
 
-   it("reports a trimmed path when the relative path is part of the full path", () => {
-      const spec = (n: number) => Array.from({ length: n }) as never[];
-      logger.reportSuccess([
-         {
-            fullPath: "/project/src/ipc/schema/user.ts",
-            relativePath: "./schema/user.ts",
-            specs: { channelSpecArray: spec(2) },
-         },
-         {
-            fullPath: "/elsewhere/other.ts",
-            relativePath: "schema/missing.ts",
-            specs: { channelSpecArray: spec(1) },
-         },
-      ] as never);
-      expect(output()).toContain("Successfully generated IPC bindings:");
-      expect(output()).toContain("2 channels from path 'schema/user.ts'");
-      expect(output()).toContain("1 channels from path '/elsewhere/other.ts'");
+   describe("reportSuccess", () => {
+      const file = (fullPath: string, relativePath: string, channels = 1) =>
+         ({
+            fullPath,
+            relativePath,
+            specs: { channelSpecArray: Array.from({ length: channels }) },
+         }) as never;
+
+      it("reports paths relative to the project root, and others in full", () => {
+         logger.reportSuccess(
+            [
+               file("/project/src/ipc/schema/user.ts", "./schema/user.ts", 2),
+               file("/elsewhere/other.ts", "schema/missing.ts"),
+            ],
+            "/project",
+         );
+         expect(output()).toContain("Successfully generated IPC bindings:");
+         expect(output()).toContain("2 channels from path 'src/ipc/schema/user.ts'");
+         expect(output()).toContain("1 channels from path '/elsewhere/other.ts'");
+      });
+
+      // Regression for T71: the path was cut at the first occurrence of the data dir name,
+      // which was found inside the name of the project directory.
+      it("does not cut the path at a data dir name inside the project path", () => {
+         logger.reportSuccess(
+            [file("/work/automate-electron-ipc/ipc/schema.ts", "ipc")],
+            "/work/automate-electron-ipc",
+         );
+         expect(output()).toContain("1 channels from path 'ipc/schema.ts'");
+         expect(output()).not.toContain("ipc/ipc");
+         expect(output()).not.toContain("automate-electron-ipc");
+      });
+
+      it("reports the full path when the project root is unknown", () => {
+         logger.reportSuccess([file("/project/ipc/schema.ts", "ipc")]);
+         expect(output()).toContain("1 channels from path '/project/ipc/schema.ts'");
+      });
+
+      it("does not treat a sibling directory with the same prefix as inside the project", () => {
+         logger.reportSuccess([file("/project-two/ipc/schema.ts", "ipc")], "/project");
+         expect(output()).toContain("path '/project-two/ipc/schema.ts'");
+      });
+
+      it("uses forward slashes for the relative path", () => {
+         logger.reportSuccess([file("/project/a/b.ts", "b.ts")], "/project");
+         expect(output()).toContain("path 'a/b.ts'");
+      });
    });
 });

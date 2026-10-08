@@ -18,6 +18,8 @@ export interface IPCOptionalConfig {
 }
 
 export interface IPCResolvedConfig {
+   /** The directory of the nearest `package.json`, with `/` separators. */
+   projectRoot: string;
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;

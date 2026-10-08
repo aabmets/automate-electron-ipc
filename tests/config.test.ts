@@ -70,6 +70,7 @@ describe("getResolvedConfig", () => {
       expect(config?.ipcSchema?.stats?.isDirectory()).toStrictEqual(false);
       expect(config?.ipcSchema?.stats?.isFile()).toStrictEqual(true);
       expect(config).toMatchObject({
+         projectRoot: "/home/user/project",
          projectUsesNodeNext: false,
          ipcDataDir: "src/autoipc",
          codeIndent: 3,

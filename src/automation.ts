@@ -86,6 +86,6 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
    if (pfsArray.length === 0) {
       logger.noChannelExpressions(config.ipcSchema.path);
    } else {
-      logger.reportSuccess(pfsArray);
+      logger.reportSuccess(pfsArray, config.projectRoot);
    }
 }

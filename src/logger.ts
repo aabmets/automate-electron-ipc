@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import path from "node:path";
 import { styleText } from "node:util";
 import type * as t from "@types";
 
@@ -59,14 +60,18 @@ export function fatalError(err: unknown): void {
    error(["IPC automation failed:", ...message.split("\n")]);
 }
 
-export function reportSuccess(pfsArray: t.ParsedFileSpecs[]): void {
+/**
+ * Reports the schema files that bindings were generated from. Paths are shown relative to the
+ * project root, with `/` separators. A path outside the project, or any path when the root is
+ * unknown, is shown in full.
+ */
+export function reportSuccess(pfsArray: t.ParsedFileSpecs[], projectRoot?: string): void {
    success([
       "Successfully generated IPC bindings:",
       ...pfsArray.map((pfs) => {
-         const sanitizedRelPath = pfs.relativePath.replace(/^\.+\//, "");
-         const resultPath = pfs.fullPath.includes(sanitizedRelPath)
-            ? pfs.fullPath.substring(pfs.fullPath.indexOf(sanitizedRelPath))
-            : pfs.fullPath;
+         const relative = projectRoot ? path.relative(projectRoot, pfs.fullPath) : "";
+         const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+         const resultPath = inside ? relative.replaceAll("\\", "/") : pfs.fullPath;
          const count = pfs.specs.channelSpecArray.length;
          return `${count} channels from path '${resultPath}'`;
       }),

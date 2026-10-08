@@ -320,6 +320,25 @@ describe("parseSpecs", () => {
       );
    });
 
+   it("should report the editor column of a syntax error after a tab or a wide character", () => {
+      const parse = (contents: string) => () =>
+         parser.parseSpecs({ contents, relativePath: "s.ts", fullPath: "/p/s.ts" });
+      expect(parse("\tconst b = ;")).toThrow("Syntax error in schema file '/p/s.ts:1:12'");
+      expect(parse('const s = "日本"; const b = ;')).toThrow(
+         "Syntax error in schema file '/p/s.ts:1:27'",
+      );
+   });
+
+   it("should report the end of the input for a syntax error at the end", () => {
+      expect(() =>
+         parser.parseSpecs({
+            contents: "const a = 1;\nconst b = ",
+            relativePath: "",
+            fullPath: "/p/s.ts",
+         }),
+      ).toThrow("Syntax error in schema file '/p/s.ts:2:11': Expression expected");
+   });
+
    it("should fall back to the relative path when naming a file with a syntax error", () => {
       expect(() =>
          parser.parseSpecs({ contents: "const = ;", relativePath: "user.ts", fullPath: "" }),
@@ -680,6 +699,85 @@ describe("describeSyntaxError", () => {
          reason: "Expression expected",
          line: 2,
          column: 23,
+      });
+   });
+
+   // Regression for T71: the column was read from the frame, which expands tabs and counts the
+   // display width of wide characters.
+   describe("with the parsed source", () => {
+      const describeError = (code: string) => {
+         try {
+            parser.parseModule(code);
+         } catch (error) {
+            return parser.describeSyntaxError(error, code);
+         }
+         throw new Error("Expected a syntax error");
+      };
+
+      it("counts a tab as one column", () => {
+         expect(describeError("\tconst b = ;")).toMatchObject({ line: 1, column: 12 });
+         expect(describeError("x\t=\t;")).toMatchObject({ line: 1, column: 5 });
+         expect(describeError("\t\tconst b = ;")).toMatchObject({ line: 1, column: 13 });
+      });
+
+      it("counts a wide character as one column", () => {
+         expect(describeError('const s = "日本"; const b = ;')).toMatchObject({
+            line: 1,
+            column: 27,
+         });
+      });
+
+      it("counts a character outside the BMP as two columns, like an editor", () => {
+         expect(describeError('const s = "😀"; const b = ;')).toMatchObject({
+            line: 1,
+            column: 27,
+         });
+      });
+
+      it("counts a combining mark as a column", () => {
+         expect(describeError('const s = "e\u0301"; const b = ;')).toMatchObject({
+            line: 1,
+            column: 27,
+         });
+      });
+
+      it("reads the line of an error after several lines, with CRLF line ends", () => {
+         expect(describeError("const a = 1;\r\n\r\n\tconst b = ;\r\n")).toMatchObject({
+            line: 3,
+            column: 12,
+         });
+      });
+
+      it("does not count a BOM", () => {
+         expect(describeError("\uFEFFconst b = ;")).toMatchObject({ line: 1, column: 11 });
+         expect(describeError("\uFEFF\tconst b = ;")).toMatchObject({ line: 1, column: 12 });
+      });
+
+      it("gives an error at the end of the input the position of the end", () => {
+         expect(describeError("const a = 1;\nconst b = ")).toMatchObject({ line: 2, column: 11 });
+         expect(describeError("const a = (")).toMatchObject({ line: 1, column: 12 });
+         expect(describeError("type T = ")).toMatchObject({ line: 1, column: 10 });
+         expect(describeError("const a = (\n")).toMatchObject({ line: 2, column: 1 });
+      });
+
+      it("falls back to the display column when the frame does not match the source", () => {
+         const message = ["  x Oops", "   ,----", " 1 | const b = ;", "   :           ^"].join(
+            "\n",
+         );
+         expect(parser.describeSyntaxError(new Error(message), "different")).toMatchObject({
+            line: 1,
+            column: 11,
+         });
+         expect(parser.describeSyntaxError(new Error(message), "")).toMatchObject({
+            line: 1,
+            column: 11,
+         });
+      });
+
+      it("does not invent a position for a message without a code frame", () => {
+         expect(parser.describeSyntaxError(new Error("boom"), "const a = 1;")).toStrictEqual({
+            reason: "boom",
+         });
       });
    });
 
