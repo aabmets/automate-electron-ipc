@@ -63,10 +63,15 @@ describe("BaseWriter", () => {
       }
    });
 
-   it("should inject IpcMainEvent typehint", () => {
+   it("should inject the event typehint", () => {
       const sigDef = "(arg1: number, arg2: string) => boolean";
-      const result = shared.VitestBaseWriter.prototype.injectEventTypehint(sigDef);
-      expect(result).toStrictEqual("(event: IpcMainEvent, arg1: number, arg2: string) => boolean");
+      const writer = shared.VitestBaseWriter.prototype;
+      expect(writer.injectEventTypehint(sigDef, "IpcMainEvent")).toStrictEqual(
+         "(event: IpcMainEvent, arg1: number, arg2: string) => boolean",
+      );
+      expect(writer.injectEventTypehint(sigDef, "IpcMainInvokeEvent", "_event")).toStrictEqual(
+         "(_event: IpcMainInvokeEvent, arg1: number, arg2: string) => boolean",
+      );
    });
 
    it("should stringify CallableParam objects with and without types", () => {

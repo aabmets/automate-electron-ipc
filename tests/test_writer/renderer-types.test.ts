@@ -54,7 +54,7 @@ describe("PreloadBindingsWriter", () => {
          declare global {
             interface Window {
                ipc: {
-                  sendVitestChannel: (arg1: string, arg2: string) => Promise<void>;
+                  sendVitestChannel: (arg1: string, arg2: string) => void;
                };
             }
          }\n
@@ -80,6 +80,35 @@ describe("PreloadBindingsWriter", () => {
          export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
+   });
+
+   it("should type senders by channel kind, not by the declared return type", async () => {
+      // Regression for B7: `ipcRenderer.send` returns `undefined`, so Broadcast senders are
+      // `void` even when the declared signature returns a promise.
+      const pfsArray = shared.buildFileSpecs(
+         {
+            name: "sendIt",
+            kind: "Broadcast",
+            direction: "RendererToMain",
+            params: ["text: string"],
+            returnType: "Promise<void>",
+         },
+         { name: "syncIt", kind: "Unicast", direction: "RendererToMain", returnType: "number" },
+         {
+            name: "asyncIt",
+            kind: "Unicast",
+            direction: "RendererToMain",
+            params: ["id: number"],
+            returnType: "Promise<string>",
+         },
+      );
+      const obj = new shared.VitestRendererTypesWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain("sendAsyncIt: (id: number) => Promise<string>;");
+      expect(output).toContain("sendSendIt: (text: string) => void;");
+      expect(output).toContain("sendSyncIt: () => Promise<number>;");
    });
 
    it("should write only ports into Window declaration when there are no callables", async () => {

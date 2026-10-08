@@ -33,11 +33,11 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent } from "electron";
+         import type { IpcMainInvokeEvent } from "electron";
          
          export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => 
-               electronIpcMain.handle('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+            onVitestChannel: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => 
+               electronIpcMain.handle('vitestChannel', (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2)),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -54,9 +54,9 @@ describe("MainBindingsWriter", () => {
 
          export const ipcMain = {
             onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+               electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
             onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+               electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -69,7 +69,7 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent, BrowserWindow } from "electron";
+         import type { BrowserWindow } from "electron";
          
          export const ipcMain = {
             sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number) => 
@@ -77,6 +77,67 @@ describe("MainBindingsWriter", () => {
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   it("should import only the event types that the channels use", async () => {
+      // Regression for B6: Unicast handlers get an IpcMainInvokeEvent, Broadcast ones an IpcMainEvent.
+      const render = async (...channels: shared.SimpleChannel[]) => {
+         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+
+      const both = await render(unicast, broadcast);
+      expect(both).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
+      const onlyUnicast = await render(unicast);
+      expect(onlyUnicast).toContain('import type { IpcMainInvokeEvent } from "electron";');
+      expect(onlyUnicast).not.toContain("IpcMainEvent");
+      const none = await render();
+      expect(none).not.toContain("import type");
+   });
+
+   it("should enforce the declared signature in the handler wrappers", async () => {
+      const pfsArray = shared.buildFileSpecs(
+         {
+            name: "restIt",
+            kind: "Broadcast",
+            direction: "RendererToMain",
+            params: ["label: string", "flag?: boolean", "...rest: number[]"],
+         },
+         { name: "bareIt", kind: "Unicast", direction: "RendererToMain", returnType: "number" },
+      );
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain(
+         "electronIpcMain.on('restIt', (event: IpcMainEvent, label: string, flag?: boolean, ...rest: number[]) => callback(event, label, flag, ...rest))",
+      );
+      expect(output).toContain(
+         "electronIpcMain.handle('bareIt', (event: IpcMainInvokeEvent) => callback(event))",
+      );
+      expect(output).not.toContain("any");
+   });
+
+   it("should not shadow the callback or the event with parameters of the signature", async () => {
+      const pfsArray = shared.buildFileSpecs({
+         name: "clashIt",
+         kind: "Broadcast",
+         direction: "RendererToMain",
+         params: ["callback: string", "event: number"],
+      });
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain(
+         "onClashIt: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void)",
+      );
+      expect(output).toContain(
+         "(_event: IpcMainEvent, callback: string, event: number) => _callback(_event, callback, event)",
+      );
    });
 
    it("should write only ports into ipcMain object when there are no callables", async () => {

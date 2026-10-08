@@ -22,7 +22,7 @@ export class MainBindingsWriter extends BaseWriter {
    }
    protected renderFileContents(): string {
       const electronImportsSet = new Set<string>(["ipcMain as electronIpcMain"]);
-      const electronTypeImportsSet = new Set<string>(["IpcMainEvent"]);
+      const electronTypeImportsSet = new Set<string>();
       const importDeclarationsArray: string[] = [];
       const callablesArray: string[] = [];
       const portsArray: string[] = [];
@@ -32,6 +32,7 @@ export class MainBindingsWriter extends BaseWriter {
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
             if (spec.direction === "RendererToMain") {
+               electronTypeImportsSet.add(this.getEventType(spec));
                this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
@@ -56,7 +57,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       const out: string[] = [
          `import { ${Array.from(electronImportsSet).join(", ")} } from "electron";`,
-         `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
+         ...(electronTypeImportsSet.size > 0
+            ? [`import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`]
+            : []),
          ...importDeclarationsArray.sort(utils.compareStrings),
       ];
       const bindingsExpression = ["\nexport const ipcMain = {"];
@@ -76,14 +79,35 @@ export class MainBindingsWriter extends BaseWriter {
       out.push(bindingsExpression.join(""));
       return out.join("\n");
    }
+   /**
+    * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
+    * to `on` listeners.
+    */
+   private getEventType(spec: t.ChannelSpec): string {
+      return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
+   }
    private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       const method = spec.kind === "Broadcast" ? "on" : "handle";
-      const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
-      const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
-      const modSigDef = this.injectEventTypehint(spec.signature.definition);
+      const eventType = this.getEventType(spec);
+      // The names of the generated parameters must not shadow the ones of the signature.
+      const taken = this.collectIdentifiers([spec.signature.definition]);
+      const eventName = this.uniqueName("event", taken);
+      const callbackName = this.uniqueName("callback", taken);
+      const wrapperParams = [`${eventName}: ${eventType}`, this.getOriginalParams(spec, false)];
+      const forwarded = [eventName, this.getOriginalParams(spec, true)];
+      // A generic signature's type parameters must be in scope for the wrapper's params.
+      const definition = spec.signature.definition.trimStart();
+      const typeParams = definition.startsWith("<")
+         ? definition.slice(0, definition.indexOf("("))
+         : "";
+      const listener =
+         `${typeParams}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
+         `${callbackName}(${forwarded.filter(Boolean).join(", ")})`;
+      const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${listener})`;
+      const modSigDef = this.injectEventTypehint(spec.signature.definition, eventType, eventName);
       const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
       callableNames.forEach((name) => {
-         callablesArray.push(`${name}: (callback: ${modSigDef}) => ${ipcMain}`);
+         callablesArray.push(`${name}: (${callbackName}: ${modSigDef}) => ${ipcMain}`);
       });
    }
    private buildMainToRendererCallable(spec: t.ChannelSpec): string {

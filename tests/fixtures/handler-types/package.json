@@ -1,0 +1,9 @@
+{
+   "name": "fixture-handler-types",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

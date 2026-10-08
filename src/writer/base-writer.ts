@@ -109,8 +109,8 @@ export class BaseWriter {
       }));
    }
 
-   protected injectEventTypehint(sigDef: string): string {
-      return sigDef.replace("(", "(event: IpcMainEvent, ");
+   protected injectEventTypehint(sigDef: string, eventType: string, eventName = "event"): string {
+      return sigDef.replace("(", `(${eventName}: ${eventType}, `);
    }
 
    /**

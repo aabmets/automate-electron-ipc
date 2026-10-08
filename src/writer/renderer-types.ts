@@ -81,7 +81,10 @@ export class RendererTypesWriter extends BaseWriter {
    }
    private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       let ipcSignature = spec.signature.definition;
-      if (!spec.signature.async) {
+      if (spec.kind === "Broadcast") {
+         // `ipcRenderer.send` is fire-and-forget: it returns `undefined`, not a promise.
+         ipcSignature = `(${this.getOriginalParams(spec, false)}) => void`;
+      } else if (!spec.signature.async) {
          const ipcParams = this.getOriginalParams(spec, false);
          ipcSignature = `(${ipcParams}) => Promise<${spec.signature.returnType}>`;
       }

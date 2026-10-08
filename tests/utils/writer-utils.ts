@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import parser from "@src/parser.js";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import writer from "@src/writer/index.js";
 import type * as t from "@types";
@@ -26,8 +27,8 @@ export class VitestBaseWriter extends BaseWriter {
    public getCodeIndents(): string[] {
       return super.getCodeIndents();
    }
-   public injectEventTypehint(sigDef: string): string {
-      return super.injectEventTypehint(sigDef);
+   public injectEventTypehint(sigDef: string, eventType: string, eventName?: string): string {
+      return super.injectEventTypehint(sigDef, eventType, eventName);
    }
    public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
       return super.getOriginalParams(spec, withTypes);
@@ -112,7 +113,37 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
    ] as t.ParsedFileSpecs[];
 }
 
+export interface SimpleChannel {
+   name: string;
+   kind: t.ChannelKind;
+   direction: t.ChannelDirection;
+   /** Parameters as written in the signature, such as `"id: number"` or `"...rest: string[]"`. */
+   params?: string[];
+   returnType?: string;
+   trigger?: string;
+}
+
+/**
+ * Builds the file specs of a schema file from simple channel descriptors,
+ * parsing the signatures the same way the parser does for real schema files.
+ */
+export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[] {
+   const channelSpecArray = channels.map((channel) => {
+      const definition = `(${(channel.params ?? []).join(", ")}) => ${channel.returnType ?? "void"}`;
+      const { module, src } = parser.parseModule(`type T = ${definition};`);
+      const alias = (module.body[0] as any).typeAnnotation;
+      const { trigger, params: _params, returnType: _returnType, ...rest } = channel;
+      return { ...rest, signature: parser.parseSignature(alias, src), ...(trigger && { trigger }) };
+   });
+   return [
+      {
+         specs: { typeSpecArray: [], importSpecArray: [], channelSpecArray },
+      } as unknown as t.ParsedFileSpecs,
+   ];
+}
+
 export default {
+   buildFileSpecs,
    VitestBaseWriter,
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,

@@ -14,4 +14,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - Drop the `any` casts in the `main.ts` handler wrappers where feasible, so the declared signature
     is actually enforced.
 - **Tests:** writer unit tests, plus an e2e type-check.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Handler wrappers now take the declared params explicitly, so no `any` casts remain. The wrapper and callback names (`event`, `callback`) are chosen to not shadow signature names; T57 covers the rest of the clash handling. Broadcast senders are `void` even if the declared return is `Promise<void>`.

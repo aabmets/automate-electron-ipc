@@ -415,6 +415,37 @@ describe("ipcAutomation, schema with a syntax error", () => {
    });
 });
 
+describe("ipcAutomation, handler and sender types", () => {
+   // Regression for B6 and B7: `handle` listeners got the wrong event type, and Broadcast
+   // senders were typed as promises although `ipcRenderer.send` returns `undefined`.
+   it("types Unicast handlers with IpcMainInvokeEvent and Broadcast ones with IpcMainEvent", async () => {
+      project = await runFixture("handler-types");
+      const main = project.generated["main.ts"];
+
+      expect(main).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
+      expect(main).toContain("onGetUser: (callback: (event: IpcMainInvokeEvent, id: number)");
+      expect(main).toContain("(event: IpcMainInvokeEvent, id: number) => callback(event, id)");
+      expect(main).toContain("onEcho: (callback: (event: IpcMainEvent, text: string,");
+      expect(main).toContain("(event: IpcMainEvent, text: string, ...rest: number[]) =>");
+      expect(main).toContain("callback(event, text, ...rest)");
+      expect(main).not.toContain("any");
+   });
+
+   it("types Broadcast senders as void and Unicast senders as promises", async () => {
+      project = await runFixture("handler-types");
+      const windowTypes = project.generated["window.d.ts"];
+
+      expect(windowTypes).toContain("sendEcho: (text: string, ...rest: number[]) => void;");
+      expect(windowTypes).toContain("sendPing: (text: string) => void;");
+      expect(windowTypes).toContain("sendGetUser: (id: number) => Promise<string>;");
+   });
+
+   it("generates files that type-check against the declared signatures", async () => {
+      project = await runFixture("handler-types");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, rest, optional and destructured parameters", () => {
    // Regression for B4: the sender dropped the spread, so `webContents.send` received one array.
    it("forwards rest parameters with their spread", async () => {
