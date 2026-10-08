@@ -140,6 +140,46 @@ describe("MainBindingsWriter", () => {
       );
    });
 
+   it("should write an immediate sender and a separate binder for triggered channels", async () => {
+      // Regression for B5: the sender used to register a window listener on every call.
+      const pfsArray = shared.buildFileSpecs({
+         name: "focused",
+         kind: "Broadcast",
+         direction: "MainToRenderer",
+         params: ["state: boolean", "...tags: string[]"],
+         trigger: "focus",
+      });
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const expectedOutput = utils.dedent(`
+         import { ipcMain as electronIpcMain } from "electron";
+         import type { BrowserWindow } from "electron";
+
+         export const ipcMain = {
+            sendFocused: (browserWindow: BrowserWindow, state: boolean, ...tags: string[]) =>
+               browserWindow.webContents.send('focused', state, ...tags),
+            bindFocused: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>) => {
+               const listener = async () => {
+                  const args = await provider();
+                  if (!browserWindow.isDestroyed()) {
+                     browserWindow.webContents.send('focused', ...args);
+                  }
+               };
+               browserWindow.on("focus", listener);
+               return () => {
+                  browserWindow.off("focus", listener);
+               };
+            },
+         }
+      `);
+      // The sender arrow is followed by a newline and a trailing space in the generated code.
+      const expected = expectedOutput
+         .trimStart()
+         .replace("...tags: string[]) =>\n", "...tags: string[]) => \n");
+      expect(buffer.toString()).toStrictEqual(expected);
+   });
+
    it("should write only ports into ipcMain object when there are no callables", async () => {
       // Regression for T52: the empty callables line left a lone comma in the object.
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;

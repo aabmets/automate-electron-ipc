@@ -24,6 +24,7 @@ import {
    refine,
    string,
 } from "superstruct";
+import { BROWSER_WINDOW_EVENTS } from "./browser-window-events.js";
 import utils from "./utils.js";
 
 export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
@@ -43,6 +44,16 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    });
    assert(config, IPCOptionalConfigStruct);
 }
+
+const TriggerStruct = refine(string(), "event", (value) => {
+   if (BROWSER_WINDOW_EVENTS.includes(value)) {
+      return true;
+   }
+   return (
+      `'${value}' is not a BrowserWindow event. ` +
+      `Use one of: ${BROWSER_WINDOW_EVENTS.join(", ")}`
+   );
+});
 
 function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<any, any> {
    const ListenersStruct = refine(string(), "format", (value) => {
@@ -105,7 +116,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
          async: boolean(),
       }),
       listeners: kind === "Broadcast" ? optional(array(ListenersStruct)) : optional(never()),
-      trigger: triggerable ? optional(string()) : optional(never()),
+      trigger: triggerable ? optional(TriggerStruct) : optional(never()),
    });
 }
 

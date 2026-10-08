@@ -61,8 +61,10 @@ export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
 /**
  * Options of `emit` channels.
  *
- * @property trigger - Name of a BrowserWindow event. When it fires in the main process,
- *    the sender callable is invoked automatically.
+ * @property trigger - Name of a BrowserWindow event. For a channel with a trigger, the main
+ *    bindings also contain a `bind<Name>(browserWindow, provider)` callable. It registers one
+ *    listener for the event, calls the provider each time the event fires and sends the
+ *    arguments that the provider returns. It returns a function which removes the listener.
  */
 export interface EmitConfig<_S extends ChannelSignature = ChannelSignature> {
    trigger?:
@@ -85,6 +87,8 @@ export interface EmitConfig<_S extends ChannelSignature = ChannelSignature> {
       | "moved"
       | "new-window-for-tab"
       | "page-title-updated"
+      | "persisted-state-restored"
+      | "query-session-end"
       | "resize"
       | "resized"
       | "responsive"
@@ -141,8 +145,8 @@ export function send<S extends ChannelSignature = never>(
 /**
  * One-way message from the main process to a renderer process.
  * The signature must return `void` or `Promise<void>`.
- * If a trigger is given, then the sender callable is invoked automatically
- * when that BrowserWindow event fires.
+ * If a trigger is given, then a `bind<Name>` callable is generated in addition to the sender,
+ * which sends automatically when that BrowserWindow event fires.
  *
  * @example
  * progress: emit<(n: number) => void>({ trigger: "focus" })

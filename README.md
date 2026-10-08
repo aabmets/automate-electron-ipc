@@ -150,7 +150,7 @@ export default defineChannels({
    echoUserName: send<(userName: string) => void>(),
 
    // Message from the main process to a renderer process without return data,
-   // optionally sent automatically when a BrowserWindow event fires
+   // optionally with a generated binder which sends when a BrowserWindow event fires
    progress: emit<(n: number) => void>({ trigger: "focus" }),
 
    // Sender and listener on same port for each of two renderer processes
@@ -165,7 +165,18 @@ export default defineChannels({
 | `emit`   | MainToRenderer     | `void` or `Promise<void>`    |
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
 
-The only supported option is `trigger` of `emit`.
+The only supported option is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
+The sender of an `emit` channel, `ipcMain.sendProgress(browserWindow, n)`, always sends immediately.
+With a `trigger`, the main bindings also contain `ipcMain.bindProgress(browserWindow, provider)`.
+It registers one listener for the event, calls `provider` each time the event fires, sends the
+argument list that `provider` returns (or resolves to), and returns a function which removes the
+listener:
+
+```typescript
+const dispose = ipcMain.bindProgress(browserWindow, () => [currentProgress()]);
+// Later, to stop sending on focus:
+dispose();
+```
 
 
 ### The `as` Form

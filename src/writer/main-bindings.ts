@@ -36,7 +36,7 @@ export class MainBindingsWriter extends BaseWriter {
                this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
-               callablesArray.push(this.buildMainToRendererCallable(spec));
+               this.addMainToRendererCallables(spec, callablesArray);
             } else if (spec.direction === "RendererToRenderer") {
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
@@ -110,15 +110,40 @@ export class MainBindingsWriter extends BaseWriter {
          callablesArray.push(`${name}: (${callbackName}: ${modSigDef}) => ${ipcMain}`);
       });
    }
-   private buildMainToRendererCallable(spec: t.ChannelSpec): string {
+   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+      const capitalized = utils.capitalize(spec.name);
       const senderParams = this.getOriginalParams(spec, true);
-      let sender = `browserWindow.webContents.send('${spec.name}', ${senderParams})`;
-      if (spec.trigger) {
-         sender = `browserWindow.on("${spec.trigger}", () => ${sender})`;
-      }
+      const sender = `browserWindow.webContents.send('${spec.name}', ${senderParams})`;
       const ipcParams = this.getOriginalParams(spec, false);
       const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
-      return `send${utils.capitalize(spec.name)}: ${ipcSignature} => \n${this.indents[1]}${sender}`;
+      callablesArray.push(`send${capitalized}: ${ipcSignature} => \n${this.indents[1]}${sender}`);
+      if (spec.trigger) {
+         callablesArray.push(this.buildTriggerBinder(spec));
+      }
+   }
+   /**
+    * Builds `bind<Name>(browserWindow, provider)`, which registers one listener for the trigger
+    * event, evaluates the provider each time the event fires and returns a disposer.
+    */
+   private buildTriggerBinder(spec: t.ChannelSpec): string {
+      const [i0, i1, i2, i3] = this.indents;
+      const args = `[${this.getOriginalParams(spec, false)}]`;
+      const provider = `provider: () => ${args} | Promise<${args}>`;
+      const event = JSON.stringify(spec.trigger);
+      return [
+         `bind${utils.capitalize(spec.name)}: (browserWindow: BrowserWindow, ${provider}) => {`,
+         `${i1}const listener = async () => {`,
+         `${i2}const args = await provider();`,
+         `${i2}if (!browserWindow.isDestroyed()) {`,
+         `${i3}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}browserWindow.on(${event}, listener);`,
+         `${i1}return () => {`,
+         `${i2}browserWindow.off(${event}, listener);`,
+         `${i1}};`,
+         `${i0}}`,
+      ].join("\n");
    }
    private buildRendererToRendererPort(spec: t.ChannelSpec): string {
       const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";

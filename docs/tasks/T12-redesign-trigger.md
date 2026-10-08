@@ -16,4 +16,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - Regression: N calls produce 0 extra listeners.
   - The disposer removes the listener.
   - The provider is evaluated per event.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `bind<X>` is named after today's `send<X>` (T13 moves it). The trigger list gained `persisted-state-restored` and `query-session-end` from the Electron 44 docs. The binder skips the send if the window was destroyed while an async provider ran. Errors thrown by a provider are not caught.
