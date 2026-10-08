@@ -9,17 +9,17 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser.js";
+import parser, { type TypeDefinitionNode } from "@src/parser.js";
 import * as t from "@types";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 function parseTypeDefinitions(code: string): t.TypeSpec[] {
-   const src = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+   const { module, src } = parser.parseModule(code);
    const specs: t.TypeSpec[] = [];
-   ts.forEachChild(src, (node: ts.Node) => {
-      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
-         parser.parseTypeDefinitions(node, src, specs);
+   parser.forEachChild(module, (node) => {
+      const inner = node.declaration ?? node.decl ?? node;
+      if (inner.type === "TsInterfaceDeclaration" || inner.type === "TsTypeAliasDeclaration") {
+         parser.parseTypeDefinitions(node as TypeDefinitionNode, src, specs);
       }
    });
    return specs;

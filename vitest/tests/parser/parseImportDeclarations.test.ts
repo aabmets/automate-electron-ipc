@@ -10,16 +10,16 @@
  */
 
 import parser from "@src/parser.js";
+import type { ImportDeclaration } from "@swc/core";
 import * as t from "@types";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 function parseImportDeclarations(code: string): t.ImportSpec[] {
-   const src = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+   const { module, src } = parser.parseModule(code);
    const specs: t.ImportSpec[] = [];
-   ts.forEachChild(src, (node: ts.Node) => {
-      if (ts.isImportDeclaration(node)) {
-         parser.parseImportDeclarations(node as ts.ImportDeclaration, src, specs);
+   parser.forEachChild(module, (node) => {
+      if (node.type === "ImportDeclaration") {
+         parser.parseImportDeclarations(node as ImportDeclaration, src, specs);
       }
    });
    return specs;
@@ -144,16 +144,10 @@ describe("parseImportDeclarations", () => {
          ]);
       });
 
-      it("should handle empty named imports", () => {
+      it("should ignore empty named imports", () => {
          const code = `import { } from 'empty-module';`;
          const result = parseImportDeclarations(code);
-         expect(result).toEqual([
-            {
-               fromPath: "empty-module",
-               customTypes: [],
-               namespace: null,
-            },
-         ]);
+         expect(result).toEqual([]);
       });
 
       it("should ignore built-in types in type-only named imports", () => {
@@ -233,10 +227,9 @@ describe("parseImportDeclarations", () => {
          expect(result).toEqual([]);
       });
 
-      it("should ignore type-only side-effect imports", () => {
+      it("should reject type-only side-effect imports as invalid syntax", () => {
          const code = `import type 'types-side-effect';`;
-         const result = parseImportDeclarations(code);
-         expect(result).toEqual([]);
+         expect(() => parseImportDeclarations(code)).toThrow();
       });
    });
 

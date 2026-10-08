@@ -9,10 +9,64 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+   ExportDeclaration,
+   ExportDefaultDeclaration,
+   ImportDeclaration,
+   Module,
+   ModuleItem,
+   Param,
+   Span,
+   TsFunctionType,
+   TsInterfaceDeclaration,
+   TsTypeAliasDeclaration,
+} from "@swc/core";
+import { parseSync } from "@swc/core";
 import type * as t from "@types";
-import ts from "typescript";
 import utils from "./utils.js";
 import vld from "./validators.js";
+
+export interface AstNode {
+   type: string;
+   span: Span;
+   [key: string]: any;
+}
+
+export interface Source {
+   text: (node: { span: Span }) => string;
+}
+
+export type TypeDefinitionNode =
+   | TsInterfaceDeclaration
+   | TsTypeAliasDeclaration
+   | ExportDeclaration
+   | ExportDefaultDeclaration;
+
+export function parseModule(code: string): { module: Module; src: Source } {
+   const module = parseSync(code, { syntax: "typescript", target: "esnext" });
+   // swc spans are 1-based offsets into the source of each parse call.
+   const base = 1;
+   const src: Source = {
+      text: (node) => code.slice(node.span.start - base, node.span.end - base),
+   };
+   return { module, src };
+}
+
+export function forEachChild(node: AstNode, callback: (child: AstNode) => void): void {
+   for (const value of Object.values(node)) {
+      const children = Array.isArray(value) ? value : [value];
+      for (const child of children) {
+         if (child && typeof child === "object") {
+            if (typeof child.type === "string") {
+               callback(child);
+            } else {
+               // Wrapper objects without a node type, such as call arguments.
+               forEachChild(child, callback);
+            }
+         }
+      }
+   }
+}
 
 export function isBuiltinType(typeName: string): boolean {
    return new Set([
@@ -31,44 +85,31 @@ export function isBuiltinType(typeName: string): boolean {
    ]).has(typeName);
 }
 
-export function collectCustomTypes(node: ts.Node, src: ts.SourceFile, set: Set<string>): void {
+export function collectCustomTypes(node: AstNode, src: Source, set: Set<string>): void {
    if (!node) {
       return;
-   } else if (ts.isTypeReferenceNode(node)) {
-      const typeName = node.typeName.getText(src);
+   } else if (node.type === "TsTypeReference") {
+      const typeName = src.text(node.typeName);
       if (!isBuiltinType(typeName)) {
          set.add(typeName);
       }
-   } else if (ts.isTypeLiteralNode(node)) {
-      node.members.forEach((member) => {
-         if (ts.isPropertySignature(member) && member.type) {
-            collectCustomTypes(member.type, src, set);
-         }
-      });
-   } else if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
-      for (const subType of node.types) {
-         collectCustomTypes(subType, src, set);
+   } else if (node.type === "KeyValuePatternProperty") {
+      if (node.value?.type === "Identifier" && !isBuiltinType(node.value.value)) {
+         set.add(node.value.value);
       }
-   } else if (ts.isBindingElement(node)) {
-      const children = node.getChildren();
-      if (children.length === 3 && ts.isIdentifier(children[2])) {
-         const name = children[2].getText(src);
-         if (!isBuiltinType(name)) {
+   } else if (node.type === "ImportDeclaration") {
+      for (const element of node.specifiers) {
+         const name = element.local.value;
+         if (
+            element.type === "ImportSpecifier" &&
+            (node.typeOnly || element.isTypeOnly) &&
+            !isBuiltinType(name)
+         ) {
             set.add(name);
          }
       }
-   } else if (ts.isImportDeclaration(node)) {
-      const clause = node.importClause;
-      if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
-         clause.namedBindings.elements.forEach((element) => {
-            const name = element.name.getText(src);
-            if ((clause?.isTypeOnly || element.isTypeOnly) && !isBuiltinType(name)) {
-               set.add(name);
-            }
-         });
-      }
    }
-   node.forEachChild((child) => collectCustomTypes(child, src, set));
+   forEachChild(node, (child) => collectCustomTypes(child, src, set));
 }
 
 export const channelPattern = utils.concatRegex([
@@ -92,39 +133,49 @@ export function isTriggerAssignment(text: string): boolean {
    return regex.test(text);
 }
 
+function getParamInfo(param: Param["pat"], src: Source): t.CallableParam {
+   const node = param as AstNode;
+   const annotation = node.typeAnnotation?.typeAnnotation;
+   const type = annotation ? src.text(annotation) : "any";
+   if (node.type === "RestElement") {
+      const arg = node.argument as AstNode;
+      const name = arg.type === "Identifier" ? arg.value : src.text(arg as { span: Span });
+      return { name, type, rest: true, optional: false };
+   } else if (node.type === "Identifier") {
+      return { name: node.value, type, rest: false, optional: !!node.optional };
+   }
+   const end = node.typeAnnotation ? node.typeAnnotation.span.start : node.span.end;
+   const name = src.text({ span: { ...node.span, end } }).trim();
+   return { name, type, rest: false, optional: !!node.optional };
+}
+
 export function parseChannelExpressions(
-   node: ts.Node,
-   src: ts.SourceFile,
+   node: AstNode,
+   src: Source,
    spec: Partial<t.ChannelSpec>,
 ): void {
-   if (ts.isPropertyAccessExpression(node)) {
-      const text = node.getText(src).replaceAll(/\s*/gm, "");
+   if (node.type === "MemberExpression") {
+      const text = src.text(node as { span: Span }).replaceAll(/\s*/gm, "");
       const groups = text.match(channelPattern)?.groups;
       Object.assign(spec, groups);
-   } else if (ts.isPropertyAssignment(node)) {
-      const text = node.getText(src);
+   } else if (node.type === "KeyValueProperty") {
+      const start = node.key.span.start;
+      const end = node.value.span.end;
+      const text = src.text({ span: { start, end, ctxt: 0 } });
 
       if (isSignatureAssignment(text)) {
-         const child1 = node.getChildAt(2);
-         const child2 = child1.getChildAt(2);
+         const fn = node.value.typeAnnotation as TsFunctionType | undefined;
 
-         if (ts.isFunctionTypeNode(child2)) {
+         if (node.value.type === "TsAsExpression" && fn?.type === "TsFunctionType") {
             const set = new Set<string>();
-            collectCustomTypes(child2, src, set);
+            collectCustomTypes(fn as AstNode, src, set);
 
-            const returnType = child2.type.getText(src) || "void";
+            const returnType = src.text(fn.typeAnnotation.typeAnnotation) || "void";
             const async = returnType.startsWith("Promise");
 
             spec.signature = {
-               definition: child2.getText(src),
-               params: child2.parameters.map((param) => {
-                  return {
-                     name: param.name.getText(),
-                     type: param?.type ? param.type.getText() : "any",
-                     rest: !!param.dotDotDotToken,
-                     optional: !!param.questionToken,
-                  } as t.CallableParam;
-               }),
+               definition: src.text(fn),
+               params: fn.params.map((param) => getParamInfo(param, src)),
                customTypes: Array.from(set),
                returnType,
                async,
@@ -149,67 +200,76 @@ export function parseChannelExpressions(
          }
       }
    }
-   node.forEachChild((child) => parseChannelExpressions(child, src, spec));
+   forEachChild(node, (child) => parseChannelExpressions(child, src, spec));
 }
 
 export function parseImportDeclarations(
-   node: ts.ImportDeclaration,
-   src: ts.SourceFile,
+   node: ImportDeclaration,
+   _src: Source,
    array: t.ImportSpec[],
 ): void {
    const customTypes = new Set<string>();
-   const moduleSpecifier = node.moduleSpecifier;
-   const clause = node.importClause;
    const importSpec: t.ImportSpec = {
-      fromPath: moduleSpecifier.getText(src).slice(1, -1),
+      fromPath: node.source.value,
       customTypes: [],
       namespace: null,
    };
-   if (clause?.namedBindings) {
-      if (ts.isNamespaceImport(clause.namedBindings)) {
-         importSpec.namespace = clause.namedBindings.name.getText(src);
-         array.push(importSpec);
-      } else if (ts.isNamedImports(clause.namedBindings)) {
-         clause.namedBindings.elements.forEach((element) => {
-            const isTypeOnlyImport = clause.isTypeOnly || element.isTypeOnly;
-            const localName = element.name.getText(src);
-            const exportedName = element.propertyName ? element.propertyName.getText(src) : null;
-            if (isTypeOnlyImport && !isBuiltinType(exportedName || localName)) {
-               const typeName = exportedName ? `${exportedName} as ${localName}` : localName;
-               customTypes.add(typeName);
-            }
-         });
-         importSpec.customTypes = Array.from(customTypes);
-         array.push(importSpec);
+   const namespace = node.specifiers.find((spec) => spec.type === "ImportNamespaceSpecifier");
+   if (namespace) {
+      importSpec.namespace = namespace.local.value;
+      array.push(importSpec);
+      return;
+   }
+   const named = node.specifiers.filter((spec) => spec.type === "ImportSpecifier");
+   if (named.length > 0) {
+      for (const element of named) {
+         const isTypeOnlyImport = node.typeOnly || element.isTypeOnly;
+         const localName = element.local.value;
+         const exportedName = element.imported ? element.imported.value : null;
+         if (isTypeOnlyImport && !isBuiltinType(exportedName || localName)) {
+            const typeName = exportedName ? `${exportedName} as ${localName}` : localName;
+            customTypes.add(typeName);
+         }
       }
+      importSpec.customTypes = Array.from(customTypes);
+      array.push(importSpec);
    }
 }
 
 export function parseTypeDefinitions(
-   node: ts.InterfaceDeclaration | ts.TypeAliasDeclaration,
-   src: ts.SourceFile,
+   item: TypeDefinitionNode,
+   src: Source,
    array: t.TypeSpec[],
 ): void {
-   let isExported = false;
-   node.modifiers?.forEach((mod) => {
-      isExported = mod.kind === ts.SyntaxKind.ExportKeyword ? true : isExported;
-   });
+   const isExported = item.type === "ExportDeclaration" || item.type === "ExportDefaultDeclaration";
+   const node = (
+      item.type === "ExportDeclaration"
+         ? item.declaration
+         : item.type === "ExportDefaultDeclaration"
+           ? item.decl
+           : item
+   ) as TsInterfaceDeclaration | TsTypeAliasDeclaration;
+
    const kind = new Map([
-      ["InterfaceDeclaration", "interface"],
-      ["TypeAliasDeclaration", "type"],
-   ]).get(ts.SyntaxKind[node.kind]);
+      ["TsInterfaceDeclaration", "interface"],
+      ["TsTypeAliasDeclaration", "type"],
+   ]).get(node.type);
 
    let generics: string | null = null;
-   if (node.typeParameters && node.typeParameters.length > 0) {
-      const typeParams = node.typeParameters.map((tp) => tp.getText(src)).join(", ");
+   if (node.typeParams && node.typeParams.parameters.length > 0) {
+      const typeParams = node.typeParams.parameters.map((tp) => src.text(tp)).join(", ");
       generics = `<${typeParams}>`;
    }
    array.push({
-      name: node.name.getText(src),
+      name: node.id.value,
       kind: kind as t.TypeKind,
       generics,
       isExported,
    });
+}
+
+function isTypeDefinition(node: AstNode): boolean {
+   return node.type === "TsInterfaceDeclaration" || node.type === "TsTypeAliasDeclaration";
 }
 
 export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
@@ -217,21 +277,31 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
    const importSpecArray: t.ImportSpec[] = [];
    const typeSpecArray: t.TypeSpec[] = [];
 
-   const src = ts.createSourceFile("temp.ts", fileData.contents, ts.ScriptTarget.Latest, true);
+   let parsed: { module: Module; src: Source };
+   try {
+      parsed = parseModule(fileData.contents);
+   } catch {
+      // Files which are not valid TypeScript cannot contain channel definitions.
+      return { typeSpecArray: [], channelSpecArray: [], importSpecArray: [] };
+   }
+   const { module, src } = parsed;
 
-   ts.forEachChild(src, (node: ts.Node) => {
-      if (ts.isExpressionStatement(node)) {
-         if (node.getText(src).startsWith("Channel")) {
+   module.body.forEach((node: ModuleItem) => {
+      const item = node as AstNode;
+      if (item.type === "ExpressionStatement") {
+         if (src.text(item as { span: Span }).startsWith("Channel")) {
             const spec: Partial<t.ChannelSpec> = {};
-            parseChannelExpressions(node, src, spec);
+            parseChannelExpressions(item, src, spec);
             channelSpecArray.push(spec);
          }
-      } else if (ts.isImportDeclaration(node)) {
-         parseImportDeclarations(node, src, importSpecArray);
-      } else if (ts.isInterfaceDeclaration(node)) {
-         parseTypeDefinitions(node, src, typeSpecArray);
-      } else if (ts.isTypeAliasDeclaration(node)) {
-         parseTypeDefinitions(node, src, typeSpecArray);
+      } else if (item.type === "ImportDeclaration") {
+         parseImportDeclarations(item as ImportDeclaration, src, importSpecArray);
+      } else if (isTypeDefinition(item)) {
+         parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
+      } else if (item.type === "ExportDeclaration" && isTypeDefinition(item.declaration)) {
+         parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
+      } else if (item.type === "ExportDefaultDeclaration" && isTypeDefinition(item.decl)) {
+         parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
       }
    });
 
@@ -245,11 +315,14 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
 }
 
 export default {
+   parseModule,
+   forEachChild,
    isBuiltinType,
    collectCustomTypes,
    channelPattern,
    isSignatureAssignment,
    isListenersAssignment,
+   isTriggerAssignment,
    parseChannelExpressions,
    parseImportDeclarations,
    parseTypeDefinitions,

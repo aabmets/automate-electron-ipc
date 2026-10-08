@@ -10,13 +10,12 @@
  */
 
 import parser from "@src/parser.js";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 function collectCustomTypes(code: string): Set<string> {
-   const src = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+   const { module, src } = parser.parseModule(code);
    const set = new Set<string>();
-   ts.forEachChild(src, (node: ts.Node) => {
+   parser.forEachChild(module, (node) => {
       parser.collectCustomTypes(node, src, set);
    });
    return set;
@@ -25,7 +24,7 @@ function collectCustomTypes(code: string): Set<string> {
 describe("collectCustomTypes", () => {
    it("should not collect any types when no types are defined", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg1, arg2, arg3) => void;
+         const x = type as (arg1, arg2, arg3) => void;
       `);
       expect(customTypes).toStrictEqual(new Set());
    });
@@ -46,7 +45,7 @@ describe("collectCustomTypes", () => {
       ].forEach((typeName) => {
          expect(parser.isBuiltinType(typeName)).toStrictEqual(true);
          const customTypes = collectCustomTypes(`
-            type as (arg: ${typeName}) => ${typeName};
+            const x = type as (arg: ${typeName}) => ${typeName};
          `);
          expect(customTypes).toStrictEqual(new Set());
       });
@@ -54,63 +53,63 @@ describe("collectCustomTypes", () => {
 
    it("should collect custom types from return type literals", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg) => CustomType;
+         const x = type as (arg) => CustomType;
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
    });
 
    it("should collect custom types from param type literals", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType) => void;
+         const x = type as (arg: CustomType) => void;
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
    });
 
    it("should collect custom type array definitions", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType1[]) => CustomType2[];
+         const x = type as (arg: CustomType1[]) => CustomType2[];
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
    it("should collect custom types from type unions", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType1 | CustomType2) => CustomType2 | CustomType3;
+         const x = type as (arg: CustomType1 | CustomType2) => CustomType2 | CustomType3;
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2", "CustomType3"]));
    });
 
    it("should collect custom types from type intersections", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType1 & CustomType2) => CustomType2 & CustomType3;
+         const x = type as (arg: CustomType1 & CustomType2) => CustomType2 & CustomType3;
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2", "CustomType3"]));
    });
 
    it("should collect custom types from inlined object types", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: { abc: CustomType1 }) => { def: CustomType2 };
+         const x = type as (arg: { abc: CustomType1 }) => { def: CustomType2 };
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
    it("should collect custom types from within destructured objects", () => {
       const customTypes = collectCustomTypes(`
-         type as ({ abc: CustomType }) => void
+         const x = type as ({ abc: CustomType }) => void
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
    });
 
    it("should collect custom types from destructured object literal typehints", () => {
       const customTypes = collectCustomTypes(`
-         type as ({ abc }: CustomType) => void
+         const x = type as ({ abc }: CustomType) => void
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
    });
 
    it("should not collect generics from argument and return custom types", () => {
       const customTypes = collectCustomTypes(`
-         type as (arg: CustomType1<string>) => CustomType2<number>
+         const x = type as (arg: CustomType1<string>) => CustomType2<number>
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });

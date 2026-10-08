@@ -11,14 +11,13 @@
 
 import parser from "@src/parser.js";
 import * as t from "@types";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 function parseChannelExpressions(code: string): t.ChannelSpec {
-   const src = ts.createSourceFile("temp.ts", code, ts.ScriptTarget.Latest, true);
+   const { module, src } = parser.parseModule(code);
    const spec: Partial<t.ChannelSpec> = {};
-   ts.forEachChild(src, (node: ts.Node) => {
-      if (ts.isExpressionStatement(node)) {
+   parser.forEachChild(module, (node) => {
+      if (node.type === "ExpressionStatement") {
          parser.parseChannelExpressions(node, src, spec);
       }
    });
@@ -196,7 +195,7 @@ describe("parseChannelExpressions", () => {
             for (const c of "!#$%&()*+,-./:;<=>?@[\\]^{|}~") {
                const result = parseChannelExpressions(`
                   Channel("SomeChannel").RendererToMain.Broadcast({
-                     listeners: ["valid_listener", 'invalid${c}listener', '', 123];
+                     listeners: ["valid_listener", 'invalid${c}listener', '', 123],
                   });
                `);
                if (result?.listeners) {
@@ -210,7 +209,7 @@ describe("parseChannelExpressions", () => {
          it("should handle listeners assignment with excessive whitespace", () => {
             const result = parseChannelExpressions(`
                Channel("SomeChannel").RendererToMain.Broadcast({
-                  listeners: [  'listenerOne'  ,  "listenerTwo"  ,   'listenerThree'  ];
+                  listeners: [  'listenerOne'  ,  "listenerTwo"  ,   'listenerThree'  ],
                });
             `);
             expect(result.listeners).toEqual(["listenerOne", "listenerTwo", "listenerThree"]);
