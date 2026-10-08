@@ -154,7 +154,7 @@ meaning you can use any front-end framework or library like React, Vue or Angula
 Each verb declares one kind of channel in one direction:
 
 ```typescript
-import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";
+import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
@@ -172,6 +172,9 @@ export default defineChannels({
 
    // Sender and listener on same port for each of two renderer processes
    chat: port<(msg: string) => void>(),
+
+   // Sender and listener on one port between the main process and a renderer process
+   logTail: mainPort<(line: string) => void>(),
 });
 ```
 
@@ -182,6 +185,7 @@ export default defineChannels({
 | `emit`   | MainToRenderer     | `void` or `Promise<void>`    |
 | `ask`    | MainToRenderer     | any value or promise         |
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
+| `mainPort` | MainToRenderer   | `void` or `Promise<void>`    |
 
 The only supported option is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
 The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
@@ -216,6 +220,7 @@ on the verb of the channel and on the process that uses it:
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onConnection(callback)` |
+| `mainPort` | `ipc.<name>.connect(target)`      | the same as `port`                                |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -386,6 +391,43 @@ reloads; `send` of a closed connection does nothing.
 The methods of the channel itself, `ipc.chat.send`, `on`, `onReady` and `onClose`, address all of the
 connections: `send` goes to each of them (and is queued for the first one while there is none), and
 the others hear every connection. They are what a page with a single peer needs.
+
+#### Ports between the main process and a renderer
+
+High-frequency data, such as log tailing, audio meters or progress, pays the overhead of `ipcMain`
+for every message. Electron recommends a `MessagePortMain` for it, and a `mainPort` channel
+generates one. The signature types the messages in both directions, as it does for `port`:
+
+```typescript
+// schema.ts
+logTail: mainPort<(line: string) => void>(),
+
+// main process: a window, a view or contents
+const tail = ipc.logTail.connect(mainWindow);
+tail.send("started"); // queued until the page has the port, then sent in order
+const stop = tail.on((line) => console.log("from the page:", line)); // any number of subscribers
+tail.onReady(() => console.log("the page is connected")); // for every new port, at once if one is there
+tail.onClose(() => console.log("the page is gone"));
+tail.close(); // ends the connection for good
+
+// renderer: the API of a `port` channel
+ipc.logTail.on((line) => append(line));
+ipc.logTail.send("hello"); // to the main process
+```
+
+`connect(target)` returns the connection of the main process, a typed wrapper of the `MessagePortMain`
+that it keeps: `send`, `on`, `onReady`, `onClose` and `close`. The messages are argument lists, and
+the callbacks get the arguments, not the Electron event. The main process keeps one end of a
+`MessageChannelMain` and transfers the other to the page once it has loaded, and again after every
+reload, so a reloaded page gets a fresh port, `onReady` runs again and `onClose` does not run for the
+replaced port. `onClose` runs when the port closes, such as when the page goes away; the connection
+then queues `send` until the page is back. `close()` is final. It tells the page, which runs its own
+`onClose`, and the connection is not paired again. The connection also ends when the contents are
+destroyed, and when the page calls `close()` on its connection.
+
+The renderer has the API of a `port` channel (see above), with the main process as the peer. Several
+`connect` calls make several connections, for one or for different contents, and a page gets each of
+them from `onConnection`. A channel is either a `port` channel or a `mainPort` channel, not both.
 
 #### Sender validation
 

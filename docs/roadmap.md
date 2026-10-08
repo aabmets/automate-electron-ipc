@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 50 delivered, 22 remaining, 1 dropped.
+**Progress:** 51 delivered, 21 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -77,7 +77,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T23: `ask` channels (main asks a renderer and awaits the answer)](./tasks/T23-ask-channels.md) · depends on: T18, T21
 - [x] [T24: Robust port lifecycle (B9)](./tasks/T24-robust-port-lifecycle.md) · depends on: T14
 - [x] [T25: One-to-many port topologies](./tasks/T25-one-to-many-port-topologies.md) · depends on: T24
-- [ ] [T26: Main ↔ renderer port channels](./tasks/T26-main-renderer-port-channels.md) · depends on: T24
+- [x] [T26: Main ↔ renderer port channels](./tasks/T26-main-renderer-port-channels.md) · depends on: T24
 - [ ] [T27: Streaming results with cancellation](./tasks/T27-streaming-results-with-cancellation.md) · depends on: T18, T24
 - [ ] [T28: Invoke timeouts](./tasks/T28-invoke-timeouts.md) · depends on: T18
 - [ ] [T29: utilityProcess channels](./tasks/T29-utilityprocess-channels.md) · depends on: T18

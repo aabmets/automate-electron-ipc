@@ -190,5 +190,13 @@ export default {
          paramOptional: false,
          sigReturnType: "void",
       }),
+      Port_MainToRenderer: getParsedFileSpecsArray({
+         channelKind: "Port",
+         channelDirection: "MainToRenderer",
+         paramType: "string",
+         paramRest: false,
+         paramOptional: false,
+         sigReturnType: "void",
+      }),
    },
 };

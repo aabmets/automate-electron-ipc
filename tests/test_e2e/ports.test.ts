@@ -44,6 +44,7 @@ function createWindow(state: { loading?: boolean; url?: string; destroyed?: bool
       send: vi.fn(),
       isLoading: () => contents.loading,
       getURL: () => contents.url,
+      isDestroyed: () => win.destroyed,
    });
    const win = Object.assign(new EventEmitter(), {
       destroyed: state.destroyed ?? false,

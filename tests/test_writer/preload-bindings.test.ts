@@ -145,6 +145,17 @@ describe("PreloadBindingsWriter", () => {
       expect(output).toContain("ipcRenderer.send(`${wire}:disconnect`, key);");
    });
 
+   it("should give a mainPort channel the same page API as a port channel", async () => {
+      const render = async (direction: "RendererToRenderer" | "MainToRenderer") => {
+         const specs = shared.buildFileSpecs({ name: "alpha", kind: "Port", direction });
+         const obj = new shared.VitestPreloadBindingsWriter(specs);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      expect(await render("MainToRenderer")).toStrictEqual(await render("RendererToRenderer"));
+   });
+
    it("should write one object per channel, sorted by name, next to the port objects", async () => {
       const pfsArray = shared.buildFileSpecs(
          { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },

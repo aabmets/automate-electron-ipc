@@ -36,19 +36,20 @@ export class PreloadBindingsWriter extends BaseWriter {
 
       for (const parsedFileSpecs of this.pfsArray) {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
-            if (spec.direction === "RendererToMain") {
+            if (spec.kind === "Port") {
+               // The page has the same API for both peers: another page, or the main process.
+               portNamesArray.push(spec.name);
+               channels.push({
+                  name: spec.name,
+                  property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
+               });
+            } else if (spec.direction === "RendererToMain") {
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
                if (spec.kind === "Unicast") {
                   askNames.push(spec.name);
                }
                channels.push(this.buildMainToRendererChannel(spec));
-            } else if (spec.direction === "RendererToRenderer") {
-               portNamesArray.push(spec.name);
-               channels.push({
-                  name: spec.name,
-                  property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
-               });
             }
          }
       }

@@ -13,7 +13,7 @@ import { typecheck } from "@testutils/tsc-utils.js";
 import { describe, expect, it } from "vitest";
 
 const IMPORT =
-   'import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";';
+   'import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";';
 
 describe("public types", () => {
    it("accepts the generic form and the as form", async () => {
@@ -27,10 +27,12 @@ describe("public types", () => {
                echoUserName: send<(userName: string) => void>({}),
                progress: emit<(n: number) => void>({ trigger: "focus" }),
                chat: port<(msg: string) => void>(),
+               logTail: mainPort<(line: string) => void>(),
 
                getUserAlt: invoke({}) as (id: number) => Promise<User>,
                progressAlt: emit({ trigger: "focus" }) as (n: number) => void,
                chatAlt: (port() as (msg: string) => void),
+               logTailAlt: (mainPort() as (line: string) => void),
             });
          `,
       });

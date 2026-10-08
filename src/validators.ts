@@ -126,7 +126,7 @@ function getChannelSpecStruct(
          } else if (kind === "Unicast") {
             choices.push(asking ? "MainToRenderer" : "RendererToMain");
          } else if (kind === "Port") {
-            choices.push("RendererToRenderer");
+            choices.push("RendererToRenderer", "MainToRenderer");
          }
          return choices.includes(value)
             ? true

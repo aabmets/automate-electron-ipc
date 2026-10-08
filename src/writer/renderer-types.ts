@@ -41,12 +41,13 @@ export class RendererTypesWriter extends BaseWriter {
          let customTypes: Set<string> = new Set();
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (spec.direction === "RendererToMain") {
+            if (spec.kind === "Port") {
+               // The page has the same API for both peers: another page, or the main process.
+               channels.push(this.buildPortChannel(spec));
+            } else if (spec.direction === "RendererToMain") {
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
                channels.push(this.buildMainToRendererChannel(spec));
-            } else if (spec.direction === "RendererToRenderer") {
-               channels.push(this.buildPortChannel(spec));
             }
             const specCustomTypes = new Set([
                ...spec.signature.customTypes,

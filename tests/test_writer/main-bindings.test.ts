@@ -796,10 +796,10 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";
-         import type { BrowserWindow, IpcMainEvent } from "electron";
+         import type { BrowserWindow, IpcMainEvent, WebContents } from "electron";
 
          let lastPortConnectionId = 0;
-         const portEnds = new Map<string, { win: BrowserWindow; close: () => void }>();
+         const portEnds = new Map<string, { contents: WebContents; close: () => void }>();
          const portDisconnectChannels = new Set<string>();
 
          function listenForPortDisconnects(channel: string): void {
@@ -809,7 +809,7 @@ describe("MainBindingsWriter", () => {
             portDisconnectChannels.add(channel);
             electronIpcMain.on(\`\${channel}:disconnect\`, (event: IpcMainEvent, key: unknown) => {
                const end = typeof key === 'string' ? portEnds.get(key) : undefined;
-               if (end && !end.win.isDestroyed() && end.win.webContents === event.sender) {
+               if (end && !end.contents.isDestroyed() && end.contents === event.sender) {
                   end.close();
                }
             });
@@ -853,7 +853,7 @@ describe("MainBindingsWriter", () => {
                }
             };
             for (const end of ends) {
-               portEnds.set(end.key, { win: end.win, close });
+               portEnds.set(end.key, { contents: end.win.webContents, close });
             }
             listenForPortDisconnects(channel);
             for (const win of windows) {
@@ -871,6 +871,114 @@ describe("MainBindingsWriter", () => {
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   describe("mainPort channels", () => {
+      const render = async (...channels: shared.SimpleChannel[]) => {
+         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const mainPort = { name: "tail", kind: "Port", direction: "MainToRenderer" } as const;
+      const port = { name: "chat", kind: "Port", direction: "RendererToRenderer" } as const;
+
+      it("should write a typed connect method which returns the connection of one contents", async () => {
+         const pfsArray = shared.vitestChannelSpecs.Port_MainToRenderer;
+         const obj = new shared.VitestMainBindingsWriter(pfsArray);
+         await obj.write(false);
+         const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+         expect(output).toContain(
+            'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
+         );
+         expect(output).toContain(
+            'import type { BrowserWindow, IpcMainEvent, WebContents, WebContentsView, MessagePortMain } from "electron";',
+         );
+         expect(output).toContain(
+            "connect: (target: BrowserWindow | WebContents | WebContentsView): " +
+               "{ send: (arg1: string, arg2: string) => void; " +
+               "on: (callback: (arg1: string, arg2: string) => void) => () => void; " +
+               "onReady: (callback: () => void) => () => void; " +
+               "onClose: (callback: () => void) => () => void; " +
+               "close: () => void } => connectMainPort('vitestChannel', target),",
+         );
+         // The helper for two windows is not there.
+         expect(output).not.toContain("connectPorts");
+      });
+
+      it("should keep the main end of a MessageChannelMain, and give the page the other", async () => {
+         const output = await render(mainPort);
+
+         expect(output).toContain("const { port1, port2 } = new MessageChannelMain();");
+         expect(output).toContain("attach(port1);");
+         expect(output).toContain("contents.postMessage(channel, key, [port2]);");
+         expect(output).toContain("next.on('message', (event: { data: unknown }) => {");
+         expect(output).toContain("next.on('close', () => {");
+         expect(output).toContain("next.start();");
+         expect(output).toContain("next.postMessage(args);");
+         expect(output).toContain("contents.on('did-finish-load', pair);");
+         expect(output).toContain("contents.send(`${channel}:close`, key);");
+      });
+
+      it("should end the connection when the contents are destroyed or the page asks for it", async () => {
+         const output = await render(mainPort);
+
+         expect(output).toContain("contents.on('destroyed', close);");
+         expect(output).toContain("portEnds.set(key, { contents, close });");
+         expect(output).toContain("listenForPortDisconnects(channel);");
+      });
+
+      it("should send the messages in order once the port is there, never before", async () => {
+         const output = await render(mainPort);
+
+         expect(output).toContain("pending.push(args);");
+         expect(output).toContain("for (const args of pending.splice(0)) {");
+      });
+
+      it("should declare only the helpers that the port channels use", async () => {
+         const onlyMain = await render(mainPort);
+         const onlyRenderers = await render(port);
+         const both = await render(mainPort, port);
+
+         expect(onlyMain).toContain("function connectMainPort(");
+         expect(onlyMain).not.toContain("function connectPorts(");
+         expect(onlyRenderers).toContain("function connectPorts(");
+         expect(onlyRenderers).not.toContain("connectMainPort");
+         expect(onlyRenderers).not.toContain("MessagePortMain");
+         expect(both).toContain("function connectMainPort(");
+         expect(both).toContain("function connectPorts(");
+         // The registry of the ends is shared, so it is declared once.
+         expect(both.match(/const portEnds = /g)).toHaveLength(1);
+      });
+
+      it("should reserve the names that the helpers declare, so that schema types are renamed", () => {
+         const generator = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(mainPort));
+         const names = (
+            generator as unknown as { getReservedNames(): string[] }
+         ).getReservedNames();
+
+         for (const name of [
+            "connectMainPort",
+            "MainPortConnection",
+            "MainPortListener",
+            "MessagePortMain",
+            "Map",
+            "Set",
+            "Function",
+         ]) {
+            expect(names).toContain(name);
+         }
+      });
+
+      it("should put the prefix in front of the name that is passed to Electron", async () => {
+         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(mainPort), {
+            channelPrefix: "app:",
+         });
+         await obj.write(false);
+         const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+         expect(output).toContain("connectMainPort('app:tail', target)");
+      });
    });
 
    it("should write one object per channel, sorted by name, with no top-level helpers", async () => {

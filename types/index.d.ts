@@ -4,7 +4,7 @@
  * Channels are declared in an exported channel map in the schema file:
  *
  * @example
- * import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";
+ * import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";
  *
  * export default defineChannels({
  *    getUser: invoke<(id: number) => Promise<User>>(),
@@ -12,6 +12,7 @@
  *    progress: emit<(n: number) => void>({ trigger: "focus" }),
  *    hasUnsavedChanges: ask<() => boolean>(),
  *    chat: port<(msg: string) => void>(),
+ *    logTail: mainPort<(line: string) => void>(),
  * });
  */
 
@@ -111,6 +112,13 @@ export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
  * Options of `port` channels. There are none yet.
  */
 export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
+   [option: string]: never;
+}
+
+/**
+ * Options of `mainPort` channels. There are none yet.
+ */
+export interface MainPortConfig<_S extends ChannelSignature = ChannelSignature> {
    [option: string]: never;
 }
 
@@ -253,4 +261,21 @@ export function ask<S extends ChannelSignature = never>(
  */
 export function port<S extends ChannelSignature = never>(
    config?: PortConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * Two-way channel between the main process and a renderer process over a single message port,
+ * for high-frequency data such as log tailing, audio meters or progress, which would otherwise
+ * pay the overhead of `ipcMain` for every message. The signature must return `void` or
+ * `Promise<void>`, and types the messages in both directions.
+ *
+ * The main process connects a window, a view or contents with `ipc.<name>.connect(target)`, and
+ * gets a connection with `send`, `on`, `onReady`, `onClose` and `close`. The renderer has the API
+ * of a `port` channel: `send`, `on`, `onReady`, `onClose` and `onConnection`.
+ *
+ * @example
+ * logTail: mainPort<(line: string) => void>()
+ */
+export function mainPort<S extends ChannelSignature = never>(
+   config?: MainPortConfig<NoInfer<S>>,
 ): ChannelResult<S>;

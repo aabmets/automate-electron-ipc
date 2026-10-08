@@ -42,7 +42,11 @@ export class MainBindingsWriter extends BaseWriter {
       return this.config.mainBindingsFilePath;
    }
    protected getReservedNames(): string[] {
+      // The globals that only the helpers of port channels use.
+      const portGlobals = this.hasPorts("RendererToRenderer") || this.hasPorts("MainToRenderer");
       return [
+         ...(portGlobals ? ["Map", "Set"] : []),
+         ...(this.hasPorts("MainToRenderer") ? ["Function"] : []),
          "ipc",
          "electronIpcMain",
          "MessageChannelMain",
@@ -87,6 +91,12 @@ export class MainBindingsWriter extends BaseWriter {
          "portEnds",
          "portDisconnectChannels",
          "listenForPortDisconnects",
+         "MessagePortMain",
+         "MainPortConnection",
+         "MainPortListener",
+         "notifyMainPortListeners",
+         "addMainPortListener",
+         "connectMainPort",
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -112,14 +122,15 @@ export class MainBindingsWriter extends BaseWriter {
       let usesValidation = false;
       let usesEnvelope = false;
       let usesSenders = false;
-      let usesPorts = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (spec.direction === "RendererToMain") {
+            if (spec.kind === "Port") {
+               channels.push(this.buildPort(spec, electronImportsSet, electronTypeImportsSet));
+            } else if (spec.direction === "RendererToMain") {
                usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
                eventTypes.add(this.getEventType(spec));
@@ -139,12 +150,6 @@ export class MainBindingsWriter extends BaseWriter {
                   electronTypeImportsSet.add(type);
                }
                channels.push(this.buildMainToRendererChannel(spec));
-            } else if (spec.direction === "RendererToRenderer") {
-               usesPorts = true;
-               electronImportsSet.add("MessageChannelMain");
-               electronTypeImportsSet.add("BrowserWindow");
-               electronTypeImportsSet.add("IpcMainEvent");
-               channels.push(this.buildPortChannel(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -161,6 +166,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       const usesAsks = this.hasChannels("Unicast");
       const usesEmits = this.hasChannels("Broadcast");
+      const usesRendererPorts = this.hasPorts("RendererToRenderer");
+      const usesMainPorts = this.hasPorts("MainToRenderer");
+      const usesPorts = usesRendererPorts || usesMainPorts;
       const out = this.buildImports(
          [
             ...(usesIpcMain || usesAsks || usesPorts ? ["ipcMain as electronIpcMain"] : []),
@@ -180,6 +188,8 @@ export class MainBindingsWriter extends BaseWriter {
             usesEmits,
             usesAsks,
             usesPorts,
+            usesRendererPorts,
+            usesMainPorts,
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -208,6 +218,31 @@ export class MainBindingsWriter extends BaseWriter {
          ),
       );
    }
+   /** Builds a port channel, and adds the electron imports that its helpers use. */
+   private buildPort(spec: t.ChannelSpec, values: Set<string>, types: Set<string>): ChannelEntry {
+      values.add("MessageChannelMain");
+      for (const type of this.getPortTypes(spec)) {
+         types.add(type);
+      }
+      return spec.direction === "MainToRenderer"
+         ? this.buildMainPortChannel(spec)
+         : this.buildPortChannel(spec);
+   }
+   /** Whether any schema file declares a port channel with the direction. */
+   private hasPorts(direction: t.ChannelDirection): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some(
+            (spec) => spec.kind === "Port" && spec.direction === direction,
+         ),
+      );
+   }
+   /** The electron types that the helpers of a port channel use. */
+   private getPortTypes(spec: t.ChannelSpec): string[] {
+      const types = ["BrowserWindow", "IpcMainEvent", "WebContents"];
+      return spec.direction === "MainToRenderer"
+         ? [...types, "WebContentsView", "MessagePortMain"]
+         : types;
+   }
    /** The electron types that the channels which send to a renderer use. */
    private getSenderTypes(spec: t.ChannelSpec): string[] {
       const types = ["BrowserWindow", "WebContents", "WebContentsView", "WebFrameMain"];
@@ -225,6 +260,8 @@ export class MainBindingsWriter extends BaseWriter {
          usesEmits: boolean;
          usesAsks: boolean;
          usesPorts: boolean;
+         usesRendererPorts: boolean;
+         usesMainPorts: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -245,7 +282,13 @@ export class MainBindingsWriter extends BaseWriter {
          support.push(this.buildAskHelpers());
       }
       if (uses.usesPorts) {
+         support.push(this.buildPortRegistry());
+      }
+      if (uses.usesRendererPorts) {
          support.push(this.buildPortHelpers());
+      }
+      if (uses.usesMainPorts) {
+         support.push(this.buildMainPortHelpers());
       }
       if (uses.usesHandlers) {
          // The handler that each invoke channel has now, which its disposer compares against.
@@ -989,26 +1032,20 @@ export class MainBindingsWriter extends BaseWriter {
       ].join("\n");
    }
    /**
-    * `connectPorts`, which `ipc.<name>.connect` calls. A pair of ports is made only when both
-    * windows have loaded their page, since a port that is posted earlier arrives before the preload
-    * script listens for it. It is made right away if both have, and again on every
-    * `did-finish-load`, so a window that is shown late and a page that reloads get a fresh port, and
-    * the other window replaces its end. The windows are told through `<channel>:close` when the
-    * connection ends, since the main process no longer holds the ports it has transferred. The
-    * connection ends when it is closed and when either window is destroyed.
-    *
-    * Every end of a connection has a key, `<id>:a` or `<id>:b`, which is the message that carries its
-    * port and the one that closes it. A page tells the keys apart, so it can hold any number of
-    * connections of the channel, and replaces the port of the one that is paired again. A page ends
-    * a connection through `<channel>:disconnect`, which is honoured only from the window that holds
-    * that end.
+    * The registry of the ends of connections, which both kinds of port channel use. Every end of a
+    * connection has a key: the message that carries its port, and the one that closes it. A page
+    * tells the keys apart, so it can hold any number of connections of a channel, and replaces the
+    * port of the one that is paired again. A page ends a connection through `<channel>:disconnect`,
+    * which is honoured only from the contents that hold that end. The main process no longer holds
+    * the ports that it has transferred, so it tells the pages through `<channel>:close` when a
+    * connection ends.
     */
-   private buildPortHelpers(): string {
-      const [i1, i2, i3, i4] = this.indents;
+   private buildPortRegistry(): string {
+      const [i1, i2, i3] = this.indents;
       return [
          "",
          "let lastPortConnectionId = 0;",
-         "const portEnds = new Map<string, { win: BrowserWindow; close: () => void }>();",
+         "const portEnds = new Map<string, { contents: WebContents; close: () => void }>();",
          "const portDisconnectChannels = new Set<string>();",
          "",
          "function listenForPortDisconnects(channel: string): void {",
@@ -1018,11 +1055,25 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}portDisconnectChannels.add(channel);`,
          `${i1}electronIpcMain.on(\`\${channel}:disconnect\`, (event: IpcMainEvent, key: unknown) => {`,
          `${i2}const end = typeof key === 'string' ? portEnds.get(key) : undefined;`,
-         `${i2}if (end && !end.win.isDestroyed() && end.win.webContents === event.sender) {`,
+         `${i2}if (end && !end.contents.isDestroyed() && end.contents === event.sender) {`,
          `${i3}end.close();`,
          `${i2}}`,
          `${i1}});`,
          "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `connectPorts`, which `ipc.<name>.connect` calls. A pair of ports is made only when both
+    * windows have loaded their page, since a port that is posted earlier arrives before the preload
+    * script listens for it. It is made right away if both have, and again on every
+    * `did-finish-load`, so a window that is shown late and a page that reloads get a fresh port, and
+    * the other window replaces its end. The connection ends when it is closed and when either
+    * window is destroyed.
+    */
+   private buildPortHelpers(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
          "",
          "function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {",
          `${i1}const id = ++lastPortConnectionId;`,
@@ -1062,7 +1113,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i1}};`,
          `${i1}for (const end of ends) {`,
-         `${i2}portEnds.set(end.key, { win: end.win, close });`,
+         `${i2}portEnds.set(end.key, { contents: end.win.webContents, close });`,
          `${i1}}`,
          `${i1}listenForPortDisconnects(channel);`,
          `${i1}for (const win of windows) {`,
@@ -1081,6 +1132,175 @@ export class MainBindingsWriter extends BaseWriter {
       const connector = [
          `\n${i1}connect: (winA: BrowserWindow, winB: BrowserWindow) =>`,
          ` connectPorts(${this.wireName(spec.name)}, winA, winB),`,
+      ].join("");
+      return { name: spec.name, members: [connector] };
+   }
+   /**
+    * `connectMainPort`, which `ipc.<name>.connect` of a `mainPort` channel calls. The main process
+    * keeps one end of a `MessageChannelMain` and transfers the other to the page, with the key of
+    * the connection. It pairs once the page has loaded, since a port that is posted earlier arrives
+    * before the preload script listens for it, and again on every `did-finish-load`, so a page that
+    * reloads gets a fresh port, and the old port is dropped without ending the connection. The
+    * connection has the shape of the one that a page gets from `onConnection`:
+    * - `send` queues the messages until a port is there, and flushes them in order;
+    * - `on`, `onReady` and `onClose` keep any number of subscribers with their own disposers, and a
+    *   subscriber which throws is reported to `console.error` and does not stop the others;
+    * - `onReady` runs at once if a port is there, and again for every new port;
+    * - `onClose` runs when the port closes, such as when the page goes away, and when `close` ends
+    *   the connection. `close` is final: the page is told through `<channel>:close`, the port is
+    *   closed and a reload pairs no more. The connection also ends when the contents are destroyed,
+    *   and when the page asks for it.
+    */
+   private buildMainPortHelpers(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "interface MainPortConnection {",
+         `${i1}send: (...args: any[]) => void;`,
+         `${i1}on: (callback: Function) => () => void;`,
+         `${i1}onReady: (callback: () => void) => () => void;`,
+         `${i1}onClose: (callback: () => void) => () => void;`,
+         `${i1}close: () => void;`,
+         "}",
+         "",
+         "type MainPortListener = { callback: Function };",
+         "",
+         "function notifyMainPortListeners(listeners: Iterable<MainPortListener>, args: unknown[]): void {",
+         `${i1}for (const listener of [...listeners]) {`,
+         `${i2}try {`,
+         `${i3}listener.callback(...args);`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i2}}`,
+         `${i1}}`,
+         "}",
+         "",
+         "function addMainPortListener(listeners: Set<MainPortListener>, callback: Function) {",
+         `${i1}const listener = { callback };`,
+         `${i1}listeners.add(listener);`,
+         `${i1}return { listener, dispose: () => void listeners.delete(listener) };`,
+         "}",
+         "",
+         "function connectMainPort(",
+         `${i1}channel: string,`,
+         `${i1}target: BrowserWindow | WebContents | WebContentsView,`,
+         "): MainPortConnection {",
+         `${i1}const contents = 'webContents' in target ? target.webContents : target;`,
+         `${i1}const key = \`\${++lastPortConnectionId}:main\`;`,
+         `${i1}const subscribers = new Set<MainPortListener>();`,
+         `${i1}const readyListeners = new Set<MainPortListener>();`,
+         `${i1}const closeListeners = new Set<MainPortListener>();`,
+         `${i1}const pending: unknown[][] = [];`,
+         `${i1}let port: MessagePortMain | null = null;`,
+         `${i1}let closed = false;`,
+         `${i1}const isReady = () =>`,
+         `${i2}!contents.isDestroyed() && !contents.isLoading() && contents.getURL() !== '';`,
+         `${i1}// Drops the port without ending the connection, which is what a new port replaces.`,
+         `${i1}const release = () => {`,
+         `${i2}const current = port;`,
+         `${i2}port = null;`,
+         `${i2}current?.close();`,
+         `${i2}return current;`,
+         `${i1}};`,
+         `${i1}const attach = (next: MessagePortMain) => {`,
+         `${i2}release();`,
+         `${i2}port = next;`,
+         `${i2}next.on('message', (event: { data: unknown }) => {`,
+         `${i3}if (port === next && Array.isArray(event.data)) {`,
+         `${i4}notifyMainPortListeners(subscribers, event.data);`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i2}next.on('close', () => {`,
+         `${i3}if (port === next) {`,
+         `${i4}port = null;`,
+         `${i4}notifyMainPortListeners(closeListeners, []);`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i2}next.start();`,
+         `${i2}for (const args of pending.splice(0)) {`,
+         `${i3}try {`,
+         `${i4}next.postMessage(args);`,
+         `${i3}} catch (error) {`,
+         `${i4}console.error(error);`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i2}notifyMainPortListeners(readyListeners, []);`,
+         `${i1}};`,
+         `${i1}const pair = () => {`,
+         `${i2}if (closed || !isReady()) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}const { port1, port2 } = new MessageChannelMain();`,
+         `${i2}attach(port1);`,
+         `${i2}contents.postMessage(channel, key, [port2]);`,
+         `${i1}};`,
+         `${i1}const close = () => {`,
+         `${i2}if (closed) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}closed = true;`,
+         `${i2}pending.length = 0;`,
+         `${i2}portEnds.delete(key);`,
+         `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i2}if (!contents.isDestroyed()) {`,
+         `${i3}contents.off('did-finish-load', pair);`,
+         `${i3}contents.off('destroyed', close);`,
+         `${i3}contents.send(\`\${channel}:close\`, key);`,
+         `${i2}}`,
+         `${i2}if (release()) {`,
+         `${i3}notifyMainPortListeners(closeListeners, []);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}portEnds.set(key, { contents, close });`,
+         `${i1}listenForPortDisconnects(channel);`,
+         `${i1}contents.on('did-finish-load', pair);`,
+         `${i1}contents.on('destroyed', close);`,
+         `${i1}pair();`,
+         `${i1}return {`,
+         `${i2}send: (...args: any[]) => {`,
+         `${i3}if (closed) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}if (port) {`,
+         `${i4}port.postMessage(args);`,
+         `${i3}} else {`,
+         `${i4}pending.push(args);`,
+         `${i3}}`,
+         `${i2}},`,
+         `${i2}on: (callback: Function) => addMainPortListener(subscribers, callback).dispose,`,
+         `${i2}onReady: (callback: () => void) => {`,
+         `${i3}const { listener, dispose } = addMainPortListener(readyListeners, callback);`,
+         `${i3}if (port) {`,
+         `${i4}notifyMainPortListeners([listener], []);`,
+         `${i3}}`,
+         `${i3}return dispose;`,
+         `${i2}},`,
+         `${i2}onClose: (callback: () => void) => addMainPortListener(closeListeners, callback).dispose,`,
+         `${i2}close,`,
+         `${i1}};`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `ipc.<name>.connect(target)` of a `mainPort` channel, which pairs the contents of the window,
+    * the view or the contents and returns the connection. The messages are typed with the signature
+    * in both directions: `send` takes its parameters, and the callback of `on` is the signature.
+    */
+   private buildMainPortChannel(spec: t.ChannelSpec): ChannelEntry {
+      const i1 = this.indents[1];
+      const typeParams = this.getTypeParams(spec.signature);
+      const send = `${typeParams}(${this.getOriginalParams(spec, false)}) => void`;
+      const connection = [
+         `{ send: ${send};`,
+         ` on: (callback: ${spec.signature.definition}) => () => void;`,
+         " onReady: (callback: () => void) => () => void;",
+         " onClose: (callback: () => void) => () => void;",
+         " close: () => void }",
+      ].join("");
+      const connector = [
+         `\n${i1}connect: (target: BrowserWindow | WebContents | WebContentsView): ${connection} =>`,
+         ` connectMainPort(${this.wireName(spec.name)}, target),`,
       ].join("");
       return { name: spec.name, members: [connector] };
    }

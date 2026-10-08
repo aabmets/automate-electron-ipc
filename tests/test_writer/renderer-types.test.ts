@@ -179,6 +179,19 @@ describe("RendererTypesWriter", () => {
       expect(buffer.toString()).toStrictEqual(`${expectedOutput.trim()}\n`);
    });
 
+   it("should type a mainPort channel like a port channel, since the page has the same API", async () => {
+      const render = async (name: string, direction: "RendererToRenderer" | "MainToRenderer") => {
+         const specs = shared.buildFileSpecs({ name, kind: "Port", direction });
+         const obj = new shared.VitestRendererTypesWriter(specs);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      expect(await render("alpha", "MainToRenderer")).toStrictEqual(
+         await render("alpha", "RendererToRenderer"),
+      );
+   });
+
    it("should write one object per channel, sorted by name, with no ports object", async () => {
       const pfsArray = shared.buildFileSpecs(
          { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },

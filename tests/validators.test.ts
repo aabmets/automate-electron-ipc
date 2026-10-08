@@ -61,6 +61,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("MainToRenderer", "Broadcast"),
          csg.generate("RendererToMain", "Unicast"),
          csg.generate("RendererToRenderer", "Port"),
+         csg.generate("MainToRenderer", "Port"),
       ];
       try {
          const retVal = vld.validateChannelSpecs(channelSpecsArray);
@@ -140,7 +141,6 @@ describe("validateChannelSpecs", () => {
       const invalidChannelSpecsArray = [
          csg.generate("RendererToRenderer", "Broadcast"),
          csg.generate("RendererToRenderer", "Unicast"),
-         csg.generate("MainToRenderer", "Port"),
          csg.generate("RendererToMain", "Port"),
       ];
       for (const spec of invalidChannelSpecsArray) {
