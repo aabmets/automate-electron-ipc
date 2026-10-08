@@ -136,6 +136,46 @@ describe("validateChannelSpecs", () => {
    });
 });
 
+describe("validateGlobalChannelSpecs", () => {
+   const file = (relativePath: string, specs: t.ChannelSpec[]): t.ParsedFileSpecs => ({
+      fullPath: `/project/ipc/schema/${relativePath}`,
+      relativePath,
+      specs: {
+         channelSpecArray: specs,
+         channelMapExport: { kind: "default" },
+         importSpecArray: [],
+         typeSpecArray: [],
+      },
+   });
+   const spec = (name: string, listeners?: string[]): t.ChannelSpec => ({
+      ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast"),
+      name,
+      ...(listeners ? { listeners } : {}),
+   });
+
+   it("should accept unique channels across files", () => {
+      const files = [file("a.ts", [spec("getUser")]), file("b.ts", [spec("getPost")])];
+      expect(() => vld.validateGlobalChannelSpecs(files)).not.toThrowError();
+   });
+
+   it("should throw an error naming both files when a channel is declared twice", () => {
+      const files = [file("b.ts", [spec("getUser")]), file("a.ts", [spec("getUser")])];
+      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
+         "Channel name 'getUser' is declared in both 'a.ts' and 'b.ts'",
+      );
+   });
+
+   it("should throw an error naming both files when listener names clash", () => {
+      const files = [
+         file("a.ts", [spec("getUser")]),
+         file("b.ts", [spec("getPost", ["onGetUser"])]),
+      ];
+      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
+         /'onGetUser' of channel 'getPost' in 'b\.ts' clashes .* 'getUser' in 'a\.ts'/,
+      );
+   });
+});
+
 describe("validateTypeSpecs", () => {
    it("should accept exported types", () => {
       vld.validateTypeSpecs([

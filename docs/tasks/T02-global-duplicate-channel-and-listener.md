@@ -9,4 +9,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** validate uniqueness across all parsed files after parsing. The error message names both
   files.
 - **Tests:** unit test, plus an e2e regression test with two schema files defining the same channel.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `validateGlobalChannelSpecs` runs in `ipcAutomation` after all files are parsed (files sorted by path so the message is deterministic). Custom `listeners` cannot be declared in the new syntax, so the listener check only matters for the implicit `on<Name>` listeners.

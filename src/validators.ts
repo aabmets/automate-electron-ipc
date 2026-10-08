@@ -161,6 +161,44 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
    return specs as t.ChannelSpec[];
 }
 
+/**
+ * Checks that channel names and listener names are unique across all parsed files.
+ * Per-file validation cannot see clashes between files, which would produce duplicate
+ * object keys in the generated code and a second handler registration at runtime.
+ */
+export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
+   const sorted = [...files].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+   const channelOwners = new Map<string, string>();
+   const listenerOwners = new Map<string, { file: string; channel: string }>();
+
+   for (const file of sorted) {
+      for (const spec of file.specs.channelSpecArray) {
+         const firstFile = channelOwners.get(spec.name);
+         if (firstFile !== undefined) {
+            throw new Error(
+               `Channel name '${spec.name}' is declared in both '${firstFile}' and ` +
+                  `'${file.relativePath}'. Channel names must be unique across the application.`,
+            );
+         }
+         channelOwners.set(spec.name, file.relativePath);
+
+         const listeners = [...(spec.listeners ?? []), `on${utils.capitalize(spec.name)}`];
+         for (const listener of listeners) {
+            const first = listenerOwners.get(listener);
+            if (first !== undefined) {
+               throw new Error(
+                  `Listener name '${listener}' of channel '${spec.name}' in ` +
+                     `'${file.relativePath}' clashes with a listener of channel ` +
+                     `'${first.channel}' in '${first.file}'. Listener names must be ` +
+                     "unique across the application.",
+               );
+            }
+            listenerOwners.set(listener, { file: file.relativePath, channel: spec.name });
+         }
+      }
+   }
+}
+
 export function validateTypeSpecs(specs: Partial<t.TypeSpec>[]): t.TypeSpec[] {
    const TypeSpecStruct = object({
       name: string(),
@@ -176,4 +214,9 @@ export function validateTypeSpecs(specs: Partial<t.TypeSpec>[]): t.TypeSpec[] {
    return specs as t.TypeSpec[];
 }
 
-export default { validateOptionalConfig, validateChannelSpecs, validateTypeSpecs };
+export default {
+   validateOptionalConfig,
+   validateChannelSpecs,
+   validateGlobalChannelSpecs,
+   validateTypeSpecs,
+};

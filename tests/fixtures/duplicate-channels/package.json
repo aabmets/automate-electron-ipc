@@ -1,0 +1,9 @@
+{
+   "name": "fixture-duplicate-channels",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

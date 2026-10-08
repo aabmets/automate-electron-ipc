@@ -15,6 +15,7 @@ import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import parser from "./parser.js";
+import vld from "./validators.js";
 import writer from "./writer/index.js";
 
 export async function ipcAutomation(): Promise<void> {
@@ -66,6 +67,7 @@ export async function ipcAutomation(): Promise<void> {
          }
       }
    }
+   vld.validateGlobalChannelSpecs(pfsArray);
    await Promise.all([
       new writer.MainBindingsWriter(config, pfsArray).write(),
       new writer.PreloadBindingsWriter(config, pfsArray).write(),

@@ -72,3 +72,12 @@ describe("ipcAutomation, schema directory", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, duplicate channels across files", () => {
+   it("rejects the same channel name declared in two schema files", async () => {
+      // Regression for B2: validation ran per file, so this produced duplicate keys in the output.
+      await expect(runFixture("duplicate-channels")).rejects.toThrowError(
+         /Channel name 'getUser' is declared in both '(a|b)\.ts' and '(a|b)\.ts'/,
+      );
+   });
+});
