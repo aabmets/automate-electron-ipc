@@ -36,19 +36,26 @@ get an overview; the roadmap is enough. Every session follows this protocol:
    - Keep the generated runtime code sandbox-safe (it runs in a sandboxed preload or the main process)
      and free of any dependency on this library at runtime.
 4. Before committing, all of these must pass: `bun run check` and `bunx vitest run`.
-   Once T11 lands, the Node e2e job must pass too.
-5. In the same commit:
-   - flip the task to `[x]` in the roadmap and update its **Progress** line;
+   Once T11 lands, the Node e2e job must pass too. Check that `git diff --cached` includes
+   `docs/roadmap.md`; a task commit without a roadmap change is incomplete.
+5. **Update `docs/roadmap.md`** in the same commit. A task is not done until the roadmap says so:
+   - flip the task's marker from `[ ]` to `[x]`;
+   - update the **Progress** line counts to match the markers;
+   - if the task was dropped instead, mark it `[-]` and say why in its task file;
+   - if a **Decision needed** question was answered, remove the flag from the roadmap entry.
+
+   Also in the same commit:
    - fill in `Delivered:` in the task file with the date and a one-line note on anything notable
      (deviations, follow-ups);
    - if new follow-up work was discovered, add it as a new task with the next free ID: a new task
-     file, plus a roadmap entry at the end of the matching phase.
+     file, plus a roadmap entry at the end of the matching phase, with its `depends on` list.
 6. Make exactly **one commit** for the task, with message `T<NN>: <short summary>` followed by a body.
    Push it to the session's designated branch.
-7. **Stop.** Report what was delivered and which task is next. Do not continue to the next task.
-   The user clears the session between tasks.
+7. **Stop.** Report what was delivered and which task is next, as read from the updated roadmap.
+   Do not continue to the next task. The user clears the session between tasks.
 
 If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so
-on, each with its own task file and roadmap entry. Deliver only the first part, and say so.
+on, each with its own task file and roadmap entry. Deliver only the first part, mark only that
+part `[x]` in the roadmap, and say so.
 
 @docs/roadmap.md
