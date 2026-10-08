@@ -278,12 +278,33 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import type { BrowserWindow } from "electron";
-         
+         import { webContents as electronWebContents } from "electron";
+         import type { BrowserWindow, WebContents, WebContentsView } from "electron";
+
+         function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {
+            return 'webContents' in target ? target.webContents : target;
+         }
+
+         function broadcastMessage(
+            channel: string,
+            args: unknown[],
+            filter?: (contents: WebContents) => boolean,
+         ): void {
+            for (const contents of electronWebContents.getAllWebContents()) {
+               if (!contents.isDestroyed() && (!filter || filter(contents))) {
+                  contents.send(channel, ...args);
+               }
+            }
+         }
+
          export const ipc = {
             vitestChannel: {
-               send: (browserWindow: BrowserWindow, arg1: number, ...arg2: number[]) =>
-                  browserWindow.webContents.send('vitestChannel', arg1, ...arg2),
+               send: (target: BrowserWindow | WebContents | WebContentsView, arg1: number, ...arg2: number[]) =>
+                  resolveSendTarget(target).send('vitestChannel', arg1, ...arg2),
+               broadcast: (arg1: number, ...arg2: number[]) =>
+                  broadcastMessage('vitestChannel', [arg1, ...arg2]),
+               broadcastTo: (filter: (contents: WebContents) => boolean, arg1: number, ...arg2: number[]) =>
+                  broadcastMessage('vitestChannel', [arg1, ...arg2], filter),
             },
          }
       `);
@@ -669,12 +690,33 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import type { BrowserWindow } from "electron";
+         import { webContents as electronWebContents } from "electron";
+         import type { BrowserWindow, WebContents, WebContentsView } from "electron";
+
+         function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {
+            return 'webContents' in target ? target.webContents : target;
+         }
+
+         function broadcastMessage(
+            channel: string,
+            args: unknown[],
+            filter?: (contents: WebContents) => boolean,
+         ): void {
+            for (const contents of electronWebContents.getAllWebContents()) {
+               if (!contents.isDestroyed() && (!filter || filter(contents))) {
+                  contents.send(channel, ...args);
+               }
+            }
+         }
 
          export const ipc = {
             focused: {
-               send: (browserWindow: BrowserWindow, state: boolean, ...tags: string[]) =>
-                  browserWindow.webContents.send('focused', state, ...tags),
+               send: (target: BrowserWindow | WebContents | WebContentsView, state: boolean, ...tags: string[]) =>
+                  resolveSendTarget(target).send('focused', state, ...tags),
+               broadcast: (state: boolean, ...tags: string[]) =>
+                  broadcastMessage('focused', [state, ...tags]),
+               broadcastTo: (filter: (contents: WebContents) => boolean, state: boolean, ...tags: string[]) =>
+                  broadcastMessage('focused', [state, ...tags], filter),
                bind: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>, onError?: (error: unknown) => void) => {
                   const listener = async () => {
                      try {
@@ -760,7 +802,9 @@ describe("MainBindingsWriter", () => {
       );
 
       expect(toRenderer).not.toContain("electronIpcMain");
-      expect(toRenderer.startsWith('import type { BrowserWindow } from "electron";')).toBe(true);
+      expect(
+         toRenderer.startsWith('import { webContents as electronWebContents } from "electron";'),
+      ).toBe(true);
       expect(port).not.toContain("electronIpcMain");
       expect(port.startsWith('import { MessageChannelMain } from "electron";')).toBe(true);
       expect(toMain.startsWith('import { ipcMain as electronIpcMain } from "electron";')).toBe(
@@ -944,6 +988,8 @@ describe("MainBindingsWriter", () => {
          const output = await render({ channelPrefix: "app:" });
 
          expect(output).toContain("browserWindow.webContents.send('app:pushIt', ...args);");
+         expect(output).toContain("resolveSendTarget(target).send('app:pushIt', ");
+         expect(output).toContain("broadcastMessage('app:pushIt', ");
       });
    });
 });

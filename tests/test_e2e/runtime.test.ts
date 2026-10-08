@@ -208,8 +208,12 @@ describe("generated main process bindings", () => {
          "getUser.handleOnce",
          "logLine.on",
          "logLine.once",
+         "progress.broadcast",
+         "progress.broadcastTo",
          "progress.send",
          "titleChanged.bind",
+         "titleChanged.broadcast",
+         "titleChanged.broadcastTo",
          "titleChanged.send",
       ]);
    });

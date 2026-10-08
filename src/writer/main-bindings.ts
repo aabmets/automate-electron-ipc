@@ -61,6 +61,11 @@ export class MainBindingsWriter extends BaseWriter {
          "IpcArgumentsSchema",
          "IpcSchemaResult",
          "validateArguments",
+         "WebContents",
+         "WebContentsView",
+         "electronWebContents",
+         "resolveSendTarget",
+         "broadcastMessage",
          "IpcErrorInfo",
          "IpcEnvelope",
          "toIpcError",
@@ -85,6 +90,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesHandlers = false;
       let usesValidation = false;
       let usesEnvelope = false;
+      let usesSenders = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -105,7 +111,11 @@ export class MainBindingsWriter extends BaseWriter {
                usesValidation ||= validator !== null;
                channels.push(this.buildRendererToMainChannel(spec, validator));
             } else if (spec.direction === "MainToRenderer") {
-               electronTypeImportsSet.add("BrowserWindow");
+               usesSenders = true;
+               electronImportsSet.add("webContents as electronWebContents");
+               for (const type of ["BrowserWindow", "WebContents", "WebContentsView"]) {
+                  electronTypeImportsSet.add(type);
+               }
                channels.push(this.buildMainToRendererChannel(spec));
             } else if (spec.direction === "RendererToRenderer") {
                electronImportsSet.add("MessageChannelMain");
@@ -139,27 +149,10 @@ export class MainBindingsWriter extends BaseWriter {
          ...importDeclarationsArray.sort(utils.compareStrings),
       ];
       const [i0] = this.indents;
-      const bindingsExpression = [];
-      if (usesIpcMain) {
-         bindingsExpression.push(
-            this.buildSenderValidation([...eventTypes].sort(utils.compareStrings), usesValidation),
-         );
-      }
-      if (usesValidation) {
-         bindingsExpression.push(
-            this.buildArgumentValidation([...eventTypes].sort(utils.compareStrings)),
-         );
-      }
-      if (usesEnvelope) {
-         bindingsExpression.push(this.buildErrorEnvelope());
-      }
-      if (usesHandlers) {
-         // The handler that each invoke channel has now, which its disposer compares against.
-         // It uses no global, which a schema type could shadow, and has no prototype.
-         bindingsExpression.push(
-            "\nconst registeredHandlers: { [channel: string]: unknown } = { __proto__: null };\n",
-         );
-      }
+      const bindingsExpression = this.buildSupport(
+         { usesIpcMain, usesHandlers, usesValidation, usesEnvelope, usesSenders },
+         [...eventTypes].sort(utils.compareStrings),
+      );
       bindingsExpression.push("\nexport const ipc = {");
       for (const channel of this.sortChannels(channels)) {
          bindingsExpression.push(`\n${i0}${channel.name}: {`, ...channel.members, `\n${i0}},`);
@@ -168,6 +161,39 @@ export class MainBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+   /** The helpers that the channels of the file use, in the order that they are declared. */
+   private buildSupport(
+      uses: {
+         usesIpcMain: boolean;
+         usesHandlers: boolean;
+         usesValidation: boolean;
+         usesEnvelope: boolean;
+         usesSenders: boolean;
+      },
+      eventTypes: string[],
+   ): string[] {
+      const support: string[] = [];
+      if (uses.usesIpcMain) {
+         support.push(this.buildSenderValidation(eventTypes, uses.usesValidation));
+      }
+      if (uses.usesValidation) {
+         support.push(this.buildArgumentValidation(eventTypes));
+      }
+      if (uses.usesEnvelope) {
+         support.push(this.buildErrorEnvelope());
+      }
+      if (uses.usesSenders) {
+         support.push(this.buildSenderHelpers());
+      }
+      if (uses.usesHandlers) {
+         // The handler that each invoke channel has now, which its disposer compares against.
+         // It uses no global, which a schema type could shadow, and has no prototype.
+         support.push(
+            "\nconst registeredHandlers: { [channel: string]: unknown } = { __proto__: null };\n",
+         );
+      }
+      return support;
    }
    /**
     * Imports the validator of the channel, if it has one, and returns its local name. The import
@@ -564,18 +590,63 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}};`,
       ];
    }
-   /** `ipc.<name>.send(window, ...args)`, and `ipc.<name>.bind(window, provider)` with a trigger. */
+   /**
+    * The helpers of the `emit` channels. `resolveSendTarget` takes the contents out of what
+    * `send` is given: a window or a view has them as `webContents`, and a `WebContents` is them.
+    * `broadcastMessage` sends to every contents that is not destroyed, optionally only to those
+    * that `filter` accepts. Destroyed contents are skipped, since sending to them throws.
+    */
+   private buildSenderHelpers(): string {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "",
+         "function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {",
+         `${i1}return 'webContents' in target ? target.webContents : target;`,
+         "}",
+         "",
+         "function broadcastMessage(",
+         `${i1}channel: string,`,
+         `${i1}args: unknown[],`,
+         `${i1}filter?: (contents: WebContents) => boolean,`,
+         "): void {",
+         `${i1}for (const contents of electronWebContents.getAllWebContents()) {`,
+         `${i2}if (!contents.isDestroyed() && (!filter || filter(contents))) {`,
+         `${i3}contents.send(channel, ...args);`,
+         `${i2}}`,
+         `${i1}}`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `ipc.<name>.send(target, ...args)` to one window, view or contents, `broadcast(...args)` to
+    * all contents, `broadcastTo(filter, ...args)` to those that the filter accepts, and
+    * `ipc.<name>.bind(window, provider)` with a trigger. The filter comes first, since the
+    * signature may end in optional or rest parameters, which would swallow an options argument.
+    */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
       const [, i1, i2] = this.indents;
-      // The name of the window parameter must not shadow a parameter of the signature.
+      // The names of the generated parameters must not shadow a parameter of the signature.
       const taken = this.collectIdentifiers([spec.signature.definition]);
-      const windowName = this.uniqueName("browserWindow", taken);
+      const targetName = this.uniqueName("target", taken);
+      const filterName = this.uniqueName("filter", taken);
       const senderParams = this.getOriginalParams(spec, true);
-      const sender = `${windowName}.webContents.send(${this.wireName(spec.name)}, ${senderParams})`;
+      const wire = this.wireName(spec.name);
+      const sender = `resolveSendTarget(${targetName}).send(${wire}, ${senderParams})`;
       const ipcParams = this.getOriginalParams(spec, false);
       const typeParams = this.getTypeParams(spec.signature);
-      const ipcSignature = `${typeParams}(${windowName}: BrowserWindow, ${ipcParams})`;
-      const members = [`\n${i1}send: ${ipcSignature} =>`, `\n${i2}${sender},`];
+      const targetType = "BrowserWindow | WebContents | WebContentsView";
+      const ipcSignature = `${typeParams}(${targetName}: ${targetType}, ${ipcParams})`;
+      const filterType = `(contents: WebContents) => boolean`;
+      const rest = senderParams ? `[${senderParams}]` : "[]";
+      const members = [
+         `\n${i1}send: ${ipcSignature} =>`,
+         `\n${i2}${sender},`,
+         `\n${i1}broadcast: ${typeParams}(${ipcParams}) =>`,
+         `\n${i2}broadcastMessage(${wire}, ${rest}),`,
+         `\n${i1}broadcastTo: ${typeParams}(${filterName}: ${filterType}, ${ipcParams}) =>`,
+         `\n${i2}broadcastMessage(${wire}, ${rest}, ${filterName}),`,
+      ];
       if (spec.trigger) {
          members.push(`\n${this.buildTriggerBinder(spec)}`);
       }

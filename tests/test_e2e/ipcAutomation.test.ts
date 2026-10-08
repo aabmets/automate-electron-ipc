@@ -433,7 +433,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       expect(main).toContain(`<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => {`);
       expect(main).toContain("return callback(event, user);");
       expect(methodLine(main, "pushUserC", "send")).toContain(
-         `<T extends ${userC}>(browserWindow: BrowserWindow, user: T)`,
+         `<T extends ${userC}>(target: BrowserWindow | WebContents | WebContentsView, user: T)`,
       );
    });
 
@@ -487,7 +487,17 @@ describe("ipcAutomation, schema types named like generated names", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         'import type { IpcMainInvokeEvent, IpcMainEvent, BrowserWindow } from "electron";',
+         'import type { IpcMainInvokeEvent, IpcMainEvent, BrowserWindow, WebContents, WebContentsView } from "electron";',
+      );
+      // The helpers and imports of the senders are reserved too.
+      expect(importLine(main, "WebContents", "./schema")).toBe(
+         'import type { WebContents as WebContents_2 } from "./schema";',
+      );
+      expect(importLine(main, "broadcastMessage", "./schema")).toBe(
+         'import type { broadcastMessage as broadcastMessage_2 } from "./schema";',
+      );
+      expect(importLine(main, "resolveSendTarget", "./schema")).toBe(
+         'import type { resolveSendTarget as resolveSendTarget_2 } from "./schema";',
       );
       expect(importLine(main, "BrowserWindow", "./schema")).toBe(
          'import type { BrowserWindow as BrowserWindow_2 } from "./schema";',
@@ -512,7 +522,9 @@ describe("ipcAutomation, schema types named like generated names", () => {
       );
       // The schema type is used in the signatures, the Electron type in the generated wrapper.
       expect(main).toContain("(callback: (event: IpcMainEvent, options: BrowserWindow_2) => void)");
-      expect(main).toContain("(browserWindow: BrowserWindow, event: IpcMainEvent_2)");
+      expect(main).toContain(
+         "(target: BrowserWindow | WebContents | WebContentsView, event: IpcMainEvent_2)",
+      );
       expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent) => Promise<ipc_2>)");
    });
 
@@ -689,11 +701,17 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
       project = await runFixture("param-shapes");
       const main = project.generated["main.ts"];
 
-      expect(main).toContain("(browserWindow: BrowserWindow, label: string, ...values: number[])");
-      expect(main).toContain("browserWindow.webContents.send('autoipc:restSum', label, ...values)");
-      expect(main).toContain("browserWindow.webContents.send('autoipc:optionalFlag', label, flag)");
-      expect(main).toContain("(browserWindow: BrowserWindow, arg0: Point, arg1: [number, number])");
-      expect(main).toContain("browserWindow.webContents.send('autoipc:destructured', arg0, arg1)");
+      expect(main).toContain(
+         "(target: BrowserWindow | WebContents | WebContentsView, label: string, ...values: number[])",
+      );
+      expect(main).toContain("resolveSendTarget(target).send('autoipc:restSum', label, ...values)");
+      expect(main).toContain("broadcastMessage('autoipc:restSum', [label, ...values])");
+      expect(main).toContain("resolveSendTarget(target).send('autoipc:optionalFlag', label, flag)");
+      expect(main).toContain(
+         "(target: BrowserWindow | WebContents | WebContentsView, arg0: Point, arg1: [number, number])",
+      );
+      expect(main).toContain("resolveSendTarget(target).send('autoipc:destructured', arg0, arg1)");
+      expect(main).toContain("broadcastMessage('autoipc:destructured', [arg0, arg1])");
    });
 
    it("generates files that type-check", async () => {

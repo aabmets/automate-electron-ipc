@@ -35,7 +35,9 @@ describe("ipcAutomation, triggers", () => {
       expect(main).toContain('browserWindow.off("focus", listener);');
       expect(main).toContain('browserWindow.on("page-title-updated", listener);');
       expect(main.match(/\bbind:/g)).toHaveLength(2);
-      expect(main).toContain("plain: {\n      send: (browserWindow: BrowserWindow, n: number) =>");
+      expect(main).toContain(
+         "plain: {\n      send: (target: BrowserWindow | WebContents | WebContentsView, n: number) =>",
+      );
    });
 
    it("generates files that type-check", async () => {
@@ -242,10 +244,20 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         "send: (_browserWindow: BrowserWindow, browserWindow: number, event: string, callback: boolean) =>",
+         "send: (target: BrowserWindow | WebContents | WebContentsView, browserWindow: number, event: string, callback: boolean) =>",
       );
       expect(main).toContain(
-         "_browserWindow.webContents.send('autoipc:windowClash', browserWindow, event, callback)",
+         "resolveSendTarget(target).send('autoipc:windowClash', browserWindow, event, callback)",
+      );
+      // The names of the sender and of the broadcast filter yield to the parameters too.
+      expect(main).toContain(
+         "send: (_target: BrowserWindow | WebContents | WebContentsView, target: string, filter: number, contents: boolean) =>",
+      );
+      expect(main).toContain(
+         "broadcastTo: (_filter: (contents: WebContents) => boolean, target: string, filter: number, contents: boolean) =>",
+      );
+      expect(main).toContain(
+         "broadcastMessage('autoipc:senderClash', [target, filter, contents], _filter)",
       );
       expect(main).toContain(
          "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => {",
@@ -266,7 +278,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       );
       expect(main).toContain("return callback(event, cb);");
       expect(main).toContain(
-         "send: <T extends Parameters<(x: number) => void>>(browserWindow: BrowserWindow, cb: T) =>",
+         "send: <T extends Parameters<(x: number) => void>>(target: BrowserWindow | WebContents | WebContentsView, cb: T) =>",
       );
       expect(project.generated["window.d.ts"]).toContain(
          "invoke: <T>(value: T) => Promise<Awaited<T>>;",

@@ -15,11 +15,19 @@ export interface IpcApi {
 export type ipc = { ready: boolean };
 export type registeredHandlers = { count: number };
 
+export interface WebContents {
+   url: string;
+}
+export type broadcastMessage = { sent: number };
+export type resolveSendTarget = { found: boolean };
+
 export default defineChannels({
    getApi: invoke<() => Promise<IpcApi>>(),
    getIpc: invoke<() => Promise<ipc>>(),
    getHandlers: invoke<() => Promise<registeredHandlers>>(),
    getWindow: invoke<(id: number) => Promise<Window>>(),
    openWindow: send<(options: BrowserWindow) => void>(),
+   pageChanged: emit<(contents: WebContents, sent: broadcastMessage) => void>(),
+   targetResolved: emit<(found: resolveSendTarget) => void>(),
    eventHappened: emit<(event: IpcMainEvent) => void>({ trigger: "focus" }),
 });

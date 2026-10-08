@@ -208,7 +208,7 @@ on the verb of the channel and on the process that uses it:
 |----------|-------------------------------------|---------------------------------------------------|
 | `invoke` | `ipc.<name>.handle(callback)`       | `ipc.<name>.invoke(...args)`                      |
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
-| `emit`   | `ipc.<name>.send(window, ...args)`  | `ipc.<name>.on(callback)`                         |
+| `emit`   | `ipc.<name>.send(target, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
@@ -227,6 +227,31 @@ In the main process, `on` and `once` of a `send` channel, and `handle` and `hand
 An `invoke` channel has one handler. Registering `handle` or `handleOnce` again replaces the
 previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
 hot-restarting the main process works. The disposer of a replaced handler does nothing.
+
+#### Sending to windows
+
+`ipc.<name>.send(target, ...args)` of an `emit` channel takes a `BrowserWindow`, a `WebContentsView`
+or a `WebContents`, so a message can go to a window, to a view inside it, or to one frame tree:
+
+```typescript
+ipc.progress.send(mainWindow, 50);
+ipc.progress.send(view, 50);
+ipc.progress.send(mainWindow.webContents, 50);
+```
+
+`broadcast(...args)` sends to every open `WebContents`, such as the windows and views of the app,
+for something that all of them show (a theme or a setting). Contents that are destroyed are skipped.
+`broadcastTo(filter, ...args)` sends only to the contents that `filter` accepts:
+
+```typescript
+ipc.theme.broadcast("dark");
+ipc.theme.broadcastTo((contents) => contents.getURL().startsWith("app://settings"), "dark");
+```
+
+`broadcast` covers all contents that Electron reports, DevTools included, so use `broadcastTo` when
+only some of them should get the message. The filter comes first, because the options of a signature
+may end in optional or rest parameters, which would swallow an options argument. `send` still throws
+for a target that is destroyed, since the caller handed it over.
 
 #### Sender validation
 

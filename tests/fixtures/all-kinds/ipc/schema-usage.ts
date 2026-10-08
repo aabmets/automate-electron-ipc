@@ -1,9 +1,11 @@
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when a channel exposes the wrong methods.
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, WebContents, WebContentsView } from "electron";
 import { ipc as mainIpc } from "./main";
 
 declare const win: BrowserWindow;
+declare const contents: WebContents;
+declare const view: WebContentsView;
 
 // Renderer: the bare global, `window.ipc` and `globalThis.ipc` are the same typed object.
 export const user: Promise<string> = ipc.getUser.invoke(1);
@@ -44,6 +46,24 @@ export const stopGetUser: () => void = mainIpc.getUser.handle(async () => "user"
 export const stopGetUserOnce: () => void = mainIpc.getUser.handleOnce(async () => "user");
 stopLogLine();
 mainIpc.progress.send(win, 50, "half");
+mainIpc.progress.send(contents, 50);
+mainIpc.progress.send(view, 50, "half");
+mainIpc.progress.broadcast(50, "half");
+mainIpc.progress.broadcastTo((target: WebContents) => target.id === contents.id, 50);
+mainIpc.titleChanged.broadcast("title");
+
+// @ts-expect-error a send needs a target
+mainIpc.progress.send(50);
+// @ts-expect-error the target of a send is a window, a view or contents
+mainIpc.progress.send("window", 50);
+// @ts-expect-error the filter of broadcastTo comes first
+mainIpc.progress.broadcastTo(50, (target: WebContents) => target.id > 0);
+// @ts-expect-error broadcast takes the arguments of the signature, not an options object
+mainIpc.progress.broadcast(50, "half", { filter: () => true });
+// @ts-expect-error send channels have no broadcast
+mainIpc.logLine.broadcast("line");
+// @ts-expect-error invoke channels have no broadcast
+mainIpc.getUser.broadcast(1);
 mainIpc.chat.connect(win, win);
 
 // @ts-expect-error invoke channels are only handled in the main process
