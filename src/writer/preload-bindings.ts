@@ -75,7 +75,7 @@ export class PreloadBindingsWriter extends BaseWriter {
     */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
-      const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
+      const ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ...args)`;
       if (spec.kind === "Unicast" && !this.config.rawErrors) {
          const [, i1, i2, i3] = this.indents;
          const implementation = [
@@ -105,9 +105,9 @@ export class PreloadBindingsWriter extends BaseWriter {
          [
             `${i1}${method}: (callback: Function) => {`,
             `${i2}const listener = (_event: any, ...args: any[]) => callback(...args);`,
-            `${i2}ipcRenderer.${method}('${spec.name}', listener);`,
+            `${i2}ipcRenderer.${method}(${this.wireName(spec.name)}, listener);`,
             `${i2}return () => {`,
-            `${i3}ipcRenderer.removeListener('${spec.name}', listener);`,
+            `${i3}ipcRenderer.removeListener(${this.wireName(spec.name)}, listener);`,
             `${i2}};`,
             `${i1}},`,
          ].join("\n");
@@ -137,7 +137,7 @@ export class PreloadBindingsWriter extends BaseWriter {
 
    private getPortInitializer(portName: string) {
       return utils.dedent(`
-         ipcRenderer.on('${portName}', (event: IpcRendererEvent) => {
+         ipcRenderer.on(${this.wireName(portName)}, (event: IpcRendererEvent) => {
             ports.${portName} = event.ports[0];
          });
       `);

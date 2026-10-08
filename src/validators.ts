@@ -35,6 +35,16 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          return path.isAbsolute(value) ? errMsg : true;
       }),
       rawErrors: optional(boolean()),
+      channelPrefix: optional(
+         refine(string(), "prefix", (value) => {
+            if (value.length > 64) {
+               return "channelPrefix cannot be longer than 64 characters";
+            }
+            return /^[\w.:/@#-]*$/.test(value)
+               ? true
+               : "channelPrefix can contain only letters, digits and _ . : / @ # -";
+         }),
+      ),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";

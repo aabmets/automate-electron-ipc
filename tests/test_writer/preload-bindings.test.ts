@@ -184,4 +184,47 @@ describe("PreloadBindingsWriter", () => {
          expect(output).not.toContain("result");
       });
    });
+
+   describe("channel prefix", () => {
+      const channels = [
+         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+         { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" },
+         { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "chatIt", kind: "Port", direction: "RendererToRenderer" },
+      ] as const;
+      const render = async (config: Partial<t.IPCResolvedConfig>) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("puts the prefix in front of every name that is passed to Electron", async () => {
+         const output = await render({ channelPrefix: "app:" });
+
+         expect(output).toContain("ipcRenderer.invoke('app:getIt', ...args)");
+         expect(output).toContain("ipcRenderer.send('app:sendIt', ...args)");
+         expect(output).toContain("ipcRenderer.on('app:pushIt', listener);");
+         expect(output).toContain("ipcRenderer.once('app:pushIt', listener);");
+         expect(output).toContain("ipcRenderer.removeListener('app:pushIt', listener);");
+         expect(output).toContain("ipcRenderer.on('app:chatIt', (event: IpcRendererEvent) => {");
+      });
+
+      it("keeps the names of the exposed api and of the port registry", async () => {
+         const output = await render({ channelPrefix: "app:" });
+
+         expect(output).toContain("\n   getIt: {");
+         expect(output).toContain("chatIt: getPortObject('chatIt'),");
+         expect(output).toContain("ports.chatIt = event.ports[0];");
+      });
+
+      it("writes the names as they are without a prefix, and when the config has none", async () => {
+         const bare = await render({ channelPrefix: "" });
+
+         expect(bare).toContain("ipcRenderer.invoke('getIt', ...args)");
+         expect(await render({})).toBe(bare);
+      });
+   });
 });

@@ -32,7 +32,9 @@ async function loadMain(fixture: string) {
    const electron = createFakeElectron();
    const generated = loadGenerated(project.generated["main.ts"], { electron });
    const handlerOf = (channel: string): Handler => {
-      const call = electron.ipcMain.handle.mock.calls.find(([name]) => name === channel);
+      const call = electron.ipcMain.handle.mock.calls.find(
+         ([name]) => name === `autoipc:${channel}`,
+      );
       return call?.[1] as Handler;
    };
    return { electron, generated, handlerOf, ipc: generated.ipc };
@@ -85,7 +87,7 @@ describe("fixture raw-errors", () => {
       expect(main).not.toContain("IpcErrorInfo");
       expect(main).toContain("const listener = (event: IpcMainInvokeEvent, id: number) => {");
       expect(preload).toContain(
-         "invoke: (...args: any[]) => ipcRenderer.invoke('getUser', ...args),",
+         "invoke: (...args: any[]) => ipcRenderer.invoke('autoipc:getUser', ...args),",
       );
       expect(types).not.toContain("IpcError");
       expect(types).not.toContain("@throws");
@@ -261,7 +263,7 @@ describe("generated error round trip, from the handler to the renderer", () => {
       const { handlerOf, ipc } = await loadMain(fixture);
       const fake = createFakePreloadElectron();
       fake.electron.ipcRenderer.invoke.mockImplementation((channel: string, ...args: unknown[]) =>
-         handlerOf(channel)({ sender: "renderer" }, ...args),
+         handlerOf(channel.replace("autoipc:", ""))({ sender: "renderer" }, ...args),
       );
       loadGenerated(project?.generated["preload.ts"] as string, { electron: fake.electron });
       return { main: ipc, renderer: fake.exposed.ipc };

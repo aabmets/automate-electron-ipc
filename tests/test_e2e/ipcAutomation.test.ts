@@ -690,10 +690,10 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain("(browserWindow: BrowserWindow, label: string, ...values: number[])");
-      expect(main).toContain("browserWindow.webContents.send('restSum', label, ...values)");
-      expect(main).toContain("browserWindow.webContents.send('optionalFlag', label, flag)");
+      expect(main).toContain("browserWindow.webContents.send('autoipc:restSum', label, ...values)");
+      expect(main).toContain("browserWindow.webContents.send('autoipc:optionalFlag', label, flag)");
       expect(main).toContain("(browserWindow: BrowserWindow, arg0: Point, arg1: [number, number])");
-      expect(main).toContain("browserWindow.webContents.send('destructured', arg0, arg1)");
+      expect(main).toContain("browserWindow.webContents.send('autoipc:destructured', arg0, arg1)");
    });
 
    it("generates files that type-check", async () => {

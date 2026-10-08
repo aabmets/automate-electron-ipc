@@ -91,6 +91,14 @@ export class BaseWriter {
       return null as unknown as string;
    }
 
+   /**
+    * The channel name that Electron sees, as a quoted literal: the name of the channel in the
+    * schema behind `channelPrefix`. Hooks and errors keep the name from the schema.
+    */
+   protected wireName(name: string): string {
+      return `'${this.config.channelPrefix ?? ""}${name}'`;
+   }
+
    protected getCodeIndents(): string[] {
       return [1, 2, 3, 4, 5, 6].map((value) => {
          return " ".repeat(this.config.codeIndent).repeat(value);

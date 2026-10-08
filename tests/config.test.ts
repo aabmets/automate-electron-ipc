@@ -75,6 +75,7 @@ describe("getResolvedConfig", () => {
          ipcDataDir: "src/autoipc",
          codeIndent: 3,
          rawErrors: false,
+         channelPrefix: "autoipc:",
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -94,6 +95,7 @@ describe("getResolvedConfig", () => {
                ipcDataDir: "src/subpath/autoipc",
                codeIndent: 4,
                rawErrors: true,
+               channelPrefix: "",
             },
          },
       });
@@ -106,6 +108,7 @@ describe("getResolvedConfig", () => {
          ipcDataDir: "src/subpath/autoipc",
          codeIndent: 4,
          rawErrors: true,
+         channelPrefix: "",
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,

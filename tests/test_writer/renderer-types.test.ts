@@ -316,4 +316,27 @@ describe("RendererTypesWriter", () => {
          expect(names).toEqual(expect.arrayContaining(["IpcError", "Error", "IpcApi"]));
       });
    });
+
+   describe("channel prefix", () => {
+      it("does not change the declarations, since they use the names from the schema", async () => {
+         const channels = [
+            { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+            { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" },
+            { name: "chatIt", kind: "Port", direction: "RendererToRenderer" },
+         ] as const;
+         const render = async (config: Partial<t.IPCResolvedConfig>) => {
+            const obj = new shared.VitestRendererTypesWriter(
+               shared.buildFileSpecs(...channels),
+               config,
+            );
+            await obj.write(false);
+            return (await fsp.readFile(obj.getTargetFilePath())).toString();
+         };
+
+         const prefixed = await render({ channelPrefix: "app:" });
+
+         expect(prefixed).not.toContain("app:");
+         expect(prefixed).toBe(await render({ channelPrefix: "" }));
+      });
+   });
 });

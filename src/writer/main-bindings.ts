@@ -441,6 +441,7 @@ export class MainBindingsWriter extends BaseWriter {
       const typeParams = this.getTypeParams(spec.signature);
       const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
       const channel = `'${spec.name}'`;
+      const wire = this.wireName(spec.name);
       const isBroadcast = spec.kind === "Broadcast";
       const origins = spec.allowedOrigins
          ? `, [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
@@ -460,11 +461,11 @@ export class MainBindingsWriter extends BaseWriter {
               `${i2}};`,
            ];
       const unregister = isBroadcast
-         ? [`${i3}electronIpcMain.off(${channel}, ${listenerName});`]
+         ? [`${i3}electronIpcMain.off(${wire}, ${listenerName});`]
          : [
               `${i3}if (registeredHandlers[${channel}] === ${listenerName}) {`,
               `${i4}delete registeredHandlers[${channel}];`,
-              `${i4}electronIpcMain.removeHandler(${channel});`,
+              `${i4}electronIpcMain.removeHandler(${wire});`,
               `${i3}}`,
            ];
       const names: ListenerNames = {
@@ -515,11 +516,11 @@ export class MainBindingsWriter extends BaseWriter {
             ...listener,
          ];
          if (isBroadcast) {
-            lines.push(`${i2}electronIpcMain.on(${channel}, ${listenerName});`);
+            lines.push(`${i2}electronIpcMain.on(${wire}, ${listenerName});`);
          } else {
             lines.push(
-               `${i2}electronIpcMain.removeHandler(${channel});`,
-               `${i2}electronIpcMain.handle(${channel}, ${listenerName});`,
+               `${i2}electronIpcMain.removeHandler(${wire});`,
+               `${i2}electronIpcMain.handle(${wire}, ${listenerName});`,
                `${i2}registeredHandlers[${channel}] = ${listenerName};`,
             );
          }
@@ -570,7 +571,7 @@ export class MainBindingsWriter extends BaseWriter {
       const taken = this.collectIdentifiers([spec.signature.definition]);
       const windowName = this.uniqueName("browserWindow", taken);
       const senderParams = this.getOriginalParams(spec, true);
-      const sender = `${windowName}.webContents.send('${spec.name}', ${senderParams})`;
+      const sender = `${windowName}.webContents.send(${this.wireName(spec.name)}, ${senderParams})`;
       const ipcParams = this.getOriginalParams(spec, false);
       const typeParams = this.getTypeParams(spec.signature);
       const ipcSignature = `${typeParams}(${windowName}: BrowserWindow, ${ipcParams})`;
@@ -599,7 +600,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}try {`,
          `${i4}const args = await provider();`,
          `${i4}if (!browserWindow.isDestroyed()) {`,
-         `${i5}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i5}browserWindow.webContents.send(${this.wireName(spec.name)}, ...args);`,
          `${i4}}`,
          `${i3}} catch (error) {`,
          `${i4}(onError ?? console.error)(error);`,
@@ -619,10 +620,10 @@ export class MainBindingsWriter extends BaseWriter {
          `\n${i1}connect: (winA: BrowserWindow, winB: BrowserWindow) => {`,
          `${i2}const { port1, port2 } = new MessageChannelMain();`,
          `${i2}winA.once('ready-to-show', () => {`,
-         `${i3}winA.webContents.postMessage('${spec.name}', null, [port1]);`,
+         `${i3}winA.webContents.postMessage(${this.wireName(spec.name)}, null, [port1]);`,
          `${i2}});`,
          `${i2}winB.once('ready-to-show', () => {`,
-         `${i3}winB.webContents.postMessage('${spec.name}', null, [port2]);`,
+         `${i3}winB.webContents.postMessage(${this.wireName(spec.name)}, null, [port2]);`,
          `${i2}});`,
          `${i1}},`,
       ].join("\n");

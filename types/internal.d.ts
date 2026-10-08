@@ -21,6 +21,12 @@ export interface IPCOptionalConfig {
     * the renderer as an object with its name, message, code and data.
     */
    rawErrors?: boolean;
+   /**
+    * Put in front of every channel name that Electron sees, so that the channels cannot collide with
+    * the ones of other code that uses `ipcMain` directly. `getUser` travels as `autoipc:getUser`.
+    * The names in the generated API stay as they are in the schema. `""` turns the prefix off.
+    */
+   channelPrefix?: string;
 }
 
 export interface IPCResolvedConfig {
@@ -33,6 +39,7 @@ export interface IPCResolvedConfig {
    ipcDataDir: string;
    codeIndent: number;
    rawErrors: boolean;
+   channelPrefix: string;
    ipcSchema: {
       path: string;
       stats: Stats | null;

@@ -211,6 +211,45 @@ describe("validateOptionalConfig, rawErrors", () => {
    });
 });
 
+describe("validateOptionalConfig, channelPrefix", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (channelPrefix: unknown) =>
+      vld.validateOptionalConfig({ ...config, channelPrefix: channelPrefix as string });
+
+   it.each(["", "autoipc:", "my-app/v1:", "app_2.", "@scope/app#", "A".repeat(64)])(
+      "accepts '%s'",
+      (prefix) => {
+         expect(() => check(prefix)).not.toThrowError();
+      },
+   );
+
+   it("accepts a config without a prefix", () => {
+      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+   });
+
+   it.each([
+      "it's",
+      'say "hi"',
+      "back\\slash",
+      "two words",
+      "line\nbreak",
+      "tab\t",
+      "${x}",
+      "`",
+      "é",
+   ])("rejects %j, since it would break the generated string literal or the name", (prefix) => {
+      expect(() => check(prefix)).toThrowError(/channelPrefix can contain only/);
+   });
+
+   it("rejects a prefix of more than 64 characters", () => {
+      expect(() => check("a".repeat(65))).toThrowError(/longer than 64/);
+   });
+
+   it.each([5, null, true, ["a"]])("rejects %j, since it is not a string", (prefix) => {
+      expect(() => check(prefix)).toThrowError(/channelPrefix/);
+   });
+});
+
 describe("validateChannelSpecs, errors", () => {
    const errors = { definition: "NotFoundError | AuthError", customTypes: ["NotFoundError"] };
    const make = (

@@ -20,6 +20,10 @@ import {
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+/** The default `channelPrefix`, which the generated bindings put in front of every wire name. */
+const WIRE_PREFIX = "autoipc:";
+const wire = (name: string) => `${WIRE_PREFIX}${name}`;
+
 let project: E2EProject | undefined;
 
 afterEach(async () => {
@@ -81,9 +85,9 @@ describe("generated preload script", () => {
       electron.ipcRenderer.invoke.mockResolvedValue({ ok: true, value: "Ann" });
 
       await expect(exposed.ipc.getUser.invoke(7)).resolves.toBe("Ann");
-      expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith("getUser", 7);
+      expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(wire("getUser"), 7);
       await exposed.ipc.getTime.invoke();
-      expect(electron.ipcRenderer.invoke).toHaveBeenLastCalledWith("getTime");
+      expect(electron.ipcRenderer.invoke).toHaveBeenLastCalledWith(wire("getTime"));
    });
 
    it("forwards send channels to ipcRenderer.send, spreading rest arguments", async () => {
@@ -91,7 +95,7 @@ describe("generated preload script", () => {
 
       exposed.ipc.logLine.send("line", 1, 2);
 
-      expect(electron.ipcRenderer.send).toHaveBeenCalledWith("logLine", "line", 1, 2);
+      expect(electron.ipcRenderer.send).toHaveBeenCalledWith(wire("logLine"), "line", 1, 2);
    });
 
    it("registers listeners which receive the arguments without the event", async () => {
@@ -101,9 +105,9 @@ describe("generated preload script", () => {
       exposed.ipc.progress.on(callback);
 
       const [channel, listener] = electron.ipcRenderer.on.mock.calls.find(
-         ([name]: [string]) => name === "progress",
+         ([name]: [string]) => name === wire("progress"),
       ) as [string, (...args: unknown[]) => void];
-      expect(channel).toBe("progress");
+      expect(channel).toBe(wire("progress"));
       listener({ sender: "event" }, 50, "half");
       expect(callback).toHaveBeenCalledWith(50, "half");
    });
@@ -120,13 +124,13 @@ describe("generated preload script", () => {
       expect(typeof dispose).toBe("function");
       expect(dispose).not.toBe(ipcRenderer);
       const listeners = ipcRenderer.on.mock.calls
-         .filter(([name]: [string]) => name === "progress")
+         .filter(([name]: [string]) => name === wire("progress"))
          .map(([, listener]: [string, (...args: unknown[]) => void]) => listener);
       expect(listeners).toHaveLength(2);
 
       expect(dispose()).toBeUndefined();
       expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(1);
-      expect(ipcRenderer.removeListener).toHaveBeenCalledWith("progress", listeners[0]);
+      expect(ipcRenderer.removeListener).toHaveBeenCalledWith(wire("progress"), listeners[0]);
    });
 
    it("stops delivering to a disposed listener, as ipcRenderer does after removeListener", async () => {
@@ -142,13 +146,13 @@ describe("generated preload script", () => {
       const callback = vi.fn();
 
       const dispose = exposed.ipc.progress.on(callback);
-      emitter.emit("progress", {}, 1);
+      emitter.emit(wire("progress"), {}, 1);
       dispose();
-      emitter.emit("progress", {}, 2);
+      emitter.emit(wire("progress"), {}, 2);
 
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith(1);
-      expect(emitter.listenerCount("progress")).toBe(0);
+      expect(emitter.listenerCount(wire("progress"))).toBe(0);
    });
 
    it("once delivers a single message without the event, and can be disposed before it", async () => {
@@ -161,13 +165,13 @@ describe("generated preload script", () => {
          string,
          (...args: unknown[]) => void,
       ];
-      expect(channel).toBe("progress");
-      expect(electron.ipcRenderer.on).not.toHaveBeenCalledWith("progress", expect.anything());
+      expect(channel).toBe(wire("progress"));
+      expect(electron.ipcRenderer.on).not.toHaveBeenCalledWith(wire("progress"), expect.anything());
       listener({ sender: "event" }, 5, "x");
       expect(callback).toHaveBeenCalledWith(5, "x");
 
       dispose();
-      expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith("progress", listener);
+      expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith(wire("progress"), listener);
    });
 
    it("stores the port of a port channel and posts and receives messages through it", async () => {
@@ -175,7 +179,7 @@ describe("generated preload script", () => {
       const port: { postMessage: ReturnType<typeof vi.fn>; onmessage?: (event: unknown) => void } =
          { postMessage: vi.fn() };
       const [, onPort] = electron.ipcRenderer.on.mock.calls.find(
-         ([name]: [string]) => name === "chat",
+         ([name]: [string]) => name === wire("chat"),
       ) as [string, (event: unknown) => void];
 
       onPort({ ports: [port] });
@@ -253,11 +257,17 @@ describe("generated main process bindings", () => {
       const handlers = new Map<string, (...args: unknown[]) => unknown>();
       const envelopes = new Map<string, (...args: unknown[]) => unknown>();
       const electron = createFakeElectron();
+      // The tests name channels as the schema does, so the prefix is removed from what Electron gets.
+      const bare = (channel: string) => channel.replace(WIRE_PREFIX, "");
       Object.assign(electron.ipcMain, {
-         on: emitter.on.bind(emitter),
-         once: emitter.once.bind(emitter),
-         off: emitter.off.bind(emitter),
-         handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+         on: (channel: string, listener: (...args: unknown[]) => void) =>
+            emitter.on(bare(channel), listener),
+         once: (channel: string, listener: (...args: unknown[]) => void) =>
+            emitter.once(bare(channel), listener),
+         off: (channel: string, listener: (...args: unknown[]) => void) =>
+            emitter.off(bare(channel), listener),
+         handle: (rawChannel: string, handler: (...args: unknown[]) => unknown) => {
+            const channel = bare(rawChannel);
             if (envelopes.has(channel)) {
                throw new Error(`Attempted to register a second handler for '${channel}'`);
             }
@@ -266,14 +276,14 @@ describe("generated main process bindings", () => {
          },
          handleOnce: (channel: string, handler: (...args: unknown[]) => unknown) => {
             electron.ipcMain.handle(channel, (...args: unknown[]) => {
-               handlers.delete(channel);
-               envelopes.delete(channel);
+               handlers.delete(bare(channel));
+               envelopes.delete(bare(channel));
                return handler(...args);
             });
          },
-         removeHandler: (channel: string) => {
-            handlers.delete(channel);
-            envelopes.delete(channel);
+         removeHandler: (rawChannel: string) => {
+            handlers.delete(bare(rawChannel));
+            envelopes.delete(bare(rawChannel));
          },
       });
       project = await runFixture(fixture);
@@ -289,7 +299,7 @@ describe("generated main process bindings", () => {
 
       expect(electron.ipcMain.handle).toHaveBeenCalledOnce();
       const [channel, wrapper] = electron.ipcMain.handle.mock.calls[0];
-      expect(channel).toBe("getUser");
+      expect(channel).toBe(wire("getUser"));
       const event = { sender: "renderer" };
       await expect(wrapper(event, 3)).resolves.toStrictEqual({ ok: true, value: "user 3" });
       expect(callback).toHaveBeenCalledWith(event, 3);
@@ -314,7 +324,7 @@ describe("generated main process bindings", () => {
       ipc.logLine.on(callback);
 
       const [channel, wrapper] = electron.ipcMain.on.mock.calls[0];
-      expect(channel).toBe("logLine");
+      expect(channel).toBe(wire("logLine"));
       wrapper("event", "line", 1, 2);
       expect(callback).toHaveBeenCalledWith("event", "line", 1, 2);
    });
@@ -329,7 +339,7 @@ describe("generated main process bindings", () => {
       expect(dispose()).toBeUndefined();
 
       expect(electron.ipcMain.off).toHaveBeenCalledOnce();
-      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", second);
+      expect(electron.ipcMain.off).toHaveBeenCalledWith(wire("logLine"), second);
       expect(second).not.toBe(first);
    });
 
@@ -357,15 +367,15 @@ describe("generated main process bindings", () => {
 
       // A normal listener, which removes itself, so that a rejected sender cannot use it up.
       const [channel, wrapper] = electron.ipcMain.on.mock.calls[0];
-      expect(channel).toBe("logLine");
+      expect(channel).toBe(wire("logLine"));
       expect(electron.ipcMain.once).not.toHaveBeenCalled();
       wrapper("event", "line", 1, 2);
       expect(callback).toHaveBeenCalledWith("event", "line", 1, 2);
-      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", wrapper);
+      expect(electron.ipcMain.off).toHaveBeenCalledWith(wire("logLine"), wrapper);
 
       electron.ipcMain.off.mockClear();
       dispose();
-      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", wrapper);
+      expect(electron.ipcMain.off).toHaveBeenCalledWith(wire("logLine"), wrapper);
    });
 
    it("once delivers to the first message only, with a real emitter", async () => {
@@ -401,7 +411,7 @@ describe("generated main process bindings", () => {
 
       expect(order).toStrictEqual(["remove", "handle", "remove", "handle"]);
       expect(electron.ipcMain.handleOnce).not.toHaveBeenCalled();
-      expect(electron.ipcMain.removeHandler).toHaveBeenCalledWith("getUser");
+      expect(electron.ipcMain.removeHandler).toHaveBeenCalledWith(wire("getUser"));
    });
 
    it("removes the handler through the disposer of handle", async () => {
@@ -469,8 +479,12 @@ describe("generated main process bindings", () => {
       one.emit("ready-to-show");
       two.emit("ready-to-show");
 
-      expect(one.webContents.postMessage).toHaveBeenCalledWith("chat", null, [{ name: "port1" }]);
-      expect(two.webContents.postMessage).toHaveBeenCalledWith("chat", null, [{ name: "port2" }]);
+      expect(one.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), null, [
+         { name: "port1" },
+      ]);
+      expect(two.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), null, [
+         { name: "port2" },
+      ]);
    });
 
    describe("sender validation", () => {
@@ -1014,6 +1028,7 @@ describe("generated main process bindings", () => {
          expect(onRejected).toHaveBeenCalledTimes(2);
          const [event, channel, error] = onRejected.mock.calls[1];
          expect(event).toStrictEqual({ id: "evt" });
+         // Hooks get the name from the schema, not the name on the wire.
          expect(channel).toBe("logLine");
          expect(error).toBeInstanceOf(generated.IpcValidationError);
          expect(error.issues).toStrictEqual([{ message: "no good" }]);

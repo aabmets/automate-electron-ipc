@@ -59,8 +59,8 @@ describe("ipcAutomation, triggers", () => {
          ipc.windowFocused.send(win, true);
 
          expect(win.webContents.send).toHaveBeenCalledTimes(3);
-         expect(win.webContents.send).toHaveBeenNthCalledWith(1, "windowFocused", true);
-         expect(win.webContents.send).toHaveBeenNthCalledWith(2, "windowFocused", false);
+         expect(win.webContents.send).toHaveBeenNthCalledWith(1, "autoipc:windowFocused", true);
+         expect(win.webContents.send).toHaveBeenNthCalledWith(2, "autoipc:windowFocused", false);
          expect(win.listenerCount("focus")).toBe(0);
       });
 
@@ -70,7 +70,12 @@ describe("ipcAutomation, triggers", () => {
 
          ipc.titleChanged.send(win, "title", "a", "b");
 
-         expect(win.webContents.send).toHaveBeenCalledWith("titleChanged", "title", "a", "b");
+         expect(win.webContents.send).toHaveBeenCalledWith(
+            "autoipc:titleChanged",
+            "title",
+            "a",
+            "b",
+         );
       });
 
       it("registers a single listener and evaluates the provider for each event", async () => {
@@ -91,8 +96,8 @@ describe("ipcAutomation, triggers", () => {
          await flush();
 
          expect(provider).toHaveBeenCalledTimes(2);
-         expect(win.webContents.send).toHaveBeenNthCalledWith(1, "windowFocused", true);
-         expect(win.webContents.send).toHaveBeenNthCalledWith(2, "windowFocused", false);
+         expect(win.webContents.send).toHaveBeenNthCalledWith(1, "autoipc:windowFocused", true);
+         expect(win.webContents.send).toHaveBeenNthCalledWith(2, "autoipc:windowFocused", false);
       });
 
       it("awaits asynchronous providers and spreads rest arguments", async () => {
@@ -103,7 +108,12 @@ describe("ipcAutomation, triggers", () => {
          win.emit("page-title-updated");
          await flush();
 
-         expect(win.webContents.send).toHaveBeenCalledWith("titleChanged", "title", "a", "b");
+         expect(win.webContents.send).toHaveBeenCalledWith(
+            "autoipc:titleChanged",
+            "title",
+            "a",
+            "b",
+         );
       });
 
       it("removes the listener when the disposer is called", async () => {
@@ -179,7 +189,7 @@ describe("ipcAutomation, triggers", () => {
 
                expect(onError).toHaveBeenCalledTimes(1);
                expect(win.webContents.send).toHaveBeenCalledTimes(1);
-               expect(win.webContents.send).toHaveBeenCalledWith("windowFocused", true);
+               expect(win.webContents.send).toHaveBeenCalledWith("autoipc:windowFocused", true);
                expect(unhandled).not.toHaveBeenCalled();
             },
          );
@@ -235,7 +245,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
          "send: (_browserWindow: BrowserWindow, browserWindow: number, event: string, callback: boolean) =>",
       );
       expect(main).toContain(
-         "_browserWindow.webContents.send('windowClash', browserWindow, event, callback)",
+         "_browserWindow.webContents.send('autoipc:windowClash', browserWindow, event, callback)",
       );
       expect(main).toContain(
          "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => {",
@@ -275,12 +285,12 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const win = createFakeWindow();
 
       ipc.windowClash.send(win, 1, "two", true);
-      expect(win.webContents.send).toHaveBeenCalledWith("windowClash", 1, "two", true);
+      expect(win.webContents.send).toHaveBeenCalledWith("autoipc:windowClash", 1, "two", true);
 
       const callback = vi.fn();
       ipc.handlerClash.on(callback);
       const [channel, listener] = electron.ipcMain.on.mock.calls[0];
-      expect(channel).toBe("handlerClash");
+      expect(channel).toBe("autoipc:handlerClash");
       listener("the-event", "a", 2, false);
       expect(callback).toHaveBeenCalledWith("the-event", "a", 2, false);
    });

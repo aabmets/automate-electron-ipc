@@ -892,4 +892,58 @@ describe("MainBindingsWriter", () => {
          }
       });
    });
+
+   describe("channel prefix", () => {
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const emit = {
+         name: "pushIt",
+         kind: "Broadcast",
+         direction: "MainToRenderer",
+         trigger: "focus",
+      } as const;
+      const port = { name: "chatIt", kind: "Port", direction: "RendererToRenderer" } as const;
+      const render = async (config: Partial<t.IPCResolvedConfig>) => {
+         const specs = shared.buildFileSpecs(unicast, broadcast, emit, port);
+         const obj = new shared.VitestMainBindingsWriter(specs, config);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("puts the prefix in front of every name that is passed to Electron", async () => {
+         const output = await render({ channelPrefix: "app:" });
+
+         expect(output).toContain("electronIpcMain.handle('app:getIt', listener);");
+         expect(output).toContain("electronIpcMain.removeHandler('app:getIt');");
+         expect(output).toContain("electronIpcMain.on('app:sendIt', listener);");
+         expect(output).toContain("electronIpcMain.off('app:sendIt', listener);");
+         expect(output).toContain("webContents.send('app:pushIt', ");
+         expect(output).toContain("webContents.postMessage('app:chatIt', null, [port1]);");
+         expect(output).toContain("webContents.postMessage('app:chatIt', null, [port2]);");
+      });
+
+      it("leaves the names for hooks, errors and the registry as they are in the schema", async () => {
+         const output = await render({ channelPrefix: "app:" });
+
+         expect(output).toContain("isSenderAllowed(event, 'getIt')");
+         expect(output).toContain("new IpcForbiddenError('getIt')");
+         expect(output).toContain("registeredHandlers['getIt'] = listener;");
+         expect(output).not.toMatch(/'app:(getIt|sendIt)'\)\)/);
+         expect(output).not.toContain("registeredHandlers['app:");
+      });
+
+      it("writes the names as they are without a prefix, and when the config has none", async () => {
+         const bare = await render({ channelPrefix: "" });
+
+         expect(bare).toContain("electronIpcMain.handle('getIt', listener);");
+         expect(bare).toContain("webContents.send('pushIt', ");
+         expect(await render({})).toBe(bare);
+      });
+
+      it("writes the name of a trigger binder with the prefix too", async () => {
+         const output = await render({ channelPrefix: "app:" });
+
+         expect(output).toContain("browserWindow.webContents.send('app:pushIt', ...args);");
+      });
+   });
 });

@@ -52,7 +52,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "projectUsesNodeNext": false,
          "ipcDataDir": "src/autoipc",
          "codeIndent": 3,
-         "rawErrors": false
+         "rawErrors": false,
+         "channelPrefix": "autoipc:"
       }
    }
 }
@@ -63,6 +64,12 @@ Config explanation:
  - `ipcDataDir` - Relative path to a directory within the users project which will contain the IPC schema expressions and where the IPC bindings will be generated into.
  - `codeIndent` - How many spaces will one code indentation level have within the generated IPC bindings.
  - `rawErrors` - Set to true to leave the errors of `invoke` handlers to Electron. See [Errors](#errors).
+ - `channelPrefix` - Put in front of every channel name that Electron sees, so that the channels cannot
+   collide with other code that uses `ipcMain` or `ipcRenderer` directly: `getUser` travels as
+   `autoipc:getUser`. The names of the generated API stay as they are in the schema, and so do the names
+   that `validateSender`, `onRejected` and the errors receive. Set it to `""` to turn the prefix off.
+   It can contain letters, digits and `_ . : / @ # -`, up to 64 characters. It separates channel names
+   and is not a security measure: restrict who can call a channel with `allowedOrigins`.
 
 
 ### Getting Started
@@ -378,6 +385,10 @@ subscribers, call `.on()` more than once.
 | `interface Window { ipc: {...} }` and `export default Window` in `window.d.ts` | `declare global { var ipc: IpcApi }` |
 
 `window.ipc` keeps working, since `ipc` is a global variable.
+
+Channel names on the wire now start with `autoipc:`. This changes nothing in the generated API, but
+other code that talks to a channel by its raw name, such as a handler registered with `ipcMain`
+directly, must use the prefixed name, or set `channelPrefix` to `""`.
 
 An `invoke` that fails now rejects with the error object described in [Errors](#errors), not with an
 `Error` whose message is Electron's `Error invoking remote method`. Code that reads that message

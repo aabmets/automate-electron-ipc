@@ -1,0 +1,10 @@
+{
+   "name": "fixture-no-prefix",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "channelPrefix": ""
+      }
+   }
+}
