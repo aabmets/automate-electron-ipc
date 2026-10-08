@@ -13,4 +13,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   out not to type-check.
 - **Tests:** a harness test that a `window.d.ts` with a broken import makes `typecheck()` report
   an error.
-- **Delivered:**
+- **Delivered:** 2026-10-08. The harness compiles a temporary `.ts` copy of `window.d.ts` in its place, so `skipLibCheck` stays on; no existing fixture needed changes.

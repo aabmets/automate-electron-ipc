@@ -75,9 +75,16 @@ export async function runFixture(fixture: string): Promise<E2EProject> {
    };
 }
 
+/** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */
+const windowCheckFile = "window.dts-check.ts";
+
 /**
  * Compiles the schema files, `main.ts`, `preload.ts` and `window.d.ts` of the project
  * against the `electron` types pinned by this repo, using a tiny tsconfig in the project dir.
+ *
+ * `skipLibCheck` skips every `.d.ts` file, including the generated `window.d.ts`, so that file
+ * is compiled as a `.ts` copy instead. The copy replaces the original in the compiled files,
+ * which avoids declaring the global `Window` members twice.
  */
 async function typecheckProject(dir: string, ipcDataDir: string): Promise<string> {
    const ipcDir = path.join(dir, ipcDataDir);
@@ -101,10 +108,17 @@ async function typecheckProject(dir: string, ipcDataDir: string): Promise<string
          },
       },
       files: [
-         ...["main.ts", "preload.ts", "window.d.ts"].map((name) => `${ipcDataDir}/${name}`),
+         ...["main.ts", "preload.ts", windowCheckFile].map((name) => `${ipcDataDir}/${name}`),
          ...schemaFiles,
       ],
    };
+   const windowTypes = await fsp.readFile(path.join(ipcDir, "window.d.ts"), "utf8");
+   const windowCheckPath = path.join(ipcDir, windowCheckFile);
+   await fsp.writeFile(windowCheckPath, windowTypes);
    await fsp.writeFile(path.join(dir, "tsconfig.json"), JSON.stringify(tsconfig));
-   return runTsc(dir);
+   try {
+      return runTsc(dir);
+   } finally {
+      await fsp.rm(windowCheckPath, { force: true });
+   }
 }

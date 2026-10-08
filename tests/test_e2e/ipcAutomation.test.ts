@@ -10,6 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
+import path from "node:path";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -36,6 +37,26 @@ describe("ipcAutomation, single schema file", () => {
    it("generates files that type-check", async () => {
       project = await runFixture("single-file");
       expect(await project.typecheck()).toBe("");
+   });
+});
+
+describe("e2e harness", () => {
+   // Regression for T50: `skipLibCheck` hid every error in the generated `window.d.ts`.
+   it("reports errors in the generated window.d.ts", async () => {
+      project = await runFixture("single-file");
+      const windowTypes = path.join(project.dir, project.ipcDataDir, "window.d.ts");
+      await fsp.appendFile(windowTypes, '\nimport type { Missing } from "./does-not-exist";\n');
+
+      const diagnostics = await project.typecheck();
+      expect(diagnostics).toContain("window.dts-check.ts");
+      expect(diagnostics).toContain("does-not-exist");
+   });
+
+   it("leaves no helper file behind", async () => {
+      project = await runFixture("single-file");
+      await project.typecheck();
+      const files = await fsp.readdir(path.join(project.dir, project.ipcDataDir));
+      expect(files).not.toContain("window.dts-check.ts");
    });
 });
 
