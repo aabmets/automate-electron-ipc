@@ -16,8 +16,8 @@ The session protocol is in `CLAUDE.md`.
 
 ### [ ] T00: New channel declaration syntax: a `defineChannels` map with verb helpers
 - **Goal:** replace `Channel("X").<Direction>.<Kind>({ signature: type as Sig, ...rest })` with an
-  exported map. The key is the channel name, a verb helper picks the pattern, and the signature is
-  a type argument on the verb. That generic form is the main form. `verb(config?) as Sig` is also
+  exported channel map. The key is the channel name, a verb helper picks the pattern, and the
+  signature is a type argument on the verb. That generic form is the main form. `verb(config?) as Sig` is also
   accepted as an alternative:
   ```ts
   import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
@@ -33,6 +33,9 @@ The session protocol is in `CLAUDE.md`.
      getUserAlt: invoke({ timeoutMs: 5 }) as (id: number) => Promise<User>,
   });
   ```
+  - The channel map is exported: `export default defineChannels({...})` or
+    `export const <name> = defineChannels({...})`. Being exported, it is a real typed value that
+    app code and generated code can `import type` from (T44).
   - Verbs replace the direction × kind grid: `invoke` = RendererToMain Unicast, `send` =
     RendererToMain Broadcast, `emit` = MainToRenderer Broadcast, `port` = RendererToRenderer Port.
     Later tasks add `ask` (T23), `stream` (T27) and the utility/service-worker verbs (T29, T36).
@@ -55,9 +58,10 @@ The session protocol is in `CLAUDE.md`.
     - Update the JSDoc examples.
   - **`src/index.ts`:** runtime stubs for `defineChannels` and the verbs, matching the new types.
   - **`src/parser.ts`:**
-    - A schema file declares its channels in `export default defineChannels({...})`. Resolve the
-      verb and `defineChannels` names through the file's imports from `automate-electron-ipc`, so
-      aliased imports work.
+    - A schema file declares its channels in one exported channel map:
+      `export default defineChannels({...})` or `export const <name> = defineChannels({...})`.
+      Record which export it is, for T44. Resolve the verb and `defineChannels` names through the
+      file's imports from `automate-electron-ipc`, so aliased imports work.
     - Each property is `name: verb<Sig>(config?)` or `name: verb(config?) as Sig` (unwrap
       parentheses). Either `TsFunctionType` provides the signature: params, return type, custom
       types, async.
@@ -69,6 +73,8 @@ The session protocol is in `CLAUDE.md`.
         for T20/T33 groups);
       - an option that the verb does not support;
       - more than one `defineChannels` call in a file;
+      - a `defineChannels` call that is not exported (not assigned, or assigned to a non-exported
+        `const`);
       - a leftover `Channel(...)` statement or `signature:` key, with a message explaining the
         migration.
     - Remove `channelPattern`, the `is*Assignment` helpers and all regex-on-source-text matching in
@@ -82,6 +88,7 @@ The session protocol is in `CLAUDE.md`.
       - each verb, in both forms, with and without config;
       - a parenthesized `as` expression;
       - aliased imports;
+      - default and named exports of the map;
       - async return;
       - rest, optional and destructured params;
       - each error case above.
@@ -661,7 +668,9 @@ The session protocol is in `CLAUDE.md`.
 ### [ ] T44: Exported helper types
 - **Problem:** users cannot type wrappers or hooks generically.
 - **Scope:** generated `window.d.ts` (or a `types.ts`) exports `IpcApi`, `ChannelName`,
-  `ChannelArgs<N>` and `ChannelResult<N>`.
+  `ChannelArgs<N>` and `ChannelResult<N>`. Derive them with mapped types over `typeof` the exported
+  channel maps from T00 (`import type`), handling both signature forms, instead of emitting each
+  type as text.
 - **Tests:** e2e type-level tests (`expectTypeOf`).
 - **Depends on:** T13
 - **Delivered:**
