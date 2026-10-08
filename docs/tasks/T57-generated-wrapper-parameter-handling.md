@@ -12,4 +12,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** pick generated parameter names that cannot clash with user parameter names. Insert the
   event parameter at the start of the parameter list found from the AST, not by text search.
 - **Tests:** writer unit tests, plus an e2e fixture that type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. The parser records `paramsStart` (offset after the `(` of the parameter list) on each signature, which the event injection uses. Clashing generated names get `_` prefixes (`_browserWindow`, `_event`, `_callback`). Generated wrappers and window.d.ts senders now repeat the type parameters of generic signatures, which the old rebuilt signatures lost. `bind<X>` uses `browserWindow` unrenamed since its other parameters cannot clash. Integration with T53: `getChannelSpecs` recomputes `paramsStart` after renaming type names, with an e2e regression in the `name-collisions` fixture.

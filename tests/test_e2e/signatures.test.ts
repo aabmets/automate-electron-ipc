@@ -138,6 +138,66 @@ describe("ipcAutomation, triggers", () => {
    });
 });
 
+describe("ipcAutomation, parameter names and generic signatures", () => {
+   // Regression for T57: `(browserWindow: number)` produced a duplicate parameter (TS2300),
+   // and `event` and `callback` could shadow the names that the wrappers use.
+   it("renames generated parameters that clash with the ones of the signature", async () => {
+      project = await runFixture("param-clashes");
+      const main = project.generated["main.ts"];
+
+      expect(main).toContain(
+         "sendWindowClash: (_browserWindow: BrowserWindow, browserWindow: number, event: string, callback: boolean) =>",
+      );
+      expect(main).toContain(
+         "_browserWindow.webContents.send('windowClash', browserWindow, event, callback)",
+      );
+      expect(main).toContain(
+         "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => _callback(_event, event, callback, args)",
+      );
+      expect(main).toContain("onNoParams: (callback: (event: IpcMainEvent) => void)");
+   });
+
+   it("inserts the event parameter after the type parameters of generic signatures", async () => {
+      project = await runFixture("param-clashes");
+      const main = project.generated["main.ts"];
+
+      expect(main).toContain(
+         "(callback: <T extends (x: number) => void>(event: IpcMainEvent, cb: T) => void)",
+      );
+      expect(main).toContain(
+         "<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => callback(event, cb)",
+      );
+      expect(main).toContain(
+         "sendGenericEmit: <T extends (x: number) => void>(browserWindow: BrowserWindow, cb: T) =>",
+      );
+      expect(project.generated["window.d.ts"]).toContain(
+         "sendGenericInvoke: <T>(value: T) => Promise<Awaited<T>>;",
+      );
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("param-clashes");
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("forwards the arguments to the right parameters at runtime", async () => {
+      project = await runFixture("param-clashes");
+      const electron = createFakeElectron();
+      const { ipcMain } = loadGenerated(project.generated["main.ts"], { electron });
+      const win = createFakeWindow();
+
+      ipcMain.sendWindowClash(win, 1, "two", true);
+      expect(win.webContents.send).toHaveBeenCalledWith("windowClash", 1, "two", true);
+
+      const callback = vi.fn();
+      ipcMain.onHandlerClash(callback);
+      const [channel, listener] = electron.ipcMain.on.mock.calls[0];
+      expect(channel).toBe("handlerClash");
+      listener("the-event", "a", 2, false);
+      expect(callback).toHaveBeenCalledWith("the-event", "a", 2, false);
+   });
+});
+
 describe("ipcAutomation, async return types", () => {
    // Regression for T56: a user type `PromiseResult` and `PromiseLike<T>` counted as async,
    // so their invoke senders were not typed as promises.

@@ -103,6 +103,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
       }),
       signature: object({
          definition: string(),
+         paramsStart: number(),
          params: array(
             object({
                name: string(),

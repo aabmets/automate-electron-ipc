@@ -359,6 +359,28 @@ function isPromiseType(node: AstNode): boolean {
    );
 }
 
+/**
+ * Finds the offset in the text of a function type just after the `(` that opens its
+ * parameter list. It skips the type parameters, whose own `(` may appear in constraints
+ * such as `<T extends (x: number) => void>`, and any comments in front of the `(`.
+ */
+function findParamsStart(fn: TsFunctionType, src: Source): number {
+   const code = src.text(fn);
+   let index = fn.typeParams ? fn.typeParams.span.end - fn.span.start : 0;
+   while (index < code.length) {
+      if (code.startsWith("/*", index)) {
+         index = code.indexOf("*/", index + 2) + 2;
+      } else if (code.startsWith("//", index)) {
+         index = code.indexOf("\n", index) + 1;
+      } else if (code[index] === "(") {
+         return index + 1;
+      } else {
+         index++;
+      }
+   }
+   throw new Error(`Cannot find the parameter list of the signature '${code}'`);
+}
+
 export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSignature {
    const set = new Set<string>();
    collectCustomTypes(fn as AstNode, src, set);
@@ -367,6 +389,7 @@ export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSigna
    const returnType = src.text(returnNode) || "void";
    return {
       definition: src.text(fn),
+      paramsStart: findParamsStart(fn, src),
       params: fn.params.map((param) => getParamInfo(param, src)),
       customTypes: Array.from(set),
       returnType,

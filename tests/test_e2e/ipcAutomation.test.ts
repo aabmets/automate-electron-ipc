@@ -358,6 +358,25 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       }
    });
 
+   it("injects the event and repeats type params after a renamed type param bound", async () => {
+      // Regression for the T53/T57 combination: renaming `User` to `User_3` lengthened the
+      // text before the parameter list, so `paramsStart` pointed into the wrong place.
+      project = await runFixture("name-collisions");
+      const main = project.generated["main.ts"];
+      const userC = importedAs(main, "User", "./schema/c");
+      expect(userC).not.toBe("User");
+
+      expect(lineOf(main, "onFindUserC")).toContain(
+         `(callback: <T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => Promise<T>)`,
+      );
+      expect(main).toContain(
+         `<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => callback(event, user)`,
+      );
+      expect(lineOf(main, "sendPushUserC")).toContain(
+         `<T extends ${userC}>(browserWindow: BrowserWindow, user: T)`,
+      );
+   });
+
    it("imports a type that two schema files import once", async () => {
       project = await runFixture("name-collisions");
       for (const file of ["main.ts", "window.d.ts"] as const) {

@@ -62,3 +62,28 @@ describe("parseSignature, parameters", () => {
       expect(params.map((param) => param.name)).toStrictEqual(["{ x, y }", "[a, b]"]);
    });
 });
+
+describe("parseSignature, start of the parameter list", () => {
+   const restAfterParen = (definition: string) => {
+      const { definition: text, paramsStart } = parseSignature(definition);
+      return text.slice(paramsStart);
+   };
+
+   it("points just after the opening parenthesis", () => {
+      expect(restAfterParen("(a: string) => void")).toBe("a: string) => void");
+      expect(restAfterParen("() => void")).toBe(") => void");
+   });
+
+   // Regression for T57: the first `(` of the text belonged to a constraint of a type parameter.
+   it("skips the type parameters of generic signatures", () => {
+      expect(restAfterParen("<T extends (x: number) => void>(cb: T) => void")).toBe(
+         "cb: T) => void",
+      );
+      expect(restAfterParen("<T, U = (a: T) => T>() => U")).toBe(") => U");
+   });
+
+   it("skips comments between the type parameters and the parameter list", () => {
+      expect(restAfterParen("<T>/* ( */(a: T) => void")).toBe("a: T) => void");
+      expect(restAfterParen("<T>// (\n(a: T) => void")).toBe("a: T) => void");
+   });
+});

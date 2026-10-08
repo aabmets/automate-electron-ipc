@@ -56,6 +56,8 @@ export interface CallableParam {
 
 export interface CallableSignature {
    definition: string;
+   /** Offset in `definition` just after the `(` that opens the parameter list. */
+   paramsStart: number;
    params: CallableParam[];
    returnType: string;
    customTypes: string[];

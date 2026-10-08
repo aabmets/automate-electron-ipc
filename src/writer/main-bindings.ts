@@ -95,16 +95,11 @@ export class MainBindingsWriter extends BaseWriter {
       const callbackName = this.uniqueName("callback", taken);
       const wrapperParams = [`${eventName}: ${eventType}`, this.getOriginalParams(spec, false)];
       const forwarded = [eventName, this.getOriginalParams(spec, true)];
-      // A generic signature's type parameters must be in scope for the wrapper's params.
-      const definition = spec.signature.definition.trimStart();
-      const typeParams = definition.startsWith("<")
-         ? definition.slice(0, definition.indexOf("("))
-         : "";
       const listener =
-         `${typeParams}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
+         `${this.getTypeParams(spec.signature)}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
          `${callbackName}(${forwarded.filter(Boolean).join(", ")})`;
       const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${listener})`;
-      const modSigDef = this.injectEventTypehint(spec.signature.definition, eventType, eventName);
+      const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
       const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
       callableNames.forEach((name) => {
          callablesArray.push(`${name}: (${callbackName}: ${modSigDef}) => ${ipcMain}`);
@@ -112,10 +107,14 @@ export class MainBindingsWriter extends BaseWriter {
    }
    private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       const capitalized = utils.capitalize(spec.name);
+      // The name of the window parameter must not shadow a parameter of the signature.
+      const taken = this.collectIdentifiers([spec.signature.definition]);
+      const windowName = this.uniqueName("browserWindow", taken);
       const senderParams = this.getOriginalParams(spec, true);
-      const sender = `browserWindow.webContents.send('${spec.name}', ${senderParams})`;
+      const sender = `${windowName}.webContents.send('${spec.name}', ${senderParams})`;
       const ipcParams = this.getOriginalParams(spec, false);
-      const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
+      const typeParams = this.getTypeParams(spec.signature);
+      const ipcSignature = `${typeParams}(${windowName}: BrowserWindow, ${ipcParams})`;
       callablesArray.push(`send${capitalized}: ${ipcSignature} => \n${this.indents[1]}${sender}`);
       if (spec.trigger) {
          callablesArray.push(this.buildTriggerBinder(spec));
@@ -130,8 +129,9 @@ export class MainBindingsWriter extends BaseWriter {
       const args = `[${this.getOriginalParams(spec, false)}]`;
       const provider = `provider: () => ${args} | Promise<${args}>`;
       const event = JSON.stringify(spec.trigger);
+      const typeParams = this.getTypeParams(spec.signature);
       return [
-         `bind${utils.capitalize(spec.name)}: (browserWindow: BrowserWindow, ${provider}) => {`,
+         `bind${utils.capitalize(spec.name)}: ${typeParams}(browserWindow: BrowserWindow, ${provider}) => {`,
          `${i1}const listener = async () => {`,
          `${i2}const args = await provider();`,
          `${i2}if (!browserWindow.isDestroyed()) {`,

@@ -86,6 +86,7 @@ describe("parseChannelMapModule", () => {
          const spec = parseOne("chan: invoke<(a: string, b: Foo<Bar>[]) => Baz>()");
          expect(spec.signature).toStrictEqual({
             definition: "(a: string, b: Foo<Bar>[]) => Baz",
+            paramsStart: 1,
             params: [
                { name: "a", type: "string", rest: false, optional: false },
                { name: "b", type: "Foo<Bar>[]", rest: false, optional: false },

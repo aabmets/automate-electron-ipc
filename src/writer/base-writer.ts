@@ -100,6 +100,11 @@ export class BaseWriter {
          signature: {
             ...spec.signature,
             definition: renameTypeReferences(spec.signature.definition, renames),
+            // Renaming changes the length of the text before the parameter list.
+            paramsStart: renameTypeReferences(
+               spec.signature.definition.slice(0, spec.signature.paramsStart),
+               renames,
+            ).length,
             returnType: renameTypeReferences(spec.signature.returnType, renames),
             params: spec.signature.params.map((param) => ({
                ...param,
@@ -109,8 +114,32 @@ export class BaseWriter {
       }));
    }
 
-   protected injectEventTypehint(sigDef: string, eventType: string, eventName = "event"): string {
-      return sigDef.replace("(", `(${eventName}: ${eventType}, `);
+   /**
+    * Inserts the event parameter at the start of the parameter list of the signature.
+    * The position comes from the parser, since the first `(` of the text can belong to
+    * the type parameters, as in `<T extends (x: number) => void>(cb: T) => void`.
+    */
+   protected injectEventTypehint(
+      signature: t.CallableSignature,
+      eventType: string,
+      eventName = "event",
+   ): string {
+      const { definition, paramsStart, params } = signature;
+      const separator = params.length > 0 ? ", " : "";
+      return [
+         definition.slice(0, paramsStart),
+         `${eventName}: ${eventType}${separator}`,
+         definition.slice(paramsStart),
+      ].join("");
+   }
+
+   /**
+    * Returns the type parameters of the signature, such as `<T extends Foo>`, or an empty
+    * string. Generated functions repeat them so that the
+    * parameter types which refer to them stay valid.
+    */
+   protected getTypeParams(signature: t.CallableSignature): string {
+      return signature.definition.slice(0, signature.paramsStart - 1).trim();
    }
 
    /**

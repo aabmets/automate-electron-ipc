@@ -27,8 +27,15 @@ export class VitestBaseWriter extends BaseWriter {
    public getCodeIndents(): string[] {
       return super.getCodeIndents();
    }
-   public injectEventTypehint(sigDef: string, eventType: string, eventName?: string): string {
-      return super.injectEventTypehint(sigDef, eventType, eventName);
+   public injectEventTypehint(
+      signature: t.CallableSignature,
+      eventType: string,
+      eventName?: string,
+   ): string {
+      return super.injectEventTypehint(signature, eventType, eventName);
+   }
+   public getTypeParams(signature: t.CallableSignature): string {
+      return super.getTypeParams(signature);
    }
    public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
       return super.getOriginalParams(spec, withTypes);
@@ -93,6 +100,7 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
       direction: vcs.channelDirection as t.ChannelDirection,
       signature: {
          definition: sigDefinition,
+         paramsStart: sigDefinition.indexOf("(") + 1,
          params: sigParamsArray,
          returnType: vcs.sigReturnType,
          customTypes: vcs.sigCustomTypes,

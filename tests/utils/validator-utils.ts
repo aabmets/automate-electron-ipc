@@ -30,6 +30,7 @@ export class ChannelSpecGenerator {
          direction,
          signature: {
             definition: `() => ${returnType}`,
+            paramsStart: 1,
             params: [],
             returnType,
             customTypes: [],

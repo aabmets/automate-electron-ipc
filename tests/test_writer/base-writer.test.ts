@@ -63,15 +63,42 @@ describe("BaseWriter", () => {
       }
    });
 
-   it("should inject the event typehint", () => {
-      const sigDef = "(arg1: number, arg2: string) => boolean";
+   it("should inject the event typehint at the start of the parameter list", () => {
       const writer = shared.VitestBaseWriter.prototype;
-      expect(writer.injectEventTypehint(sigDef, "IpcMainEvent")).toStrictEqual(
-         "(event: IpcMainEvent, arg1: number, arg2: string) => boolean",
+      const sign = (definition: string, params: number) =>
+         ({
+            definition,
+            paramsStart: definition.indexOf("(") + 1,
+            params: new Array(params),
+         }) as unknown as t.CallableSignature;
+
+      expect(writer.injectEventTypehint(sign("(arg1: number) => boolean", 1), "IpcMainEvent")).toBe(
+         "(event: IpcMainEvent, arg1: number) => boolean",
       );
-      expect(writer.injectEventTypehint(sigDef, "IpcMainInvokeEvent", "_event")).toStrictEqual(
-         "(_event: IpcMainInvokeEvent, arg1: number, arg2: string) => boolean",
+      expect(
+         writer.injectEventTypehint(sign("() => void", 0), "IpcMainInvokeEvent", "_event"),
+      ).toBe("(_event: IpcMainInvokeEvent) => void");
+   });
+
+   // Regression for T57: the event was inserted at the first `(` of the text.
+   it("should not insert the event into the constraint of a type parameter", () => {
+      const signature = {
+         definition: "<T extends (x: number) => void>(cb: T) => void",
+         paramsStart: 32,
+         params: [{}],
+      } as unknown as t.CallableSignature;
+      const writer = shared.VitestBaseWriter.prototype;
+      expect(writer.injectEventTypehint(signature, "IpcMainEvent")).toBe(
+         "<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => void",
       );
+      expect(writer.getTypeParams(signature)).toBe("<T extends (x: number) => void>");
+   });
+
+   it("should return no type parameters for a plain signature", () => {
+      const signature = { definition: "(a: string) => void", paramsStart: 1 };
+      expect(
+         shared.VitestBaseWriter.prototype.getTypeParams(signature as t.CallableSignature),
+      ).toBe("");
    });
 
    it("should stringify CallableParam objects with and without types", () => {
