@@ -53,13 +53,28 @@ describe("MainBindingsWriter", () => {
          import type { IpcMainEvent } from "electron";
 
          export const ipcMain = {
-            onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
-            onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
+            onVitestChannel: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
                electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   it("should write one callable per listener name when a channel has listeners", async () => {
+      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_RendererToMain, [
+         "onCustomListener1",
+         "onCustomListener2",
+      ]);
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).toContain(
+         "onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>",
+      );
+      expect(output).toContain(
+         "onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>",
+      );
+      expect(output).not.toContain("onVitestChannel");
    });
 
    it("should write Broadcast MainToRenderer callables into ipcMain object", async () => {
@@ -71,7 +86,7 @@ describe("MainBindingsWriter", () => {
          import type { BrowserWindow } from "electron";
          
          export const ipcMain = {
-            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number) => 
+            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number[]) => 
                browserWindow.webContents.send('vitestChannel', arg1, ...arg2),
          }
       `);
@@ -117,7 +132,7 @@ describe("MainBindingsWriter", () => {
       expect(output).toContain(
          "electronIpcMain.handle('bareIt', (event: IpcMainInvokeEvent) => callback(event))",
       );
-      expect(output).not.toContain("any");
+      expect(output).not.toMatch(/\bany\b/);
    });
 
    it("should not shadow the callback or the event with parameters of the signature", async () => {

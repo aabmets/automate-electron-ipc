@@ -25,14 +25,22 @@ export function mockFspReadFile(data: any): void {
    });
 }
 
-export function mockFspStats(isDirectory: boolean): void {
+/**
+ * Mocks `fsp.stat` so that it answers per path: the given paths exist as a directory or a file
+ * (matched with `/` separators), every other path rejects like a missing one.
+ */
+export function mockFspStatsByPath(entries: Record<string, "directory" | "file">): void {
    const spy = vi.spyOn(fsp, "stat");
-   spy.mockImplementation(() => {
+   spy.mockImplementation(((target: string) => {
+      const kind = entries[String(target).replaceAll("\\", "/")];
+      if (!kind) {
+         return Promise.reject(Object.assign(new Error(`ENOENT: ${target}`), { code: "ENOENT" }));
+      }
       return Promise.resolve({
-         isDirectory: () => isDirectory,
-         isFile: () => !isDirectory,
+         isDirectory: () => kind === "directory",
+         isFile: () => kind === "file",
       } as Stats);
-   });
+   }) as unknown as typeof fsp.stat);
 }
 
 export function mockResolveUserProjectPath(): void {
@@ -60,7 +68,7 @@ export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWrit
 
 export default {
    mockFspReadFile,
-   mockFspStats,
+   mockFspStatsByPath,
    mockResolveUserProjectPath,
    mockGetTargetFilePath,
 };

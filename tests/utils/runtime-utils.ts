@@ -11,7 +11,7 @@
 
 import { EventEmitter } from "node:events";
 import vm from "node:vm";
-import { transformSync } from "@swc/core";
+import { parseSync, transformSync } from "@swc/core";
 import { vi } from "vitest";
 
 /**
@@ -55,4 +55,62 @@ export function createFakeElectron() {
       ipcMain: { on: vi.fn(), handle: vi.fn() },
       MessageChannelMain: class {},
    };
+}
+
+/** A fake `electron` module for the generated preload script, which records what it exposes. */
+export function createFakePreloadElectron() {
+   const exposed: Record<string, any> = {};
+   return {
+      exposed,
+      electron: {
+         contextBridge: {
+            exposeInMainWorld: vi.fn((key: string, api: unknown) => {
+               exposed[key] = api;
+            }),
+         },
+         ipcRenderer: { invoke: vi.fn(), send: vi.fn(), on: vi.fn() },
+      },
+   };
+}
+
+/** The dotted paths of the callable members of an object, such as `ports.chat.sendMessage`. */
+export function callablePaths(api: Record<string, unknown>, prefix = ""): string[] {
+   return Object.entries(api)
+      .flatMap(([key, value]) => {
+         const path = `${prefix}${key}`;
+         return typeof value === "function"
+            ? [path]
+            : callablePaths(value as Record<string, unknown>, `${path}.`);
+      })
+      .sort();
+}
+
+/**
+ * The dotted paths of the function members of `Window.ipc` in the text of a generated
+ * `window.d.ts`, read from its syntax tree.
+ */
+export function windowIpcPaths(windowTypes: string): string[] {
+   const module = parseSync(windowTypes, { syntax: "typescript", target: "esnext" });
+   const collect = (members: any[], prefix: string): string[] =>
+      members.flatMap((member) => {
+         const path = `${prefix}${member.key.value}`;
+         const type = member.typeAnnotation?.typeAnnotation;
+         return type?.type === "TsTypeLiteral" ? collect(type.members, `${path}.`) : [path];
+      });
+   const find = (node: any): string[] | null => {
+      if (node?.type === "TsInterfaceDeclaration" && node.id.value === "Window") {
+         const ipc = node.body.body.find((member: any) => member.key?.value === "ipc");
+         return ipc ? collect(ipc.typeAnnotation.typeAnnotation.members, "") : [];
+      }
+      for (const child of Object.values(node ?? {})) {
+         for (const item of Array.isArray(child) ? child : [child]) {
+            const found = item && typeof item === "object" ? find(item) : null;
+            if (found) {
+               return found;
+            }
+         }
+      }
+      return null;
+   };
+   return (find(module) ?? []).sort();
 }

@@ -75,50 +75,49 @@ export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
    }
 }
 
+/**
+ * Builds the file specs of one channel, with a signature that the parser produces from
+ * `(arg1: T, arg2: T) => R`, where the second parameter may be rest or optional.
+ */
 function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] {
-   const sigParamsArray: t.CallableParam[] = [1, 2].map((index) => {
-      return {
-         name: `arg${index}`,
-         type: vcs.paramType,
-         rest: vcs.paramRest && index === 2,
-         optional: vcs.paramOptional && index === 2,
-      };
-   });
-   const sigParams = sigParamsArray.map((param) => {
-      let paramName = param.name;
-      if (param.rest) {
-         paramName = `...${param.name}`;
-      } else if (param.optional) {
-         paramName = `${param.name}?`;
-      }
-      return `${paramName}: ${param.type}`;
-   });
-   const sigDefinition = `(${sigParams.join(", ")}) => ${vcs.sigReturnType}`;
-   const channelSpec: Partial<t.ChannelSpec> = {
+   const second = vcs.paramRest ? "...arg2" : vcs.paramOptional ? "arg2?" : "arg2";
+   const secondType = vcs.paramRest ? `${vcs.paramType}[]` : vcs.paramType;
+   const definition = `(arg1: ${vcs.paramType}, ${second}: ${secondType}) => ${vcs.sigReturnType}`;
+   const channelSpec: t.ChannelSpec = {
       name: "vitestChannel",
       kind: vcs.channelKind as t.ChannelKind,
       direction: vcs.channelDirection as t.ChannelDirection,
-      signature: {
-         definition: sigDefinition,
-         paramsStart: sigDefinition.indexOf("(") + 1,
-         params: sigParamsArray,
-         returnType: vcs.sigReturnType,
-         customTypes: vcs.sigCustomTypes,
-         async: vcs.sigReturnType.includes("Promise"),
-      } as t.CallableSignature,
+      signature: parseTestSignature(definition),
    };
-   if (vcs.channelListeners.length > 0) {
-      Object.assign(channelSpec, { listeners: vcs.channelListeners });
-   }
    return [
       {
+         fullPath: "/project/ipc/schema.ts",
+         relativePath: "schema.ts",
          specs: {
             typeSpecArray: [],
             importSpecArray: [],
-            channelSpecArray: [channelSpec] as Partial<t.ChannelSpec>[],
-         } as Partial<t.SpecsCollection>,
-      } as Partial<t.ParsedFileSpecs>,
-   ] as t.ParsedFileSpecs[];
+            channelSpecArray: [channelSpec],
+            channelMapExport: { kind: "default" },
+         },
+      },
+   ];
+}
+
+/**
+ * Gives every channel of the file specs the listener names. The parser never sets `listeners`,
+ * but the writers support them, so their tests set them explicitly.
+ */
+export function withListeners(
+   pfsArray: t.ParsedFileSpecs[],
+   listeners: string[],
+): t.ParsedFileSpecs[] {
+   return pfsArray.map((pfs) => ({
+      ...pfs,
+      specs: {
+         ...pfs.specs,
+         channelSpecArray: pfs.specs.channelSpecArray.map((spec) => ({ ...spec, listeners })),
+      },
+   }));
 }
 
 /** Parses a signature text the same way the parser does for real schema files. */
@@ -160,6 +159,7 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
 export default {
    buildFileSpecs,
    parseTestSignature,
+   withListeners,
    VitestBaseWriter,
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,
@@ -168,42 +168,34 @@ export default {
       Unicast_RendererToMain: getParsedFileSpecsArray({
          channelKind: "Unicast",
          channelDirection: "RendererToMain",
-         channelListeners: [],
          paramType: "CustomType",
          paramRest: false,
          paramOptional: true,
          sigReturnType: "Promise<string>",
-         sigCustomTypes: ["CustomType"],
       }),
       Broadcast_RendererToMain: getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "RendererToMain",
-         channelListeners: ["onCustomListener1", "onCustomListener2"],
          paramType: "string",
          paramRest: false,
          paramOptional: false,
          sigReturnType: "void",
-         sigCustomTypes: [],
       }),
       Broadcast_MainToRenderer: getParsedFileSpecsArray({
          channelKind: "Broadcast",
          channelDirection: "MainToRenderer",
-         channelListeners: ["onCustomListener1", "onCustomListener2"],
          paramType: "number",
          paramRest: true,
          paramOptional: false,
          sigReturnType: "Promise<CustomType>",
-         sigCustomTypes: ["CustomType"],
       }),
       Port_RendererToRenderer: getParsedFileSpecsArray({
          channelKind: "Port",
          channelDirection: "RendererToRenderer",
-         channelListeners: [],
          paramType: "string",
          paramRest: false,
          paramOptional: false,
          sigReturnType: "void",
-         sigCustomTypes: [],
       }),
    },
 };

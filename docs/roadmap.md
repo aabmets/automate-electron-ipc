@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 34 delivered, 37 remaining, 1 dropped.
+**Progress:** 35 delivered, 36 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -55,7 +55,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T67: Locale-dependent sorting remains in the writers and the global validation](./tasks/T67-locale-dependent-sorting-remains.md) · depends on: T06
 - [x] [T68: The suite fails under Bun; order-dependent and under-restored tests](./tasks/T68-suite-fails-under-bun-and-order-dependent-tests.md) · depends on: T07, T11
 - [x] [T69: Signature edge cases that produce wrong or confusing generated code](./tasks/T69-signature-edge-cases-in-generated-code.md) · depends on: T53, T57
-- [ ] [T70: Test harness and fixture gaps](./tasks/T70-test-harness-gaps.md) · depends on: T50
+- [x] [T70: Test harness and fixture gaps](./tasks/T70-test-harness-gaps.md) · depends on: T50
 - [ ] [T71: Syntax error positions and the success report path](./tasks/T71-diagnostics-positions-and-paths.md) · depends on: T08
 
 ## Phase 2: Core API, listener lifecycle and security

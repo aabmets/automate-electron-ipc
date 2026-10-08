@@ -11,7 +11,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let project: E2EProject | undefined;
@@ -31,7 +31,8 @@ describe("ipcAutomation, single schema file", () => {
       expect(generated["main.ts"]).toContain("windowFocused");
       expect(generated["preload.ts"]).toContain("sendEchoUserName");
       expect(generated["window.d.ts"]).toContain("sendEchoUserName");
-      expect(generated["window.d.ts"]).toContain("User");
+      expect(generated["window.d.ts"]).toContain('import type { User } from "./schema";');
+      expect(generated["window.d.ts"]).toContain("sendGetUser: (id: number) => Promise<User>;");
    });
 
    it("generates files that type-check", async () => {
@@ -187,11 +188,13 @@ describe("ipcAutomation, workspace", () => {
 
       expect(project.generated["main.ts"]).toContain("getUser");
       expect(project.generated["preload.ts"]).toContain("sendEchoUserName");
-      expect(project.generated["window.d.ts"]).toContain("User");
-      await expect(fsp.stat(path.join(project.root, "wrong"))).rejects.toThrowError();
+      expect(project.generated["window.d.ts"]).toContain("sendGetUser: (id: number) =>");
+      await expect(fsp.stat(path.join(project.root, "wrong"))).rejects.toMatchObject({
+         code: "ENOENT",
+      });
       await expect(
          fsp.stat(path.join(project.root, "packages/app/src/main/ipc")),
-      ).rejects.toThrowError();
+      ).rejects.toMatchObject({ code: "ENOENT" });
    });
 
    it("generates files that type-check", async () => {
@@ -278,6 +281,11 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
    it("generates files that type-check", async () => {
       project = await runFixture("dotted-imports");
       expect(await project.typecheck()).toBe("");
+   });
+
+   it("generates files that resolve under NodeNext, which needs the script extensions", async () => {
+      project = await runFixture("dotted-imports");
+      expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 });
 
@@ -624,7 +632,8 @@ describe("ipcAutomation, handler and sender types", () => {
       expect(main).toContain("onEcho: (callback: (event: IpcMainEvent, text: string,");
       expect(main).toContain("(event: IpcMainEvent, text: string, ...rest: number[]) =>");
       expect(main).toContain("callback(event, text, ...rest)");
-      expect(main).not.toContain("any");
+      // No loosely typed parameter, as a whole word.
+      expect(main).not.toMatch(/\bany\b/);
    });
 
    it("types Broadcast senders as void and Unicast senders as promises", async () => {

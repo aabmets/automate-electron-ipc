@@ -1,0 +1,9 @@
+{
+   "name": "fixture-all-kinds",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

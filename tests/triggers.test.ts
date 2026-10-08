@@ -27,7 +27,8 @@ function triggerSpec(trigger: string) {
 describe("trigger validation", () => {
    it("accepts every documented BrowserWindow event", () => {
       for (const event of BROWSER_WINDOW_EVENTS) {
-         expect(() => vld.validateChannelSpecs([triggerSpec(event)])).not.toThrowError();
+         const spec = triggerSpec(event);
+         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 

@@ -16,7 +16,7 @@ import shared from "@testutils/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-describe("PreloadBindingsWriter", () => {
+describe("RendererTypesWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
 
    it("should write empty Window declaration as a module when pfsArray is empty", async () => {
@@ -72,14 +72,30 @@ describe("PreloadBindingsWriter", () => {
          declare global {
             interface Window {
                ipc: {
-                  onCustomListener1: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
-                  onCustomListener2: (callback: (arg1: number, ...arg2: number) => Promise<CustomType>) => void;
+                  onVitestChannel: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;
                };
             }
          }\n
          export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   it("should write one callable per listener name when a channel has listeners", async () => {
+      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_MainToRenderer, [
+         "onCustomListener1",
+         "onCustomListener2",
+      ]);
+      const obj = new shared.VitestRendererTypesWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).toContain(
+         "onCustomListener1: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;",
+      );
+      expect(output).toContain(
+         "onCustomListener2: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;",
+      );
+      expect(output).not.toContain("onVitestChannel");
    });
 
    it("should type senders by channel kind, not by the declared return type", async () => {

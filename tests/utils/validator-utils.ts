@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import * as t from "@types";
+import type * as t from "@types";
+import { parseTestSignature } from "./writer-utils.js";
 
 export class ChannelSpecGenerator {
    private index: number;
@@ -28,14 +29,7 @@ export class ChannelSpecGenerator {
          name: `vitestChannel_${this.index}`,
          kind,
          direction,
-         signature: {
-            definition: `() => ${returnType}`,
-            paramsStart: 1,
-            params: [],
-            returnType,
-            customTypes: [],
-            async: returnType.includes("Promise"),
-         },
+         signature: parseTestSignature(`() => ${returnType}`),
       };
       if (listeners) {
          Object.assign(spec, { listeners });

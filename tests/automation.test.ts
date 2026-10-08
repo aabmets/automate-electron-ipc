@@ -59,7 +59,9 @@ describe("ipcAutomation", () => {
 
       expect(warn).toHaveBeenCalledWith(schemaPath);
       expect((await fsp.stat(path.dirname(schemaPath))).isDirectory()).toBe(true);
-      await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toThrowError();
+      await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toMatchObject({
+         code: "ENOENT",
+      });
    });
 
    it("writes empty bindings and warns when the schema has no channels", async () => {
@@ -219,7 +221,9 @@ describe("ipcAutomation", () => {
       await expect(ipcAutomation()).rejects.toThrowError(
          `Syntax error in schema file '${schemaPath}:1:36'`,
       );
-      await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toThrowError();
+      await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toMatchObject({
+         code: "ENOENT",
+      });
    });
 
    it("skips schema directory files without channels", async () => {

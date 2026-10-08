@@ -25,13 +25,13 @@ describe("getConfigFromUserPackage", () => {
 
       mocks.mockFspReadFile({});
       config = await cfg.getConfigFromUserPackage();
-      expect(config).toMatchObject({});
+      expect(config).toStrictEqual({});
       vi.restoreAllMocks();
 
       mocks.mockResolveUserProjectPath();
       mocks.mockFspReadFile({ config: {} });
       config = await cfg.getConfigFromUserPackage();
-      expect(config).toMatchObject({});
+      expect(config).toStrictEqual({});
    });
 
    it("should return valid IpcOptionalConfig objects", async () => {
@@ -52,7 +52,7 @@ describe("getResolvedConfig", () => {
 
    it("should resolve the manifest and the data dir from the given cwd", async () => {
       // Regression for T07: the project root was found from the library install location.
-      mocks.mockFspStats(false);
+      mocks.mockFspStatsByPath({});
       mocks.mockFspReadFile({ config: { autoipc: { ipcDataDir: "ipc" } } });
       const resolve = vi.spyOn(utils, "resolveUserProjectPath");
       await cfg.getResolvedConfig("/home/user/workspace/packages/app");
@@ -60,8 +60,10 @@ describe("getResolvedConfig", () => {
       expect(resolve).toHaveBeenCalledWith("ipc", "/home/user/workspace/packages/app");
    });
 
+   const DEFAULT_DIR = "/home/user/project/src/autoipc";
+
    it("should resolve missing optional config to expected default config", async () => {
-      mocks.mockFspStats(false);
+      mocks.mockFspStatsByPath({ [`${DEFAULT_DIR}/schema.ts`]: "file" });
       mocks.mockFspReadFile({ config: {} });
       const config = await cfg.getResolvedConfig();
 
@@ -71,17 +73,18 @@ describe("getResolvedConfig", () => {
          projectUsesNodeNext: false,
          ipcDataDir: "src/autoipc",
          codeIndent: 3,
-         mainBindingsFilePath: "/home/user/project/src/autoipc/main.ts",
-         preloadBindingsFilePath: "/home/user/project/src/autoipc/preload.ts",
-         rendererTypesFilePath: "/home/user/project/src/autoipc/window.d.ts",
+         mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
+         preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
+         rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
          ipcSchema: {
-            path: "/home/user/project/src/autoipc/schema.ts",
+            path: `${DEFAULT_DIR}/schema.ts`,
          },
       });
    });
 
    it("should resolve optional config to expected config", async () => {
-      mocks.mockFspStats(true);
+      const dir = "/home/user/project/src/subpath/autoipc";
+      mocks.mockFspStatsByPath({ [`${dir}/schema`]: "directory" });
       mocks.mockFspReadFile({
          config: {
             autoipc: {
@@ -99,12 +102,47 @@ describe("getResolvedConfig", () => {
          projectUsesNodeNext: true,
          ipcDataDir: "src/subpath/autoipc",
          codeIndent: 4,
-         mainBindingsFilePath: "/home/user/project/src/subpath/autoipc/main.ts",
-         preloadBindingsFilePath: "/home/user/project/src/subpath/autoipc/preload.ts",
-         rendererTypesFilePath: "/home/user/project/src/subpath/autoipc/window.d.ts",
+         mainBindingsFilePath: `${dir}/main.ts`,
+         preloadBindingsFilePath: `${dir}/preload.ts`,
+         rendererTypesFilePath: `${dir}/window.d.ts`,
          ipcSchema: {
-            path: "/home/user/project/src/subpath/autoipc/schema.ts",
+            path: `${dir}/schema`,
          },
+      });
+   });
+
+   describe("choice of the schema path", () => {
+      const resolve = async (entries: Record<string, "directory" | "file">) => {
+         mocks.mockFspStatsByPath(entries);
+         mocks.mockFspReadFile({ config: {} });
+         return (await cfg.getResolvedConfig()).ipcSchema;
+      };
+
+      it("uses the schema directory when only the directory exists", async () => {
+         const schema = await resolve({ [`${DEFAULT_DIR}/schema`]: "directory" });
+         expect(schema.path).toBe(`${DEFAULT_DIR}/schema`);
+         expect(schema.stats?.isDirectory()).toBe(true);
+      });
+
+      it("uses the schema file when only the file exists", async () => {
+         const schema = await resolve({ [`${DEFAULT_DIR}/schema.ts`]: "file" });
+         expect(schema.path).toBe(`${DEFAULT_DIR}/schema.ts`);
+         expect(schema.stats?.isFile()).toBe(true);
+      });
+
+      it("prefers the schema file when both exist", async () => {
+         const schema = await resolve({
+            [`${DEFAULT_DIR}/schema`]: "directory",
+            [`${DEFAULT_DIR}/schema.ts`]: "file",
+         });
+         expect(schema.path).toBe(`${DEFAULT_DIR}/schema.ts`);
+         expect(schema.stats?.isFile()).toBe(true);
+      });
+
+      it("points at the schema file without stats when neither exists", async () => {
+         const schema = await resolve({});
+         expect(schema.path).toBe(`${DEFAULT_DIR}/schema.ts`);
+         expect(schema.stats).toBeNull();
       });
    });
 });

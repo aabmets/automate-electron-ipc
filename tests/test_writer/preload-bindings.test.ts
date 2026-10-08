@@ -68,11 +68,23 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            onCustomListener1: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
-            onCustomListener2: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            onVitestChannel: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   it("should write one callable per listener name when a channel has listeners", async () => {
+      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_MainToRenderer, [
+         "onCustomListener1",
+         "onCustomListener2",
+      ]);
+      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).toContain("onCustomListener1: (callback: Function) =>");
+      expect(output).toContain("onCustomListener2: (callback: Function) =>");
+      expect(output).not.toContain("onVitestChannel");
    });
 
    it("should write only ports into ipc object when there are no callables", async () => {

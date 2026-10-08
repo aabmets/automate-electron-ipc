@@ -16,8 +16,14 @@ import { describe, expect, it } from "vitest";
 
 describe("validateOptionalConfig", () => {
    it("should throw an error if ipcDataDir path is absolute", () => {
-      const config: t.IPCOptionalConfig = { ipcDataDir: "/absolute/path/auto-ipc" };
-      expect(() => vld.validateOptionalConfig(config)).toThrowError();
+      const config: t.IPCOptionalConfig = {
+         projectUsesNodeNext: false,
+         ipcDataDir: "/absolute/path/auto-ipc",
+         codeIndent: 3,
+      };
+      expect(() => vld.validateOptionalConfig(config)).toThrowError(
+         "ipcDataDir must be relative to the project root",
+      );
    });
 
    it("should throw an error if codeIndent is not an integer", () => {
@@ -38,8 +44,12 @@ describe("validateOptionalConfig", () => {
    });
 
    it("should throw errors if codeIndent value is out of range", () => {
-      expect(() => vld.validateOptionalConfig({ codeIndent: 1 })).toThrowError();
-      expect(() => vld.validateOptionalConfig({ codeIndent: 5 })).toThrowError();
+      const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
+      for (const codeIndent of [1, 5]) {
+         expect(() => vld.validateOptionalConfig({ ...config, codeIndent })).toThrowError(
+            "value cannot be less than 2 or greater than 4",
+         );
+      }
    });
 });
 
@@ -85,7 +95,7 @@ describe("validateChannelSpecs", () => {
    it("should accept camelCase channel names, including ones that start with 'on'", () => {
       for (const name of ["getUser", "echo_name", "online", "once"]) {
          const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
-         expect(() => vld.validateChannelSpecs([{ ...spec, name }])).not.toThrowError();
+         expect(vld.validateChannelSpecs([{ ...spec, name }])).toStrictEqual([{ ...spec, name }]);
       }
    });
 
@@ -156,7 +166,7 @@ describe("validateChannelSpecs", () => {
          const direction = kind === "Port" ? "RendererToRenderer" : "RendererToMain";
          const spec = csg.generate(direction, kind, "Promise<void >");
          spec.signature.returnsVoid = true;
-         expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
+         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
@@ -174,7 +184,7 @@ describe("validateChannelSpecs", () => {
          "Broadcast",
          "Promise<void >",
       );
-      expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
+      expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
    });
 
    it("should throw Struct error for Unicast or Port kind channels", () => {
@@ -184,7 +194,9 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToRenderer", "Port", "void", ["onChannel"]),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError();
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            "At path: listeners -- Expected a value of type `never`, but received: `onChannel`",
+         );
       }
    });
 

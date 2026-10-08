@@ -615,13 +615,16 @@ describe("parseSpecs, typeof of values declared in the schema file", () => {
    });
 
    it("accepts a queried value that is exported later", () => {
-      expect(() =>
-         parse(`const config = 1;\nexport { config };\n${using("config")}`),
-      ).not.toThrow();
+      const { typeSpecArray, channelSpecArray } = parse(
+         `const config = 1;\nexport { config };\n${using("config")}`,
+      );
+      expect(channelSpecArray[0].signature.customTypes).toStrictEqual(["config"]);
+      expect(typeSpecArray).toMatchObject([{ name: "config", kind: "value", isExported: true }]);
    });
 
    it("does not require values that no signature queries", () => {
-      expect(() => parse(`const unused = 1;\n${using("unused2")}`)).not.toThrow();
+      const { typeSpecArray } = parse(`const unused = 1;\n${using("unused2")}`);
+      expect(typeSpecArray).toMatchObject([{ name: "unused", kind: "value", isExported: false }]);
    });
 
    it("queries the head of a qualified name", () => {

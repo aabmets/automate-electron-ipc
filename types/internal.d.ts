@@ -120,10 +120,8 @@ export interface ParsedFileSpecs extends FileMeta {
 export interface VitestChannelSpec {
    channelKind: string;
    channelDirection: string;
-   channelListeners: string[];
    paramType: string;
    paramRest: boolean;
    paramOptional: boolean;
    sigReturnType: string;
-   sigCustomTypes: string[];
 }

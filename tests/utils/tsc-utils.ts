@@ -16,10 +16,29 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-export function runTsc(dir: string): string {
-   const tsc = path.join(root, "node_modules/.bin/tsc");
+const defaultTsc = path.join(root, "node_modules/.bin/tsc");
+
+/**
+ * Runs tsc on the project in `dir` and returns its diagnostics, which are empty for a clean run.
+ * Throws if tsc does not run to completion: it could not start, it was killed, or it failed
+ * without a diagnostic. Otherwise a crash would give an empty result, which means "no errors".
+ * `tsc` is the executable to run, which is only replaced by the tests of this helper.
+ */
+export function runTsc(dir: string, tsc = defaultTsc): string {
    const result = spawnSync(tsc, ["-p", dir, "--pretty", "false"], { encoding: "utf8" });
-   return `${result.stdout}${result.stderr}`.trim();
+   if (result.error) {
+      throw new Error(`tsc could not run: ${result.error.message}`);
+   } else if (result.signal) {
+      throw new Error(`tsc was killed by signal ${result.signal}`);
+   }
+   const output = `${result.stdout}${result.stderr}`.trim();
+   // tsc exits with 0 when there are no errors, and with 1 or 2 when it reports diagnostics.
+   if (![0, 1, 2].includes(result.status ?? -1)) {
+      throw new Error(`tsc exited with status ${result.status}: ${output}`);
+   } else if (result.status !== 0 && output === "") {
+      throw new Error(`tsc exited with status ${result.status} and printed no diagnostics`);
+   }
+   return output;
 }
 
 /**

@@ -19,6 +19,13 @@ import { runTsc } from "./tsc-utils.js";
 const root = path.resolve(import.meta.dirname, "../..");
 const fixturesDir = path.join(root, "tests/fixtures");
 
+/**
+ * Compiler options for `typecheck` that resolve imports like Node does for ESM. The default
+ * is `moduleResolution: "bundler"`, which also accepts the extensionless imports that
+ * `projectUsesNodeNext` projects must not generate.
+ */
+export const NODE_NEXT_OPTIONS = { module: "NodeNext", moduleResolution: "NodeNext" } as const;
+
 export interface RunFixtureOptions {
    /** Sub-directory of the fixture that is the project root. Defaults to the fixture root. */
    project?: string;
