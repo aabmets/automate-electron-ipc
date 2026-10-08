@@ -27,5 +27,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   false. Other verbs: `emit`'s `send` and `connect` of the port verbs throw Electron's own
   `TypeError` for a destroyed window, which the README now says. Note: `connectPorts` registers the
   first window in `portEnds` before it reads the second one's `webContents`, so a destroyed second
-  window leaves that entry behind when `connect` throws; not worth a task, since the caller
-  hands over a dead window.
+  window leaves that entry behind when `connect` throws; this became T78.
