@@ -66,7 +66,7 @@ describe("parseSignature, names that the schema file binds", () => {
 describe("parseSignature, parameters", () => {
    it("reads names, types, rest and optional flags", () => {
       const { params } = parseSignature("(a: string, b?: number, ...rest: boolean[]) => void");
-      expect(params).toStrictEqual([
+      expect(params).toMatchObject([
          { name: "a", type: "string", rest: false, optional: false },
          { name: "b", type: "number", rest: false, optional: true },
          { name: "rest", type: "boolean[]", rest: true, optional: false },
@@ -101,5 +101,97 @@ describe("parseSignature, start of the parameter list", () => {
    it("skips comments between the type parameters and the parameter list", () => {
       expect(restAfterParen("<T>/* ( */(a: T) => void")).toBe("a: T) => void");
       expect(restAfterParen("<T>// (\n(a: T) => void")).toBe("a: T) => void");
+   });
+});
+
+describe("parseSignature, void return types", () => {
+   // Regression for T69: the check compared the text with "void" and "Promise<void>".
+   it.each([
+      "void",
+      "(void)",
+      "Promise<void>",
+      "Promise< void >",
+      "Promise<(void)>",
+      "(Promise<void>)",
+      "Promise<void /* x */>",
+   ])("treats %s as void", (returnType) => {
+      expect(parseSignature(`() => ${returnType}`).returnsVoid).toBe(true);
+   });
+
+   it.each([
+      "string",
+      "undefined",
+      "never",
+      "Promise<string>",
+      "Promise<void | string>",
+      "Promise<void[]>",
+      "Promise<void, void>",
+      "Promise",
+      "PromiseLike<void>",
+      "Foo<void>",
+      "void | string",
+   ])("does not treat %s as void", (returnType) => {
+      expect(parseSignature(`() => ${returnType}`).returnsVoid).toBe(false);
+   });
+
+   it("does not treat a declared Promise<void> as void", () => {
+      expect(parseSignature("() => Promise<void>", ["Promise"]).returnsVoid).toBe(false);
+   });
+});
+
+describe("parseSignature, type references", () => {
+   const refsOf = (definition: string, locals: string[] = []) => {
+      const signature = parseSignature(definition, locals);
+      return (signature.typeRefs ?? []).map((ref) => [
+         ref.name,
+         signature.definition.slice(ref.start, ref.end),
+      ]);
+   };
+
+   it("records the position of every reference, ordered by position", () => {
+      expect(refsOf("(a: Foo, b: Map<string, Bar>) => Baz")).toStrictEqual([
+         ["Foo", "Foo"],
+         ["Bar", "Bar"],
+         ["Baz", "Baz"],
+      ]);
+   });
+
+   it("records the head of a qualified name and of a typeof query", () => {
+      expect(refsOf("(a: NS.Inner.Kind, b: typeof cfg.value) => void")).toStrictEqual([
+         ["NS", "NS"],
+         ["cfg", "cfg"],
+      ]);
+   });
+
+   it("records references inside a template literal type, not its text", () => {
+      expect(refsOf("(a: `User-${User}-${Id}`) => void")).toStrictEqual([
+         ["User", "User"],
+         ["Id", "Id"],
+      ]);
+   });
+
+   it("records no method name, property key, parameter name or string literal", () => {
+      expect(refsOf('(User: { User(): void; User: "User" }) => void')).toStrictEqual([]);
+   });
+
+   it("records no builtin type and no type parameter in scope", () => {
+      expect(refsOf("<T>(a: T, b: Promise<Date>) => T")).toStrictEqual([]);
+   });
+
+   it("records a global that the schema file binds itself", () => {
+      expect(refsOf("(a: Error) => void", ["Error"])).toStrictEqual([["Error", "Error"]]);
+   });
+
+   it("records where the text of the parameter types and of the return type starts", () => {
+      const signature = parseSignature('(k: "é", ...rest: Foo[]) => Promise<Bar>');
+      const at = (start?: number, text?: string) =>
+         signature.definition.slice(start, (start ?? 0) + (text?.length ?? 0));
+      expect(at(signature.params[0].typeStart, signature.params[0].type)).toBe('"é"');
+      expect(at(signature.params[1].typeStart, signature.params[1].type)).toBe("Foo[]");
+      expect(at(signature.returnStart, signature.returnType)).toBe("Promise<Bar>");
+   });
+
+   it("has no type start for a parameter without an annotation", () => {
+      expect(parseSignature("(a) => void").params[0].typeStart).toBeUndefined();
    });
 });

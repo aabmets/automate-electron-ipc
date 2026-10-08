@@ -149,6 +149,34 @@ describe("validateChannelSpecs", () => {
       }
    });
 
+   // Regression for T69: the check compared the text, so `Promise<void >` was rejected.
+   it("should accept the void return types that the parser reports, whatever the spacing", () => {
+      const csg = new ChannelSpecGenerator();
+      for (const kind of ["Broadcast", "Port"] as const) {
+         const direction = kind === "Port" ? "RendererToRenderer" : "RendererToMain";
+         const spec = csg.generate(direction, kind, "Promise<void >");
+         spec.signature.returnsVoid = true;
+         expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
+      }
+   });
+
+   it("should trust returnsVoid over the text of the return type", () => {
+      const spec = new ChannelSpecGenerator().generate("RendererToMain", "Broadcast", "Foo");
+      spec.signature.returnsVoid = false;
+      expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         "Channel return type 'Foo' not allowed when channel kind is 'Broadcast'",
+      );
+   });
+
+   it("should ignore whitespace when a spec has no returnsVoid", () => {
+      const spec = new ChannelSpecGenerator().generate(
+         "RendererToMain",
+         "Broadcast",
+         "Promise<void >",
+      );
+      expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
+   });
+
    it("should throw Struct error for Unicast or Port kind channels", () => {
       const csg = new ChannelSpecGenerator();
       const invalidChannelSpecsArray = [

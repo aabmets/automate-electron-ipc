@@ -53,8 +53,18 @@ export interface TypeSpec {
 export interface CallableParam {
    name: string;
    type: string;
+   /** Offset in `definition` where the text of `type` starts. Absent without an annotation. */
+   typeStart?: number;
    rest: boolean;
    optional: boolean;
+}
+
+/** A reference to a type by name in a signature, as offsets in `definition`. */
+export interface TypeRef {
+   /** The name to rename: the leftmost identifier, such as `Kind` for `Kind.A`. */
+   name: string;
+   start: number;
+   end: number;
 }
 
 export interface CallableSignature {
@@ -63,8 +73,14 @@ export interface CallableSignature {
    paramsStart: number;
    params: CallableParam[];
    returnType: string;
+   /** Offset in `definition` where the text of `returnType` starts. */
+   returnStart?: number;
+   /** True for `void`, and for `Promise<void>` of an async signature. */
+   returnsVoid?: boolean;
    customTypes: string[];
    async: boolean;
+   /** The type references of the signature, ordered by position, which writers may rename. */
+   typeRefs?: TypeRef[];
 }
 
 export type ChannelKind = "Broadcast" | "Unicast" | "Port";

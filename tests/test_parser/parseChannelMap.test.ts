@@ -81,10 +81,32 @@ describe("parseChannelMapModule", () => {
       }
    });
 
+   describe("this parameters", () => {
+      // Regression for T69: the wrappers declared `this` as an ordinary parameter (TS2680).
+      it("rejects a this parameter in the generic and the as form", () => {
+         const message =
+            "Schema file 'schema.ts': channel 'chan': " +
+            "a 'this' parameter is not supported, since IPC does not transfer 'this'.";
+         expect(
+            parseError(
+               "export default defineChannels({ chan: send<(this: Foo, a: string) => void>() });",
+            ),
+         ).toBe(message);
+         expect(
+            parseError("export default defineChannels({ chan: send() as (this: Foo) => void });"),
+         ).toBe(message);
+      });
+
+      it("accepts a parameter that is merely called thisArg", () => {
+         const spec = parseOne("chan: send<(thisArg: Foo) => void>()");
+         expect(spec.signature?.params.map((param) => param.name)).toStrictEqual(["thisArg"]);
+      });
+   });
+
    describe("signatures", () => {
       it("parses params, return type and custom types", () => {
          const spec = parseOne("chan: invoke<(a: string, b: Foo<Bar>[]) => Baz>()");
-         expect(spec.signature).toStrictEqual({
+         expect(spec.signature).toMatchObject({
             definition: "(a: string, b: Foo<Bar>[]) => Baz",
             paramsStart: 1,
             params: [
@@ -113,7 +135,7 @@ describe("parseChannelMapModule", () => {
 
       it("parses optional and rest params", () => {
          const spec = parseOne("chan: send<(a: string, b?: number, ...rest: Foo[]) => void>()");
-         expect(spec.signature?.params).toStrictEqual([
+         expect(spec.signature?.params).toMatchObject([
             { name: "a", type: "string", rest: false, optional: false },
             { name: "b", type: "number", rest: false, optional: true },
             { name: "rest", type: "Foo[]", rest: true, optional: false },
@@ -122,7 +144,7 @@ describe("parseChannelMapModule", () => {
 
       it("parses destructured params", () => {
          const spec = parseOne("chan: send<({ abc }: Foo, [x, y]: Bar) => void>()");
-         expect(spec.signature?.params).toStrictEqual([
+         expect(spec.signature?.params).toMatchObject([
             { name: "{ abc }", type: "Foo", rest: false, optional: false },
             { name: "[x, y]", type: "Bar", rest: false, optional: false },
          ]);

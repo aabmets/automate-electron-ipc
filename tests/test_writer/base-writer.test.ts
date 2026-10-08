@@ -218,22 +218,14 @@ describe("BaseWriter", () => {
    });
 
    describe("channel specs of colliding type names", () => {
-      const pfsOf = (
-         fullPath: string,
-         signature: Partial<t.CallableSignature>,
-      ): t.ParsedFileSpecs => ({
+      const pfsOf = (fullPath: string, definition: string): t.ParsedFileSpecs => ({
          fullPath,
          relativePath: "",
          specs: {
             channelSpecArray: [
                {
                   name: "chan",
-                  signature: {
-                     customTypes: ["User"],
-                     returnType: "void",
-                     params: [],
-                     ...signature,
-                  },
+                  signature: shared.parseTestSignature(definition),
                } as unknown as t.ChannelSpec,
             ],
             channelMapExport: null,
@@ -243,7 +235,14 @@ describe("BaseWriter", () => {
             ],
          },
       });
-      const first = pfsOf("/project/a.ts", { definition: "() => User" });
+      const first = pfsOf("/project/a.ts", "() => User");
+      const renamed = (definition: string) => {
+         const second = pfsOf("/project/b.ts", definition);
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         // The first file takes the name `User`, so the second one is renamed.
+         obj.getChannelSpecs(first);
+         return obj.getChannelSpecs(second)[0].signature;
+      };
 
       it("should return the specs as they are when no type name is taken", () => {
          const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first]);
@@ -252,34 +251,92 @@ describe("BaseWriter", () => {
 
       it("should rename the references of the colliding type in the signature", () => {
          const definition =
-            "(User: User, list: Map<string, User>, o: { User: User; readonly User: User }, " +
+            "(User: User, list?: Map<string, User>, o: { User: User; readonly User: User }, " +
             's: "User", n: NS.User, c: A extends B ? User : User[]) => Promise<User[]>';
-         const second = pfsOf("/project/b.ts", {
-            definition,
-            returnType: "Promise<User[]>",
-            params: [
-               { name: "User", type: "User", rest: false, optional: false },
-               { name: "list", type: "Map<string, User>", rest: false, optional: true },
-            ],
-         });
+         const second = pfsOf("/project/b.ts", definition);
          const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
 
          expect(obj.getChannelSpecs(first)).toBe(first.specs.channelSpecArray);
          const [spec] = obj.getChannelSpecs(second);
          expect(spec.signature.definition).toStrictEqual(
-            "(User: User_2, list: Map<string, User_2>, o: { User: User_2; readonly User: User_2 }, " +
+            "(User: User_2, list?: Map<string, User_2>, o: { User: User_2; readonly User: User_2 }, " +
                's: "User", n: NS.User, c: A extends B ? User_2 : User_2[]) => Promise<User_2[]>',
          );
          expect(spec.signature.returnType).toStrictEqual("Promise<User_2[]>");
-         expect(spec.signature.params).toStrictEqual([
+         expect(spec.signature.params.slice(0, 2)).toMatchObject([
             { name: "User", type: "User_2", rest: false, optional: false },
             { name: "list", type: "Map<string, User_2>", rest: false, optional: true },
          ]);
-         expect(spec.signature.customTypes).toStrictEqual(["User"]);
+         expect(spec.signature.params[3].type).toStrictEqual('"User"');
+         expect(spec.signature.customTypes).toStrictEqual(["User", "NS.User", "A", "B"]);
          // The parsed spec is not modified.
          expect(second.specs.channelSpecArray[0].signature.returnType).toStrictEqual(
             "Promise<User[]>",
          );
+      });
+
+      // Regression for T69: the `${...}` part of a template literal type was skipped as a string.
+      it("should rename a reference inside a template literal type", () => {
+         const signature = renamed("(key: `k-${User}`, u: User) => `${User}-v`");
+         expect(signature.definition).toBe("(key: `k-${User_2}`, u: User_2) => `${User_2}-v`");
+         expect(signature.params[0].type).toBe("`k-${User_2}`");
+         expect(signature.returnType).toBe("`${User_2}-v`");
+      });
+
+      it("should not rename the text of a template literal outside of `${}`", () => {
+         expect(renamed("(key: `User-${User}-User`) => void").definition).toBe(
+            "(key: `User-${User_2}-User`) => void",
+         );
+      });
+
+      // Regression for T69: the member name of a method type was renamed.
+      it("should not rename the name of a method or an accessor", () => {
+         const signature = renamed("(o: { User(): User; get User(): User; User?: User }) => void");
+         expect(signature.definition).toBe(
+            "(o: { User(): User_2; get User(): User_2; User?: User_2 }) => void",
+         );
+      });
+
+      it("should rename a type in the type parameters and shift the start of the parameters", () => {
+         const signature = renamed("<T extends User = User>(a: T) => T");
+         expect(signature.definition).toBe("<T extends User_2 = User_2>(a: T) => T");
+         expect(signature.definition.slice(signature.paramsStart)).toBe("a: T) => T");
+      });
+
+      it("should rename the head of a qualified name and a typeof query, not the rest", () => {
+         const signature = renamed("(a: User.Kind, b: typeof User, c: typeof User.value) => void");
+         expect(signature.definition).toBe(
+            "(a: User_2.Kind, b: typeof User_2, c: typeof User_2.value) => void",
+         );
+      });
+
+      it("should not rename a type parameter that shadows the colliding type", () => {
+         const signature = renamed("<User>(a: User) => User");
+         expect(signature.definition).toBe("<User>(a: User) => User");
+      });
+
+      it("should leave the texts alone for a signature without the offsets of the parser", () => {
+         const second = pfsOf("/project/b.ts", "(a: User) => User");
+         const {
+            typeRefs: _refs,
+            returnStart: _r,
+            ...bare
+         } = second.specs.channelSpecArray[0].signature;
+         bare.params = bare.params.map(({ typeStart: _t, ...param }) => param);
+         second.specs.channelSpecArray[0].signature = bare;
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         obj.getChannelSpecs(first);
+         expect(obj.getChannelSpecs(second)[0].signature).toMatchObject({
+            returnType: "User",
+            params: [{ type: "User" }],
+         });
+      });
+
+      it("should rename correctly after non-ASCII text", () => {
+         const signature = renamed('(k: "é日本", a: User) => User');
+         expect(signature.definition).toBe('(k: "é日本", a: User_2) => User_2');
+         expect(signature.params[1].type).toBe("User_2");
+         expect(signature.returnType).toBe("User_2");
       });
    });
 

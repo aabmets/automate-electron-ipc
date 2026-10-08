@@ -108,13 +108,17 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
             object({
                name: string(),
                type: string(),
+               typeStart: optional(number()),
                rest: boolean(),
                optional: boolean(),
             }),
          ),
          returnType: string(),
+         returnStart: optional(number()),
+         returnsVoid: optional(boolean()),
          customTypes: array(string()),
          async: boolean(),
+         typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
       }),
       listeners: kind === "Broadcast" ? optional(array(ListenersStruct)) : optional(never()),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
@@ -159,7 +163,10 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
 
       if (spec?.kind) {
          const returnType = spec?.signature?.returnType ?? "";
-         const isVoid = ["void", "Promise<void>"].includes(returnType);
+         // The parser decides from the AST. Specs that did not come from it fall back to the text.
+         const isVoid =
+            spec?.signature?.returnsVoid ??
+            ["void", "Promise<void>"].includes(returnType.replaceAll(/\s+/g, ""));
          const isLimited = ["Broadcast", "Port"].includes(spec.kind);
          if (isLimited && !isVoid) {
             throw new Error(

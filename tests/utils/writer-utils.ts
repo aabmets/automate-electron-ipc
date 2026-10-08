@@ -121,6 +121,13 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
    ] as t.ParsedFileSpecs[];
 }
 
+/** Parses a signature text the same way the parser does for real schema files. */
+export function parseTestSignature(definition: string, locals: string[] = []): t.CallableSignature {
+   const { module, src } = parser.parseModule(`type T = ${definition};`);
+   const alias = (module.body[0] as any).typeAnnotation;
+   return parser.parseSignature(alias, src, new Set(locals));
+}
+
 export interface SimpleChannel {
    name: string;
    kind: t.ChannelKind;
@@ -152,6 +159,7 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
 
 export default {
    buildFileSpecs,
+   parseTestSignature,
    VitestBaseWriter,
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,

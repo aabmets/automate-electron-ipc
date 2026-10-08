@@ -16,23 +16,27 @@ import utils from "../utils.js";
 import { ImportsGenerator } from "./imports-generator.js";
 
 /**
- * Replaces the type names of a signature text, such as `User` with `User_2`. Only references
- * are replaced, not the members of a qualified name, string literals, property keys or
- * parameter names.
+ * Replaces the type names of a text of a signature, such as `User` with `User_2`. `refs` are the
+ * type references of the whole definition, which the parser took from the AST, and `offset` is
+ * the position in the definition where `text` starts. Only the references inside the text are
+ * replaced, so names of members, string literals, property keys and parameters stay as written.
  */
-function renameTypeReferences(text: string, renames: ReadonlyMap<string, string>): string {
-   const token = /(["'`])(?:\\.|(?!\1).)*\1|[A-Za-z_$][\w$]*/g;
-   return text.replace(token, (match, quote, offset: number) => {
-      const renamed = quote ? undefined : renames.get(match);
-      if (renamed === undefined) {
-         return match;
+function renameTypeReferences(
+   text: string,
+   offset: number,
+   refs: readonly t.TypeRef[],
+   renames: ReadonlyMap<string, string>,
+): string {
+   let result = "";
+   let last = 0;
+   for (const ref of refs) {
+      const renamed = renames.get(ref.name);
+      if (renamed !== undefined && ref.start >= offset + last && ref.end <= offset + text.length) {
+         result += text.slice(last, ref.start - offset) + renamed;
+         last = ref.end - offset;
       }
-      const before = text.slice(0, offset);
-      const after = text.slice(offset + match.length);
-      const isMember = /\.\s*$/.test(before);
-      const isKey = /(?:[({,;]|\breadonly)\s*$/.test(before) && /^\s*\??\s*:/.test(after);
-      return isMember || isKey ? match : renamed;
-   });
+   }
+   return result + text.slice(last);
 }
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
@@ -103,23 +107,28 @@ export class BaseWriter {
       if (renames.size === 0) {
          return specs;
       }
-      return specs.map((spec) => ({
-         ...spec,
-         signature: {
-            ...spec.signature,
-            definition: renameTypeReferences(spec.signature.definition, renames),
-            // Renaming changes the length of the text before the parameter list.
-            paramsStart: renameTypeReferences(
-               spec.signature.definition.slice(0, spec.signature.paramsStart),
-               renames,
-            ).length,
-            returnType: renameTypeReferences(spec.signature.returnType, renames),
-            params: spec.signature.params.map((param) => ({
-               ...param,
-               type: renameTypeReferences(param.type, renames),
-            })),
-         },
-      }));
+      return specs.map((spec) => {
+         const { definition, paramsStart, returnType, returnStart, params } = spec.signature;
+         const refs = spec.signature.typeRefs ?? [];
+         const rename = (text: string, offset: number | undefined) =>
+            offset === undefined ? text : renameTypeReferences(text, offset, refs, renames);
+         return {
+            ...spec,
+            signature: {
+               ...spec.signature,
+               definition: rename(definition, 0),
+               // Renaming changes the length of the text before the parameter list.
+               paramsStart: rename(definition.slice(0, paramsStart), 0).length,
+               returnType: rename(returnType, returnStart),
+               params: params.map((param) => ({
+                  ...param,
+                  type: rename(param.type, param.typeStart),
+               })),
+               // The offsets of the references refer to the text before the renaming.
+               typeRefs: [],
+            },
+         };
+      });
    }
 
    /**

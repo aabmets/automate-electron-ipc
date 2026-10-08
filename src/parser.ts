@@ -34,6 +34,12 @@ export interface AstNode {
    [key: string]: any;
 }
 
+/** A reference to a type by name, with the swc span of the identifier. */
+export interface SpanRef {
+   name: string;
+   span: Span;
+}
+
 export interface Source {
    text: (node: { span: Span }) => string;
 }
@@ -195,13 +201,13 @@ function headOf(name: string): string {
    return name.split(".")[0];
 }
 
-/** The leftmost identifier of the expression that `typeof` queries. */
-function queryHead(exprName: AstNode): string | null {
-   let current = exprName;
+/** The leftmost identifier of a possibly qualified name, such as `Kind` in `Kind.A`. */
+function headNode(name: AstNode): AstNode | null {
+   let current = name;
    while (current.type === "TsQualifiedName") {
       current = current.left;
    }
-   return current.type === "Identifier" ? current.value : null;
+   return current.type === "Identifier" ? current : null;
 }
 
 /**
@@ -228,6 +234,8 @@ function declaredTypeParams(node: AstNode): string[] {
 /**
  * Collects the names of the types that a node refers to and that the generated files must import.
  * `scope` are the type parameters in scope, `locals` the names that the schema file binds itself.
+ * If `refs` is given, the span of the leftmost identifier of every such reference is appended to
+ * it, so that the writers can rename a type by position instead of by scanning text.
  */
 export function collectCustomTypes(
    node: AstNode,
@@ -235,6 +243,7 @@ export function collectCustomTypes(
    set: Set<string>,
    scope: ReadonlySet<string> = new Set(),
    locals: ReadonlySet<string> = new Set(),
+   refs?: SpanRef[],
 ): void {
    if (!node) {
       return;
@@ -247,11 +256,16 @@ export function collectCustomTypes(
       const head = headOf(typeName);
       if (!(isBuiltinType(head, locals) || inScope.has(head))) {
          set.add(typeName);
+         const identifier = headNode(node.typeName);
+         if (identifier) {
+            refs?.push({ name: head, span: identifier.span });
+         }
       }
    } else if (node.type === "TsTypeQuery") {
-      const head = queryHead(node.exprName);
-      if (head && !inScope.has(head)) {
-         set.add(head);
+      const identifier = headNode(node.exprName);
+      if (identifier && !inScope.has(identifier.value)) {
+         set.add(identifier.value);
+         refs?.push({ name: identifier.value, span: identifier.span });
       }
    } else if (node.type === "ImportDeclaration") {
       for (const element of node.specifiers) {
@@ -261,7 +275,7 @@ export function collectCustomTypes(
          }
       }
    }
-   forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope, locals));
+   forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope, locals, refs));
 }
 
 const PACKAGE_NAME = "automate-electron-ipc";
@@ -423,23 +437,52 @@ function findParamsStart(fn: TsFunctionType, src: Source): number {
    throw new Error(`Cannot find the parameter list of the signature '${code}'`);
 }
 
+function isVoidType(node: AstNode): boolean {
+   const type = unwrapTypeParentheses(node);
+   return type.type === "TsKeywordType" && type.kind === "void";
+}
+
+/** Tells whether a return type is `void` or, for an async signature, `Promise<void>`. */
+function returnsVoid(returnNode: AstNode, isAsync: boolean): boolean {
+   if (isVoidType(returnNode)) {
+      return true;
+   }
+   const args: AstNode[] = isAsync ? unwrapTypeParentheses(returnNode).typeParams?.params : [];
+   return args?.length === 1 && isVoidType(args[0]);
+}
+
 export function parseSignature(
    fn: TsFunctionType,
    src: Source,
    locals: ReadonlySet<string> = new Set(),
 ): t.CallableSignature {
    const set = new Set<string>();
-   collectCustomTypes(fn as AstNode, src, set, new Set(), locals);
+   const spanRefs: SpanRef[] = [];
+   collectCustomTypes(fn as AstNode, src, set, new Set(), locals, spanRefs);
+
+   // Offsets in the decoded text of the definition, which starts at the span of the function type.
+   const offsetOf = (position: number) => src.text({ span: { ...fn.span, end: position } }).length;
+   const typeRefs: t.TypeRef[] = spanRefs
+      .map(({ name, span }) => ({ name, start: offsetOf(span.start), end: offsetOf(span.end) }))
+      .sort((a, b) => a.start - b.start);
 
    const returnNode = fn.typeAnnotation.typeAnnotation;
    const returnType = src.text(returnNode) || "void";
+   const isAsync = !locals.has("Promise") && isPromiseType(returnNode as AstNode);
    return {
       definition: src.text(fn),
       paramsStart: findParamsStart(fn, src),
-      params: fn.params.map((param) => getParamInfo(param, src)),
+      params: fn.params.map((param) => {
+         const info = getParamInfo(param, src);
+         const annotation = (param as AstNode).typeAnnotation?.typeAnnotation;
+         return annotation ? { ...info, typeStart: offsetOf(annotation.span.start) } : info;
+      }),
       customTypes: Array.from(set),
       returnType,
-      async: !locals.has("Promise") && isPromiseType(returnNode as AstNode),
+      returnStart: offsetOf(returnNode.span.start),
+      returnsVoid: returnsVoid(returnNode as AstNode, isAsync),
+      async: isAsync,
+      typeRefs,
    };
 }
 
@@ -592,6 +635,10 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
    } else if (signature.type !== "TsFunctionType") {
       const text = ctx.src.text(signature as { span: Span });
       throw fail(`the signature must be a function type, found '${text}'.`);
+   } else if (
+      (signature.params as AstNode[]).some((p) => p.type === "Identifier" && p.value === "this")
+   ) {
+      throw fail("a 'this' parameter is not supported, since IPC does not transfer 'this'.");
    }
    return {
       name,
