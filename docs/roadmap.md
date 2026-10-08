@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 37 delivered, 35 remaining, 1 dropped.
+**Progress:** 38 delivered, 34 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -61,7 +61,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 ## Phase 2: Core API, listener lifecycle and security
 
 - [x] [T13: Naming of generated API members](./tasks/T13-naming-of-generated-api-members.md) · depends on: T05
-- [ ] [T14: Renderer listener disposers and `once`](./tasks/T14-renderer-listener-disposers-and-once.md) · depends on: T13
+- [x] [T14: Renderer listener disposers and `once`](./tasks/T14-renderer-listener-disposers-and-once.md) · depends on: T13
 - [ ] [T15: Main-process listener and handler disposers and `handleOnce`](./tasks/T15-main-process-listener-and-handler.md) · depends on: T13
 - [ ] [T16: Sender validation (Electron security checklist #17)](./tasks/T16-sender-validation.md) · depends on: T15
 - [ ] [T17: Runtime argument validation (Standard Schema)](./tasks/T17-runtime-argument-validation.md) · depends on: T16

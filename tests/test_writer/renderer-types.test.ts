@@ -85,7 +85,8 @@ describe("RendererTypesWriter", () => {
       const expectedOutput = utils.dedent(`
          interface IpcApi {
             vitestChannel: {
-               on: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;
+               on: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => () => void;
+               once: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => () => void;
             };
          }
 

@@ -73,11 +73,27 @@ export class PreloadBindingsWriter extends BaseWriter {
       return this.buildChannel(spec.name, method, `(...args: any[]) => ${ipcRenderer}`);
    }
 
-   /** `ipc.<name>.on(callback)`. */
+   /**
+    * `ipc.<name>.on(callback)` and `ipc.<name>.once(callback)`. The wrapper that is registered with
+    * `ipcRenderer` is created here, in the preload script, because contextBridge hands over a new
+    * proxy of the callback on every crossing, so a separate `off(callback)` could not find it. Each
+    * method returns a function which removes that one wrapper. The callback never sees the event,
+    * and the return value is not `ipcRenderer`, which must not leak into the page.
+    */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
-      const callback = "(_event: any, ...args: any[]) => callback(...args)";
-      const ipcRenderer = `ipcRenderer.on('${spec.name}', ${callback})`;
-      return this.buildChannel(spec.name, "on", `(callback: Function) => ${ipcRenderer}`);
+      const [i0, i1, i2, i3] = this.indents;
+      const subscribe = (method: "on" | "once") =>
+         [
+            `${i1}${method}: (callback: Function) => {`,
+            `${i2}const listener = (_event: any, ...args: any[]) => callback(...args);`,
+            `${i2}ipcRenderer.${method}('${spec.name}', listener);`,
+            `${i2}return () => {`,
+            `${i3}ipcRenderer.removeListener('${spec.name}', listener);`,
+            `${i2}};`,
+            `${i1}},`,
+         ].join("\n");
+      const methods = [subscribe("on"), subscribe("once")].join("\n");
+      return { name: spec.name, property: `\n${i0}${spec.name}: {\n${methods}\n${i0}},` };
    }
 
    private buildChannel(name: string, method: string, implementation: string): ChannelEntry {

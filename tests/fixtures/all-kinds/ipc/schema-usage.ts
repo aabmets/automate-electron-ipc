@@ -11,6 +11,9 @@ export const userViaWindow: Promise<string> = window.ipc.getUser.invoke(1);
 export const userViaGlobalThis: Promise<string> = globalThis.ipc.getUser.invoke(1);
 ipc.logLine.send("line", 1, 2);
 ipc.progress.on((percent: number, label?: string) => console.log(percent, label));
+export const stopProgress: () => void = ipc.progress.on(() => undefined);
+export const stopProgressOnce: () => void = ipc.progress.once((percent: number) => percent);
+stopProgress();
 ipc.chat.send("hi");
 ipc.chat.on((msg: string) => console.log(msg));
 

@@ -68,7 +68,13 @@ export function createFakePreloadElectron() {
                exposed[key] = api;
             }),
          },
-         ipcRenderer: { invoke: vi.fn(), send: vi.fn(), on: vi.fn() },
+         ipcRenderer: {
+            invoke: vi.fn(),
+            send: vi.fn(),
+            on: vi.fn(),
+            once: vi.fn(),
+            removeListener: vi.fn(),
+         },
       },
    };
 }

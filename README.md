@@ -202,6 +202,15 @@ on the verb of the channel and on the process that uses it:
 | `emit`   | `ipc.<name>.send(window, ...args)`  | `ipc.<name>.on(callback)`                         |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
 
+In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
+listener, so a component can unsubscribe when it unmounts:
+
+```typescript
+useEffect(() => ipc.progress.on((percent) => setPercent(percent)), []);
+```
+
+`once` delivers a single message. The callback never receives the Electron event.
+
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
 

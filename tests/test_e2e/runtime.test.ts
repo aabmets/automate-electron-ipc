@@ -64,7 +64,9 @@ describe("generated preload script", () => {
          "getUser.invoke",
          "logLine.send",
          "progress.on",
+         "progress.once",
          "titleChanged.on",
+         "titleChanged.once",
       ]);
    });
 
@@ -104,6 +106,68 @@ describe("generated preload script", () => {
       expect(channel).toBe("progress");
       listener({ sender: "event" }, 50, "half");
       expect(callback).toHaveBeenCalledWith(50, "half");
+   });
+
+   it("returns a function which removes only that listener, and not ipcRenderer", async () => {
+      const { exposed, electron } = await loadPreload("all-kinds");
+      const { ipcRenderer } = electron;
+      const first = vi.fn();
+      const second = vi.fn();
+
+      const dispose = exposed.ipc.progress.on(first);
+      exposed.ipc.progress.on(second);
+
+      expect(typeof dispose).toBe("function");
+      expect(dispose).not.toBe(ipcRenderer);
+      const listeners = ipcRenderer.on.mock.calls
+         .filter(([name]: [string]) => name === "progress")
+         .map(([, listener]: [string, (...args: unknown[]) => void]) => listener);
+      expect(listeners).toHaveLength(2);
+
+      expect(dispose()).toBeUndefined();
+      expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(1);
+      expect(ipcRenderer.removeListener).toHaveBeenCalledWith("progress", listeners[0]);
+   });
+
+   it("stops delivering to a disposed listener, as ipcRenderer does after removeListener", async () => {
+      // Back the fake with a real emitter, so that the removal is observable.
+      const { EventEmitter } = await import("node:events");
+      const emitter = new EventEmitter();
+      const { exposed, electron } = await loadPreload("all-kinds");
+      Object.assign(electron.ipcRenderer, {
+         on: emitter.on.bind(emitter),
+         once: emitter.once.bind(emitter),
+         removeListener: emitter.removeListener.bind(emitter),
+      });
+      const callback = vi.fn();
+
+      const dispose = exposed.ipc.progress.on(callback);
+      emitter.emit("progress", {}, 1);
+      dispose();
+      emitter.emit("progress", {}, 2);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(1);
+      expect(emitter.listenerCount("progress")).toBe(0);
+   });
+
+   it("once delivers a single message without the event, and can be disposed before it", async () => {
+      const { exposed, electron } = await loadPreload("all-kinds");
+      const callback = vi.fn();
+
+      const dispose = exposed.ipc.progress.once(callback);
+
+      const [channel, listener] = electron.ipcRenderer.once.mock.calls[0] as [
+         string,
+         (...args: unknown[]) => void,
+      ];
+      expect(channel).toBe("progress");
+      expect(electron.ipcRenderer.on).not.toHaveBeenCalledWith("progress", expect.anything());
+      listener({ sender: "event" }, 5, "x");
+      expect(callback).toHaveBeenCalledWith(5, "x");
+
+      dispose();
+      expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith("progress", listener);
    });
 
    it("stores the port of a port channel and posts and receives messages through it", async () => {

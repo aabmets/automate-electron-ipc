@@ -97,8 +97,12 @@ export class RendererTypesWriter extends BaseWriter {
       return { name: spec.name, methods: [this.method(method, ipcSignature)] };
    }
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
-      const on = this.method("on", `(callback: ${spec.signature.definition}) => void`);
-      return { name: spec.name, methods: [on] };
+      // Subscribing returns a function which removes that one listener.
+      const subscribe = `(callback: ${spec.signature.definition}) => () => void`;
+      return {
+         name: spec.name,
+         methods: [this.method("on", subscribe), this.method("once", subscribe)],
+      };
    }
    private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
       const definition = spec.signature.definition;

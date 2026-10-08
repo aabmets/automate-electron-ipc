@@ -73,7 +73,20 @@ describe("PreloadBindingsWriter", () => {
          
          contextBridge.exposeInMainWorld('ipc', {
             vitestChannel: {
-               on: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+               on: (callback: Function) => {
+                  const listener = (_event: any, ...args: any[]) => callback(...args);
+                  ipcRenderer.on('vitestChannel', listener);
+                  return () => {
+                     ipcRenderer.removeListener('vitestChannel', listener);
+                  };
+               },
+               once: (callback: Function) => {
+                  const listener = (_event: any, ...args: any[]) => callback(...args);
+                  ipcRenderer.once('vitestChannel', listener);
+                  return () => {
+                     ipcRenderer.removeListener('vitestChannel', listener);
+                  };
+               },
             },
          });
       `);
@@ -115,6 +128,6 @@ describe("PreloadBindingsWriter", () => {
       ]);
       expect(exposed).toContain("Beta: {\n      invoke: (...args: any[]) =>");
       expect(exposed).toContain("gamma: {\n      send: (...args: any[]) =>");
-      expect(exposed).toContain("zeta: {\n      on: (callback: Function) =>");
+      expect(exposed).toContain("zeta: {\n      on: (callback: Function) => {");
    });
 });
