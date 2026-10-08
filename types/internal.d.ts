@@ -150,12 +150,18 @@ export interface ErrorsSpec {
 }
 
 export type ChannelKind = "Broadcast" | "Unicast" | "Port" | "Stream";
+/**
+ * `RendererToUtility` is a call or a stream from a page to a utility process, over a port that
+ * the main process brokers. `MainToUtility` and `UtilityToMain` are the channels of the main
+ * process itself with a utility process.
+ */
 export type ChannelDirection =
    | "RendererToRenderer"
    | "RendererToMain"
    | "MainToRenderer"
    | "MainToUtility"
-   | "UtilityToMain";
+   | "UtilityToMain"
+   | "RendererToUtility";
 
 /** An identifier of the schema file which is a value import, such as `userArgs` in `{ userArgs }`. */
 export interface ValidatorRef {
@@ -172,7 +178,7 @@ export interface ChannelSpec {
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;
-   /** The error types that a RendererToMain Unicast or Stream channel may fail with. An `ask` has none. */
+   /** The error types that a RendererToMain or RendererToUtility Unicast or Stream channel may fail with. An `ask` has none. */
    errors?: ErrorsSpec;
    trigger?: string;
    /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */

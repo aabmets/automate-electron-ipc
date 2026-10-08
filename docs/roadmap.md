@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 59 delivered, 20 remaining, 1 dropped.
+**Progress:** 60 delivered, 19 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -86,7 +86,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T75: Real-Electron integration tests](./tasks/T75-real-electron-integration-tests.md) · depends on: T11, T27, T73
 - [x] [T28: Invoke timeouts](./tasks/T28-invoke-timeouts.md) · depends on: T18
 - [x] [T29: utilityProcess channels](./tasks/T29-utilityprocess-channels.md) · depends on: T18
-- [ ] [T30: Renderer ↔ utility process via a brokered port](./tasks/T30-renderer-utility-process-via.md) · depends on: T26, T29
+- [x] [T30: Renderer ↔ utility process via a brokered port](./tasks/T30-renderer-utility-process-via.md) · depends on: T26, T29
 - [ ] [T31: Configurable exposure key and isolated worlds](./tasks/T31-configurable-exposure-key-and-isolated.md) · depends on: T13
 - [ ] [T32: Composable preload output](./tasks/T32-composable-preload-output.md) · depends on: T31
 - [ ] [T33: Per-window API scopes (least privilege)](./tasks/T33-per-window-api-scopes.md) · depends on: T16, T32
@@ -95,7 +95,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T36: Service worker IPC (Electron ≥ 35, experimental)](./tasks/T36-service-worker-ipc.md) · depends on: T15, T16
 - [ ] [T37: Custom serializers](./tasks/T37-custom-serializers.md) · depends on: T18
 - [ ] [T74: Backpressure for streams](./tasks/T74-stream-backpressure.md) · depends on: T27
-- [ ] [T79: Timeouts for utility process calls](./tasks/T79-utility-call-timeouts.md) · depends on: T29, T28
+- [ ] [T79: Timeouts for utility process calls](./tasks/T79-utility-call-timeouts.md) · depends on: T29, T28, T30
 
 ## Phase 4: Developer experience
 

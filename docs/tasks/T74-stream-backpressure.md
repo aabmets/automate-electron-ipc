@@ -13,6 +13,9 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - A `highWaterMark`-like option of `stream` (a non-negative integer or `Infinity`), with a default
     that keeps today's throughput for small chunks.
   - `cancel()` and the error paths of T27 must keep working while the producer is paused.
+  - Found in T30: `streamUtility` has the same problem, with the generator in the utility process and
+    all the streams of a channel sharing one port. The credits are per call ID there, and the pump in
+    `utility.ts` is the producer to pause.
 - **Tests:** runtime tests with a slow reader (the generator pauses at the limit and resumes), a reader
   that cancels while paused, and ordering.
 - **Delivered:**

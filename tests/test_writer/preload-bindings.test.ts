@@ -549,7 +549,7 @@ describe("PreloadBindingsWriter", () => {
       it("sends the cancel message and closes the port, and fails a port which closes early", async () => {
          const output = await render([rows]);
 
-         expect(output).toContain("port?.postMessage({ type: 'cancel' });");
+         expect(output).toContain("() => port?.postMessage({ type: 'cancel' }),");
          expect(output).toContain("code: 'IPC_STREAM_CLOSED'");
          expect(output).toContain("code: 'IPC_STREAM_INVALID_REPLY'");
       });
@@ -623,5 +623,100 @@ describe("PreloadBindingsWriter, utility channels", () => {
       for (const { name } of utility) {
          expect(mixed).not.toContain(name);
       }
+   });
+});
+
+describe("PreloadBindingsWriter, renderer to utility channels", () => {
+   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+
+   const render = async (...channels: shared.SimpleChannel[]) => {
+      const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels), {
+         channelPrefix: "autoipc:",
+      });
+      await obj.write(false);
+      return (await fsp.readFile(obj.getTargetFilePath())).toString();
+   };
+   const invokeUtility = {
+      name: "queryRows",
+      kind: "Unicast",
+      direction: "RendererToUtility",
+      params: ["sql: string"],
+      returnType: "Promise<number>",
+   } as const;
+   const streamUtility = {
+      name: "scanRows",
+      kind: "Stream",
+      direction: "RendererToUtility",
+      returnType: "AsyncIterable<number>",
+   } as const;
+   const mainStream = {
+      name: "exportRows",
+      kind: "Stream",
+      direction: "RendererToMain",
+      returnType: "AsyncIterable<number>",
+   } as const;
+
+   it("exposes invoke and stream, which call the client of the channel", async () => {
+      const output = await render(streamUtility, invokeUtility);
+
+      expect(output).toContain(
+         "\n   queryRows: {\n      invoke: (...args: any[]) => callUtilityPort(utilityClients['queryRows'], args),\n   },",
+      );
+      expect(output).toContain(
+         "\n   scanRows: {\n      stream: (...args: any[]) => openUtilityStream(utilityClients['scanRows'], args),\n   },",
+      );
+   });
+
+   it("listens for the port and the close of each channel, on the wire names, sorted", async () => {
+      const output = await render(streamUtility, invokeUtility);
+
+      expect(output).toContain(
+         "function listenForUtilityPorts(name: string, channel: string): void {",
+      );
+      expect(output).toContain("ipcRenderer.on(`${channel}:close`,");
+      const listeners = [...output.matchAll(/^listenForUtilityPorts\((.*)\);$/gm)].map((m) => m[1]);
+      expect(listeners).toStrictEqual([
+         "'queryRows', 'autoipc:queryRows'",
+         "'scanRows', 'autoipc:scanRows'",
+      ]);
+   });
+
+   it("writes the stream parts only when a stream channel is declared", async () => {
+      const calls = await render(invokeUtility);
+      const streams = await render(streamUtility);
+
+      expect(calls).toContain("function callUtilityPort(");
+      for (const name of ["openUtilityStream", "createStreamReader", "StreamResult"]) {
+         expect(calls).not.toContain(name);
+      }
+      expect(streams).toContain("function openUtilityStream(");
+      expect(streams).toContain("function createStreamReader(");
+      expect(streams).toContain("function callUtilityPort(");
+   });
+
+   it("writes the error helpers once, and the reader once when both kinds of stream are declared", async () => {
+      const output = await render(streamUtility, mainStream, invokeUtility);
+
+      expect(output.match(/^function toIpcError\(/gm)).toHaveLength(1);
+      expect(output.match(/^function createStreamReader\(/gm)).toHaveLength(1);
+      expect(output).toContain("function openStream(");
+      expect(output).toContain("function openUtilityStream(");
+   });
+
+   it("needs no stream of the main process, and imports nothing else of electron", async () => {
+      const output = await render(invokeUtility);
+
+      expect(output).toContain('import { contextBridge, ipcRenderer } from "electron";');
+      expect(output).not.toContain("IpcRendererEvent");
+      expect(output).not.toContain("openStream");
+      expect(output).not.toContain("withTimeout");
+   });
+
+   it("writes the stream of the main process on the reader that the streams share", async () => {
+      const output = await render(mainStream);
+
+      expect(output).toContain("const reader = createStreamReader(");
+      expect(output).toContain("return reader.stream;");
+      expect(output).not.toContain("utilityClients");
    });
 });

@@ -14,7 +14,7 @@ import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 const IMPORT =
-   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain } from "automate-electron-ipc";';
+   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility } from "automate-electron-ipc";';
 
 function parseMap(code: string, imports = IMPORT) {
    const { module, src } = parser.parseModule(`${imports}\n${code}`);
@@ -51,6 +51,7 @@ describe("parseChannelMapModule", () => {
          ["notifyUtility", "Broadcast", "MainToUtility"],
          ["callMain", "Unicast", "UtilityToMain"],
          ["notifyMain", "Broadcast", "UtilityToMain"],
+         ["invokeUtility", "Unicast", "RendererToUtility"],
       ] as const;
 
       for (const [verb, kind, direction] of verbs) {
@@ -1073,6 +1074,61 @@ describe("utility channels", () => {
          "RendererToMain",
          "MainToUtility",
          "UtilityToMain",
+      ]);
+   });
+});
+
+describe("renderer to utility channels", () => {
+   const verbs = ["invokeUtility", "streamUtility"];
+   const signature = (verb: string) =>
+      verb === "streamUtility" ? "(t: string) => AsyncIterable<Row>" : "(t: string) => Row";
+
+   it.each(verbs)("rejects every option of %s, since it has none", (verb) => {
+      for (const option of ["timeoutMs: 5", "validate: v", 'allowedOrigins: ["app://."]']) {
+         expect(
+            parseError(
+               `export default defineChannels({ a: ${verb}<${signature(verb)}>({ ${option} }) });`,
+            ),
+         ).toContain(`option '${option.split(":")[0]}' is not supported by '${verb}'.`);
+      }
+   });
+
+   it.each(verbs)("takes the error types of %s as a second type argument", (verb) => {
+      const spec = parseOne(`a: ${verb}<${signature(verb)}, NotFound | Denied>()`);
+      expect(spec.errors).toMatchObject({ definition: "NotFound | Denied" });
+      expect(spec.errors?.customTypes).toStrictEqual(["NotFound", "Denied"]);
+      expect(spec.signature?.customTypes).toStrictEqual(["Row"]);
+   });
+
+   it.each(verbs)("accepts the as form of %s, which cannot declare error types", (verb) => {
+      const spec = parseOne(`a: ${verb}() as ${signature(verb)}`);
+      expect(spec.errors).toBeUndefined();
+      expect(parseError(`export default defineChannels({ a: ${verb}<() => void, A, B>() });`)).toBe(
+         `Schema file 'schema.ts': channel 'a': '${verb}' takes at most two type arguments, the signature and the error types.`,
+      );
+   });
+
+   it("reads the chunk type of a stream, and requires an async iterable for it", () => {
+      const spec = parseOne(
+         "a: streamUtility<(t: string) => AsyncGenerator<Row, void, undefined>>()",
+      );
+      expect(spec.kind).toBe("Stream");
+      expect(spec.signature?.chunkType).toBe("Row");
+      expect(
+         parseError("export default defineChannels({ a: streamUtility<() => Row[]>() });"),
+      ).toContain("must return AsyncIterable<Chunk>");
+   });
+
+   it("keeps the call of a page to a utility process next to the other channels", () => {
+      const { channelSpecs } = parseMap(`export default defineChannels({
+         a: invoke<() => void>(),
+         b: invokeUtility<() => void>(),
+         c: callUtility<() => void>(),
+      });`);
+      expect(channelSpecs.map((spec) => spec.direction)).toStrictEqual([
+         "RendererToMain",
+         "RendererToUtility",
+         "MainToUtility",
       ]);
    });
 });

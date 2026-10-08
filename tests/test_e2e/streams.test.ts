@@ -15,6 +15,7 @@ import {
    callablePaths,
    createFakeElectron,
    createFakePreloadElectron,
+   createSource,
    loadGenerated,
    windowIpcPaths,
 } from "@testutils/runtime-utils.js";
@@ -80,48 +81,6 @@ class FakeChannelMain {
    constructor() {
       channelsMade.push(this);
    }
-}
-
-/** An async iterable which the test feeds by hand, and which records `return()`. */
-function createSource() {
-   const waiting: {
-      resolve: (r: IteratorResult<unknown>) => void;
-      reject: (e: unknown) => void;
-   }[] = [];
-   const buffered: ({ result: IteratorResult<unknown> } | { error: unknown })[] = [];
-   const feed = (item: (typeof buffered)[number]) => {
-      const waiter = waiting.shift();
-      if (!waiter) {
-         buffered.push(item);
-      } else if ("error" in item) {
-         waiter.reject(item.error);
-      } else {
-         waiter.resolve(item.result);
-      }
-   };
-   const iterator = {
-      next: vi.fn(
-         () =>
-            new Promise<IteratorResult<unknown>>((resolve, reject) => {
-               const item = buffered.shift();
-               if (!item) {
-                  waiting.push({ resolve, reject });
-               } else if ("error" in item) {
-                  reject(item.error);
-               } else {
-                  resolve(item.result);
-               }
-            }),
-      ),
-      return: vi.fn(async () => ({ done: true, value: undefined })),
-   };
-   return {
-      iterable: { [Symbol.asyncIterator]: () => iterator },
-      iterator,
-      push: (value: unknown) => feed({ result: { done: false, value } }),
-      end: () => feed({ result: { done: true, value: undefined } }),
-      fail: (error: unknown) => feed({ error }),
-   };
 }
 
 async function loadMainWith(channelClass: unknown, fixture = "stream-channels") {

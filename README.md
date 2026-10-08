@@ -30,6 +30,8 @@ Node library for generating IPC components for Electron apps.
 7) `ask` channels, with which the main process asks a renderer and awaits the answer
 8) `stream` channels, with which the main process streams results to a renderer, which can cancel
 9) Typed channels between the main process and a `utilityProcess`, in a generated `utility.ts`
+10) Typed calls and streams from a renderer straight to a `utilityProcess`, over a port that the main
+    process brokers
 
 
 ### Installation
@@ -166,7 +168,7 @@ Each verb declares one kind of channel in one direction:
 ```typescript
 import {
    defineChannels, invoke, send, emit, ask, stream, port, mainPort,
-   callUtility, notifyUtility, callMain, notifyMain,
+   callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility,
 } from "automate-electron-ipc";
 
 export default defineChannels({
@@ -204,6 +206,12 @@ export default defineChannels({
 
    // Message from a utility process to the main process without return data
    indexed: notifyMain<(done: number, total: number) => void>(),
+
+   // Request from a renderer process to a utility process with return data, over a brokered port
+   queryRows: invokeUtility<(sql: string) => Promise<Row[]>>(),
+
+   // Request from a renderer process to a utility process with a stream of results
+   scanRows: streamUtility<(table: string) => AsyncIterable<Row>>(),
 });
 ```
 
@@ -220,6 +228,8 @@ export default defineChannels({
 | `notifyUtility` | MainToUtility | `void` or `Promise<void>`  |
 | `callMain` | UtilityToMain    | any value or promise         |
 | `notifyMain` | UtilityToMain  | `void` or `Promise<void>`    |
+| `invokeUtility` | RendererToUtility | any value or promise      |
+| `streamUtility` | RendererToUtility | `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk>` |
 
 The verbs for utility processes take no options. The only option of the others that is not described in
 its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
@@ -261,6 +271,8 @@ on the verb of the channel and on the process that uses it:
 | `notifyUtility` | `ipc.<name>.send(child, ...args)` | none: the utility process has `ipc.<name>.on(callback)` and `once(callback)` |
 | `callMain` | `ipc.<name>.handle(child, callback)` | none: the utility process has `ipc.<name>.invoke(...args)` |
 | `notifyMain` | `ipc.<name>.on(child, callback)`, `once(child, callback)` | none: the utility process has `ipc.<name>.send(...args)` |
+| `invokeUtility` | `ipc.<name>.connect(child, target)` | `ipc.<name>.invoke(...args)`; the utility process has `ipc.<name>.handle(callback)` |
+| `streamUtility` | `ipc.<name>.connect(child, target)` | `ipc.<name>.stream(...args)`; the utility process has `ipc.<name>.handle(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -855,6 +867,73 @@ A few things to know:
  - `utility.ts` fails with a `TypeError` when a channel is used outside a utility process. Importing it
    elsewhere is harmless.
  - The signature is checked for what structured clone cannot send, like the others.
+
+#### Calling a utility process from a renderer
+
+A page that needs the database of a utility process would otherwise hop through the main process for
+every query. `invokeUtility` and `streamUtility` let the page talk to the child directly: the main
+process only brokers a `MessageChannelMain` between a window and the child, and sees none of the
+traffic afterwards.
+
+```typescript
+// main process
+const child = utilityProcess.fork(path.join(__dirname, "indexer.js"));
+const win = new BrowserWindow({ webPreferences: { preload } });
+const link = ipc.queryRows.connect(child, win); // a window, a view or contents
+ipc.scanRows.connect(child, win);
+// Later, to end the connection: link.close()
+```
+
+```typescript
+// indexer.ts, the entry of the utility process
+import { ipc } from "./autoipc/utility";
+
+ipc.queryRows.handle(async (sql) => db.all(sql));
+ipc.scanRows.handle(async function* (table) {
+   for (const row of db.iterate(table)) {
+      yield row;
+   }
+});
+```
+
+```typescript
+// renderer
+const rows = await ipc.queryRows.invoke("select * from notes");
+for await (const row of ipc.scanRows.stream("notes")) {
+   render(row);
+}
+```
+
+The page API is that of `invoke` and `stream`, and the types of `window.d.ts` declare the errors: the
+optional second type argument of the verbs lists the error types of the handler, like it does for
+`invoke`. A failure reaches the page as a plain object `{ name, message, code?, data? }`. The library
+adds an `IpcUtilityError` with these codes:
+
+| Code                       | Meaning                                                                       |
+|----------------------------|-------------------------------------------------------------------------------|
+| `IPC_UTILITY_EXITED`       | the connection closed (the child exited, `close()` was called, or the port was replaced), also while the call or the stream was open, and any later call |
+| `IPC_UTILITY_NO_HANDLER`   | the child has no handler of this kind for the channel                         |
+| `IPC_UTILITY_NOT_ITERABLE` | the handler of a stream returned something that is not an async iterable      |
+| `IPC_UTILITY_UNSENDABLE`   | the arguments, the result or a chunk cannot be cloned                         |
+| `IPC_UTILITY_INVALID_REPLY`| the reply had an unknown shape                                                |
+
+A few things to know:
+ - There is one port per channel and page, and `connect(child, target)` is how the main process
+   chooses the child that serves a channel, and the pages that may use it. A page cannot reach a
+   channel that was not connected to it, and a port serves only the channel it was made for.
+   Connecting the same channel to the same page again replaces the earlier connection.
+ - The port is posted once the page has loaded, and again on every load, so a page that reloads gets a
+   fresh port. A call made before the port is there waits for it, in order. The connection ends when
+   `close()` is called, when the child exits and when the contents are destroyed. After that, calls
+   are rejected with `IPC_UTILITY_EXITED` until the main process connects again, such as to a new child.
+ - All the calls and streams of a channel share its port and are told apart by an ID. Cancelling a
+   stream (`cancel()`, `return()` or a `break`) and closing the connection stop the generator in the
+   child. There is no backpressure: the generator runs ahead of a page that reads slowly.
+ - The handler of the child is single, as for `callUtility`: a new `handle` replaces the old one, and
+   the function it returns removes only its own. Register the handlers when the process starts, since a
+   call for a channel without a handler is answered with `IPC_UTILITY_NO_HANDLER`.
+ - There are no `allowedOrigins`, `validate` or `timeoutMs` options yet. The main process decides which
+   pages are connected, and a call whose handler never answers waits until the connection closes.
 
 #### Migrating from 0.2
 

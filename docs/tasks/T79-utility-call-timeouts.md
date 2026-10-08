@@ -13,6 +13,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     handler is not stopped, and its late reply is dropped.
   - Decide whether `invokeWith(child, { timeoutMs }, ...args)` is also needed for a timeout chosen by
     the caller, like `ask` has.
+  - Found in T30: the same for `invokeUtility` and `streamUtility`, whose calls come from a page. A call
+    whose handler never answers waits until the connection closes. The page is the caller, so the
+    option is in the schema, and the page rejects with the plain object of `withTimeout`, code
+    `IPC_UTILITY_TIMEOUT`; a timed-out stream is cancelled in the child.
 - **Tests:** runtime tests with fake timers on both ends, and a real-Electron scenario with a hanging
   handler.
 - **Delivered:**

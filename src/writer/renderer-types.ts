@@ -23,6 +23,8 @@ interface ChannelEntry {
    times?: boolean;
    /** Whether the channel returns an `IpcStream`. */
    streams?: boolean;
+   /** Whether the promise of the channel can be rejected with an `IpcUtilityError`. */
+   utility?: boolean;
    /** The methods of the channel, one per line, starting with a newline. */
    methods: string[];
 }
@@ -41,6 +43,7 @@ export class RendererTypesWriter extends BaseWriter {
          "IpcPortOverflowInfo",
          "IpcPortOverflowAction",
          "IpcStream",
+         "IpcUtilityError",
          "Error",
          "Symbol",
          "IteratorResult",
@@ -63,19 +66,11 @@ export class RendererTypesWriter extends BaseWriter {
          let customTypes: Set<string> = new Set();
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (this.isUtilitySpec(spec)) {
+            const channel = this.buildChannelEntry(spec);
+            if (!channel) {
                continue;
             }
-            if (spec.kind === "Port") {
-               // The page has the same API for both peers: another page, or the main process.
-               channels.push(this.buildPortChannel(spec));
-            } else if (spec.kind === "Stream") {
-               channels.push(this.buildStreamChannel(spec));
-            } else if (spec.direction === "RendererToMain") {
-               channels.push(this.buildRendererToMainChannel(spec));
-            } else if (spec.direction === "MainToRenderer") {
-               channels.push(this.buildMainToRendererChannel(spec));
-            }
+            channels.push(channel);
             const specCustomTypes = new Set([
                ...spec.signature.customTypes,
                ...(spec.errors?.customTypes ?? []),
@@ -95,6 +90,22 @@ export class RendererTypesWriter extends BaseWriter {
       out.sort(utils.compareStrings);
       out.push(this.renderDeclaration(channels));
       return out.join("\n");
+   }
+   /** The entry of a channel of the page, or `null` for the channels that the page has no part in. */
+   private buildChannelEntry(spec: t.ChannelSpec): ChannelEntry | null {
+      if (this.isUtilitySpec(spec)) {
+         return null;
+      } else if (spec.kind === "Port") {
+         // The page has the same API for both peers: another page, or the main process.
+         return this.buildPortChannel(spec);
+      } else if (this.isBrokeredSpec(spec)) {
+         return this.buildBrokeredChannel(spec);
+      } else if (spec.kind === "Stream") {
+         return this.buildStreamChannel(spec);
+      } else if (spec.direction === "RendererToMain") {
+         return this.buildRendererToMainChannel(spec);
+      }
+      return spec.direction === "MainToRenderer" ? this.buildMainToRendererChannel(spec) : null;
    }
    /**
     * `ipc` is declared as a global variable, which types the bare `ipc`, `window.ipc` and
@@ -133,9 +144,9 @@ export class RendererTypesWriter extends BaseWriter {
               `\ninterface IpcStream<T> {`,
               `${i0}/** The next chunk. The promise is rejected with the error of the stream, if it fails. */`,
               `${i0}next(): Promise<IteratorResult<T, undefined>>;`,
-              `${i0}/** Stops the stream and the generator in the main process. */`,
+              `${i0}/** Stops the stream and the generator of its handler. */`,
               `${i0}return(): Promise<IteratorResult<T, undefined>>;`,
-              `${i0}/** Stops the stream and the generator in the main process, like \`return()\` does. */`,
+              `${i0}/** Stops the stream and the generator of its handler, like \`return()\` does. */`,
               `${i0}cancel(): void;`,
               `${i0}[Symbol.asyncIterator](): IpcStream<T>;`,
               "}",
@@ -148,10 +159,21 @@ export class RendererTypesWriter extends BaseWriter {
               `${i0}type IpcTimeoutError = Error & { name: 'IpcTimeoutError'; code: 'IPC_TIMEOUT' };`,
            ].join("\n")
          : "";
+      // The error of the utility process is declared only if a channel to one can fail with it.
+      const utilityType = channels.some((channel) => channel.utility)
+         ? [
+              `${i0}/** The error that the library rejects a call to a utility process with, apart from the errors of the handler. */`,
+              `${i0}type IpcUtilityError = Error & {`,
+              `${i1}name: 'IpcUtilityError';`,
+              `${i1}code: 'IPC_UTILITY_EXITED' | 'IPC_UTILITY_UNSENDABLE' | 'IPC_UTILITY_INVALID_REPLY' | 'IPC_UTILITY_NO_HANDLER' | 'IPC_UTILITY_NOT_ITERABLE';`,
+              `${i0}};`,
+           ].join("\n")
+         : "";
       const globals = [
          `${i0}var ipc: IpcApi;`,
          ...(errorType ? [errorType] : []),
          ...(timeoutType ? [timeoutType] : []),
+         ...(utilityType ? [utilityType] : []),
       ];
       // The types of the overflow callbacks, declared only if a port channel has them.
       const overflowTypes = channels.some((channel) => channel.overflows)
@@ -217,6 +239,36 @@ export class RendererTypesWriter extends BaseWriter {
          throws: true,
          streams: true,
          methods: [this.method("stream", `${signatureHead} => IpcStream<${chunk}>`, doc)],
+      };
+   }
+   /**
+    * `ipc.<name>.invoke(...args)` and `ipc.<name>.stream(...args)` of the channels to a utility
+    * process. They are typed like those of the main process, and can fail with the errors that the
+    * handler of the child throws, and with an `IpcUtilityError` of the library.
+    */
+   private buildBrokeredChannel(spec: t.ChannelSpec): ChannelEntry {
+      const signatureHead = `${this.getTypeParams(spec.signature)}(${this.getOriginalParams(spec, false)})`;
+      const errorType = [spec.errors?.definition, "IpcUtilityError"].filter(Boolean).join(" | ");
+      if (spec.kind === "Stream") {
+         const chunk = spec.signature.chunkType ?? "unknown";
+         const doc = `/** @throws {IpcError<${errorType}>} when the stream fails, from a read of the stream */`;
+         return {
+            name: spec.name,
+            throws: true,
+            streams: true,
+            utility: true,
+            methods: [this.method("stream", `${signatureHead} => IpcStream<${chunk}>`, doc)],
+         };
+      }
+      // `invoke` always returns a promise, which resolves the thenables inside.
+      const returned = spec.signature.async
+         ? spec.signature.definition
+         : `${signatureHead} => Promise<Awaited<${spec.signature.returnType}>>`;
+      return {
+         name: spec.name,
+         throws: true,
+         utility: true,
+         methods: [this.method("invoke", returned, `/** @throws {IpcError<${errorType}>} */`)],
       };
    }
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {

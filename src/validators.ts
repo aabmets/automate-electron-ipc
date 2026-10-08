@@ -126,6 +126,7 @@ function getChannelSpecStruct(
    bounded = false,
    streaming = false,
    utility = false,
+   brokered = false,
 ): Struct<any, any> {
    return object({
       name: refine(string(), "identifier", (value) =>
@@ -141,7 +142,9 @@ function getChannelSpecStruct(
       }),
       direction: refine(string(), "choice", (value) => {
          const choices = [];
-         if (utility) {
+         if (brokered) {
+            choices.push("RendererToUtility");
+         } else if (utility) {
             choices.push("MainToUtility", "UtilityToMain");
          } else if (kind === "Broadcast") {
             choices.push("RendererToMain", "MainToRenderer");
@@ -206,7 +209,10 @@ function getChannelSpecStruct(
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
-      timeoutMs: kind === "Unicast" && !asking && !utility ? optional(number()) : optional(never()),
+      timeoutMs:
+         kind === "Unicast" && !asking && !utility && !brokered
+            ? optional(number())
+            : optional(never()),
    });
 }
 
@@ -236,10 +242,35 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
          false,
          true,
       ),
+      BrokeredUnicastStruct: getChannelSpecStruct(
+         "Unicast",
+         false,
+         false,
+         false,
+         false,
+         false,
+         false,
+         true,
+      ),
+      BrokeredStreamStruct: getChannelSpecStruct(
+         "Stream",
+         false,
+         false,
+         false,
+         false,
+         true,
+         false,
+         true,
+      ),
    };
+   const brokered = spec?.direction === ("RendererToUtility" as t.ChannelDirection);
    const toUtility = spec?.direction === ("MainToUtility" as t.ChannelDirection);
    const fromUtility = spec?.direction === ("UtilityToMain" as t.ChannelDirection);
-   if ((toUtility || fromUtility) && spec?.kind === ("Broadcast" as t.ChannelKind)) {
+   if (brokered && spec?.kind === ("Unicast" as t.ChannelKind)) {
+      assert(spec, structMap.BrokeredUnicastStruct);
+   } else if (brokered && spec?.kind === ("Stream" as t.ChannelKind)) {
+      assert(spec, structMap.BrokeredStreamStruct);
+   } else if ((toUtility || fromUtility) && spec?.kind === ("Broadcast" as t.ChannelKind)) {
       assert(spec, structMap.UtilityBroadcastStruct);
    } else if ((toUtility || fromUtility) && spec?.kind === ("Unicast" as t.ChannelKind)) {
       assert(spec, structMap.UtilityUnicastStruct);

@@ -122,10 +122,20 @@ export class BaseWriter {
       return spec.direction === "MainToUtility" || spec.direction === "UtilityToMain";
    }
 
-   /** Whether any schema file declares a channel to or from a utility process. */
+   /**
+    * Whether the channel is between a renderer and a utility process, over a port which the main
+    * process brokers. The page uses it like the other channels of a renderer.
+    */
+   protected isBrokeredSpec(spec: t.ChannelSpec): boolean {
+      return spec.direction === "RendererToUtility";
+   }
+
+   /** Whether any schema file declares a channel that a utility process takes part in. */
    protected hasUtilityChannels(): boolean {
       return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some((spec) => this.isUtilitySpec(spec)),
+         pfs.specs.channelSpecArray.some(
+            (spec) => this.isUtilitySpec(spec) || this.isBrokeredSpec(spec),
+         ),
       );
    }
 

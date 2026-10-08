@@ -32,3 +32,5 @@ export const callUtility: typeof api.callUtility = verb;
 export const notifyUtility: typeof api.notifyUtility = verb;
 export const callMain: typeof api.callMain = verb;
 export const notifyMain: typeof api.notifyMain = verb;
+export const invokeUtility: typeof api.invokeUtility = verb;
+export const streamUtility: typeof api.streamUtility = verb;

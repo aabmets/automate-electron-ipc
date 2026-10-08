@@ -630,3 +630,76 @@ describe("RendererTypesWriter, utility channels", () => {
       expect(mixed).toStrictEqual(alone);
    });
 });
+
+describe("RendererTypesWriter, renderer to utility channels", () => {
+   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+
+   const render = async (...channels: shared.SimpleChannel[]) => {
+      const obj = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...channels));
+      await obj.write(false);
+      return (await fsp.readFile(obj.getTargetFilePath())).toString();
+   };
+   const invokeUtility = {
+      name: "queryRows",
+      kind: "Unicast",
+      direction: "RendererToUtility",
+      params: ["sql: string"],
+      returnType: "Promise<number>",
+   } as const;
+   const streamUtility = {
+      name: "scanRows",
+      kind: "Stream",
+      direction: "RendererToUtility",
+      params: ["table: string"],
+      returnType: "AsyncIterable<number>",
+   } as const;
+
+   it("types invoke and stream, which can fail with the library's error", async () => {
+      const output = await render(invokeUtility, streamUtility);
+
+      expect(output).toContain(
+         "   queryRows: {\n      /** @throws {IpcError<IpcUtilityError>} */\n      invoke: (sql: string) => Promise<number>;\n   };",
+      );
+      expect(output).toContain(
+         "      /** @throws {IpcError<IpcUtilityError>} when the stream fails, from a read of the stream */\n      stream: (table: string) => IpcStream<number>;",
+      );
+      expect(output).toContain("interface IpcStream<T> {");
+   });
+
+   it("lists the declared errors in front of the library's", async () => {
+      const output = await render(
+         { ...invokeUtility, errors: "NotFound | Denied" },
+         { ...streamUtility, errors: "Denied" },
+      );
+
+      expect(output).toContain("/** @throws {IpcError<NotFound | Denied | IpcUtilityError>} */");
+      expect(output).toContain(
+         "/** @throws {IpcError<Denied | IpcUtilityError>} when the stream fails, from a read of the stream */",
+      );
+   });
+
+   it("wraps a result which is not a promise, as the invoke of the main process does", async () => {
+      const output = await render({ ...invokeUtility, returnType: "number" });
+
+      expect(output).toContain("invoke: (sql: string) => Promise<Awaited<number>>;");
+   });
+
+   it("declares IpcUtilityError, with its codes, only for such a schema", async () => {
+      const output = await render(invokeUtility);
+      const plain = await render({ name: "getUser", kind: "Unicast", direction: "RendererToMain" });
+
+      expect(output).toContain("type IpcUtilityError = Error & {");
+      expect(output).toContain("name: 'IpcUtilityError';");
+      for (const code of ["EXITED", "UNSENDABLE", "INVALID_REPLY", "NO_HANDLER", "NOT_ITERABLE"]) {
+         expect(output).toContain(`'IPC_UTILITY_${code}'`);
+      }
+      expect(output).toContain("type IpcError<E extends Error = Error>");
+      expect(plain).not.toContain("IpcUtilityError");
+   });
+
+   it("keeps the channels between the processes out, as before", async () => {
+      const only = await render({ name: "indexFile", kind: "Unicast", direction: "MainToUtility" });
+
+      expect(only).toStrictEqual(await render());
+   });
+});

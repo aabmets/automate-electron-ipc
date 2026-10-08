@@ -20,6 +20,9 @@ interface ChannelEntry {
    members: string[];
 }
 
+/** The electron types that the helpers of the channels between a renderer and a utility process use. */
+const BROKER_TYPES = ["BrowserWindow", "WebContents", "WebContentsView", "UtilityProcess"];
+
 /** The names that a generated listener uses, which differ from the names of its signature. */
 interface ListenerNames {
    event: string;
@@ -46,7 +49,7 @@ export class MainBindingsWriter extends BaseWriter {
       // The globals that only the helpers of port channels use.
       const portGlobals = this.hasPorts("RendererToRenderer") || this.hasPorts("MainToRenderer");
       return [
-         ...(portGlobals ? ["Map", "Set"] : []),
+         ...(portGlobals ? ["Map", "Set"] : this.hasBrokeredChannels() ? ["Map"] : []),
          ...(this.hasPorts("MainToRenderer") ? ["Function"] : []),
          "ipc",
          "electronIpcMain",
@@ -108,6 +111,9 @@ export class MainBindingsWriter extends BaseWriter {
          "enqueueMainPort",
          "startStream",
          "stopIterator",
+         "lastUtilityLinkId",
+         "utilityLinks",
+         "connectUtilityPort",
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -153,6 +159,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesSenders = false;
       let usesStreams = false;
       let usesUtility = false;
+      let usesBrokers = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -187,8 +194,13 @@ export class MainBindingsWriter extends BaseWriter {
                usesEnvelope = true;
                electronTypeImportsSet.add("UtilityProcess");
                channels.push(this.buildUtilityChannel(spec));
+            } else if (this.isBrokeredSpec(spec)) {
+               usesBrokers = true;
+               channels.push(
+                  this.buildBrokeredChannel(spec, electronImportsSet, electronTypeImportsSet),
+               );
             }
-            const specCustomTypes = new Set(spec.signature.customTypes);
+            const specCustomTypes = new Set(this.getImportedTypes(spec));
             customTypes = customTypes.union(specCustomTypes);
          }
          this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
@@ -200,10 +212,7 @@ export class MainBindingsWriter extends BaseWriter {
       const usesMainPorts = this.hasPorts("MainToRenderer");
       const usesPorts = usesRendererPorts || usesMainPorts;
       const out = this.buildImports(
-         [
-            ...(usesIpcMain || usesAsks || usesPorts ? ["ipcMain as electronIpcMain"] : []),
-            ...electronImportsSet,
-         ],
+         [...this.getIpcMainImport(usesIpcMain || usesAsks || usesPorts), ...electronImportsSet],
          [...electronTypeImportsSet],
          importDeclarationsArray,
       );
@@ -222,6 +231,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesMainPorts,
             usesStreams,
             usesUtility,
+            usesBrokers,
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -233,6 +243,10 @@ export class MainBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+   /** The import of `ipcMain`, if the generated code registers a listener or a handler. */
+   private getIpcMainImport(used: boolean): string[] {
+      return used ? ["ipcMain as electronIpcMain"] : [];
    }
    /** Adds the import lines for the custom types that the channels of the file use. */
    private importCustomTypes(
@@ -282,6 +296,19 @@ export class MainBindingsWriter extends BaseWriter {
          ? this.buildMainPortChannel(spec)
          : this.buildPortChannel(spec);
    }
+   /**
+    * The custom types of the signature that the generated code needs. The main process only pairs
+    * a page with a child, and sees none of the traffic, so it needs none for those channels.
+    */
+   private getImportedTypes(spec: t.ChannelSpec): string[] {
+      return this.isBrokeredSpec(spec) ? [] : spec.signature.customTypes;
+   }
+   /** Whether any schema file declares a channel between a renderer and a utility process. */
+   private hasBrokeredChannels(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some((spec) => this.isBrokeredSpec(spec)),
+      );
+   }
    /** Whether any schema file declares a port channel with the direction. */
    private hasPorts(direction: t.ChannelDirection): boolean {
       return this.pfsArray.some((pfs) =>
@@ -318,6 +345,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesMainPorts: boolean;
          usesStreams: boolean;
          usesUtility: boolean;
+         usesBrokers: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -345,6 +373,12 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesPorts) {
          support.push(this.buildPortRegistry());
+      }
+      if (uses.usesPorts || uses.usesBrokers) {
+         support.push(this.buildPageLoadWatch());
+      }
+      if (uses.usesBrokers) {
+         support.push(this.buildBrokerHelpers());
       }
       if (uses.usesRendererPorts) {
          support.push(this.buildPortHelpers());
@@ -1212,18 +1246,9 @@ export class MainBindingsWriter extends BaseWriter {
     * which is honoured only from the contents that hold that end. The main process no longer holds
     * the ports that it has transferred, so it tells the pages through `<channel>:close` when a
     * connection ends.
-    *
-    * `watchPageLoad` tells when the page of some contents has loaded, which a port has to wait for,
-    * since one that is posted earlier arrives before the preload script listens for it. It cannot
-    * ask `isLoading()`: Electron keeps it `true` while `did-finish-load` fires, and after
-    * `loadURL` has resolved, until `did-stop-loading`. So the page counts as loaded from every
-    * `did-finish-load`, and from the `did-stop-loading` of a load that `did-finish-load` has not
-    * reported, such as one that finished before the watch began. A failed main-frame load does not
-    * count. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
-    * page and are not loading.
     */
    private buildPortRegistry(): string {
-      const [i1, i2, i3, i4] = this.indents;
+      const [i1, i2, i3] = this.indents;
       return [
          "",
          "let lastPortConnectionId = 0;",
@@ -1242,6 +1267,22 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i1}});`,
          "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `watchPageLoad` tells when the page of some contents has loaded, which a port has to wait for,
+    * since one that is posted earlier arrives before the preload script listens for it. It cannot
+    * ask `isLoading()`: Electron keeps it `true` while `did-finish-load` fires, and after
+    * `loadURL` has resolved, until `did-stop-loading`. So the page counts as loaded from every
+    * `did-finish-load`, and from the `did-stop-loading` of a load that `did-finish-load` has not
+    * reported, such as one that finished before the watch began. A failed main-frame load does not
+    * count. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
+    * page and are not loading.
+    */
+   private buildPageLoadWatch(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
          "",
          "interface PageLoadWatch {",
          `${i1}isLoaded: () => boolean;`,
@@ -1727,5 +1768,113 @@ export class MainBindingsWriter extends BaseWriter {
             `\n${i2}setUtilityHandler(${peer}, ${wire}, ${callbackName}),`,
          ],
       };
+   }
+   /**
+    * `connectUtilityPort`, which `ipc.<name>.connect` of an `invokeUtility` or `streamUtility`
+    * channel calls. The main process only pairs the page with the child, and sees none of the
+    * traffic: it makes a `MessageChannelMain`, posts one port to the child as
+    * `{ __ipc: 'port', channel, key }`, and the other to the page on the channel, with the same key.
+    * It pairs once the page has loaded (see `watchPageLoad`), and again whenever a page loads, so a
+    * page that reloads gets a fresh port. A failure of the first pairing is thrown to the caller, a
+    * later one goes to `console.error`. The connection ends when `close` is called, when the child
+    * exits and when the contents are destroyed, and the page is told through `<channel>:close`.
+    * A channel has one connection per page: connecting again replaces the earlier one, so the two
+    * cannot fight over the port of the page on a reload. The contents are resolved first, and a
+    * setup step that fails undoes what was registered.
+    */
+   private buildBrokerHelpers(): string {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "",
+         "let lastUtilityLinkId = 0;",
+         "const utilityLinks = new Map<string, () => void>();",
+         "",
+         "function connectUtilityPort(",
+         `${i1}channel: string,`,
+         `${i1}child: UtilityProcess,`,
+         `${i1}target: BrowserWindow | WebContents | WebContentsView,`,
+         "): { close: () => void } {",
+         `${i1}const contents = 'webContents' in target ? target.webContents : target;`,
+         `${i1}// Contents that are destroyed already would never emit 'destroyed', which leaves the entry behind.`,
+         `${i1}if (contents.isDestroyed()) {`,
+         `${i2}throw new TypeError('Object has been destroyed');`,
+         `${i1}}`,
+         `${i1}const linkKey = \`\${channel}:\${contents.id}\`;`,
+         `${i1}const key = \`\${++lastUtilityLinkId}:utility\`;`,
+         `${i1}let closed = false;`,
+         `${i1}const pair = () => {`,
+         `${i2}if (closed || contents.isDestroyed() || !watch.isLoaded()) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}const { port1, port2 } = new MessageChannelMain();`,
+         `${i2}try {`,
+         `${i3}child.postMessage({ __ipc: 'port', channel, key }, [port1]);`,
+         `${i3}contents.postMessage(channel, key, [port2]);`,
+         `${i2}} catch (error) {`,
+         `${i3}port1.close();`,
+         `${i3}port2.close();`,
+         `${i3}throw error;`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const watch = watchPageLoad(contents, () => {`,
+         `${i2}try {`,
+         `${i3}pair();`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i2}}`,
+         `${i1}});`,
+         `${i1}const close = () => {`,
+         `${i2}if (closed) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}closed = true;`,
+         `${i2}watch.dispose();`,
+         `${i2}child.removeListener('exit', close);`,
+         `${i2}if (utilityLinks.get(linkKey) === close) {`,
+         `${i3}utilityLinks.delete(linkKey);`,
+         `${i2}}`,
+         `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i2}if (!contents.isDestroyed()) {`,
+         `${i3}contents.off('destroyed', close);`,
+         `${i3}contents.send(\`\${channel}:close\`, key);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}utilityLinks.get(linkKey)?.();`,
+         `${i1}// A failure from here on undoes what was registered, since the caller never gets the handle.`,
+         `${i1}try {`,
+         `${i2}utilityLinks.set(linkKey, close);`,
+         `${i2}contents.on('destroyed', close);`,
+         `${i2}child.once('exit', close);`,
+         `${i2}pair();`,
+         `${i1}} catch (error) {`,
+         `${i2}close();`,
+         `${i2}throw error;`,
+         `${i1}}`,
+         `${i1}return { close };`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `ipc.<name>.connect(child, target)` of an `invokeUtility` or `streamUtility` channel, which
+    * brokers the port between the child and the window, the view or the contents, and returns the
+    * handle to close the connection. The calls themselves are made by the page, and handled by the
+    * child, so the signature is not used here. Adds the electron imports that the helper uses.
+    */
+   private buildBrokeredChannel(
+      spec: t.ChannelSpec,
+      values: Set<string>,
+      types: Set<string>,
+   ): ChannelEntry {
+      const i1 = this.indents[1];
+      values.add("MessageChannelMain");
+      for (const type of BROKER_TYPES) {
+         types.add(type);
+      }
+      const connector = [
+         `\n${i1}connect: (child: UtilityProcess, target: BrowserWindow | WebContents | WebContentsView): { close: () => void } =>`,
+         ` connectUtilityPort(${this.wireName(spec.name)}, child, target),`,
+      ].join("");
+      return { name: spec.name, members: [connector] };
    }
 }

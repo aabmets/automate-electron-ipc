@@ -190,7 +190,7 @@ describe("ipcAutomation", () => {
          await fsp.writeFile(
             schemaPath,
             [
-               'import { defineChannels, invoke, callUtility } from "automate-electron-ipc";',
+               'import { defineChannels, invoke, callUtility, invokeUtility } from "automate-electron-ipc";',
                `export default defineChannels({ ${channels} });`,
             ].join("\n"),
          );
@@ -231,6 +231,18 @@ describe("ipcAutomation", () => {
          await ipcAutomation();
 
          expect(await fsp.readFile(utilityBindingsFilePath, "utf8")).toContain("   run: {");
+      });
+
+      it("is written for a schema which has only a channel from a page to the utility process", async () => {
+         await generate("run: invokeUtility<() => Promise<number>>()");
+
+         const utility = await fsp.readFile(path.join(dir, "out/utility.ts"), "utf8");
+         expect(utility).toContain("   run: {\n      handle:");
+         const main = await fsp.readFile(path.join(dir, "out/main.ts"), "utf8");
+         expect(main).toContain("connectUtilityPort('run', child, target)");
+         expect(await fsp.readFile(path.join(dir, "out/preload.ts"), "utf8")).toContain(
+            "callUtilityPort(utilityClients['run'], args)",
+         );
       });
 
       it("is not written for a schema without such a channel", async () => {

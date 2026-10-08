@@ -19,6 +19,15 @@ interface ChannelEntry {
    property: string;
 }
 
+/** The channels of the page, by the components that they need. */
+interface ChannelGroups {
+   portSpecs: t.ChannelSpec[];
+   askNames: string[];
+   streamSpecs: t.ChannelSpec[];
+   brokeredSpecs: t.ChannelSpec[];
+   channels: ChannelEntry[];
+}
+
 export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.preloadBindingsFilePath;
@@ -33,33 +42,63 @@ export class PreloadBindingsWriter extends BaseWriter {
       ].join("\n");
    }
    protected renderFileContents(): string {
-      const portSpecs: t.ChannelSpec[] = [];
-      const askNames: string[] = [];
-      const streamSpecs: t.ChannelSpec[] = [];
-      const channels: ChannelEntry[] = [];
+      const groups = this.groupChannels();
+      const out = this.buildComponents(groups);
+      const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
+      for (const channel of this.sortChannels(groups.channels)) {
+         bindingsExpression.push(channel.property);
+      }
+      bindingsExpression.push("\n});\n");
 
+      out.push(bindingsExpression.join(""));
+      return out.join("\n");
+   }
+
+   /** Sorts the channels of the page into the groups that need components of their own. */
+   private groupChannels(): ChannelGroups {
+      const groups: ChannelGroups = {
+         portSpecs: [],
+         askNames: [],
+         streamSpecs: [],
+         brokeredSpecs: [],
+         channels: [],
+      };
       for (const parsedFileSpecs of this.pfsArray) {
          for (const spec of this.getRendererSpecs(parsedFileSpecs)) {
-            if (spec.kind === "Port") {
-               // The page has the same API for both peers: another page, or the main process.
-               portSpecs.push(spec);
-               channels.push({
-                  name: spec.name,
-                  property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
-               });
-            } else if (spec.kind === "Stream") {
-               streamSpecs.push(spec);
-               channels.push(this.buildStreamChannel(spec));
-            } else if (spec.direction === "RendererToMain") {
-               channels.push(this.buildRendererToMainChannel(spec));
-            } else if (spec.direction === "MainToRenderer") {
-               if (spec.kind === "Unicast") {
-                  askNames.push(spec.name);
-               }
-               channels.push(this.buildMainToRendererChannel(spec));
-            }
+            this.groupChannel(spec, groups);
          }
       }
+      return groups;
+   }
+
+   private groupChannel(spec: t.ChannelSpec, groups: ChannelGroups): void {
+      const { portSpecs, askNames, streamSpecs, brokeredSpecs, channels } = groups;
+      if (spec.kind === "Port") {
+         // The page has the same API for both peers: another page, or the main process.
+         portSpecs.push(spec);
+         channels.push({
+            name: spec.name,
+            property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
+         });
+      } else if (this.isBrokeredSpec(spec)) {
+         brokeredSpecs.push(spec);
+         channels.push(this.buildBrokeredChannel(spec));
+      } else if (spec.kind === "Stream") {
+         streamSpecs.push(spec);
+         channels.push(this.buildStreamChannel(spec));
+      } else if (spec.direction === "RendererToMain") {
+         channels.push(this.buildRendererToMainChannel(spec));
+      } else if (spec.direction === "MainToRenderer") {
+         if (spec.kind === "Unicast") {
+            askNames.push(spec.name);
+         }
+         channels.push(this.buildMainToRendererChannel(spec));
+      }
+   }
+
+   /** The code above the exposed object: the imports, and the components that the channels use. */
+   private buildComponents(groups: ChannelGroups): string[] {
+      const { portSpecs, askNames, streamSpecs, brokeredSpecs } = groups;
       const out: string[] = ['import { contextBridge, ipcRenderer } from "electron";'];
       if (portSpecs.length > 0) {
          out.push(
@@ -71,8 +110,11 @@ export class PreloadBindingsWriter extends BaseWriter {
          );
       }
       out.push(...this.getTimeoutComponents());
-      if (askNames.length > 0 || streamSpecs.length > 0) {
+      if (askNames.length > 0 || streamSpecs.length > 0 || brokeredSpecs.length > 0) {
          out.push(this.buildErrorComponents());
+      }
+      if (streamSpecs.length > 0 || this.hasBrokeredStreams(brokeredSpecs)) {
+         out.push(this.buildStreamReader());
       }
       if (askNames.length > 0) {
          out.push(
@@ -89,14 +131,10 @@ export class PreloadBindingsWriter extends BaseWriter {
             "",
          );
       }
-      const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
-      for (const channel of this.sortChannels(channels)) {
-         bindingsExpression.push(channel.property);
+      if (brokeredSpecs.length > 0) {
+         out.push(...this.buildUtilityClient(brokeredSpecs));
       }
-      bindingsExpression.push("\n});\n");
-
-      out.push(bindingsExpression.join(""));
-      return out.join("\n");
+      return out;
    }
 
    /**
@@ -337,35 +375,27 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
 
    /**
-    * `openStream`, which starts a call of a `stream` channel and returns its stream. The page gets
-    * no `ipcRenderer`, only the object with `next`, `return`, `cancel` and `Symbol.asyncIterator`.
-    * The call is `ipcRenderer.invoke(wire, id, ...args)`: its envelope reports a failure to start
-    * (a rejected sender, invalid arguments, no handler, a handler that throws before it yields) and
-    * the main process hands over the port of the call, with the same `id`, on `<wire>:port`. Then:
-    * - `chunk` messages are queued until the page reads them, and a read resolves in order, also
-    *   when the page asks for several chunks at once. The stream is not slowed down for a slow
-    *   reader, so a reader that stops reading without cancelling keeps the chunks in memory;
-    * - `end` closes the stream after the queued chunks, and `error` does so by rejecting a read
-    *   with the error object, once the queued chunks have been read, as a plain object, since
-    *   contextBridge does not keep the fields of an `Error`;
-    * - `cancel` (and `return`, which a `break` calls) tells the main process, which calls `return()`
-    *   on the generator, closes the port and drops the chunks that are queued. A port that arrives
-    *   after the cancel is closed;
-    * - a port that closes before `end` fails the stream with the code `IPC_STREAM_CLOSED`.
+    * `createStreamReader`, which the streams of the page share, whichever transport they use. It
+    * makes the stream that the page gets, an async iterator of the chunks with `cancel()`. The
+    * page gets no `ipcRenderer`, only the object with `next`, `return`, `cancel` and
+    * `Symbol.asyncIterator`. The transport feeds it with `push` and ends it with `finish`:
+    * - chunks are queued until the page reads them, and a read resolves in order, also when the
+    *   page asks for several chunks at once. The stream is not slowed down for a slow reader, so a
+    *   reader that stops reading without cancelling keeps the chunks in memory;
+    * - `finish()` closes the stream after the queued chunks, and `finish({ error })` does so by
+    *   rejecting a read with the error object, once the queued chunks have been read, as a plain
+    *   object, since contextBridge does not keep the fields of an `Error`;
+    * - `cancel` (and `return`, which a `break` calls) tells the other side through `cancelRemote`,
+    *   drops the chunks that are queued, and finishes the stream. `stop` runs once, when it finishes.
     */
-   private buildStreamComponents(): string {
-      const [i1, i2, i3, i4, i5] = this.indents;
+   private buildStreamReader(): string {
+      const [i1, i2, i3, i4] = this.indents;
       return [
          "type StreamResult = { done: boolean; value: unknown };",
          "",
-         "const streamPorts: { [id: number]: ((port: MessagePort | undefined) => void) | undefined } = { __proto__: null } as any;",
-         "let lastStreamId = 0;",
-         "",
-         "function openStream(channel: string, wire: string, args: any[]) {",
-         `${i1}const id = ++lastStreamId;`,
+         "function createStreamReader(stop: () => void, cancelRemote: () => void) {",
          `${i1}const chunks: unknown[] = [];`,
          `${i1}const waiters: { resolve: (result: StreamResult) => void; reject: (error: unknown) => void }[] = [];`,
-         `${i1}let port: MessagePort | null = null;`,
          `${i1}let finished = false;`,
          `${i1}let failure: { error: unknown } | null = null;`,
          `${i1}const drain = () => {`,
@@ -393,13 +423,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}finished = true;`,
          `${i2}failure = error ?? null;`,
-         `${i2}delete streamPorts[id];`,
-         `${i2}const current = port;`,
-         `${i2}port = null;`,
-         `${i2}if (current) {`,
-         `${i3}current.onmessage = null;`,
-         `${i3}current.close();`,
-         `${i2}}`,
+         `${i2}stop();`,
          `${i2}drain();`,
          `${i1}};`,
          `${i1}const cancel = () => {`,
@@ -407,56 +431,13 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}return;`,
          `${i2}}`,
          `${i2}try {`,
-         `${i3}port?.postMessage({ type: 'cancel' });`,
+         `${i3}cancelRemote();`,
          `${i2}} catch {`,
-         `${i3}// The port is gone, which stops the stream as well.`,
+         `${i3}// The other side is gone, which stops the stream as well.`,
          `${i2}}`,
          `${i2}chunks.length = 0;`,
          `${i2}finish();`,
          `${i1}};`,
-         `${i1}streamPorts[id] = (next) => {`,
-         `${i2}if (!next) {`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}if (finished) {`,
-         `${i3}next.close();`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}port = next;`,
-         `${i2}next.onmessage = (event: MessageEvent) => {`,
-         `${i3}const message = event.data as { type?: unknown; value?: unknown; error?: unknown } | null;`,
-         `${i3}if (finished || !message) {`,
-         `${i4}return;`,
-         `${i3}}`,
-         `${i3}if (message.type === 'chunk') {`,
-         `${i4}chunks.push(message.value);`,
-         `${i4}drain();`,
-         `${i3}} else if (message.type === 'end') {`,
-         `${i4}finish();`,
-         `${i3}} else if (message.type === 'error') {`,
-         `${i4}finish({ error: message.error });`,
-         `${i3}}`,
-         `${i2}};`,
-         `${i2}next.addEventListener('close', () => {`,
-         `${i3}if (port === next) {`,
-         `${i4}const message = \`The stream of the channel '\${channel}' was closed before it ended\`;`,
-         `${i4}finish({ error: { name: 'IpcStreamError', message, code: 'IPC_STREAM_CLOSED' } });`,
-         `${i3}}`,
-         `${i2}});`,
-         `${i1}};`,
-         `${i1}const unreadable = { name: 'IpcStreamError', message: \`The main process sent an unreadable reply to the channel '\${channel}'\`, code: 'IPC_STREAM_INVALID_REPLY' };`,
-         `${i1}try {`,
-         `${i2}ipcRenderer.invoke(wire, id, ...args).then(`,
-         `${i3}(result: IpcEnvelope | undefined) => {`,
-         `${i4}if (!result || !result.ok) {`,
-         `${i5}finish({ error: result && result.error ? result.error : unreadable });`,
-         `${i4}}`,
-         `${i3}},`,
-         `${i3}(error: unknown) => finish({ error: toIpcError(error) }),`,
-         `${i2});`,
-         `${i1}} catch (error) {`,
-         `${i2}finish({ error: toIpcError(error) });`,
-         `${i1}}`,
          `${i1}const stream = {`,
          `${i2}next: () =>`,
          `${i3}new Promise<StreamResult>((resolve, reject) => {`,
@@ -470,7 +451,93 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}cancel,`,
          `${i2}[Symbol.asyncIterator]: () => stream,`,
          `${i1}};`,
-         `${i1}return stream;`,
+         `${i1}const push = (value: unknown) => {`,
+         `${i2}if (!finished) {`,
+         `${i3}chunks.push(value);`,
+         `${i3}drain();`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}return { stream, push, finish, isFinished: () => finished };`,
+         "}",
+         "",
+      ].join("\n");
+   }
+
+   /**
+    * `openStream`, which starts a call of a `stream` channel and returns its stream (see
+    * `createStreamReader`). The call is `ipcRenderer.invoke(wire, id, ...args)`: its envelope reports a
+    * failure to start (a rejected sender, invalid arguments, no handler, a handler that throws before
+    * it yields) and the main process hands over the port of the call, with the same `id`, on
+    * `<wire>:port`. Then:
+    * - `chunk`, `end` and `error` messages of the port feed the reader;
+    * - a cancel tells the main process, which calls `return()` on the generator, closes the port and
+    *   drops the chunks that are queued. A port that arrives after the cancel is closed;
+    * - a port that closes before `end` fails the stream with the code `IPC_STREAM_CLOSED`.
+    */
+   private buildStreamComponents(): string {
+      const [i1, i2, i3, i4, i5] = this.indents;
+      return [
+         "const streamPorts: { [id: number]: ((port: MessagePort | undefined) => void) | undefined } = { __proto__: null } as any;",
+         "let lastStreamId = 0;",
+         "",
+         "function openStream(channel: string, wire: string, args: any[]) {",
+         `${i1}const id = ++lastStreamId;`,
+         `${i1}let port: MessagePort | null = null;`,
+         `${i1}const reader = createStreamReader(`,
+         `${i2}() => {`,
+         `${i3}delete streamPorts[id];`,
+         `${i3}const current = port;`,
+         `${i3}port = null;`,
+         `${i3}if (current) {`,
+         `${i4}current.onmessage = null;`,
+         `${i4}current.close();`,
+         `${i3}}`,
+         `${i2}},`,
+         `${i2}() => port?.postMessage({ type: 'cancel' }),`,
+         `${i1});`,
+         `${i1}streamPorts[id] = (next) => {`,
+         `${i2}if (!next) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}if (reader.isFinished()) {`,
+         `${i3}next.close();`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}port = next;`,
+         `${i2}next.onmessage = (event: MessageEvent) => {`,
+         `${i3}const message = event.data as { type?: unknown; value?: unknown; error?: unknown } | null;`,
+         `${i3}if (reader.isFinished() || !message) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}if (message.type === 'chunk') {`,
+         `${i4}reader.push(message.value);`,
+         `${i3}} else if (message.type === 'end') {`,
+         `${i4}reader.finish();`,
+         `${i3}} else if (message.type === 'error') {`,
+         `${i4}reader.finish({ error: message.error });`,
+         `${i3}}`,
+         `${i2}};`,
+         `${i2}next.addEventListener('close', () => {`,
+         `${i3}if (port === next) {`,
+         `${i4}const message = \`The stream of the channel '\${channel}' was closed before it ended\`;`,
+         `${i4}reader.finish({ error: { name: 'IpcStreamError', message, code: 'IPC_STREAM_CLOSED' } });`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i1}};`,
+         `${i1}const unreadable = { name: 'IpcStreamError', message: \`The main process sent an unreadable reply to the channel '\${channel}'\`, code: 'IPC_STREAM_INVALID_REPLY' };`,
+         `${i1}try {`,
+         `${i2}ipcRenderer.invoke(wire, id, ...args).then(`,
+         `${i3}(result: IpcEnvelope | undefined) => {`,
+         `${i4}if (!result || !result.ok) {`,
+         `${i5}reader.finish({ error: result && result.error ? result.error : unreadable });`,
+         `${i4}}`,
+         `${i3}},`,
+         `${i3}(error: unknown) => reader.finish({ error: toIpcError(error) }),`,
+         `${i2});`,
+         `${i1}} catch (error) {`,
+         `${i2}reader.finish({ error: toIpcError(error) });`,
+         `${i1}}`,
+         `${i1}return reader.stream;`,
          "}",
          "",
          "function listenForStreamPorts(portWire: string): void {",
@@ -485,6 +552,243 @@ export class PreloadBindingsWriter extends BaseWriter {
          "}",
          "",
       ].join("\n");
+   }
+
+   /** Whether any of the channels to a utility process is a `streamUtility` channel. */
+   private hasBrokeredStreams(specs: t.ChannelSpec[]): boolean {
+      return specs.some((spec) => spec.kind === "Stream");
+   }
+
+   /** The client of the channels to a utility process, and the listeners for the ports of the channels. */
+   private buildUtilityClient(specs: t.ChannelSpec[]): string[] {
+      return [
+         this.buildUtilityClientComponents(this.hasBrokeredStreams(specs)),
+         ...specs
+            .sort((a, b) => utils.compareStrings(a.name, b.name))
+            .map((spec) => this.buildUtilityClientListener(spec.name)),
+         "",
+      ];
+   }
+
+   /**
+    * `ipc.<name>.invoke(...args)` of an `invokeUtility` channel and `ipc.<name>.stream(...args)` of
+    * a `streamUtility` channel, which talk to the utility process over the port that the main
+    * process brokers (see `buildUtilityClientComponents`).
+    */
+   private buildBrokeredChannel(spec: t.ChannelSpec): ChannelEntry {
+      const client = `utilityClients['${spec.name}']`;
+      if (spec.kind === "Stream") {
+         return this.buildChannel(
+            spec.name,
+            "stream",
+            `(...args: any[]) => openUtilityStream(${client}, args)`,
+         );
+      }
+      return this.buildChannel(
+         spec.name,
+         "invoke",
+         `(...args: any[]) => callUtilityPort(${client}, args)`,
+      );
+   }
+
+   /**
+    * The client of the channels between this page and a utility process. The main process hands
+    * the page one port per channel, on the channel itself, with the key of the connection, and the
+    * port goes straight to the child. The client is the same for calls and streams:
+    * - a call or a stream made before the port has arrived waits for it, in order, and is started
+    *   when it comes. One made after the connection has closed is rejected at once with
+    *   `IPC_UTILITY_EXITED`, since the process is gone;
+    * - a call posts `{ __ipc: 'call', channel, id, args }` and is answered by `reply` with the
+    *   envelope of the `invoke` channels. A stream posts `stream` and is fed by `chunk`, `end`
+    *   and `error` messages of the same ID, all of one port, and `cancel` stops it in the child;
+    * - a port that arrives for the channel replaces the one it has, and the calls and streams that
+    *   were open on the old one fail with `IPC_UTILITY_EXITED`. The main process closes the
+    *   connection through `<channel>:close` with the key, which ignores any other key. The close of
+    *   the port itself, such as when the process exits, ends it as well;
+    * - errors are plain objects `{ name, message, code, data? }`, since contextBridge does not keep
+    *   the fields of an `Error`. The ones of the library are `IpcUtilityError`, with the codes
+    *   `IPC_UTILITY_EXITED`, `_UNSENDABLE` and `_INVALID_REPLY`.
+    * Messages that are not the library's, or are for another channel or ID, are ignored.
+    */
+   private buildUtilityClientComponents(streams: boolean): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "interface UtilityClient {",
+         `${i1}name: string;`,
+         `${i1}channel: string;`,
+         `${i1}port: MessagePort | null;`,
+         `${i1}key: string | null;`,
+         `${i1}closed: boolean;`,
+         `${i1}waiting: (() => void)[];`,
+         `${i1}calls: Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>;`,
+         `${i1}streams: Map<number, { push: (value: unknown) => void; finish: (error?: { error: unknown }) => void }>;`,
+         "}",
+         "",
+         "let lastUtilityCallId = 0;",
+         "const utilityClients: { [channel: string]: UtilityClient } = { __proto__: null } as any;",
+         "",
+         "function utilityError(message: string, code: string) {",
+         `${i1}return { name: 'IpcUtilityError', message, code };`,
+         "}",
+         "",
+         "function createUtilityClient(name: string, channel: string): UtilityClient {",
+         `${i1}return { name, channel, port: null, key: null, closed: false, waiting: [], calls: new Map(), streams: new Map() };`,
+         "}",
+         "",
+         "function dropUtilityPort(client: UtilityClient, reason: string): void {",
+         `${i1}const port = client.port;`,
+         `${i1}client.port = null;`,
+         `${i1}client.key = null;`,
+         `${i1}client.closed = true;`,
+         `${i1}if (port) {`,
+         `${i2}port.onmessage = null;`,
+         `${i2}port.close();`,
+         `${i1}}`,
+         `${i1}const calls = [...client.calls.values()];`,
+         `${i1}const streams = [...client.streams.values()];`,
+         `${i1}client.calls.clear();`,
+         `${i1}client.streams.clear();`,
+         `${i1}const message = \`\${reason} before the channel '\${client.name}' was answered\`;`,
+         `${i1}for (const call of calls) {`,
+         `${i2}call.reject(utilityError(message, 'IPC_UTILITY_EXITED'));`,
+         `${i1}}`,
+         `${i1}for (const stream of streams) {`,
+         `${i2}stream.finish({ error: utilityError(message, 'IPC_UTILITY_EXITED') });`,
+         `${i1}}`,
+         "}",
+         "",
+         "function receiveFromUtility(client: UtilityClient, message: unknown): void {",
+         `${i1}const source = typeof message === 'object' && message !== null ? (message as { [key: string]: unknown }) : null;`,
+         `${i1}if (!source || source.channel !== client.channel || typeof source.id !== 'number') {`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}const id = source.id;`,
+         `${i1}if (source.__ipc === 'reply') {`,
+         `${i2}const call = client.calls.get(id);`,
+         `${i2}if (!call) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}client.calls.delete(id);`,
+         `${i2}const envelope = typeof source.envelope === 'object' && source.envelope !== null ? (source.envelope as { [key: string]: unknown }) : null;`,
+         `${i2}if (envelope && envelope.ok === true) {`,
+         `${i3}call.resolve(envelope.value);`,
+         `${i2}} else if (envelope && envelope.ok === false && typeof envelope.error === 'object' && envelope.error !== null) {`,
+         `${i3}call.reject(toIpcError(envelope.error));`,
+         `${i2}} else {`,
+         `${i3}call.reject(utilityError(\`The utility process sent an unreadable reply to the channel '\${client.name}'\`, 'IPC_UTILITY_INVALID_REPLY'));`,
+         `${i2}}`,
+         `${i1}} else {`,
+         `${i2}const stream = client.streams.get(id);`,
+         `${i2}if (!stream) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}if (source.__ipc === 'chunk') {`,
+         `${i3}stream.push(source.value);`,
+         `${i2}} else if (source.__ipc === 'end') {`,
+         `${i3}stream.finish();`,
+         `${i2}} else if (source.__ipc === 'error') {`,
+         `${i3}stream.finish({ error: toIpcError(source.error) });`,
+         `${i2}}`,
+         `${i1}}`,
+         "}",
+         "",
+         "function attachUtilityPort(client: UtilityClient, key: string, port: MessagePort): void {",
+         `${i1}if (client.port) {`,
+         `${i2}dropUtilityPort(client, 'The connection was replaced');`,
+         `${i1}}`,
+         `${i1}client.port = port;`,
+         `${i1}client.key = key;`,
+         `${i1}client.closed = false;`,
+         `${i1}port.onmessage = (event: MessageEvent) => receiveFromUtility(client, event.data);`,
+         `${i1}port.addEventListener('close', () => {`,
+         `${i2}if (client.port === port) {`,
+         `${i3}dropUtilityPort(client, 'The connection closed');`,
+         `${i2}}`,
+         `${i1}});`,
+         `${i1}for (const start of client.waiting.splice(0)) {`,
+         `${i2}start();`,
+         `${i1}}`,
+         "}",
+         "",
+         "function callUtilityPort(client: UtilityClient, args: any[]): Promise<unknown> {",
+         `${i1}return new Promise<unknown>((resolve, reject) => {`,
+         `${i2}if (client.closed) {`,
+         `${i3}reject(utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED'));`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}const start = () => {`,
+         `${i3}const id = ++lastUtilityCallId;`,
+         `${i3}client.calls.set(id, { resolve, reject });`,
+         `${i3}try {`,
+         `${i4}client.port?.postMessage({ __ipc: 'call', channel: client.channel, id, args });`,
+         `${i3}} catch (error) {`,
+         `${i4}client.calls.delete(id);`,
+         `${i4}reject(utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE'));`,
+         `${i3}}`,
+         `${i2}};`,
+         `${i2}if (client.port) {`,
+         `${i3}start();`,
+         `${i2}} else {`,
+         `${i3}client.waiting.push(start);`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
+         ...(streams
+            ? [
+                 "function openUtilityStream(client: UtilityClient, args: any[]) {",
+                 `${i1}const id = ++lastUtilityCallId;`,
+                 `${i1}const reader = createStreamReader(`,
+                 `${i2}() => void client.streams.delete(id),`,
+                 `${i2}() => client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id }),`,
+                 `${i1});`,
+                 `${i1}const start = () => {`,
+                 `${i2}if (reader.isFinished()) {`,
+                 `${i3}return;`,
+                 `${i2}}`,
+                 `${i2}client.streams.set(id, { push: reader.push, finish: reader.finish });`,
+                 `${i2}try {`,
+                 `${i3}client.port?.postMessage({ __ipc: 'stream', channel: client.channel, id, args });`,
+                 `${i2}} catch (error) {`,
+                 `${i3}reader.finish({ error: utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE') });`,
+                 `${i2}}`,
+                 `${i1}};`,
+                 `${i1}if (client.closed) {`,
+                 `${i2}reader.finish({ error: utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED') });`,
+                 `${i1}} else if (client.port) {`,
+                 `${i2}start();`,
+                 `${i1}} else {`,
+                 `${i2}client.waiting.push(start);`,
+                 `${i1}}`,
+                 `${i1}return reader.stream;`,
+                 "}",
+                 "",
+              ]
+            : []),
+         "function listenForUtilityPorts(name: string, channel: string): void {",
+         `${i1}const client = createUtilityClient(name, channel);`,
+         `${i1}utilityClients[name] = client;`,
+         `${i1}ipcRenderer.on(channel, (event: { ports: MessagePort[] }, key: unknown) => {`,
+         `${i2}const port = event.ports[0];`,
+         `${i2}if (typeof key === 'string' && port) {`,
+         `${i3}attachUtilityPort(client, key, port);`,
+         `${i2}} else {`,
+         `${i3}port?.close();`,
+         `${i2}}`,
+         `${i1}});`,
+         `${i1}ipcRenderer.on(\`\${channel}:close\`, (_event: unknown, key: unknown) => {`,
+         `${i2}if (typeof key === 'string' && key === client.key) {`,
+         `${i3}dropUtilityPort(client, 'The connection was closed');`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
+      ].join("\n");
+   }
+
+   private buildUtilityClientListener(name: string): string {
+      return `listenForUtilityPorts('${name}', ${this.wireName(name)});`;
    }
 
    private buildStreamListener(name: string): string {

@@ -994,3 +994,63 @@ describe("validateChannelSpecs, utility channels", () => {
       );
    });
 });
+
+describe("validateChannelSpecs, renderer to utility channels", () => {
+   const generate = (kind: t.ChannelKind, returnType = "void", direction = "RendererToUtility") =>
+      new ChannelSpecGenerator().generate(direction as t.ChannelDirection, kind, returnType);
+   const chunked = () => generate("Stream", "AsyncIterable<number>");
+
+   it("accepts a Unicast channel with any return type", () => {
+      for (const returnType of ["void", "number", "Promise<string>"]) {
+         expect(() =>
+            vld.validateChannelSpecs([generate("Unicast", returnType)]),
+         ).not.toThrowError();
+      }
+   });
+
+   it("accepts a Stream channel with a chunk type, and error types for both", () => {
+      expect(() => vld.validateChannelSpecs([chunked()])).not.toThrowError();
+      const errors = { definition: "Error", customTypes: [] };
+      expect(() => vld.validateChannelSpecs([{ ...chunked(), errors }])).not.toThrowError();
+      expect(() =>
+         vld.validateChannelSpecs([{ ...generate("Unicast"), errors }]),
+      ).not.toThrowError();
+   });
+
+   it("rejects a Stream channel without a chunk type", () => {
+      expect(() => vld.validateChannelSpecs([generate("Stream")])).toThrowError(/chunkType/);
+   });
+
+   it.each(["Broadcast", "Port"] as const)("rejects a %s channel", (kind) => {
+      expect(() => vld.validateChannelSpecs([generate(kind)])).toThrowError(
+         `Channel kind '${kind}' is not allowed when channel direction is 'RendererToUtility'.`,
+      );
+   });
+
+   it("rejects the options of the other verbs, including the timeout", () => {
+      const ref = { name: "args", exported: "args", fromPath: "./v" };
+      for (const kind of ["Unicast", "Stream"] as const) {
+         for (const extra of [
+            { allowedOrigins: ["app://."] },
+            { validate: ref },
+            { trigger: "focus" },
+            { maxQueue: 5 },
+            { timeoutMs: 5 },
+         ]) {
+            const [key] = Object.keys(extra);
+            const base = kind === "Stream" ? chunked() : generate(kind);
+            expect(() => vld.validateChannelSpecs([{ ...base, ...extra }])).toThrowError(
+               new RegExp(key),
+            );
+         }
+      }
+   });
+
+   it("keeps the names unique among all channels", () => {
+      const spec = generate("Unicast");
+      const clash = { ...generate("Unicast", "void", "RendererToMain"), name: spec.name };
+      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+         `Channel name '${spec.name}' is not unique across application.`,
+      );
+   });
+});
