@@ -23,9 +23,9 @@ export default defineConfig({
    },
    resolve: {
       alias: {
-         "@types": path.resolve(__dirname, "./types/internal.d.ts"),
-         "@testutils": path.resolve(__dirname, "./tests/utils"),
-         "@src": path.resolve(__dirname, "./src"),
+         "@types": path.resolve(import.meta.dirname, "./types/internal.d.ts"),
+         "@testutils": path.resolve(import.meta.dirname, "./tests/utils"),
+         "@src": path.resolve(import.meta.dirname, "./src"),
       },
    },
 });

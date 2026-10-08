@@ -34,6 +34,7 @@
             "noForEach": "off"
          },
          "correctness": {
+            "noGlobalDirnameFilename": "error",
             "noConstantMathMinMaxClamp": "error",
             "noInvalidBuiltinInstantiation": "error",
             "noUndeclaredDependencies": "off",
@@ -46,11 +47,19 @@
             "useImportExtensions": "off"
          },
          "performance": {
+            "noAccumulatingSpread": "error",
+            "noAwaitInLoops": "error",
+            "noDelete": "error",
             "noBarrelFile": "error",
             "noReExportAll": "error",
             "noNamespaceImport": "off"
          },
          "style": {
+            "noNonNullAssertion": "error",
+            "useConst": "error",
+            "useExportType": "error",
+            "useNodejsImportProtocol": "error",
+            "useNumberNamespace": "error",
             "noUselessElse": "off",
             "noDefaultExport": "off",
             "noDoneCallback": "error",
@@ -84,6 +93,15 @@
             "useArrayLiterals": "error"
          },
          "suspicious": {
+            "noConstEnum": "error",
+            "noDoubleEquals": "error",
+            "noExtraNonNullAssertion": "error",
+            "noImplicitAnyLet": "error",
+            "noImportCycles": "error",
+            "noTsIgnore": "error",
+            "noUnusedExpressions": "error",
+            "noVar": "error",
+            "useIterableCallbackReturn": "error",
             "noConsole": "off",
             "noEmptyBlockStatements": "error",
             "noEvolvingTypes": "off",
@@ -94,6 +112,16 @@
             "useAwait": "error",
             "useErrorMessage": "error",
             "useNumberToFixedDigitsArgument": "error"
+         },
+         "security": {
+            "noGlobalEval": "error"
+         },
+         "nursery": {
+            "noFloatingPromises": "error",
+            "noImpliedEval": "error",
+            "noMisusedPromises": "error",
+            "useAwaitThenable": "error",
+            "useExhaustiveSwitchCases": "error"
          }
       }
    }
