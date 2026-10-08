@@ -95,6 +95,23 @@ describe("parseTypeDefinitions", () => {
          ]);
       });
 
+      it("should mark a default exported interface", () => {
+         const result = parseTypeDefinitions(`
+            export default interface Payload {
+               id: number;
+            }
+         `);
+         expect(result).toStrictEqual([
+            {
+               name: "Payload",
+               kind: "interface",
+               generics: null,
+               isExported: true,
+               isDefault: true,
+            },
+         ]);
+      });
+
       it("should handle interfaces with inheritance", () => {
          const result = parseTypeDefinitions(`
             export interface Admin extends User {

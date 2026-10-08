@@ -38,6 +38,51 @@ describe("ImportsGenerator", () => {
       }
    });
 
+   it("imports a default exported type of the IPC schema as the default export", () => {
+      const pfs: t.ParsedFileSpecs = {
+         fullPath: "/project/src/autoipc/schema.ts",
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: [],
+            typeSpecArray: [
+               {
+                  name: "Payload",
+                  kind: "interface" as t.TypeKind,
+                  generics: null,
+                  isExported: true,
+                  isDefault: true,
+               },
+            ],
+         },
+      };
+      const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+      expect(ig.getDeclaration(pfs, "Payload")).toStrictEqual(
+         'import type { default as Payload } from "./schema";',
+      );
+   });
+
+   it("imports a type of the IPC schema only once", () => {
+      const pfs: t.ParsedFileSpecs = {
+         fullPath: "/project/src/autoipc/schema.ts",
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: [],
+            typeSpecArray: [
+               { name: "Local", kind: "type" as t.TypeKind, generics: null, isExported: true },
+            ],
+         },
+      };
+      const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+      expect(ig.getDeclaration(pfs, "Local")).toStrictEqual(
+         'import type { Local } from "./schema";',
+      );
+      expect(ig.getDeclaration(pfs, "Local")).toBeNull();
+   });
+
    it("generates valid import statement for types external to the IPC schema", () => {
       for (const ext of ["", ".js"]) {
          const pfs: t.ParsedFileSpecs = {

@@ -225,17 +225,35 @@ describe("validateTypeSpecs", () => {
       ]);
    });
 
-   it("should throw struct error on non-exported types", () => {
-      const specs = [
-         {
-            name: "VitestInterface",
-            kind: "interface" as t.TypeKind,
-            generics: null,
-            isExported: false,
-         },
-      ];
-      expect(() => vld.validateTypeSpecs(specs)).toThrowError(
-         "User-defined types must be exported",
+   const hiddenSpec = {
+      name: "VitestInterface",
+      kind: "interface" as t.TypeKind,
+      generics: null,
+      isExported: false,
+   };
+   const channelUsing = (...customTypes: string[]) =>
+      ({ name: "vitestChannel", signature: { customTypes } }) as unknown as t.ChannelSpec;
+
+   // T09: a helper type in the schema file no longer has to be exported.
+   it("should accept non-exported types that no channel uses", () => {
+      expect(vld.validateTypeSpecs([hiddenSpec])).toStrictEqual([hiddenSpec]);
+      expect(vld.validateTypeSpecs([hiddenSpec], [channelUsing("Other")])).toStrictEqual([
+         hiddenSpec,
+      ]);
+   });
+
+   it("should throw on a non-exported type that a channel uses", () => {
+      expect(() =>
+         vld.validateTypeSpecs([hiddenSpec], [channelUsing("VitestInterface")]),
+      ).toThrowError(
+         "Type 'VitestInterface' is used by channel 'vitestChannel' and must be exported",
       );
+   });
+
+   it("should accept exported types that a channel uses", () => {
+      const spec = { ...hiddenSpec, isExported: true, isDefault: true };
+      expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([
+         spec,
+      ]);
    });
 });

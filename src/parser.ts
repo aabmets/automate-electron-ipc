@@ -67,29 +67,119 @@ export function forEachChild(node: AstNode, callback: (child: AstNode) => void):
    }
 }
 
+const BUILTIN_TYPES = new Set([
+   // Keywords and the global types that signatures use without an import.
+   "string",
+   "number",
+   "boolean",
+   "void",
+   "any",
+   "unknown",
+   "null",
+   "undefined",
+   "never",
+   "object",
+   "Function",
+   "Promise",
+   // ECMAScript globals.
+   "Array",
+   "ReadonlyArray",
+   "Map",
+   "ReadonlyMap",
+   "Set",
+   "ReadonlySet",
+   "WeakMap",
+   "WeakSet",
+   "WeakRef",
+   "Date",
+   "RegExp",
+   "Error",
+   "ArrayBuffer",
+   "SharedArrayBuffer",
+   "DataView",
+   "Int8Array",
+   "Uint8Array",
+   "Uint8ClampedArray",
+   "Int16Array",
+   "Uint16Array",
+   "Int32Array",
+   "Uint32Array",
+   "Float32Array",
+   "Float64Array",
+   "BigInt64Array",
+   "BigUint64Array",
+   "Iterable",
+   "Iterator",
+   "AsyncIterable",
+   "AsyncIterator",
+   "Generator",
+   "AsyncGenerator",
+   "PromiseLike",
+   "ArrayLike",
+   // Utility types.
+   "Record",
+   "Partial",
+   "Required",
+   "Readonly",
+   "Pick",
+   "Omit",
+   "Exclude",
+   "Extract",
+   "NonNullable",
+   "ReturnType",
+   "Parameters",
+   "InstanceType",
+   "ConstructorParameters",
+   "Awaited",
+   "Uppercase",
+   "Lowercase",
+   "Capitalize",
+   "Uncapitalize",
+]);
+
+/**
+ * Tells whether a name is available in every generated file without an import.
+ * A schema that imports or declares a type under one of these names is not supported.
+ */
 export function isBuiltinType(typeName: string): boolean {
-   return new Set([
-      "string",
-      "number",
-      "boolean",
-      "void",
-      "any",
-      "unknown",
-      "null",
-      "undefined",
-      "never",
-      "object",
-      "Function",
-      "Promise",
-   ]).has(typeName);
+   return BUILTIN_TYPES.has(typeName);
 }
 
-export function collectCustomTypes(node: AstNode, src: Source, set: Set<string>): void {
+/**
+ * Names of the type parameters that a node brings into scope for its subtree:
+ * `<T>` of a function type, interface or alias, the `P` of `{ [P in K]: ... }`
+ * and the `infer U` names of a conditional type, which are scoped to the whole conditional.
+ */
+function declaredTypeParams(node: AstNode): string[] {
+   const names: string[] = (node.typeParams?.parameters ?? []).map((tp: AstNode) => tp.name.value);
+   if (node.type === "TsMappedType") {
+      names.push(node.typeParam.name.value);
+   } else if (node.type === "TsConditionalType") {
+      const visit = (child: AstNode) => {
+         if (child.type === "TsInferType") {
+            names.push(child.typeParam.name.value);
+         }
+         forEachChild(child, visit);
+      };
+      visit(node.extendsType);
+   }
+   return names;
+}
+
+export function collectCustomTypes(
+   node: AstNode,
+   src: Source,
+   set: Set<string>,
+   scope: ReadonlySet<string> = new Set(),
+): void {
    if (!node) {
       return;
-   } else if (node.type === "TsTypeReference") {
+   }
+   const declared = declaredTypeParams(node);
+   const inScope = declared.length > 0 ? new Set([...scope, ...declared]) : scope;
+   if (node.type === "TsTypeReference") {
       const typeName = src.text(node.typeName);
-      if (!isBuiltinType(typeName)) {
+      if (!(isBuiltinType(typeName) || inScope.has(typeName.split(".")[0]))) {
          set.add(typeName);
       }
    } else if (node.type === "KeyValuePatternProperty") {
@@ -108,7 +198,7 @@ export function collectCustomTypes(node: AstNode, src: Source, set: Set<string>)
          }
       }
    }
-   forEachChild(node, (child) => collectCustomTypes(child, src, set));
+   forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope));
 }
 
 const PACKAGE_NAME = "automate-electron-ipc";
@@ -592,6 +682,7 @@ export function parseTypeDefinitions(
       kind: kind as t.TypeKind,
       generics,
       isExported,
+      ...(item.type === "ExportDefaultDeclaration" ? { isDefault: true } : {}),
    });
 }
 
@@ -626,9 +717,10 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
       }
    });
 
+   const channelSpecArray = vld.validateChannelSpecs(channelSpecs);
    return {
-      typeSpecArray: vld.validateTypeSpecs(typeSpecArray),
-      channelSpecArray: vld.validateChannelSpecs(channelSpecs),
+      typeSpecArray: vld.validateTypeSpecs(typeSpecArray, channelSpecArray),
+      channelSpecArray,
       importSpecArray: importSpecArray.filter((item) => {
          return item.customTypes.length > 0 || item.namespace !== null;
       }),

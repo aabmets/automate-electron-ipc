@@ -1,0 +1,9 @@
+{
+   "name": "fixture-type-edge-cases",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

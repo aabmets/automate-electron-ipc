@@ -39,6 +39,61 @@ describe("parseSpecs", () => {
       });
    });
 
+   it("should accept non-exported types that no channel uses", () => {
+      const { typeSpecArray } = parser.parseSpecs({
+         contents: `
+            import { defineChannels, invoke } from "automate-electron-ipc";
+
+            interface Hidden { secret: string }
+            export interface Shown { id: number }
+
+            export default defineChannels({
+               getShown: invoke<() => Promise<Shown>>(),
+            });
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
+      expect(typeSpecArray.map((spec) => [spec.name, spec.isExported])).toStrictEqual([
+         ["Hidden", false],
+         ["Shown", true],
+      ]);
+   });
+
+   it("should reject a non-exported type that a channel uses", () => {
+      const contents = `
+         import { defineChannels, invoke } from "automate-electron-ipc";
+
+         interface Hidden { secret: string }
+
+         export default defineChannels({
+            getHidden: invoke<() => Promise<Hidden>>(),
+         });
+      `;
+      expect(() => parser.parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
+         "Type 'Hidden' is used by channel 'getHidden' and must be exported",
+      );
+   });
+
+   it("should mark a default exported interface", () => {
+      const { typeSpecArray } = parser.parseSpecs({
+         contents: `
+            import { defineChannels, invoke } from "automate-electron-ipc";
+
+            export default interface Payload { id: number }
+
+            export const channels = defineChannels({
+               getPayload: invoke<() => Promise<Payload>>(),
+            });
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
+      expect(typeSpecArray).toStrictEqual([
+         { name: "Payload", kind: "interface", generics: null, isExported: true, isDefault: true },
+      ]);
+   });
+
    it("should parse ES module import statements", () => {
       const { importSpecArray } = parser.parseSpecs({
          contents: `

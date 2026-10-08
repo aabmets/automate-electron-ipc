@@ -51,6 +51,59 @@ describe("collectCustomTypes", () => {
       });
    });
 
+   it("should not collect global types", () => {
+      [
+         "Array<string>",
+         "Record<string, number>",
+         "Map<string, number>",
+         "Set<string>",
+         "Date",
+         "Uint8Array",
+         "Partial<string>",
+         "Promise<ArrayBuffer>",
+      ].forEach((typeName) => {
+         const customTypes = collectCustomTypes(`
+            const x = type as (arg: ${typeName}) => void;
+         `);
+         expect(customTypes).toStrictEqual(new Set());
+      });
+   });
+
+   it("should collect the custom types that global types wrap", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (arg: Map<Key, Array<Value>>) => Record<string, Result>;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["Key", "Value", "Result"]));
+   });
+
+   it("should not collect the type parameters of a generic function type", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as <T, U extends Bound = Fallback>(a: T, b: U[]) => Promise<T | Other>;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["Bound", "Fallback", "Other"]));
+   });
+
+   it("should not collect the type parameters of nested generic function types", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (cb: <T>(value: T) => T[], other: T) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["T"]));
+   });
+
+   it("should not collect the key of a mapped type", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (arg: { [P in keyof Source]: P | Extra }) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["Source", "Extra"]));
+   });
+
+   it("should not collect infer names of a conditional type", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (arg: Input extends (infer U)[] ? U : Fallback) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["Input", "Fallback"]));
+   });
+
    it("should collect custom types from return type literals", () => {
       const customTypes = collectCustomTypes(`
          const x = type as (arg) => CustomType;

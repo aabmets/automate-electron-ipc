@@ -214,6 +214,30 @@ describe("ipcAutomation, wrapped channel map export", () => {
    });
 });
 
+describe("ipcAutomation, type definition edge cases", () => {
+   // Regression for T09: a non-exported helper type threw, a default exported interface was
+   // imported by name, type parameters and globals were imported as custom types.
+   it("imports only the user-defined types that channels use", async () => {
+      project = await runFixture("type-edge-cases");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*schema";$/gm);
+         expect(imports).toStrictEqual([
+            'import type { Box } from "./schema";',
+            'import type { default as Payload } from "./schema";',
+         ]);
+         expect(generated[file]).not.toContain("Internal");
+      }
+      expect(generated["window.d.ts"]).toContain("sendEcho: <T>(value: T) => Promise<T>;");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("type-edge-cases");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

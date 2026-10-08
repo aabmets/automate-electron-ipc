@@ -92,7 +92,9 @@ export class ImportsGenerator {
             parsedFileSpecs.fullPath,
          );
          if (!this.seenImports.customTypes.has(customType)) {
-            return `import type { ${customType} } from "${adjustedImportPath}";`;
+            this.seenImports.customTypes.add(customType);
+            const entry = typeSpec.isDefault ? `default as ${customType}` : customType;
+            return `import type { ${entry} } from "${adjustedImportPath}";`;
          }
       } else if (importSpec && importEntry) {
          const adjustedImportPath = this.resolveImportPath(

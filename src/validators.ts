@@ -202,17 +202,35 @@ export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
    }
 }
 
-export function validateTypeSpecs(specs: Partial<t.TypeSpec>[]): t.TypeSpec[] {
+/**
+ * Validates the types declared in a schema file. Only the types that a channel signature
+ * refers to must be exported, since the generated files import them from the schema file.
+ */
+export function validateTypeSpecs(
+   specs: Partial<t.TypeSpec>[],
+   channelSpecs: t.ChannelSpec[] = [],
+): t.TypeSpec[] {
    const TypeSpecStruct = object({
       name: string(),
       kind: string(),
       generics: nullable(string()),
-      isExported: refine(boolean(), "mandatory", (value) => {
-         return value ? true : "User-defined types must be exported";
-      }),
+      isExported: boolean(),
+      isDefault: optional(boolean()),
    });
    for (const spec of specs) {
       assert(spec, TypeSpecStruct);
+   }
+   for (const spec of specs as t.TypeSpec[]) {
+      if (spec.isExported) {
+         continue;
+      }
+      const channel = channelSpecs.find((cs) => cs.signature.customTypes.includes(spec.name));
+      if (channel) {
+         throw new Error(
+            `Type '${spec.name}' is used by channel '${channel.name}' and must be exported. ` +
+               `Add 'export' to its declaration.`,
+         );
+      }
    }
    return specs as t.TypeSpec[];
 }
