@@ -413,35 +413,18 @@ describe("parseChannelMapModule", () => {
          }
       });
 
-      it("explains the migration for a leftover Channel expression", () => {
-         const msg = parseError(`
-            Channel("UserChannel").RendererToMain.Unicast({
-               signature: type as (a: string) => void,
-            });
-         `);
-         expect(msg).toContain("schema.ts");
-         expect(msg).toContain("Channel(...) expressions were removed in 0.3.0");
-         expect(msg).toContain("Migrating from 0.2");
+      it("rejects the removed signature and listeners options as unsupported", () => {
+         expect(parseError(wrap("Chan: invoke({ signature: type as () => void })"))).toContain(
+            "option 'signature' is not supported by 'invoke'",
+         );
+         expect(parseError(wrap('Chan: send<() => void>({ listeners: ["onChan"] })'))).toContain(
+            "option 'listeners' is not supported by 'send'",
+         );
       });
 
-      it("detects a leftover Channel expression through an aliased import", () => {
-         const imports = 'import { Channel as Ch } from "automate-electron-ipc";';
-         const msg = parseError('Ch("X").RendererToMain.Broadcast({});', imports);
-         expect(msg).toContain("Channel(...) expressions were removed");
-      });
-
-      it("explains the migration for a leftover signature key", () => {
-         const msg = parseError(wrap("Chan: invoke({ signature: type as () => void })"));
-         expect(msg).toContain("channel 'Chan'");
-         expect(msg).toContain("'signature' option was removed");
-         expect(msg).toContain("Migrating from 0.2");
-      });
-
-      it("explains the migration for a leftover listeners key", () => {
-         const msg = parseError(wrap('Chan: send<() => void>({ listeners: ["onChan"] })'));
-         expect(msg).toContain("channel 'Chan'");
-         expect(msg).toContain("'listeners' option was removed");
-         expect(msg).toContain("Migrating from 0.2");
+      it("ignores leftover Channel expressions", () => {
+         const out = parseMap('Channel("UserChannel").RendererToMain.Broadcast({});');
+         expect(out).toStrictEqual({ channelSpecs: [], channelMapExport: null });
       });
    });
 });

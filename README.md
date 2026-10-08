@@ -182,34 +182,3 @@ export default defineChannels({
 What it loses: the type argument form lets TypeScript check the config against the signature,
 and it is the only form which will be able to carry error types. In the `as` form the config is not
 checked against the signature.
-
-
-### Migrating from 0.2
-
-Version 0.3.0 replaces the `Channel(...)` expressions. The old syntax is removed and `ipcgen` fails
-with an error that points to this section when it finds it.
-
-```typescript
-// 0.2
-Channel("GetUser").RendererToMain.Unicast({
-   signature: type as (id: number) => Promise<User>,
-});
-
-// 0.3
-export default defineChannels({
-   GetUser: invoke<(id: number) => Promise<User>>(),
-});
-```
-
-| 0.2                                     | 0.3                                                     |
-|-----------------------------------------|---------------------------------------------------------|
-| `Channel("X").RendererToMain.Unicast`   | `invoke`                                                |
-| `Channel("X").RendererToMain.Broadcast` | `send`                                                  |
-| `Channel("X").MainToRenderer.Broadcast` | `emit`                                                  |
-| `Channel("X").RendererToRenderer.Port`  | `port`                                                  |
-| `signature: type as Sig`                | type argument `<Sig>` of the verb                       |
-| `trigger: "focus"`                      | unchanged, in the config of `emit`                      |
-| `listeners: [...]`                      | removed; call the listener function once per subscriber |
-
-The `type` export is removed. The channel name moves from the `Channel("X")` string to the key of the map.
-The generated bindings are unchanged in this version.

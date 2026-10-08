@@ -30,7 +30,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - The generic form is the main form: TypeScript checks the config against the signature, and it
     is the only form that can carry error types (T18). The `as` form reads options-first, but its
     config is not checked against the signature.
-  - This is breaking; bump to 0.3.0. The old syntax is removed, not kept alongside.
+  - This is breaking; bump to 1.0.0. The old syntax is removed, not kept alongside.
 - **Scope:**
   - **`types/index.d.ts`:**
     - Each verb is `verb<S extends Fn = never>(config?: VerbConfig<NoInfer<S>>)`. It returns a
@@ -64,8 +64,9 @@ Status and dependencies are in the [roadmap](../roadmap.md).
       - more than one `defineChannels` call in a file;
       - a `defineChannels` call that is not exported (not assigned, or assigned to a non-exported
         `const`);
-      - a leftover `Channel(...)` statement, `signature:` key or `listeners:` key, with a message
-        explaining the migration.
+      - a leftover `signature:` or `listeners:` key (reported as an unsupported option).
+        Leftover `Channel(...)` statements are ignored. No migration messages: 1.0 is a breaking
+        release.
     - Remove `channelPattern`, the `is*Assignment` helpers and all regex-on-source-text matching in
       favor of AST checks.
   - **`src/validators.ts`:** unchanged semantics. Map verbs to the existing kind/direction specs
@@ -83,8 +84,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
       - each error case above.
     - A type-level test (tsc on a fixture) for the verified typing behavior above.
   - **README:** write every example in the generic form. Document the `as` form in one short
-    section as an alternative, noting what it loses. Add a short "Migrating from 0.2" note.
+    section as an alternative, noting what it loses.
 - **Delivered:** 2026-10-08. Notes:
+  - Version is 1.0.0, not 0.3.0, and there are no migration messages or README migration section
+    (decided after delivery: 1.0 is a breaking release).
   - Channel keys must still be PascalCase (3+ characters, not starting with `on`). The validators and
     the generated names (`send<Name>`, `on<Name>`) are unchanged in this task, so the `getUser`-style
     keys in the example above are rejected for now. README examples use PascalCase. T13 rewrites the

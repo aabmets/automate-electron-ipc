@@ -10,7 +10,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `ipc`, matching the renderer's `window.ipc`.
   - The `listeners` option is dropped (removed from the schema in T00). Multiple subscribers call
     `.on()` more than once.
-  - This is a breaking change to generated code; it ships in 0.3.0 together with T00.
+  - This is a breaking change to generated code; it ships in 1.0.0 together with T00.
 - **Names, by schema verb:**
 
   | Verb | Main (`ipc` from `main.ts`) | Renderer (global `ipc`, also `window.ipc`) |

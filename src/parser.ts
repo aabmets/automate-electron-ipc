@@ -112,7 +112,6 @@ export function collectCustomTypes(node: AstNode, src: Source, set: Set<string>)
 }
 
 const PACKAGE_NAME = "automate-electron-ipc";
-const MIGRATION_HINT = "See 'Migrating from 0.2' in the README.";
 
 interface VerbInfo {
    kind: t.ChannelKind;
@@ -264,16 +263,7 @@ function parseChannelConfig(
       if (key?.type !== "Identifier") {
          throw fail(`'${verb}' config keys must be plain identifiers.`);
       }
-      if (key.value === "signature") {
-         throw fail(
-            `the 'signature' option was removed. Pass the signature as a type argument, ` +
-               `such as ${verb}<(arg: string) => void>(). ${MIGRATION_HINT}`,
-         );
-      } else if (key.value === "listeners") {
-         throw fail(
-            `the 'listeners' option was removed. Subscribe more than once instead. ${MIGRATION_HINT}`,
-         );
-      } else if (!info.options.includes(key.value)) {
+      if (!info.options.includes(key.value)) {
          throw fail(`option '${key.value}' is not supported by '${verb}'.`);
       }
       const value = unwrapParentheses(prop.value);
@@ -357,23 +347,6 @@ function parseChannelMap(call: AstNode, ctx: ParseContext): Partial<t.ChannelSpe
       throw new SchemaError(ctx.file, "defineChannels accepts one object literal.");
    }
    return (map.properties as AstNode[]).map((prop) => parseChannelProperty(prop, ctx));
-}
-
-/**
- * Whether the statement is a leftover `Channel(...)...` expression from the 0.2 syntax.
- */
-function isLegacyChannelStatement(item: AstNode, imports: LibraryImports): boolean {
-   if (item.type !== "ExpressionStatement") {
-      return false;
-   }
-   let node = item.expression as AstNode;
-   while (node.type === "CallExpression" || node.type === "MemberExpression") {
-      node = (node.type === "CallExpression" ? node.callee : node.object) as AstNode;
-   }
-   return (
-      node.type === "Identifier" &&
-      (node.value === "Channel" || imports.named.get(node.value) === "Channel")
-   );
 }
 
 interface ExportedMap {
@@ -464,13 +437,6 @@ export function parseChannelMapModule(
    const imports = collectLibraryImports(module);
    const body = module.body as AstNode[];
 
-   if (body.some((item) => isLegacyChannelStatement(item, imports))) {
-      throw new SchemaError(
-         file,
-         "Channel(...) expressions were removed in 0.3.0. Declare channels in an exported " +
-            `defineChannels({...}) map instead. ${MIGRATION_HINT}`,
-      );
-   }
    const calls: AstNode[] = [];
    collectDefineChannelsCalls(module as unknown as AstNode, imports, calls);
    if (calls.length === 0) {
