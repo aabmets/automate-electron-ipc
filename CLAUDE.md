@@ -18,11 +18,14 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 
 ## Work tracker: one task per session
 
-The roadmap lives in [`TASKS.md`](./TASKS.md), imported below. Every session follows this protocol:
+The roadmap index lives in [`docs/tasks/README.md`](./docs/tasks/README.md), imported below. It
+holds each task's status and dependencies. Each task's goal, scope, tests and delivery note are in
+its own file, `docs/tasks/T<NN>-<slug>.md`. Every session follows this protocol:
 
-1. Read `TASKS.md`. Pick the **first** task marked `[ ]` whose `Depends on` tasks are all `[x]`
+1. Read the index. Pick the **first** task marked `[ ]` whose `depends on` tasks are all `[x]`
    (or `[-]` dropped).
    If the user names a specific task, do that one instead.
+   Then read that task's file. Read other task files only when the task refers to them.
 2. If the task is marked **Decision needed**, ask the user that question before writing code.
 3. Implement **only that task**. Do not start, or partially start, any other task.
    - Every behavior change needs unit tests. Every bug fix also needs a regression test that fails
@@ -33,18 +36,18 @@ The roadmap lives in [`TASKS.md`](./TASKS.md), imported below. Every session fol
      and free of any dependency on this library at runtime.
 4. Before committing, all of these must pass: `bun run check` and `bunx vitest run`.
    Once T11 lands, the Node e2e job must pass too.
-5. In the same commit, update `TASKS.md`:
-   - flip the task to `[x]`;
-   - fill in `Delivered:` with the date and a one-line note on anything notable (deviations,
-     follow-ups);
-   - if new follow-up work was discovered, append it as a new task at the end of the matching phase,
-     with the next free ID.
+5. In the same commit:
+   - flip the task to `[x]` in the index;
+   - fill in `Delivered:` in the task file with the date and a one-line note on anything notable
+     (deviations, follow-ups);
+   - if new follow-up work was discovered, add it as a new task with the next free ID: a new task
+     file, plus an index entry at the end of the matching phase.
 6. Make exactly **one commit** for the task, with message `T<NN>: <short summary>` followed by a body.
    Push it to the session's designated branch.
 7. **Stop.** Report what was delivered and which task is next. Do not continue to the next task.
    The user clears the session between tasks.
 
-If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so on
-in `TASKS.md`. Deliver only the first part, and say so.
+If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so
+on, each with its own task file and index entry. Deliver only the first part, and say so.
 
-@TASKS.md
+@docs/tasks/README.md
