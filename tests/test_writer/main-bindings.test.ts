@@ -37,7 +37,7 @@ describe("MainBindingsWriter", () => {
          
          export const ipcMain = {
             onVitestChannel: (callback: (event: IpcMainEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => 
-               electronIpcMain.handle('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+               electronIpcMain.handle('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -54,9 +54,9 @@ describe("MainBindingsWriter", () => {
 
          export const ipcMain = {
             onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+               electronIpcMain.on('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
             onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('VitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
+               electronIpcMain.on('vitestChannel', (event: any, ...args: any[]) => (callback as any)(event, ...args)),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -73,7 +73,7 @@ describe("MainBindingsWriter", () => {
          
          export const ipcMain = {
             sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number) => 
-               browserWindow.webContents.send('VitestChannel', arg1, arg2),
+               browserWindow.webContents.send('vitestChannel', arg1, arg2),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());

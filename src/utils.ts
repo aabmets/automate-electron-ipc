@@ -110,6 +110,16 @@ export function dedent(text: string): string {
 }
 
 /**
+ * Uppercases the first character of a string, such as `getUser` to `GetUser`.
+ *
+ * @param text - The string to capitalize.
+ * @returns The string with its first character in uppercase.
+ */
+export function capitalize(text: string): string {
+   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
  * Finds and returns duplicates from an array.
  *
  * @param array - Collection of objects in an array.
@@ -130,5 +140,6 @@ export default {
    concatRegex,
    isPathInside,
    dedent,
+   capitalize,
    findDuplicates,
 };

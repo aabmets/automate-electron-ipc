@@ -38,7 +38,7 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            sendVitestChannel: (...args: any[]) => ipcRenderer.invoke('VitestChannel', ...args),
+            sendVitestChannel: (...args: any[]) => ipcRenderer.invoke('vitestChannel', ...args),
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -53,7 +53,7 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            sendVitestChannel: (...args: any[]) => ipcRenderer.send('VitestChannel', ...args),
+            sendVitestChannel: (...args: any[]) => ipcRenderer.send('vitestChannel', ...args),
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -68,8 +68,8 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            onCustomListener1: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
-            onCustomListener2: (callback: Function) => ipcRenderer.on('VitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            onCustomListener1: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            onCustomListener2: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());

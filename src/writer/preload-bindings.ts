@@ -68,13 +68,13 @@ export class PreloadBindingsWriter extends BaseWriter {
    private buildRendererToMainCallable(spec: t.ChannelSpec): string {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
       const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
-      return `send${spec.name}: (...args: any[]) => ${ipcRenderer}`;
+      return `send${utils.capitalize(spec.name)}: (...args: any[]) => ${ipcRenderer}`;
    }
 
    private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
       const callback = "(_event: any, ...args: any[]) => callback(...args)";
       const ipcRenderer = `ipcRenderer.on('${spec.name}', ${callback})`;
-      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
       callableNames.forEach((name) => {
          callablesArray.push(`${name}: (callback: Function) => ${ipcRenderer}`);
       });

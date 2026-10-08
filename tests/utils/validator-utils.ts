@@ -25,7 +25,7 @@ export class ChannelSpecGenerator {
       listeners: string[] | null = null,
    ): t.ChannelSpec {
       const spec = {
-         name: `VitestChannel_${this.index}`,
+         name: `vitestChannel_${this.index}`,
          kind,
          direction,
          signature: {

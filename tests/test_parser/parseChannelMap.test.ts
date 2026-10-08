@@ -48,33 +48,33 @@ describe("parseChannelMapModule", () => {
 
       for (const [verb, kind, direction] of verbs) {
          describe(verb, () => {
-            const expected = { name: "Chan", kind, direction };
+            const expected = { name: "chan", kind, direction };
 
             it("parses the generic form", () => {
-               const spec = parseOne(`Chan: ${verb}<(a: string) => void>()`);
+               const spec = parseOne(`chan: ${verb}<(a: string) => void>()`);
                expect(spec).toMatchObject(expected);
                expect(spec.signature?.definition).toBe("(a: string) => void");
             });
 
             it("parses the generic form with an empty config", () => {
-               const spec = parseOne(`Chan: ${verb}<(a: string) => void>({})`);
+               const spec = parseOne(`chan: ${verb}<(a: string) => void>({})`);
                expect(spec).toMatchObject(expected);
             });
 
             it("parses the as form", () => {
-               const spec = parseOne(`Chan: ${verb}() as (a: string) => void`);
+               const spec = parseOne(`chan: ${verb}() as (a: string) => void`);
                expect(spec).toMatchObject(expected);
                expect(spec.signature?.definition).toBe("(a: string) => void");
             });
 
             it("parses the as form with an empty config", () => {
-               const spec = parseOne(`Chan: ${verb}({}) as (a: string) => void`);
+               const spec = parseOne(`chan: ${verb}({}) as (a: string) => void`);
                expect(spec).toMatchObject(expected);
             });
 
             it("gives both forms the same spec", () => {
-               const generic = parseOne(`Chan: ${verb}<(a: Foo, b?: number) => void>()`);
-               const alternative = parseOne(`Chan: ${verb}() as (a: Foo, b?: number) => void`);
+               const generic = parseOne(`chan: ${verb}<(a: Foo, b?: number) => void>()`);
+               const alternative = parseOne(`chan: ${verb}() as (a: Foo, b?: number) => void`);
                expect(alternative).toStrictEqual(generic);
             });
          });
@@ -83,7 +83,7 @@ describe("parseChannelMapModule", () => {
 
    describe("signatures", () => {
       it("parses params, return type and custom types", () => {
-         const spec = parseOne("Chan: invoke<(a: string, b: Foo<Bar>[]) => Baz>()");
+         const spec = parseOne("chan: invoke<(a: string, b: Foo<Bar>[]) => Baz>()");
          expect(spec.signature).toStrictEqual({
             definition: "(a: string, b: Foo<Bar>[]) => Baz",
             params: [
@@ -97,7 +97,7 @@ describe("parseChannelMapModule", () => {
       });
 
       it("detects an async return type", () => {
-         const spec = parseOne("Chan: invoke<(id: number) => Promise<User>>()");
+         const spec = parseOne("chan: invoke<(id: number) => Promise<User>>()");
          expect(spec.signature).toMatchObject({
             returnType: "Promise<User>",
             customTypes: ["User"],
@@ -106,12 +106,12 @@ describe("parseChannelMapModule", () => {
       });
 
       it("parses a signature without params", () => {
-         const spec = parseOne("Chan: invoke<() => number>()");
+         const spec = parseOne("chan: invoke<() => number>()");
          expect(spec.signature).toMatchObject({ params: [], returnType: "number", async: false });
       });
 
       it("parses optional and rest params", () => {
-         const spec = parseOne("Chan: send<(a: string, b?: number, ...rest: Foo[]) => void>()");
+         const spec = parseOne("chan: send<(a: string, b?: number, ...rest: Foo[]) => void>()");
          expect(spec.signature?.params).toStrictEqual([
             { name: "a", type: "string", rest: false, optional: false },
             { name: "b", type: "number", rest: false, optional: true },
@@ -120,7 +120,7 @@ describe("parseChannelMapModule", () => {
       });
 
       it("parses destructured params", () => {
-         const spec = parseOne("Chan: send<({ abc }: Foo, [x, y]: Bar) => void>()");
+         const spec = parseOne("chan: send<({ abc }: Foo, [x, y]: Bar) => void>()");
          expect(spec.signature?.params).toStrictEqual([
             { name: "{ abc }", type: "Foo", rest: false, optional: false },
             { name: "[x, y]", type: "Bar", rest: false, optional: false },
@@ -128,7 +128,7 @@ describe("parseChannelMapModule", () => {
       });
 
       it("parses the same signature from the as form", () => {
-         const spec = parseOne("Chan: invoke() as (a?: string, ...rest: Foo[]) => Promise<Bar>");
+         const spec = parseOne("chan: invoke() as (a?: string, ...rest: Foo[]) => Promise<Bar>");
          expect(spec.signature).toMatchObject({
             params: [
                { name: "a", type: "string", rest: false, optional: true },
@@ -142,11 +142,11 @@ describe("parseChannelMapModule", () => {
 
       it("unwraps parentheses around the as expression and its signature", () => {
          for (const entry of [
-            "Chan: (invoke() as (a: string) => void)",
-            "Chan: (invoke()) as (a: string) => void",
-            "Chan: invoke() as ((a: string) => void)",
-            "Chan: (invoke<(a: string) => void>())",
-            "Chan: invoke<((a: string) => void)>()",
+            "chan: (invoke() as (a: string) => void)",
+            "chan: (invoke()) as (a: string) => void",
+            "chan: invoke() as ((a: string) => void)",
+            "chan: (invoke<(a: string) => void>())",
+            "chan: invoke<((a: string) => void)>()",
          ]) {
             const spec = parseOne(entry);
             expect(spec.signature?.definition).toBe("(a: string) => void");
@@ -156,27 +156,27 @@ describe("parseChannelMapModule", () => {
 
    describe("config", () => {
       it("reads the trigger of emit in both forms", () => {
-         const generic = parseOne('Chan: emit<(n: number) => void>({ trigger: "focus" })');
-         const alternative = parseOne('Chan: emit({ trigger: "focus" }) as (n: number) => void');
+         const generic = parseOne('chan: emit<(n: number) => void>({ trigger: "focus" })');
+         const alternative = parseOne('chan: emit({ trigger: "focus" }) as (n: number) => void');
          expect(generic.trigger).toBe("focus");
          expect(alternative.trigger).toBe("focus");
       });
 
       it("accepts a trigger with quotes of either kind", () => {
-         expect(parseOne("Chan: emit<() => void>({ trigger: 'ready-to-show' })").trigger).toBe(
+         expect(parseOne("chan: emit<() => void>({ trigger: 'ready-to-show' })").trigger).toBe(
             "ready-to-show",
          );
       });
 
       it("does not set a trigger when none is given", () => {
-         expect(parseOne("Chan: emit<() => void>()")).not.toHaveProperty("trigger");
+         expect(parseOne("chan: emit<() => void>()")).not.toHaveProperty("trigger");
       });
 
       it("rejects a trigger that is not a string literal", () => {
          const msg = parseError(
-            "export default defineChannels({ Chan: emit<() => void>({ trigger: x }) });",
+            "export default defineChannels({ chan: emit<() => void>({ trigger: x }) });",
          );
-         expect(msg).toContain("channel 'Chan'");
+         expect(msg).toContain("channel 'chan'");
          expect(msg).toContain("must be a string literal");
       });
    });
@@ -186,7 +186,7 @@ describe("parseChannelMapModule", () => {
          const imports =
             'import { defineChannels as dc, invoke as call, emit as push } from "automate-electron-ipc";';
          const { channelSpecs } = parseMap(
-            `export default dc({ A: call<() => void>(), B: push() as () => void });`,
+            `export default dc({ a: call<() => void>(), b: push() as () => void });`,
             imports,
          );
          expect(channelSpecs.map((s) => s.kind)).toStrictEqual(["Unicast", "Broadcast"]);
@@ -199,16 +199,16 @@ describe("parseChannelMapModule", () => {
       it("resolves namespace imports", () => {
          const imports = 'import * as ipc from "automate-electron-ipc";';
          const { channelSpecs } = parseMap(
-            `export default ipc.defineChannels({ Chan: ipc.port<() => void>() });`,
+            `export default ipc.defineChannels({ chan: ipc.port<() => void>() });`,
             imports,
          );
-         expect(channelSpecs[0]).toMatchObject({ name: "Chan", kind: "Port" });
+         expect(channelSpecs[0]).toMatchObject({ name: "chan", kind: "Port" });
       });
 
       it("does not treat same-named functions from other modules as verbs", () => {
          const imports = 'import { defineChannels, invoke } from "other-lib";';
          const { channelSpecs, channelMapExport } = parseMap(
-            "export default defineChannels({ Chan: invoke<() => void>() });",
+            "export default defineChannels({ chan: invoke<() => void>() });",
             imports,
          );
          expect(channelSpecs).toStrictEqual([]);
@@ -216,14 +216,14 @@ describe("parseChannelMapModule", () => {
       });
 
       it("reports a verb that is not imported from the library as unknown", () => {
-         const msg = parseError("export default defineChannels({ Chan: other<() => void>() });");
+         const msg = parseError("export default defineChannels({ chan: other<() => void>() });");
          expect(msg).toContain("unknown verb 'other'");
       });
 
       it("reports a local alias of the wrong verb as unknown", () => {
          const imports = 'import { defineChannels, invoke as call } from "automate-electron-ipc";';
          const msg = parseError(
-            "export default defineChannels({ Chan: invoke<() => void>() });",
+            "export default defineChannels({ chan: invoke<() => void>() });",
             imports,
          );
          expect(msg).toContain("unknown verb 'invoke'");
@@ -232,13 +232,13 @@ describe("parseChannelMapModule", () => {
 
    describe("exports", () => {
       it("records a default export", () => {
-         const out = parseMap("export default defineChannels({ Chan: invoke<() => void>() });");
+         const out = parseMap("export default defineChannels({ chan: invoke<() => void>() });");
          expect(out.channelMapExport).toStrictEqual({ kind: "default" });
       });
 
       it("records a named export", () => {
          const out = parseMap(
-            "export const channels = defineChannels({ Chan: send<() => void>() });",
+            "export const channels = defineChannels({ chan: send<() => void>() });",
          );
          expect(out.channelMapExport).toStrictEqual({ kind: "named", name: "channels" });
          expect(out.channelSpecs).toHaveLength(1);
@@ -246,7 +246,7 @@ describe("parseChannelMapModule", () => {
 
       it("accepts a const that is exported later by default", () => {
          const out = parseMap(
-            "const channels = defineChannels({ Chan: send<() => void>() });\nexport default channels;",
+            "const channels = defineChannels({ chan: send<() => void>() });\nexport default channels;",
          );
          expect(out.channelMapExport).toStrictEqual({ kind: "default" });
          expect(out.channelSpecs).toHaveLength(1);
@@ -254,11 +254,11 @@ describe("parseChannelMapModule", () => {
 
       it("accepts a const that is exported later by name or alias", () => {
          const named = parseMap(
-            "const channels = defineChannels({ Chan: send<() => void>() });\nexport { channels };",
+            "const channels = defineChannels({ chan: send<() => void>() });\nexport { channels };",
          );
          expect(named.channelMapExport).toStrictEqual({ kind: "named", name: "channels" });
          const aliased = parseMap(
-            "const channels = defineChannels({ Chan: send<() => void>() });\nexport { channels as ipc };",
+            "const channels = defineChannels({ chan: send<() => void>() });\nexport { channels as ipc };",
          );
          expect(aliased.channelMapExport).toStrictEqual({ kind: "named", name: "ipc" });
       });
@@ -275,13 +275,13 @@ describe("parseChannelMapModule", () => {
       });
 
       it("rejects a defineChannels call that is not assigned", () => {
-         const msg = parseError("defineChannels({ Chan: invoke<() => void>() });");
+         const msg = parseError("defineChannels({ chan: invoke<() => void>() });");
          expect(msg).toContain("schema.ts");
          expect(msg).toContain("must be exported");
       });
 
       it("rejects a non-exported const", () => {
-         const msg = parseError("const channels = defineChannels({ Chan: invoke<() => void>() });");
+         const msg = parseError("const channels = defineChannels({ chan: invoke<() => void>() });");
          expect(msg).toContain("must be exported");
       });
 
@@ -305,47 +305,47 @@ describe("parseChannelMapModule", () => {
       const wrap = (entry: string) => `export default defineChannels({ ${entry} });`;
 
       it("rejects a missing signature", () => {
-         for (const entry of ["Chan: invoke()", "Chan: invoke({})"]) {
+         for (const entry of ["chan: invoke()", "chan: invoke({})"]) {
             const msg = parseError(wrap(entry));
             expect(msg).toContain("schema.ts");
-            expect(msg).toContain("channel 'Chan'");
+            expect(msg).toContain("channel 'chan'");
             expect(msg).toContain("no signature");
          }
       });
 
       it("rejects a signature given in both forms", () => {
-         const msg = parseError(wrap("Chan: invoke<() => void>() as () => void"));
-         expect(msg).toContain("channel 'Chan'");
+         const msg = parseError(wrap("chan: invoke<() => void>() as () => void"));
+         expect(msg).toContain("channel 'chan'");
          expect(msg).toContain("given twice");
       });
 
       it("rejects more than one type argument", () => {
-         const msg = parseError(wrap("Chan: invoke<() => void, string>()"));
+         const msg = parseError(wrap("chan: invoke<() => void, string>()"));
          expect(msg).toContain("exactly one type argument");
       });
 
       it("rejects a signature that is not a function type", () => {
          for (const entry of [
-            "Chan: invoke() as string",
-            "Chan: invoke<string>()",
-            "Chan: invoke() as Foo",
+            "chan: invoke() as string",
+            "chan: invoke<string>()",
+            "chan: invoke() as Foo",
          ]) {
             const msg = parseError(wrap(entry));
-            expect(msg).toContain("channel 'Chan'");
+            expect(msg).toContain("channel 'chan'");
             expect(msg).toContain("must be a function type");
          }
       });
 
       it("rejects an unknown verb", () => {
-         const msg = parseError(wrap("Chan: stream<() => void>()"));
-         expect(msg).toContain("channel 'Chan'");
+         const msg = parseError(wrap("chan: stream<() => void>()"));
+         expect(msg).toContain("channel 'chan'");
          expect(msg).toContain("unknown verb 'stream'");
       });
 
       it("rejects values that are not verb calls", () => {
-         for (const entry of ["Chan: 123", "Chan: invoke", "Chan: someValue"]) {
+         for (const entry of ["chan: 123", "chan: invoke", "chan: someValue"]) {
             const msg = parseError(wrap(entry));
-            expect(msg).toContain("channel 'Chan'");
+            expect(msg).toContain("channel 'chan'");
             expect(msg).toContain("expected a call to one of");
          }
       });
@@ -359,10 +359,10 @@ describe("parseChannelMapModule", () => {
       it("rejects computed, string, numeric and shorthand keys", () => {
          for (const entry of [
             "[name]: invoke<() => void>()",
-            '"Chan": invoke<() => void>()',
+            '"chan": invoke<() => void>()',
             "123: invoke<() => void>()",
-            "Chan",
-            "Chan() {}",
+            "chan",
+            "chan() {}",
          ]) {
             const msg = parseError(wrap(entry));
             expect(msg).toContain("plain identifier keys");
@@ -370,36 +370,36 @@ describe("parseChannelMapModule", () => {
       });
 
       it("rejects a nested object", () => {
-         const msg = parseError(wrap("Group: { Chan: invoke<() => void>() }"));
-         expect(msg).toContain("channel 'Group'");
+         const msg = parseError(wrap("group: { chan: invoke<() => void>() }"));
+         expect(msg).toContain("channel 'group'");
          expect(msg).toContain("nested objects");
       });
 
       it("rejects options that the verb does not support", () => {
          for (const verb of ["invoke", "send", "port"]) {
-            const msg = parseError(wrap(`Chan: ${verb}<() => void>({ trigger: "focus" })`));
-            expect(msg).toContain("channel 'Chan'");
+            const msg = parseError(wrap(`chan: ${verb}<() => void>({ trigger: "focus" })`));
+            expect(msg).toContain("channel 'chan'");
             expect(msg).toContain(`option 'trigger' is not supported by '${verb}'`);
          }
-         const msg = parseError(wrap("Chan: emit<() => void>({ other: 1 })"));
+         const msg = parseError(wrap("chan: emit<() => void>({ other: 1 })"));
          expect(msg).toContain("option 'other' is not supported by 'emit'");
       });
 
       it("rejects a config that is not a single object literal", () => {
          for (const entry of [
-            "Chan: invoke<() => void>(opts)",
-            "Chan: invoke<() => void>({}, {})",
-            "Chan: invoke<() => void>(...opts)",
+            "chan: invoke<() => void>(opts)",
+            "chan: invoke<() => void>({}, {})",
+            "chan: invoke<() => void>(...opts)",
          ]) {
             expect(parseError(wrap(entry))).toContain("one optional config object literal");
          }
       });
 
       it("rejects a config key that is not an identifier", () => {
-         expect(parseError(wrap('Chan: emit<() => void>({ "trigger": "focus" })'))).toContain(
+         expect(parseError(wrap('chan: emit<() => void>({ "trigger": "focus" })'))).toContain(
             "config keys must be plain identifiers",
          );
-         expect(parseError(wrap("Chan: emit<() => void>({ ...opts })"))).toContain(
+         expect(parseError(wrap("chan: emit<() => void>({ ...opts })"))).toContain(
             "config keys must be plain identifiers",
          );
       });
@@ -414,16 +414,16 @@ describe("parseChannelMapModule", () => {
       });
 
       it("rejects the removed signature and listeners options as unsupported", () => {
-         expect(parseError(wrap("Chan: invoke({ signature: type as () => void })"))).toContain(
+         expect(parseError(wrap("chan: invoke({ signature: type as () => void })"))).toContain(
             "option 'signature' is not supported by 'invoke'",
          );
-         expect(parseError(wrap('Chan: send<() => void>({ listeners: ["onChan"] })'))).toContain(
+         expect(parseError(wrap('chan: send<() => void>({ listeners: ["onChan"] })'))).toContain(
             "option 'listeners' is not supported by 'send'",
          );
       });
 
       it("ignores leftover Channel expressions", () => {
-         const out = parseMap('Channel("UserChannel").RendererToMain.Broadcast({});');
+         const out = parseMap('Channel("userChannel").RendererToMain.Broadcast({});');
          expect(out).toStrictEqual({ channelSpecs: [], channelMapExport: null });
       });
    });

@@ -56,13 +56,29 @@ describe("validateChannelSpecs", () => {
             err: "Channel name must not begin with 'on'",
          },
          {
-            spec: { name: "vitestChannel", kind: "Broadcast" },
-            err: "Channel name must start with a capital letter",
+            spec: { name: "VitestChannel", kind: "Broadcast" },
+            err: "Channel name must start with a lowercase letter",
          },
       ];
       for (const { spec, err } of collection) {
          expect(() => vld.validateChannelSpecs([spec as t.ChannelSpec])).toThrowError(err);
       }
+   });
+
+   it("should accept camelCase channel names, including ones that start with 'on'", () => {
+      for (const name of ["getUser", "echo_name", "online", "once"]) {
+         const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
+         expect(() => vld.validateChannelSpecs([{ ...spec, name }])).not.toThrowError();
+      }
+   });
+
+   it("should detect a custom listener that clashes with the capitalized channel listener", () => {
+      const csg = new ChannelSpecGenerator();
+      const specs = [
+         { ...csg.generate("RendererToMain", "Broadcast"), name: "getUser" },
+         csg.generate("RendererToMain", "Broadcast", "void", ["onGetUser"]),
+      ];
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError("'onGetUser'");
    });
 
    it("should throw Struct error when channel kind does not match direction", () => {

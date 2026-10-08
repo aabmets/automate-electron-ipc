@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
 export class RendererTypesWriter extends BaseWriter {
@@ -79,10 +80,10 @@ export class RendererTypesWriter extends BaseWriter {
          const ipcParams = this.getOriginalParams(spec, false);
          ipcSignature = `(${ipcParams}) => Promise<${spec.signature.returnType}>`;
       }
-      callablesArray.push(`send${spec.name}: ${ipcSignature};`);
+      callablesArray.push(`send${utils.capitalize(spec.name)}: ${ipcSignature};`);
    }
    private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
-      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
       callableNames.forEach((name) => {
          callablesArray.push(`${name}: (callback: ${spec.signature.definition}) => void;`);
       });

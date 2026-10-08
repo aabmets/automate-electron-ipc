@@ -22,14 +22,14 @@ describe("public types", () => {
             interface User { id: number }
 
             export default defineChannels({
-               GetUser: invoke<(id: number) => Promise<User>>(),
-               EchoUserName: send<(userName: string) => void>({}),
-               Progress: emit<(n: number) => void>({ trigger: "focus" }),
-               Chat: port<(msg: string) => void>(),
+               getUser: invoke<(id: number) => Promise<User>>(),
+               echoUserName: send<(userName: string) => void>({}),
+               progress: emit<(n: number) => void>({ trigger: "focus" }),
+               chat: port<(msg: string) => void>(),
 
-               GetUserAlt: invoke({}) as (id: number) => Promise<User>,
-               ProgressAlt: emit({ trigger: "focus" }) as (n: number) => void,
-               ChatAlt: (port() as (msg: string) => void),
+               getUserAlt: invoke({}) as (id: number) => Promise<User>,
+               progressAlt: emit({ trigger: "focus" }) as (n: number) => void,
+               chatAlt: (port() as (msg: string) => void),
             });
          `,
       });
@@ -43,10 +43,10 @@ describe("public types", () => {
             import type { ChannelDef } from "automate-electron-ipc";
 
             export const channels = defineChannels({
-               GetUser: invoke<(id: number) => Promise<string>>(),
+               getUser: invoke<(id: number) => Promise<string>>(),
             });
-            const ok: ChannelDef<(id: number) => Promise<string>> = channels.GetUser;
-            const bad: ChannelDef<(id: string) => Promise<string>> = channels.GetUser;
+            const ok: ChannelDef<(id: number) => Promise<string>> = channels.getUser;
+            const bad: ChannelDef<(id: string) => Promise<string>> = channels.getUser;
             export { ok, bad };
          `,
       });
@@ -59,7 +59,7 @@ describe("public types", () => {
          "schema.ts": `
             ${IMPORT}
             export default defineChannels({
-               NotFn: invoke<string>(),
+               notFn: invoke<string>(),
             });
          `,
       });
@@ -71,7 +71,7 @@ describe("public types", () => {
          "schema.ts": `
             ${IMPORT}
             export default defineChannels({
-               Both: invoke<(a: string) => void>() as (a: number) => void,
+               both: invoke<(a: string) => void>() as (a: number) => void,
             });
          `,
       });
@@ -83,11 +83,11 @@ describe("public types", () => {
          "schema.ts": `
             ${IMPORT}
             export default defineChannels({
-               A: invoke<() => void>({ trigger: "focus" }),
-               B: send<() => void>({ trigger: "focus" }),
-               C: port<() => void>({ trigger: "focus" }),
-               D: emit<() => void>({ other: true }),
-               E: send({ trigger: "focus" }) as () => void,
+               a: invoke<() => void>({ trigger: "focus" }),
+               b: send<() => void>({ trigger: "focus" }),
+               c: port<() => void>({ trigger: "focus" }),
+               d: emit<() => void>({ other: true }),
+               e: send({ trigger: "focus" }) as () => void,
             });
          `,
       });
@@ -101,7 +101,7 @@ describe("public types", () => {
          "schema.ts": `
             ${IMPORT}
             export default defineChannels({
-               A: emit<() => void>({ trigger: "not-an-event" }),
+               a: emit<() => void>({ trigger: "not-an-event" }),
             });
          `,
       });

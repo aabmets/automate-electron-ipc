@@ -79,7 +79,7 @@ describe("parseSpecs", () => {
             import { defineChannels, invoke } from "automate-electron-ipc";
 
             export default defineChannels({
-               UserChannel: invoke<(arg1: string, arg2: number) => boolean>(),
+               userChannel: invoke<(arg1: string, arg2: number) => boolean>(),
             });
          `,
          relativePath: "",
@@ -88,7 +88,7 @@ describe("parseSpecs", () => {
       expect(channelMapExport).toStrictEqual({ kind: "default" });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
-         name: "UserChannel",
+         name: "userChannel",
          kind: "Unicast",
          direction: "RendererToMain",
          signature: {
@@ -109,7 +109,7 @@ describe("parseSpecs", () => {
             import { defineChannels, send } from "automate-electron-ipc";
 
             export const channels = defineChannels({
-               UserChannel: send() as (arg1: string, arg2: number) => void,
+               userChannel: send() as (arg1: string, arg2: number) => void,
             });
          `,
          relativePath: "",
@@ -118,7 +118,7 @@ describe("parseSpecs", () => {
       expect(channelMapExport).toStrictEqual({ kind: "named", name: "channels" });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
-         name: "UserChannel",
+         name: "userChannel",
          kind: "Broadcast",
          direction: "RendererToMain",
          signature: {
@@ -139,7 +139,7 @@ describe("parseSpecs", () => {
             import { defineChannels, invoke } from "automate-electron-ipc";
 
             export default defineChannels({
-               UserChannel: invoke<(arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[]) => Promise<CustomType3>>(),
+               userChannel: invoke<(arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[]) => Promise<CustomType3>>(),
             });
          `,
          relativePath: "",
@@ -147,7 +147,7 @@ describe("parseSpecs", () => {
       });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
-         name: "UserChannel",
+         name: "userChannel",
          kind: "Unicast",
          direction: "RendererToMain",
          signature: {
@@ -168,8 +168,8 @@ describe("parseSpecs", () => {
             import { defineChannels, emit, port } from "automate-electron-ipc";
 
             export default defineChannels({
-               Progress: emit<(n: number) => Promise<void>>({ trigger: "focus" }),
-               Chat: port<(msg: CustomType) => void>(),
+               progress: emit<(n: number) => Promise<void>>({ trigger: "focus" }),
+               chat: port<(msg: CustomType) => void>(),
             });
          `,
          relativePath: "",
@@ -177,14 +177,14 @@ describe("parseSpecs", () => {
       });
       expect(channelSpecArray).toHaveLength(2);
       expect(channelSpecArray[0]).toMatchObject({
-         name: "Progress",
+         name: "progress",
          kind: "Broadcast",
          direction: "MainToRenderer",
          trigger: "focus",
          signature: { returnType: "Promise<void>", async: true },
       });
       expect(channelSpecArray[1]).toMatchObject({
-         name: "Chat",
+         name: "chat",
          kind: "Port",
          direction: "RendererToRenderer",
          signature: { customTypes: ["CustomType"] },
@@ -208,12 +208,12 @@ describe("parseSpecs", () => {
          parser.parseSpecs({
             contents: `
                import { defineChannels, invoke } from "automate-electron-ipc";
-               export default defineChannels({ UserChannel: invoke() });
+               export default defineChannels({ userChannel: invoke() });
             `,
             relativePath: "schema/user.ts",
             fullPath: "/app/src/ipc/schema/user.ts",
          }),
-      ).toThrow("Schema file '/app/src/ipc/schema/user.ts': channel 'UserChannel': no signature");
+      ).toThrow("Schema file '/app/src/ipc/schema/user.ts': channel 'userChannel': no signature");
    });
 
    it("should validate parsed channels", () => {
@@ -226,9 +226,9 @@ describe("parseSpecs", () => {
             relativePath: "",
             fullPath: "",
          });
-      expect(() => parse("lowerCase: invoke<() => void>()")).toThrow(/capital letter/);
-      expect(() => parse("SendChan: send<() => string>()")).toThrow(/not allowed/);
-      expect(() => parse("Same: invoke<() => void>(), Same: send<() => void>()")).toThrow(
+      expect(() => parse("UpperCase: invoke<() => void>()")).toThrow(/lowercase letter/);
+      expect(() => parse("sendChan: send<() => string>()")).toThrow(/not allowed/);
+      expect(() => parse("same: invoke<() => void>(), same: send<() => void>()")).toThrow(
          /not unique/,
       );
    });

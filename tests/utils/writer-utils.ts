@@ -84,7 +84,7 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
    });
    const sigDefinition = `(${sigParams.join(", ")}) => ${vcs.sigReturnType}`;
    const channelSpec: Partial<t.ChannelSpec> = {
-      name: "VitestChannel",
+      name: "vitestChannel",
       kind: vcs.channelKind as t.ChannelKind,
       direction: vcs.channelDirection as t.ChannelDirection,
       signature: {

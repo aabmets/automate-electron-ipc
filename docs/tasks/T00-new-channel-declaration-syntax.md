@@ -88,10 +88,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Delivered:** 2026-10-08. Notes:
   - Version is 1.0.0, not 0.3.0, and there are no migration messages or README migration section
     (decided after delivery: 1.0 is a breaking release).
-  - Channel keys must still be PascalCase (3+ characters, not starting with `on`). The validators and
-    the generated names (`send<Name>`, `on<Name>`) are unchanged in this task, so the `getUser`-style
-    keys in the example above are rejected for now. README examples use PascalCase. T13 rewrites the
-    naming and should relax this rule.
+  - Channel names are camelCase (decided after delivery): the validator now requires a lowercase
+    first letter and still needs 3+ characters; only names that look like a listener (`onFoo`) are
+    rejected. The generated 0.2-style members capitalize the key (`getUser` gives `sendGetUser` and
+    `onGetUser`), so the writers' output is otherwise unchanged. T13 replaces these names.
   - `timeoutMs` in the example is T28's option and is not accepted yet (`invoke` has no options).
   - Parsing also accepts `import * as ns` namespace imports, and a map that is exported after
     assignment (`const m = defineChannels(...); export default m;` or `export { m }`).

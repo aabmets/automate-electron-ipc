@@ -55,13 +55,13 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
       return true;
    });
    return object({
-      name: refine(string(), "pascalcase", (value) => {
+      name: refine(string(), "camelcase", (value) => {
          if (value.length < 3) {
             return "Channel name must be at least 3 characters in length";
-         } else if (value.toLowerCase().startsWith("on")) {
+         } else if (/^on[A-Z]/.test(value)) {
             return "Channel name must not begin with 'on'";
-         } else if (/^(?![A-Z])/.test(value)) {
-            return "Channel name must start with a capital letter";
+         } else if (/^(?![a-z])/.test(value)) {
+            return "Channel name must start with a lowercase letter";
          } else {
             return true;
          }
@@ -139,7 +139,7 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
          } else {
             seenChannelNames.add((spec as t.ChannelSpec).name);
          }
-         listenerNames.push(`on${spec.name}`);
+         listenerNames.push(`on${utils.capitalize(spec.name)}`);
       }
 
       if (spec?.kind) {

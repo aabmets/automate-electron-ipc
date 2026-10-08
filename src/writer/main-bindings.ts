@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
 export class MainBindingsWriter extends BaseWriter {
@@ -79,7 +80,7 @@ export class MainBindingsWriter extends BaseWriter {
       const callback = "(event: any, ...args: any[]) => (callback as any)(event, ...args)";
       const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${callback})`;
       const modSigDef = this.injectEventTypehint(spec.signature.definition);
-      const callableNames = spec.listeners ? spec.listeners : [`on${spec.name}`];
+      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
       callableNames.forEach((name) => {
          callablesArray.push(`${name}: (callback: ${modSigDef}) => ${ipcMain}`);
       });
@@ -92,7 +93,7 @@ export class MainBindingsWriter extends BaseWriter {
       }
       const ipcParams = this.getOriginalParams(spec, false);
       const ipcSignature = `(browserWindow: BrowserWindow, ${ipcParams})`;
-      return `send${spec.name}: ${ipcSignature} => \n${this.indents[1]}${sender}`;
+      return `send${utils.capitalize(spec.name)}: ${ipcSignature} => \n${this.indents[1]}${sender}`;
    }
    private buildRendererToRendererPort(spec: t.ChannelSpec): string {
       const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";

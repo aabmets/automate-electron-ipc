@@ -7,10 +7,10 @@
  * import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
  *
  * export default defineChannels({
- *    GetUser: invoke<(id: number) => Promise<User>>(),
- *    EchoUserName: send<(userName: string) => void>(),
- *    Progress: emit<(n: number) => void>({ trigger: "focus" }),
- *    Chat: port<(msg: string) => void>(),
+ *    getUser: invoke<(id: number) => Promise<User>>(),
+ *    echoUserName: send<(userName: string) => void>(),
+ *    progress: emit<(n: number) => void>({ trigger: "focus" }),
+ *    chat: port<(msg: string) => void>(),
  * });
  */
 
@@ -108,7 +108,7 @@ export interface EmitConfig<_S extends ChannelSignature = ChannelSignature> {
  *
  * @example
  * export default defineChannels({
- *    GetUser: invoke<(id: number) => Promise<User>>(),
+ *    getUser: invoke<(id: number) => Promise<User>>(),
  * });
  */
 export function defineChannels<T extends Record<string, unknown>>(channels: T): T;
@@ -119,9 +119,9 @@ export function defineChannels<T extends Record<string, unknown>>(channels: T): 
  * The signature may return any value, or a promise of it.
  *
  * @example
- * GetUser: invoke<(id: number) => Promise<User>>()
+ * getUser: invoke<(id: number) => Promise<User>>()
  * // Alternative form, which does not check the config against the signature:
- * GetUser: invoke() as (id: number) => Promise<User>
+ * getUser: invoke() as (id: number) => Promise<User>
  */
 export function invoke<S extends ChannelSignature = never>(
    config?: InvokeConfig<NoInfer<S>>,
@@ -132,7 +132,7 @@ export function invoke<S extends ChannelSignature = never>(
  * No response is returned. The signature must return `void` or `Promise<void>`.
  *
  * @example
- * EchoUserName: send<(userName: string) => void>()
+ * echoUserName: send<(userName: string) => void>()
  */
 export function send<S extends ChannelSignature = never>(
    config?: SendConfig<NoInfer<S>>,
@@ -145,7 +145,7 @@ export function send<S extends ChannelSignature = never>(
  * when that BrowserWindow event fires.
  *
  * @example
- * Progress: emit<(n: number) => void>({ trigger: "focus" })
+ * progress: emit<(n: number) => void>({ trigger: "focus" })
  */
 export function emit<S extends ChannelSignature = never>(
    config?: EmitConfig<NoInfer<S>>,
@@ -156,7 +156,7 @@ export function emit<S extends ChannelSignature = never>(
  * The signature must return `void` or `Promise<void>`.
  *
  * @example
- * Chat: port<(msg: string) => void>()
+ * chat: port<(msg: string) => void>()
  */
 export function port<S extends ChannelSignature = never>(
    config?: PortConfig<NoInfer<S>>,

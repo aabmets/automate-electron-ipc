@@ -130,3 +130,12 @@ describe("dedent", () => {
       );
    });
 });
+
+describe("capitalize", () => {
+   it("should uppercase only the first character", () => {
+      expect(utils.capitalize("getUser")).toBe("GetUser");
+      expect(utils.capitalize("a")).toBe("A");
+      expect(utils.capitalize("Already")).toBe("Already");
+      expect(utils.capitalize("")).toBe("");
+   });
+});

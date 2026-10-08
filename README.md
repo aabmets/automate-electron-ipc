@@ -97,7 +97,8 @@ concern themselves with IPC internals._
 Rules of the schema file:
  - Export the map with `export default defineChannels({...})` or `export const channels = defineChannels({...})`.
  - Use only one `defineChannels` call per file. In a `schema` directory, each file may have its own map.
- - Channel names are plain identifier keys. Spreads, computed keys and nested objects are not supported.
+ - Channel names are plain identifier keys in camelCase, at least 3 characters long. Spreads, computed keys and nested objects are not supported.
+ - Generated member names capitalize the channel name, so `echoUserName` becomes `sendEchoUserName` and `onEchoUserName`.
  - Aliased imports work, such as `import { invoke as call } from "automate-electron-ipc"`.
 
 
@@ -108,7 +109,7 @@ Schema file content at path `src/autoipc/schema.ts`:
 import { defineChannels, send } from "automate-electron-ipc";
 
 export default defineChannels({
-   EchoUserName: send<(userName: string) => void>(),
+   echoUserName: send<(userName: string) => void>(),
 });
 ```
 
@@ -143,17 +144,17 @@ import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc"
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
-   GetUser: invoke<(id: number) => Promise<User>>(),
+   getUser: invoke<(id: number) => Promise<User>>(),
 
    // Message from a renderer process to the main process without return data
-   EchoUserName: send<(userName: string) => void>(),
+   echoUserName: send<(userName: string) => void>(),
 
    // Message from the main process to a renderer process without return data,
    // optionally sent automatically when a BrowserWindow event fires
-   Progress: emit<(n: number) => void>({ trigger: "focus" }),
+   progress: emit<(n: number) => void>({ trigger: "focus" }),
 
    // Sender and listener on same port for each of two renderer processes
-   Chat: port<(msg: string) => void>(),
+   chat: port<(msg: string) => void>(),
 });
 ```
 
@@ -174,8 +175,8 @@ and the two cannot be combined on one channel:
 
 ```typescript
 export default defineChannels({
-   GetUser: invoke() as (id: number) => Promise<User>,
-   Progress: emit({ trigger: "focus" }) as (n: number) => void,
+   getUser: invoke() as (id: number) => Promise<User>,
+   progress: emit({ trigger: "focus" }) as (n: number) => void,
 });
 ```
 
