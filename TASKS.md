@@ -17,8 +17,8 @@ The session protocol is in `CLAUDE.md`.
 ### [ ] T00: New channel declaration syntax: a `defineChannels` map with verb helpers
 - **Goal:** replace `Channel("X").<Direction>.<Kind>({ signature: type as Sig, ...rest })` with an
   exported channel map. The key is the channel name, a verb helper picks the pattern, and the
-  signature is a type argument on the verb. That generic form is the main form. `verb(config?) as Sig` is also
-  accepted as an alternative:
+  signature is a type argument on the verb. That generic form is the main form.
+  `verb(config?) as Sig` is also accepted as an alternative:
   ```ts
   import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
 
