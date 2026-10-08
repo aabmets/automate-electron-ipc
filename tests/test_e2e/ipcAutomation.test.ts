@@ -107,3 +107,21 @@ describe("ipcAutomation, value imports used as types", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, namespace imports", () => {
+   // Regression for T49: the second type from a namespace generated a bogus named import.
+   it("imports the namespace once, however many of its types are used", async () => {
+      project = await runFixture("namespace-imports");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*"\.\/types\/models";$/gm);
+         expect(imports).toStrictEqual(['import type * as Models from "./types/models";']);
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("namespace-imports");
+      expect(await project.typecheck()).toBe("");
+   });
+});

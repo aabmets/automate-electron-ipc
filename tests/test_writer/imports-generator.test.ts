@@ -132,4 +132,38 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(pfs, "Foo")).toBeNull();
       });
    });
+
+   describe("namespace imports", () => {
+      const nsSpec: t.ImportSpec = { fromPath: "./t", customTypes: [], namespace: "NS" };
+      const pfsOf = (extra: Partial<t.SpecsCollection> = {}): t.ParsedFileSpecs => ({
+         fullPath: "/project/src/autoipc/schema/index.ts",
+         relativePath: "",
+         specs: { channelSpecArray: [], importSpecArray: [nsSpec], typeSpecArray: [], ...extra },
+      });
+      const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+
+      it("imports the namespace once for several types from it", () => {
+         const ig = generator();
+         expect(ig.getDeclaration(pfsOf(), "NS.A")).toStrictEqual(
+            'import type * as NS from "./schema/t";',
+         );
+         expect(ig.getDeclaration(pfsOf(), "NS.B")).toBeNull();
+      });
+
+      it("does not import anything for a namespace the schema does not import", () => {
+         expect(generator().getDeclaration(pfsOf(), "Other.A")).toBeNull();
+      });
+
+      it("does not resolve a namespaced type through a local type or a named import", () => {
+         const specs = {
+            importSpecArray: [nsSpec, { fromPath: "./u", customTypes: ["B"], namespace: null }],
+            typeSpecArray: [
+               { name: "B", kind: "type" as t.TypeKind, generics: null, isExported: true },
+            ],
+         };
+         const ig = generator();
+         ig.getDeclaration(pfsOf(specs), "NS.A");
+         expect(ig.getDeclaration(pfsOf(specs), "NS.B")).toBeNull();
+      });
+   });
 });

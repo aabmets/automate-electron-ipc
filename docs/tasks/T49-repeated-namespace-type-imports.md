@@ -11,4 +11,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   named-import handling.
 - **Tests:** an `ImportsGenerator` unit test with two types from one namespace, plus an e2e
   fixture where the output type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. A namespaced reference now resolves only through the matching
+  namespace import, which is emitted once. Deviation: it also no longer falls back to a local type
+  or named import that shares the name after the dot. The bogus import can still type-check when
+  the namespace happens to export that name, so the e2e test asserts the generated import text.
