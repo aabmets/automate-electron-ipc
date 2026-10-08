@@ -1,0 +1,9 @@
+{
+   "name": "fixture-non-ascii",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

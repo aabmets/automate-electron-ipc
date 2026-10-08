@@ -21,3 +21,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** parser unit tests with non-ASCII text in a comment before the map, in a string literal
   type, in a type name, in a comment inside the type parameters, and a file with a BOM. An e2e
   fixture with non-ASCII text that type-checks and asserts the generated signatures.
+- **Delivered:** 2026-10-08. `parseModule` now slices the UTF-8 bytes of the source (after dropping a leading BOM, which swc does not count) and decodes them, and `findParamsStart` measures the skipped type parameters as decoded text. New `parseModule` unit tests and a `non-ascii` e2e fixture (BOM, comments, literals, type names) that type-checks.

@@ -639,3 +639,39 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, non-ASCII schema source", () => {
+   const lineOf = (text: string, member: string): string => {
+      return text.split("\n").find((line) => line.includes(`${member}:`)) ?? "";
+   };
+
+   // Regression for T66: swc spans are UTF-8 byte offsets, so non-ASCII text (and a BOM) in front
+   // of a signature shifted every later slice and garbled the generated signatures.
+   it("generates intact signatures from a schema with a BOM and non-ASCII text", async () => {
+      project = await runFixture("non-ascii");
+      const { generated } = project;
+      expect(await fsp.readFile(path.join(project.dir, "ipc/schema.ts"), "utf8")).toMatch(
+         /^\uFEFF/,
+      );
+
+      expect(lineOf(generated["main.ts"], "onGetÜser")).toContain(
+         '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
+      );
+      expect(generated["main.ts"]).toContain(
+         `electronIpcMain.handle('generic', <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => callback(event, arg))`,
+      );
+      expect(lineOf(generated["window.d.ts"], "sendGetÜser")).toContain(
+         '(id: "ñ", size: Größe) => Promise<Üser>',
+      );
+      expect(lineOf(generated["window.d.ts"], "sendGreet")).toContain(
+         '(message: "héllo 😀") => void',
+      );
+      expect(generated["window.d.ts"]).toContain('import type { Größe } from "./schema";');
+      expect(generated["window.d.ts"]).toContain('import type { Üser } from "./schema";');
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("non-ascii");
+      expect(await project.typecheck()).toBe("");
+   });
+});

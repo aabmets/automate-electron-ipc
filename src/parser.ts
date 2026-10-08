@@ -47,12 +47,16 @@ export type TypeDefinitionNode =
    | ExportDeclaration
    | ExportDefaultDeclaration;
 
+const BOM = 0xfeff;
+
 export function parseModule(code: string): { module: Module; src: Source } {
    const module = parseSync(code, { syntax: "typescript", target: "esnext" });
-   // swc spans are 1-based offsets into the source of each parse call.
+   // swc spans are 1-based offsets into the source of each parse call, counted in UTF-8 bytes
+   // and not in UTF-16 code units, and swc does not count a leading BOM.
    const base = 1;
+   const bytes = Buffer.from(code.charCodeAt(0) === BOM ? code.slice(1) : code, "utf8");
    const src: Source = {
-      text: (node) => code.slice(node.span.start - base, node.span.end - base),
+      text: (node) => bytes.toString("utf8", node.span.start - base, node.span.end - base),
    };
    return { module, src };
 }
@@ -400,7 +404,11 @@ function isPromiseType(node: AstNode): boolean {
  */
 function findParamsStart(fn: TsFunctionType, src: Source): number {
    const code = src.text(fn);
-   let index = fn.typeParams ? fn.typeParams.span.end - fn.span.start : 0;
+   // The offset is measured in the decoded text, not as a difference of byte offsets.
+   const skipped = fn.typeParams
+      ? src.text({ span: { ...fn.span, end: fn.typeParams.span.end } })
+      : "";
+   let index = skipped.length;
    while (index < code.length) {
       if (code.startsWith("/*", index)) {
          index = code.indexOf("*/", index + 2) + 2;
