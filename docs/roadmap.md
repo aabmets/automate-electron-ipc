@@ -37,7 +37,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 
 ## Phase 2: Core API, listener lifecycle and security
 
-- [ ] [T13: Naming of generated API members](./tasks/T13-naming-of-generated-api-members.md) · depends on: T05 · **Decision needed**
+- [ ] [T13: Naming of generated API members](./tasks/T13-naming-of-generated-api-members.md) · depends on: T05
 - [ ] [T14: Renderer listener disposers and `once`](./tasks/T14-renderer-listener-disposers-and-once.md) · depends on: T13
 - [ ] [T15: Main-process listener and handler disposers and `handleOnce`](./tasks/T15-main-process-listener-and-handler.md) · depends on: T13
 - [ ] [T16: Sender validation (Electron security checklist #17)](./tasks/T16-sender-validation.md) · depends on: T15

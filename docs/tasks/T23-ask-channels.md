@@ -7,10 +7,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   `close`/`before-quit`, or fetching editor state before save.
 - **Scope:**
   - New verb `ask<Sig>(config?)`; the `as` form from T00 also works.
-  - The main side gets `invoke<X>(target, ...args, { timeoutMs? }): Promise<R>`, built on a
+  - The main side gets `ipc.<name>.invoke(target, ...args, { timeoutMs? }): Promise<R>`, built on a
     correlation ID over `send` plus a reply channel (or a per-request `MessageChannelMain`).
   - Reject on timeout, on target destroyed, and when the renderer has no handler registered.
-  - The renderer side gets `handle<X>(cb)` with a disposer, single responder.
+  - The renderer side gets `ipc.<name>.handle(cb)` with a disposer, single responder.
   - Errors use T18's envelope.
 - **Tests:** runtime tests with both sides mocked: success, timeout, destroyed target, handler error,
   concurrent requests resolved out of order.

@@ -14,7 +14,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
      /** Doc comments are kept for later use in window.d.ts. */
      getUser: invoke<(id: number) => Promise<User>>({ timeoutMs: 5 }),
      echoUserName: send<(userName: string) => void>(),
-     progress: emit<(n: number) => void>({ listeners: ["onBar"], trigger: "focus" }),
+     progress: emit<(n: number) => void>({ trigger: "focus" }),
      chat: port<(msg: string) => void>(),
 
      // Alternative `as` form, same result:
@@ -36,7 +36,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     - Each verb is `verb<S extends Fn = never>(config?: VerbConfig<NoInfer<S>>)`. It returns a
       branded `ChannelDef<S>` when `S` is given and `unknown` when it is not, so the `as` form
       type-checks.
-    - Per-verb config interfaces: `listeners` only on `send`/`emit`, `trigger` only on `emit`.
+    - Per-verb config interfaces: `trigger` only on `emit`. There is no `listeners` option (dropped,
+      see T13).
       Options that depend on the signature (`validate` in T17) take `Parameters<S>` when `S` is
       given and are unconstrained when it is not.
     - `defineChannels<T extends Record<string, unknown>>(channels: T): T`.
@@ -53,7 +54,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     - Each property is `name: verb<Sig>(config?)` or `name: verb(config?) as Sig` (unwrap
       parentheses). Either `TsFunctionType` provides the signature: params, return type, custom
       types, async.
-    - Config keys (`listeners`, `trigger`) are read from the optional object-literal argument.
+    - Config keys (`trigger`) are read from the optional object-literal argument.
     - Errors, each naming the file and the channel:
       - no signature, or both a type argument and `as`;
       - a signature that is not a function type (TypeScript accepts `invoke() as string`);
@@ -63,8 +64,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
       - more than one `defineChannels` call in a file;
       - a `defineChannels` call that is not exported (not assigned, or assigned to a non-exported
         `const`);
-      - a leftover `Channel(...)` statement or `signature:` key, with a message explaining the
-        migration.
+      - a leftover `Channel(...)` statement, `signature:` key or `listeners:` key, with a message
+        explaining the migration.
     - Remove `channelPattern`, the `is*Assignment` helpers and all regex-on-source-text matching in
       favor of AST checks.
   - **`src/validators.ts`:** unchanged semantics. Map verbs to the existing kind/direction specs

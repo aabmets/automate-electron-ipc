@@ -8,7 +8,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   call forever.
 - **Scope:**
   - `send<X>` always sends immediately.
-  - Triggers become a separate generated `bind<X>(win, provider: () => Args | Promise<Args>)`. It
+  - Triggers become a separate generated `bind<X>(win, provider: () => Args | Promise<Args>)` (T13
+    moves it to `ipc.<name>.bind`). It
     registers once, calls the provider on each trigger, and returns a disposer.
   - Validate trigger names against the documented BrowserWindow events list at generation time.
 - **Tests:**

@@ -8,7 +8,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:**
   - Optional generated `mock.ts` exporting `createIpcMock(overrides?)`, a fully typed implementation
     whose functions are configurable stubs.
-  - It can emit events to listeners: `mock.emit.onProgress(...)`.
+  - It can emit events to listeners: `mock.emit.progress(...)`.
   - Add `installIpcMock()` that assigns it to `window`.
 - **Tests:** runtime tests of the generated mock, plus an e2e type-check.
 - **Delivered:**
