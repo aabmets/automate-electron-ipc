@@ -32,8 +32,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - The empty-file output exports `ipc` (`export const ipc = {};`).
   - Make the renderer API usable as a bare global, `ipc.<name>.invoke(...)`, as well as through
     `window.ipc`. `exposeInMainWorld` already puts it on the renderer's global object; only the
-    typing is missing. `window.d.ts` declares it with `declare global { var ipc: IpcApi }` instead of
-    an `interface Window` member, which types `ipc`, `window.ipc` and `globalThis.ipc` alike.
+    typing is missing. `window.d.ts` declares it with `declare global { var ipc: IpcApi }` instead
+    of an `interface Window` member, which types `ipc`, `window.ipc` and `globalThis.ipc` alike.
   - Remove all remaining `listeners` handling from the writers and validators.
   - Reject channel names that would clash with built-in object members (`constructor`,
     `__proto__`, `toString`, ...), naming the file and the channel.
