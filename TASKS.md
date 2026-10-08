@@ -14,52 +14,80 @@ The session protocol is in `CLAUDE.md`.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
-### [ ] T00: New channel declaration syntax, with the signature as a type assertion
-- **Goal:** replace `Kind({ signature: type as Sig, ...rest })` with the signature asserted on the
-  call itself. The config object becomes optional and holds only options:
+### [ ] T00: New channel declaration syntax: a `defineChannels` map with verb helpers
+- **Goal:** replace `Channel("X").<Direction>.<Kind>({ signature: type as Sig, ...rest })` with an
+  exported map. The key is the channel name, a verb helper picks the pattern, and the signature is
+  a type argument on the verb. That generic form is the main form. `verb(config?) as Sig` is also
+  accepted as an alternative:
   ```ts
-  Channel("GetUser").RendererToMain.Unicast({ timeoutMs: 5 }) as (id: number) => Promise<User>;
-  Channel("EchoUserName").RendererToMain.Broadcast() as (userName: string) => void;
-  Channel("Progress").MainToRenderer.Broadcast({ listeners: ["onBar"], trigger: "focus" }) as (n: number) => void;
-  Channel("Chat").RendererToRenderer.Port() as (msg: string) => void;
+  import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
+
+  export default defineChannels({
+     /** Doc comments are kept for later use in window.d.ts. */
+     getUser: invoke<(id: number) => Promise<User>>({ timeoutMs: 5 }),
+     echoUserName: send<(userName: string) => void>(),
+     progress: emit<(n: number) => void>({ listeners: ["onBar"], trigger: "focus" }),
+     chat: port<(msg: string) => void>(),
+
+     // Alternative `as` form, same result:
+     getUserAlt: invoke({ timeoutMs: 5 }) as (id: number) => Promise<User>,
+  });
   ```
-  This is breaking; bump to 0.3.0. The old syntax is removed, not kept alongside.
+  - Verbs replace the direction × kind grid: `invoke` = RendererToMain Unicast, `send` =
+    RendererToMain Broadcast, `emit` = MainToRenderer Broadcast, `port` = RendererToRenderer Port.
+    Later tasks add `ask` (T23), `stream` (T27) and the utility/service-worker verbs (T29, T36).
+  - The generic form is the main form: TypeScript checks the config against the signature, and it
+    is the only form that can carry error types (T18). The `as` form reads options-first, but its
+    config is not checked against the signature.
+  - This is breaking; bump to 0.3.0. The old syntax is removed, not kept alongside.
 - **Scope:**
   - **`types/index.d.ts`:**
-    - Every kind function takes an optional config and returns `unknown`. Verified: with a `void`
-      return type, `tsc` rejects the `as` with TS2352.
-    - Remove `signature` from all config interfaces.
-    - Remove the `type` export. T18 decides whether a type-valued helper is needed again.
+    - Each verb is `verb<S extends Fn = never>(config?: VerbConfig<NoInfer<S>>)`. It returns a
+      branded `ChannelDef<S>` when `S` is given and `unknown` when it is not, so the `as` form
+      type-checks.
+    - Per-verb config interfaces: `listeners` only on `send`/`emit`, `trigger` only on `emit`.
+      Options that depend on the signature (`validate` in T17) take `Parameters<S>` when `S` is
+      given and are unconstrained when it is not.
+    - `defineChannels<T extends Record<string, unknown>>(channels: T): T`.
+    - Remove `Channel`, the `signature` config key and the `type` export.
+    - Verified with tsc 7.0.2: both forms compile; a schema that does not match the generic
+      signature is rejected; using both forms on one channel is rejected with TS2352.
     - Update the JSDoc examples.
-  - **`src/index.ts`:** the runtime stubs match the new types.
+  - **`src/index.ts`:** runtime stubs for `defineChannels` and the verbs, matching the new types.
   - **`src/parser.ts`:**
-    - A channel is a top-level `ExpressionStatement` whose expression is a `TsAsExpression`
-      (unwrap parentheses) around the `Channel(...).<Direction>.<Kind>(...)` call chain.
-    - The asserted `TsFunctionType` provides the signature: params, return type, custom types,
-      async.
-    - Config keys (`listeners`, `trigger`) are read from the call's optional object argument.
-    - Errors, each naming the channel:
-      - a `Channel(...)` statement without `as`;
-      - an asserted type that is not a function type. TypeScript accepts `Unicast() as string`, so
-        `ipcgen` must catch it;
-      - a leftover `signature:` key, with a message explaining the migration.
-    - Remove `isSignatureAssignment` and the regex-on-source-text matching in favor of AST checks.
-  - **`src/validators.ts`:** unchanged semantics. Signature-related messages refer to the asserted
-    type.
+    - A schema file declares its channels in `export default defineChannels({...})`. Resolve the
+      verb and `defineChannels` names through the file's imports from `automate-electron-ipc`, so
+      aliased imports work.
+    - Each property is `name: verb<Sig>(config?)` or `name: verb(config?) as Sig` (unwrap
+      parentheses). Either `TsFunctionType` provides the signature: params, return type, custom
+      types, async.
+    - Config keys (`listeners`, `trigger`) are read from the optional object-literal argument.
+    - Errors, each naming the file and the channel:
+      - no signature, or both a type argument and `as`;
+      - a signature that is not a function type (TypeScript accepts `invoke() as string`);
+      - an unknown verb, a spread, a computed or non-identifier key, or a nested object (reserved
+        for T20/T33 groups);
+      - an option that the verb does not support;
+      - more than one `defineChannels` call in a file;
+      - a leftover `Channel(...)` statement or `signature:` key, with a message explaining the
+        migration.
+    - Remove `channelPattern`, the `is*Assignment` helpers and all regex-on-source-text matching in
+      favor of AST checks.
+  - **`src/validators.ts`:** unchanged semantics. Map verbs to the existing kind/direction specs
+    internally, so the writers do not change in this task.
   - **Tests:**
     - Rewrite all parser tests and test utils (`tests/test_parser/*`, `tests/utils/*`) to the new
       syntax.
     - Add cases for:
-      - no config;
-      - config plus assertion;
-      - a parenthesized expression;
+      - each verb, in both forms, with and without config;
+      - a parenthesized `as` expression;
+      - aliased imports;
       - async return;
       - rest, optional and destructured params;
       - each error case above.
-  - **README:** update every example, and add a short "Migrating from 0.2" note.
-  - **Lint check:** confirm that `Biome` and `typescript-eslint`'s `no-unused-expressions` accept
-    `call() as T;` as a statement. The inner expression is a call, which should be allowed. Document
-    the result in the README.
+    - A type-level test (tsc on a fixture) for the verified typing behavior above.
+  - **README:** write every example in the generic form. Document the `as` form in one short
+    section as an alternative, noting what it loses. Add a short "Migrating from 0.2" note.
 - **Depends on:** none
 - **Delivered:**
 
@@ -303,8 +331,9 @@ The session protocol is in `CLAUDE.md`.
     arktype, ...).
   - The generated `main.ts` value-imports it and validates before invoking the handler. On failure:
     Unicast rejects with `IpcValidationError` (with issues), Broadcast drops and reports to the hook.
-  - Optional: derive the TS signature from the schema's inferred input type when the `as` assertion
-    is omitted.
+  - In the generic form, `validate` is typed against `Parameters<Sig>` (set up in T00).
+  - Optional: derive the TS signature from the schema's inferred input type when no signature is
+    given.
   - Do not add a runtime dependency; use the spec only.
 - **Tests:**
   - Parser tests for value-import detection.
@@ -320,11 +349,8 @@ The session protocol is in `CLAUDE.md`.
   - The main wrapper catches errors and returns `{ ok: false, error: { name, message, code?, data? } }`
     (or `{ ok: true, value }`). The preload unwraps and rethrows an `IpcError` with those fields.
   - Let the schema declare error types so `window.d.ts` documents them.
-    - **Decision needed:** T00 removed the `type` export. The options are:
-      - re-add `type` just for this key: `errors: type as NotFoundError | AuthError`;
-      - encode errors in the asserted type, e.g. `as Throws<(id: number) => Promise<User>, NotFoundError>`
-        using a helper type exported by the library;
-      - a generic on the kind: `Unicast<NotFoundError>({...}) as ...`.
+    - Generic form: a second type argument, `invoke<Sig, NotFoundError | AuthError>()`.
+    - The `as` form has no slot for errors. Document that errors need the generic form.
   - Opt-out config for raw Electron behavior.
 - **Tests:** runtime round-trip tests (thrown Error, thrown custom error with code/data, thrown
   non-Error value), plus an e2e type-check.
@@ -383,11 +409,11 @@ The session protocol is in `CLAUDE.md`.
 - **Depends on:** T21
 - **Delivered:**
 
-### [ ] T23: `MainToRenderer.Unicast` (main asks a renderer and awaits the answer)
+### [ ] T23: `ask` channels (main asks a renderer and awaits the answer)
 - **Problem:** Electron has no invoke from main to a renderer. A real need is "unsaved changes?" on
   `close`/`before-quit`, or fetching editor state before save.
 - **Scope:**
-  - New schema kind.
+  - New verb `ask<Sig>(config?)`; the `as` form from T00 also works.
   - The main side gets `invoke<X>(target, ...args, { timeoutMs? }): Promise<R>`, built on a
     correlation ID over `send` plus a reply channel (or a per-request `MessageChannelMain`).
   - Reject on timeout, on target destroyed, and when the renderer has no handler registered.
@@ -444,7 +470,7 @@ The session protocol is in `CLAUDE.md`.
 - **Problem:** downloads, exports, ffmpeg jobs and LLM token streams need progress and cancellation.
   There is no streaming kind.
 - **Scope:**
-  - New kind `RendererToMain.Stream() as (opts: O) => AsyncIterable<Chunk>`.
+  - New verb `stream<(opts: O) => AsyncIterable<Chunk>>()`; the `as` form from T00 also works.
   - The main handler is an `async function*`.
   - Transport is a per-call `MessageChannelMain`: chunks, then `end`/`error`, then `close`.
   - The renderer gets `stream<X>(...args, { signal?: AbortSignal }): AsyncIterable<Chunk>`. Abort
@@ -641,7 +667,8 @@ The session protocol is in `CLAUDE.md`.
 - **Delivered:**
 
 ### [-] T45: Generic DSL syntax
-- **Dropped:** superseded by T00, which makes `Kind(config?) as Signature` the only syntax.
+- **Dropped:** superseded by T00, whose main form is `verb<Sig>(config?)`, with
+  `verb(config?) as Sig` as an alternative.
 
 ### [ ] T46: Mock generation for renderer tests
 - **Problem:** renderer unit tests, Storybook and running the UI in a plain browser need a fake
