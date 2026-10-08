@@ -346,17 +346,31 @@ function getParamInfo(param: Param["pat"], src: Source): t.CallableParam {
    return { name, type, rest: false, optional: !!node.optional };
 }
 
+/**
+ * Tells whether a type node is the global `Promise<...>`, and nothing that merely starts with
+ * "Promise", such as a user type `PromiseResult`, `PromiseLike<T>` or `Foo.Promise<T>`.
+ */
+function isPromiseType(node: AstNode): boolean {
+   const type = unwrapTypeParentheses(node);
+   return (
+      type.type === "TsTypeReference" &&
+      type.typeName.type === "Identifier" &&
+      type.typeName.value === "Promise"
+   );
+}
+
 export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSignature {
    const set = new Set<string>();
    collectCustomTypes(fn as AstNode, src, set);
 
-   const returnType = src.text(fn.typeAnnotation.typeAnnotation) || "void";
+   const returnNode = fn.typeAnnotation.typeAnnotation;
+   const returnType = src.text(returnNode) || "void";
    return {
       definition: src.text(fn),
       params: fn.params.map((param) => getParamInfo(param, src)),
       customTypes: Array.from(set),
       returnType,
-      async: returnType.startsWith("Promise"),
+      async: isPromiseType(returnNode as AstNode),
    };
 }
 

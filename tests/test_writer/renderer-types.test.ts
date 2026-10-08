@@ -95,6 +95,12 @@ describe("PreloadBindingsWriter", () => {
          },
          { name: "syncIt", kind: "Unicast", direction: "RendererToMain", returnType: "number" },
          {
+            name: "lookalikeIt",
+            kind: "Unicast",
+            direction: "RendererToMain",
+            returnType: "PromiseResult",
+         },
+         {
             name: "asyncIt",
             kind: "Unicast",
             direction: "RendererToMain",
@@ -108,7 +114,9 @@ describe("PreloadBindingsWriter", () => {
 
       expect(output).toContain("sendAsyncIt: (id: number) => Promise<string>;");
       expect(output).toContain("sendSendIt: (text: string) => void;");
-      expect(output).toContain("sendSyncIt: () => Promise<number>;");
+      expect(output).toContain("sendSyncIt: () => Promise<Awaited<number>>;");
+      // Regression for T56: a user type whose name starts with "Promise" is not a promise.
+      expect(output).toContain("sendLookalikeIt: () => Promise<Awaited<PromiseResult>>;");
    });
 
    it("should write only ports into Window declaration when there are no callables", async () => {

@@ -137,3 +137,24 @@ describe("ipcAutomation, triggers", () => {
       });
    });
 });
+
+describe("ipcAutomation, async return types", () => {
+   // Regression for T56: a user type `PromiseResult` and `PromiseLike<T>` counted as async,
+   // so their invoke senders were not typed as promises.
+   it("types every invoke sender as a promise of the awaited result", async () => {
+      project = await runFixture("async-types");
+      const windowTypes = project.generated["window.d.ts"];
+
+      expect(windowTypes).toContain("sendPlain: () => Promise<Awaited<number>>;");
+      expect(windowTypes).toContain("sendUserType: () => Promise<Awaited<PromiseResult>>;");
+      expect(windowTypes).toContain(
+         "sendPromiseLike: () => Promise<Awaited<PromiseLike<string>>>;",
+      );
+      expect(windowTypes).toContain("sendReal: (id: number) => Promise<string>;");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("async-types");
+      expect(await project.typecheck()).toBe("");
+   });
+});

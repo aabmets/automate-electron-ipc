@@ -10,4 +10,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** decide async from the AST: the return type is a `TsTypeReference` named exactly
   `Promise`. Renderer senders of `invoke` channels always return `Promise<Awaited<R>>`.
 - **Tests:** parser and writer unit tests, plus an e2e type-check.
-- **Delivered:**
+- **Delivered:** 2026-10-08. A return type that is exactly the global `Promise<...>` (parentheses allowed) keeps the written definition in `window.d.ts`; every other invoke return type becomes `Promise<Awaited<R>>`. Follow-up: rebuilding a non-async invoke signature drops its type parameters, so generic signatures need T57's handling.

@@ -85,8 +85,9 @@ export class RendererTypesWriter extends BaseWriter {
          // `ipcRenderer.send` is fire-and-forget: it returns `undefined`, not a promise.
          ipcSignature = `(${this.getOriginalParams(spec, false)}) => void`;
       } else if (!spec.signature.async) {
+         // `ipcRenderer.invoke` always returns a promise, which resolves the thenables inside.
          const ipcParams = this.getOriginalParams(spec, false);
-         ipcSignature = `(${ipcParams}) => Promise<${spec.signature.returnType}>`;
+         ipcSignature = `(${ipcParams}) => Promise<Awaited<${spec.signature.returnType}>>`;
       }
       callablesArray.push(`send${utils.capitalize(spec.name)}: ${ipcSignature};`);
    }
