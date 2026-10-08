@@ -7,12 +7,61 @@ utilityProcess, security checklist, breaking changes up to v44).
 The session protocol is in `CLAUDE.md`.
 
 - One task = one commit = one session.
-- Status: `[ ]` todo, `[x]` delivered.
+- Status: `[ ]` todo, `[x]` delivered, `[-]` dropped (kept so task IDs stay stable).
 - `Bn` refers to the audit's confirmed bug list.
 
 ---
 
-## Phase 0: Test infrastructure
+## Phase 0: Declaration syntax and test infrastructure
+
+### [ ] T00: New channel declaration syntax, with the signature as a type assertion
+- **Goal:** replace `Kind({ signature: type as Sig, ...rest })` with the signature asserted on the
+  call itself. The config object becomes optional and holds only options:
+  ```ts
+  Channel("GetUser").RendererToMain.Unicast({ timeoutMs: 5 }) as (id: number) => Promise<User>;
+  Channel("EchoUserName").RendererToMain.Broadcast() as (userName: string) => void;
+  Channel("Progress").MainToRenderer.Broadcast({ listeners: ["onBar"], trigger: "focus" }) as (n: number) => void;
+  Channel("Chat").RendererToRenderer.Port() as (msg: string) => void;
+  ```
+  This is breaking; bump to 0.3.0. The old syntax is removed, not kept alongside.
+- **Scope:**
+  - **`types/index.d.ts`:**
+    - Every kind function takes an optional config and returns `unknown`. Verified: with a `void`
+      return type, `tsc` rejects the `as` with TS2352.
+    - Remove `signature` from all config interfaces.
+    - Remove the `type` export. T18 decides whether a type-valued helper is needed again.
+    - Update the JSDoc examples.
+  - **`src/index.ts`:** the runtime stubs match the new types.
+  - **`src/parser.ts`:**
+    - A channel is a top-level `ExpressionStatement` whose expression is a `TsAsExpression`
+      (unwrap parentheses) around the `Channel(...).<Direction>.<Kind>(...)` call chain.
+    - The asserted `TsFunctionType` provides the signature: params, return type, custom types,
+      async.
+    - Config keys (`listeners`, `trigger`) are read from the call's optional object argument.
+    - Errors, each naming the channel:
+      - a `Channel(...)` statement without `as`;
+      - an asserted type that is not a function type. TypeScript accepts `Unicast() as string`, so
+        `ipcgen` must catch it;
+      - a leftover `signature:` key, with a message explaining the migration.
+    - Remove `isSignatureAssignment` and the regex-on-source-text matching in favor of AST checks.
+  - **`src/validators.ts`:** unchanged semantics. Signature-related messages refer to the asserted
+    type.
+  - **Tests:**
+    - Rewrite all parser tests and test utils (`tests/test_parser/*`, `tests/utils/*`) to the new
+      syntax.
+    - Add cases for:
+      - no config;
+      - config plus assertion;
+      - a parenthesized expression;
+      - async return;
+      - rest, optional and destructured params;
+      - each error case above.
+  - **README:** update every example, and add a short "Migrating from 0.2" note.
+  - **Lint check:** confirm that `Biome` and `typescript-eslint`'s `no-unused-expressions` accept
+    `call() as T;` as a statement. The inner expression is a call, which should be allowed. Document
+    the result in the README.
+- **Depends on:** none
+- **Delivered:**
 
 ### [ ] T01: E2E harness, and fix schema-dir crash on Node (B1)
 - **Problem:** `src/automation.ts` calls `fsp.exists`, which exists only in Bun. Under Node the
@@ -32,7 +81,8 @@ The session protocol is in `CLAUDE.md`.
   - The e2e test for each fixture produces files that type-check.
   - Tests may be marked `it.fails`/`todo` for B2–B7 until those tasks land, with a comment
     referencing the task.
-- **Depends on:** none
+  - Fixtures use the T00 syntax.
+- **Depends on:** T00
 - **Delivered:**
 
 ---
@@ -253,8 +303,8 @@ The session protocol is in `CLAUDE.md`.
     arktype, ...).
   - The generated `main.ts` value-imports it and validates before invoking the handler. On failure:
     Unicast rejects with `IpcValidationError` (with issues), Broadcast drops and reports to the hook.
-  - Optional: derive the TS signature from the schema's inferred input type when `signature` is
-    omitted.
+  - Optional: derive the TS signature from the schema's inferred input type when the `as` assertion
+    is omitted.
   - Do not add a runtime dependency; use the spec only.
 - **Tests:**
   - Parser tests for value-import detection.
@@ -269,8 +319,12 @@ The session protocol is in `CLAUDE.md`.
 - **Scope:**
   - The main wrapper catches errors and returns `{ ok: false, error: { name, message, code?, data? } }`
     (or `{ ok: true, value }`). The preload unwraps and rethrows an `IpcError` with those fields.
-  - Add an optional schema key `errors: type as NotFoundError | AuthError` so `window.d.ts` documents
-    them.
+  - Let the schema declare error types so `window.d.ts` documents them.
+    - **Decision needed:** T00 removed the `type` export. The options are:
+      - re-add `type` just for this key: `errors: type as NotFoundError | AuthError`;
+      - encode errors in the asserted type, e.g. `as Throws<(id: number) => Promise<User>, NotFoundError>`
+        using a helper type exported by the library;
+      - a generic on the kind: `Unicast<NotFoundError>({...}) as ...`.
   - Opt-out config for raw Electron behavior.
 - **Tests:** runtime round-trip tests (thrown Error, thrown custom error with code/data, thrown
   non-Error value), plus an e2e type-check.
@@ -390,7 +444,7 @@ The session protocol is in `CLAUDE.md`.
 - **Problem:** downloads, exports, ffmpeg jobs and LLM token streams need progress and cancellation.
   There is no streaming kind.
 - **Scope:**
-  - New kind `RendererToMain.Stream({ signature: type as (opts: O) => AsyncIterable<Chunk> })`.
+  - New kind `RendererToMain.Stream() as (opts: O) => AsyncIterable<Chunk>`.
   - The main handler is an `async function*`.
   - Transport is a per-call `MessageChannelMain`: chunks, then `end`/`error`, then `close`.
   - The renderer gets `stream<X>(...args, { signal?: AbortSignal }): AsyncIterable<Chunk>`. Abort
@@ -586,16 +640,8 @@ The session protocol is in `CLAUDE.md`.
 - **Depends on:** T13
 - **Delivered:**
 
-### [ ] T45: Generic DSL syntax
-- **Problem:** `signature: type as (...) => ...` is awkward.
-- **Scope:**
-  - Also accept `Channel("X").RendererToMain.Unicast<(id: number) => User>()` and
-    `{ signature: ... } satisfies ...` forms.
-  - Update `types/index.d.ts` overloads.
-  - The old syntax keeps working.
-- **Tests:** parser tests for both forms producing identical specs.
-- **Depends on:** T42
-- **Delivered:**
+### [-] T45: Generic DSL syntax
+- **Dropped:** superseded by T00, which makes `Kind(config?) as Signature` the only syntax.
 
 ### [ ] T46: Mock generation for renderer tests
 - **Problem:** renderer unit tests, Storybook and running the UI in a plain browser need a fake

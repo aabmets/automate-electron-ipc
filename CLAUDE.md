@@ -20,7 +20,8 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 
 The roadmap lives in [`TASKS.md`](./TASKS.md), imported below. Every session follows this protocol:
 
-1. Read `TASKS.md`. Pick the **first** task marked `[ ]` whose `Depends on` tasks are all `[x]`.
+1. Read `TASKS.md`. Pick the **first** task marked `[ ]` whose `Depends on` tasks are all `[x]`
+   (or `[-]` dropped).
    If the user names a specific task, do that one instead.
 2. If the task is marked **Decision needed**, ask the user that question before writing code.
 3. Implement **only that task**. Do not start, or partially start, any other task.
