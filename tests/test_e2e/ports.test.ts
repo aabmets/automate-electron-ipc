@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const wire = (name: string) => `autoipc:${name}`;
 const closeWire = (name: string) => `autoipc:${name}:close`;
+const disconnectWire = (name: string) => `autoipc:${name}:disconnect`;
 
 let project: E2EProject | undefined;
 const channels: MessageChannel[] = [];
@@ -63,6 +64,11 @@ function destroy(win: FakeWindow) {
 const posted = (win: FakeWindow) => win.webContents.postMessage.mock.calls;
 
 async function loadMain() {
+   return (await loadMainWithElectron()).ipc;
+}
+
+/** Loads the generated main process, and returns the fake `electron` it was given as well. */
+async function loadMainWithElectron() {
    project = await runFixture("port-only");
    let created = 0;
    class FakeChannel {
@@ -71,7 +77,15 @@ async function loadMain() {
       port2 = { name: `port2 of ${this.id}` };
    }
    const electron = { ...createFakeElectron(), MessageChannelMain: FakeChannel };
-   return loadGenerated(project.generated["main.ts"], { electron }).ipc;
+   return { electron, ipc: loadGenerated(project.generated["main.ts"], { electron }).ipc };
+}
+
+/** The listener that the main process registered for the page which ends a connection. */
+function disconnectListener(electron: ReturnType<typeof createFakeElectron>) {
+   const call = electron.ipcMain.on.mock.calls.find(
+      ([channel]: [string]) => channel === disconnectWire("chat"),
+   );
+   return call?.[1] as (event: { sender: unknown }, key: unknown) => void;
 }
 
 describe("ipc.<name>.connect", () => {
@@ -82,8 +96,8 @@ describe("ipc.<name>.connect", () => {
 
       ipc.chat.connect(one, two);
 
-      expect(posted(one)).toStrictEqual([[wire("chat"), null, [{ name: "port1 of 1" }]]]);
-      expect(posted(two)).toStrictEqual([[wire("chat"), null, [{ name: "port2 of 1" }]]]);
+      expect(posted(one)).toStrictEqual([[wire("chat"), "1:a", [{ name: "port1 of 1" }]]]);
+      expect(posted(two)).toStrictEqual([[wire("chat"), "1:b", [{ name: "port2 of 1" }]]]);
    });
 
    // Regression for B9: the ports were posted only on `ready-to-show`, which a shown window
@@ -114,8 +128,8 @@ describe("ipc.<name>.connect", () => {
 
       late.webContents.loading = false;
       late.webContents.emit("did-finish-load");
-      expect(posted(one)).toStrictEqual([[wire("chat"), null, [{ name: "port1 of 1" }]]]);
-      expect(posted(late)).toStrictEqual([[wire("chat"), null, [{ name: "port2 of 1" }]]]);
+      expect(posted(one)).toStrictEqual([[wire("chat"), "1:a", [{ name: "port1 of 1" }]]]);
+      expect(posted(late)).toStrictEqual([[wire("chat"), "1:b", [{ name: "port2 of 1" }]]]);
    });
 
    it("treats a window without a page as not loaded", async () => {
@@ -185,8 +199,8 @@ describe("ipc.<name>.connect", () => {
 
       connection.close();
 
-      expect(one.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"));
-      expect(two.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"));
+      expect(one.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"), "1:a");
+      expect(two.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"), "1:b");
       expect(one.listenerCount("closed")).toBe(0);
       expect(one.webContents.listenerCount("did-finish-load")).toBe(0);
       expect(two.webContents.listenerCount("did-finish-load")).toBe(0);
@@ -234,7 +248,7 @@ describe("ipc.<name>.connect", () => {
 
       // The destroyed window cannot be reached, and has dropped its own listeners.
       expect(two.webContents.send).not.toHaveBeenCalled();
-      expect(one.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"));
+      expect(one.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"), "1:a");
       expect(one.webContents.listenerCount("did-finish-load")).toBe(0);
       expect(one.listenerCount("closed")).toBe(0);
 
@@ -269,7 +283,144 @@ describe("ipc.<name>.connect", () => {
       expect(win.webContents.listenerCount("did-finish-load")).toBe(1);
       expect(posted(win)).toHaveLength(2);
       connection.close();
-      expect(win.webContents.send).toHaveBeenCalledOnce();
+      // Both ends of the connection are in this window, and each is told.
+      expect(win.webContents.send.mock.calls).toStrictEqual([
+         [closeWire("chat"), "1:a"],
+         [closeWire("chat"), "1:b"],
+      ]);
+   });
+
+   describe("a hub with several peers", () => {
+      it("gives every connection its own keys, so that one page can tell its ports apart", async () => {
+         const ipc = await loadMain();
+         const hub = createWindow();
+         const peers = [createWindow(), createWindow(), createWindow()];
+
+         for (const peer of peers) {
+            ipc.chat.connect(hub, peer);
+         }
+
+         expect(posted(hub).map(([, key]) => key)).toStrictEqual(["1:a", "2:a", "3:a"]);
+         expect(peers.map((peer) => posted(peer).map(([, key]) => key))).toStrictEqual([
+            ["1:b"],
+            ["2:b"],
+            ["3:b"],
+         ]);
+      });
+
+      it("closes one peer without touching the others, which keep pairing", async () => {
+         const ipc = await loadMain();
+         const hub = createWindow();
+         const [first, second, third] = [createWindow(), createWindow(), createWindow()];
+         const toFirst = ipc.chat.connect(hub, first);
+         ipc.chat.connect(hub, second);
+         ipc.chat.connect(hub, third);
+
+         toFirst.close();
+
+         expect(hub.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:a"]]);
+         expect(first.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:b"]]);
+         expect(second.webContents.send).not.toHaveBeenCalled();
+         expect(third.webContents.send).not.toHaveBeenCalled();
+         // The hub reloads: only the open connections get a new port.
+         hub.webContents.emit("did-finish-load");
+         expect(posted(hub).map(([, key]) => key)).toStrictEqual([
+            "1:a",
+            "2:a",
+            "3:a",
+            "2:a",
+            "3:a",
+         ]);
+         expect(posted(first)).toHaveLength(1);
+      });
+
+      it("ends the connection of a destroyed peer and no other", async () => {
+         const ipc = await loadMain();
+         const hub = createWindow();
+         const [first, second] = [createWindow(), createWindow()];
+         ipc.chat.connect(hub, first);
+         ipc.chat.connect(hub, second);
+
+         destroy(second);
+
+         expect(hub.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "2:a"]]);
+         expect(first.webContents.send).not.toHaveBeenCalled();
+      });
+   });
+
+   describe("a page which ends its connection", () => {
+      it("listens for it once for the channel, however many connections there are", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+
+         ipc.chat.connect(createWindow(), createWindow());
+         ipc.chat.connect(createWindow(), createWindow());
+
+         const calls = electron.ipcMain.on.mock.calls.filter(
+            ([channel]: [string]) => channel === disconnectWire("chat"),
+         );
+         expect(calls).toHaveLength(1);
+      });
+
+      it("ends the connection for both windows when the window which holds the end asks", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+         const hub = createWindow();
+         const [first, second] = [createWindow(), createWindow()];
+         ipc.chat.connect(hub, first);
+         ipc.chat.connect(hub, second);
+
+         disconnectListener(electron)({ sender: first.webContents }, "1:b");
+
+         expect(hub.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:a"]]);
+         expect(first.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:b"]]);
+         expect(second.webContents.send).not.toHaveBeenCalled();
+         // The connection does not come back with a reload.
+         first.webContents.emit("did-finish-load");
+         expect(posted(first)).toHaveLength(1);
+      });
+
+      it("lets the hub end the connection of a peer as well", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+         const hub = createWindow();
+         const peer = createWindow();
+         ipc.chat.connect(hub, peer);
+
+         disconnectListener(electron)({ sender: hub.webContents }, "1:a");
+
+         expect(peer.webContents.send).toHaveBeenCalledExactlyOnceWith(closeWire("chat"), "1:b");
+      });
+
+      it("ignores a page which does not hold the end, an unknown key and a key which is no text", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+         const hub = createWindow();
+         const peer = createWindow();
+         const stranger = createWindow();
+         ipc.chat.connect(hub, peer);
+         const disconnect = disconnectListener(electron);
+
+         disconnect({ sender: stranger.webContents }, "1:a");
+         // A page may end only its own end, not the one of the other window.
+         disconnect({ sender: peer.webContents }, "1:a");
+         disconnect({ sender: hub.webContents }, "9:a");
+         disconnect({ sender: hub.webContents }, 1);
+         disconnect({ sender: hub.webContents }, undefined);
+         disconnect({ sender: hub.webContents }, "__proto__");
+
+         expect(hub.webContents.send).not.toHaveBeenCalled();
+         expect(peer.webContents.send).not.toHaveBeenCalled();
+      });
+
+      it("forgets the ends of a connection once it is closed", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+         const hub = createWindow();
+         const peer = createWindow();
+         const connection = ipc.chat.connect(hub, peer);
+         connection.close();
+
+         disconnectListener(electron)({ sender: hub.webContents }, "1:a");
+
+         expect(hub.webContents.send).toHaveBeenCalledOnce();
+         expect(peer.webContents.send).toHaveBeenCalledOnce();
+      });
    });
 });
 
@@ -286,26 +437,37 @@ async function loadPreload() {
    };
    const chat = fake.exposed.ipc.chat;
 
-   /** Hands the page one end of a real channel, and returns the other end for the test. */
-   const connect = () => {
+   /**
+    * Hands the page one end of a real channel under the key of a connection, and returns the other
+    * end for the test. The same key again is a new port for that connection.
+    */
+   const connect = (key = "1:a") => {
       const channel = new MessageChannel();
       channels.push(channel);
-      listener(wire("chat"))({ ports: [channel.port1] });
+      listener(wire("chat"))({ ports: [channel.port1] }, key);
       const peer = channel.port2;
       const received: unknown[] = [];
       peer.onmessage = (event) => received.push(event.data);
       return { channel, peer, received };
    };
-   return { chat, connect, listener };
+   /** Tells the page that the main process ended the connection of a key. */
+   const end = (key = "1:a") => listener(closeWire("chat"))({}, key);
+   return { chat, connect, listener, end, ipcRenderer: fake.electron.ipcRenderer };
 }
 
 /** Lets the messages and the events of the real ports arrive. */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
 
 describe("generated preload script of a port channel", () => {
-   it("exposes the four methods and nothing else", async () => {
+   it("exposes the five methods and nothing else", async () => {
       const { chat } = await loadPreload();
-      expect(Object.keys(chat).sort()).toStrictEqual(["on", "onClose", "onReady", "send"]);
+      expect(Object.keys(chat).sort()).toStrictEqual([
+         "on",
+         "onClose",
+         "onConnection",
+         "onReady",
+         "send",
+      ]);
    });
 
    // Regression for B9: `sendMessage` threw before the port arrived.
@@ -436,7 +598,7 @@ describe("generated preload script of a port channel", () => {
       const onReady = vi.fn();
       chat.onReady(onReady);
 
-      listener(wire("chat"))({ ports: [] });
+      listener(wire("chat"))({ ports: [] }, "1:a");
 
       expect(onReady).not.toHaveBeenCalled();
    });
@@ -529,7 +691,7 @@ describe("generated preload script of a port channel", () => {
 
    describe("onClose", () => {
       it("runs when the main process ends the connection, and the port is closed", async () => {
-         const { chat, connect, listener } = await loadPreload();
+         const { chat, connect, end } = await loadPreload();
          const onClose = vi.fn();
          chat.onClose(onClose);
          const { peer } = connect();
@@ -537,7 +699,7 @@ describe("generated preload script of a port channel", () => {
             peer.addEventListener("close", () => resolve()),
          );
 
-         listener(closeWire("chat"))();
+         end();
 
          expect(onClose).toHaveBeenCalledOnce();
          await expect(peerClosed).resolves.toBeUndefined();
@@ -556,25 +718,25 @@ describe("generated preload script of a port channel", () => {
       });
 
       it("runs once if the end is signalled twice", async () => {
-         const { chat, connect, listener } = await loadPreload();
+         const { chat, connect, end } = await loadPreload();
          const onClose = vi.fn();
          chat.onClose(onClose);
          const { peer } = connect();
 
-         listener(closeWire("chat"))();
+         end();
          peer.close();
-         listener(closeWire("chat"))();
+         end();
          await settle();
 
          expect(onClose).toHaveBeenCalledOnce();
       });
 
       it("does not run for a connection which never had a port", async () => {
-         const { chat, listener } = await loadPreload();
+         const { chat, end } = await loadPreload();
          const onClose = vi.fn();
          chat.onClose(onClose);
 
-         listener(closeWire("chat"))();
+         end();
 
          expect(onClose).not.toHaveBeenCalled();
       });
@@ -593,7 +755,7 @@ describe("generated preload script of a port channel", () => {
       });
 
       it("stops after its disposer is called, and reports a throwing subscriber", async () => {
-         const { chat, connect, listener } = await loadPreload();
+         const { chat, connect, end } = await loadPreload();
          const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
          const onClose = vi.fn();
          chat.onClose(() => {
@@ -602,22 +764,323 @@ describe("generated preload script of a port channel", () => {
          chat.onClose(onClose)();
          connect();
 
-         listener(closeWire("chat"))();
+         end();
 
          expect(onClose).not.toHaveBeenCalled();
          expect(error).toHaveBeenCalledOnce();
       });
 
       it("queues the sends after the end, and flushes them to the next port", async () => {
-         const { chat, connect, listener } = await loadPreload();
+         const { chat, connect, end } = await loadPreload();
          connect();
-         listener(closeWire("chat"))();
+         end();
 
          chat.send("after the end");
          const { received } = connect();
          await settle();
 
          expect(received).toStrictEqual([["after the end"]]);
+      });
+   });
+});
+
+describe("connections of a port channel in the generated preload script", () => {
+   /** A hub page with `count` peers, each with the connection object that `onConnection` gave. */
+   async function loadHub(count: number) {
+      const loaded = await loadPreload();
+      const connections: any[] = [];
+      loaded.chat.onConnection((connection: unknown) => connections.push(connection));
+      const peers = Array.from({ length: count }, (_, index) => loaded.connect(`${index + 1}:a`));
+      return { ...loaded, connections, peers };
+   }
+
+   describe("onConnection", () => {
+      it("runs for each peer with an object of its own, with the methods of the channel and close", async () => {
+         const { connections } = await loadHub(3);
+
+         expect(connections).toHaveLength(3);
+         expect(new Set(connections).size).toBe(3);
+         for (const connection of connections) {
+            expect(Object.keys(connection).sort()).toStrictEqual([
+               "close",
+               "on",
+               "onClose",
+               "onReady",
+               "send",
+            ]);
+         }
+      });
+
+      it("keeps the messages of each peer apart", async () => {
+         const { connections, peers, chat } = await loadHub(3);
+         const heard = connections.map(() => vi.fn());
+         for (const [index, connection] of connections.entries()) {
+            connection.on(heard[index]);
+         }
+         const all = vi.fn();
+         chat.on(all);
+
+         peers[0].peer.postMessage(["from one"]);
+         peers[2].peer.postMessage(["from three", 3]);
+         await settle();
+
+         expect(heard[0]).toHaveBeenCalledExactlyOnceWith("from one");
+         expect(heard[1]).not.toHaveBeenCalled();
+         expect(heard[2]).toHaveBeenCalledExactlyOnceWith("from three", 3);
+         // The subscribers of the channel hear every peer.
+         expect(all.mock.calls).toStrictEqual([["from one"], ["from three", 3]]);
+      });
+
+      it("sends to one peer through its connection and to all of them through the channel", async () => {
+         const { connections, peers, chat } = await loadHub(3);
+
+         connections[1].send("only two");
+         chat.send("everyone");
+         await settle();
+
+         expect(peers.map(({ received }) => received)).toStrictEqual([
+            [["everyone"]],
+            [["only two"], ["everyone"]],
+            [["everyone"]],
+         ]);
+      });
+
+      it("gives the queue of the channel to the first connection only", async () => {
+         const { chat, connect, connections } = await loadHub(0);
+         chat.send("early");
+
+         const first = connect("1:a");
+         const second = connect("2:a");
+         await settle();
+
+         expect(first.received).toStrictEqual([["early"]]);
+         expect(second.received).toStrictEqual([]);
+         expect(connections).toHaveLength(2);
+      });
+
+      it("runs at once for the connections that are there, and then for the later ones", async () => {
+         const { chat, connect } = await loadPreload();
+         connect("1:a");
+         connect("2:a");
+
+         const seen = vi.fn();
+         chat.onConnection(seen);
+         expect(seen).toHaveBeenCalledTimes(2);
+
+         connect("3:a");
+         expect(seen).toHaveBeenCalledTimes(3);
+      });
+
+      it("stops after its disposer is called, and every subscriber has its own", async () => {
+         const { chat, connect } = await loadPreload();
+         const kept = vi.fn();
+         const dropped = vi.fn();
+         chat.onConnection(kept);
+         const dispose = chat.onConnection(dropped);
+         const same = chat.onConnection(kept);
+
+         dispose();
+         same();
+         connect("1:a");
+
+         expect(dropped).not.toHaveBeenCalled();
+         expect(kept).toHaveBeenCalledOnce();
+      });
+
+      it("reports a throwing subscriber and still tells the others", async () => {
+         const { chat, connect } = await loadPreload();
+         const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+         const after = vi.fn();
+         chat.onConnection(() => {
+            throw new Error("boom");
+         });
+         chat.onConnection(after);
+
+         connect("1:a");
+
+         expect(error).toHaveBeenCalledOnce();
+         expect(after).toHaveBeenCalledOnce();
+      });
+
+      it("lets the callback use the connection at once: the port is there", async () => {
+         const { chat, connect } = await loadPreload();
+         chat.onConnection((connection: any) => connection.send("welcome"));
+
+         const { received } = connect("1:a");
+         await settle();
+
+         expect(received).toStrictEqual([["welcome"]]);
+      });
+   });
+
+   describe("a connection", () => {
+      it("is the same object after the port of its key arrives again", async () => {
+         const { connections, connect, chat } = await loadHub(1);
+         const onReady = vi.fn();
+         connections[0].onReady(onReady);
+         const onClose = vi.fn();
+         connections[0].onClose(onClose);
+         const seen = vi.fn();
+         chat.onConnection(seen);
+         seen.mockClear();
+
+         const replacement = connect("1:a");
+         connections[0].send("to the new");
+         await settle();
+
+         expect(connections).toHaveLength(1);
+         expect(seen).not.toHaveBeenCalled();
+         expect(onReady).toHaveBeenCalledTimes(2);
+         expect(onClose).not.toHaveBeenCalled();
+         expect(replacement.received).toStrictEqual([["to the new"]]);
+      });
+
+      it("queues its sends while its peer reloads, and flushes them to the new port", async () => {
+         const { connections, peers, connect } = await loadHub(2);
+
+         peers[0].peer.close();
+         await settle();
+         connections[0].send("while away");
+         connections[1].send("not away");
+         const back = connect("1:a");
+         await settle();
+
+         expect(back.received).toStrictEqual([["while away"]]);
+         expect(peers[1].received).toStrictEqual([["not away"]]);
+      });
+
+      it("runs onReady at once if its port is there, not otherwise", async () => {
+         const { connections, peers } = await loadHub(1);
+         const now = vi.fn();
+         connections[0].onReady(now);
+         expect(now).toHaveBeenCalledOnce();
+
+         peers[0].peer.close();
+         await settle();
+         const later = vi.fn();
+         connections[0].onReady(later);
+         expect(later).not.toHaveBeenCalled();
+      });
+
+      it("runs onClose when its peer closes the port, for this connection and for the channel", async () => {
+         const { chat, connections, peers } = await loadHub(3);
+         const closed = connections.map(() => vi.fn());
+         for (const [index, connection] of connections.entries()) {
+            connection.onClose(closed[index]);
+         }
+         const any = vi.fn();
+         chat.onClose(any);
+
+         peers[1].peer.close();
+         await settle();
+
+         expect(closed.map((callback) => callback.mock.calls.length)).toStrictEqual([0, 1, 0]);
+         expect(any).toHaveBeenCalledOnce();
+         // The others still work.
+         connections[0].send("still here");
+         await settle();
+         expect(peers[0].received).toStrictEqual([["still here"]]);
+      });
+
+      it("ends only the connection of the key that the main process closes", async () => {
+         const { chat, connections, peers, end } = await loadHub(3);
+         const closed = connections.map(() => vi.fn());
+         for (const [index, connection] of connections.entries()) {
+            connection.onClose(closed[index]);
+         }
+         const peerClosed = new Promise<void>((resolve) =>
+            peers[1].peer.addEventListener("close", () => resolve()),
+         );
+
+         end("2:a");
+
+         expect(closed.map((callback) => callback.mock.calls.length)).toStrictEqual([0, 1, 0]);
+         await expect(peerClosed).resolves.toBeUndefined();
+         // A send of the channel reaches the two that are left.
+         chat.send("rest");
+         await settle();
+         expect(peers.map(({ received }) => received)).toStrictEqual([[["rest"]], [], [["rest"]]]);
+      });
+
+      it("ignores the end of a key it does not know, and one that is no text", async () => {
+         const { connections, end, listener } = await loadHub(1);
+         const onClose = vi.fn();
+         connections[0].onClose(onClose);
+
+         end("9:a");
+         listener(closeWire("chat"))({}, undefined);
+         listener(closeWire("chat"))({}, 1);
+
+         expect(onClose).not.toHaveBeenCalled();
+      });
+
+      it("tells the main process when it closes, and ends at once: onClose, the port, no more sends", async () => {
+         const { connections, peers, ipcRenderer, chat, end } = await loadHub(2);
+         const onClose = vi.fn();
+         connections[0].onClose(onClose);
+         const channelClose = vi.fn();
+         chat.onClose(channelClose);
+         const peerClosed = new Promise<void>((resolve) =>
+            peers[0].peer.addEventListener("close", () => resolve()),
+         );
+
+         connections[0].close();
+         connections[0].close();
+         connections[0].send("too late");
+         await settle();
+
+         expect(ipcRenderer.send).toHaveBeenCalledExactlyOnceWith(disconnectWire("chat"), "1:a");
+         expect(onClose).toHaveBeenCalledOnce();
+         expect(channelClose).toHaveBeenCalledOnce();
+         await expect(peerClosed).resolves.toBeUndefined();
+         expect(peers[0].received).toStrictEqual([]);
+         // The main process answers with the close of the key, which changes nothing.
+         end("1:a");
+         expect(onClose).toHaveBeenCalledOnce();
+      });
+
+      it("does not tell the main process when the main process ended it", async () => {
+         const { connections, ipcRenderer, end } = await loadHub(1);
+
+         end("1:a");
+         connections[0].close();
+
+         expect(ipcRenderer.send).not.toHaveBeenCalled();
+      });
+
+      it("makes the channel queue again once its last connection has ended", async () => {
+         const { chat, connect, connections } = await loadHub(1);
+
+         connections[0].close();
+         chat.send("after the last");
+         const next = connect("2:a");
+         await settle();
+
+         expect(next.received).toStrictEqual([["after the last"]]);
+      });
+   });
+
+   describe("onReady and onClose of the channel", () => {
+      it("runs onReady for every connection that becomes ready", async () => {
+         const { chat, connect } = await loadPreload();
+         const onReady = vi.fn();
+         chat.onReady(onReady);
+
+         connect("1:a");
+         connect("2:a");
+         connect("1:a");
+
+         expect(onReady).toHaveBeenCalledTimes(3);
+      });
+
+      it("runs onReady at once while any connection has a port", async () => {
+         const { chat, connect } = await loadPreload();
+         connect("1:a");
+
+         const onReady = vi.fn();
+         chat.onReady(onReady);
+
+         expect(onReady).toHaveBeenCalledOnce();
       });
    });
 });

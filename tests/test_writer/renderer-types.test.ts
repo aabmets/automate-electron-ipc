@@ -154,7 +154,7 @@ describe("RendererTypesWriter", () => {
       );
    });
 
-   it("should write send, on, onReady and onClose methods for Port channels", async () => {
+   it("should write send, on, onReady, onClose and onConnection methods for Port channels", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
@@ -166,6 +166,7 @@ describe("RendererTypesWriter", () => {
                on: (callback: (arg1: string, arg2: string) => void) => () => void;
                onReady: (callback: () => void) => () => void;
                onClose: (callback: () => void) => () => void;
+               onConnection: (callback: (connection: { send: (arg1: string, arg2: string) => void; on: (callback: (arg1: string, arg2: string) => void) => () => void; onReady: (callback: () => void) => () => void; onClose: (callback: () => void) => () => void; close: () => void }) => void) => () => void;
             };
          }
 

@@ -215,7 +215,7 @@ on the verb of the channel and on the process that uses it:
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
-| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)` |
+| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onConnection(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -358,6 +358,34 @@ it (`onReady` runs again, `onClose` does not, since the connection goes on). The
 returns has a `close()`, which ends the connection and runs `onClose` in both windows. Destroying
 either window ends it as well, for the other window. After the end, `send` queues again until a
 new `connect` pairs the windows.
+
+A window can hold any number of connections of a channel, such as a hub with several peers. Call
+`connect` once per pair, and the hub gets each peer as a connection object of its own:
+
+```typescript
+// main process
+for (const peer of peers) {
+   ipc.chat.connect(hub, peer);
+}
+
+// renderer of the hub
+const stop = ipc.chat.onConnection((peer) => {
+   peer.send("welcome"); // to this peer alone
+   peer.on((msg) => show(msg)); // from this peer alone
+   peer.onClose(() => console.log("a peer left"));
+   // peer.close() ends the connection for the peer as well
+});
+```
+
+A connection has `send`, `on`, `onReady`, `onClose` and `close`. `onConnection` runs at once for the
+connections that are already there, then for each new peer, and returns a function which removes it.
+A peer that reloads is the same connection object with a new port (`onReady` runs again). `close()`
+ends the connection for both pages, through the main process, so it does not come back when a page
+reloads; `send` of a closed connection does nothing.
+
+The methods of the channel itself, `ipc.chat.send`, `on`, `onReady` and `onClose`, address all of the
+connections: `send` goes to each of them (and is queued for the first one while there is none), and
+the others hear every connection. They are what a page with a single peer needs.
 
 #### Sender validation
 

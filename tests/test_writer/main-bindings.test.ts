@@ -795,10 +795,32 @@ describe("MainBindingsWriter", () => {
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
-         import { MessageChannelMain } from "electron";
-         import type { BrowserWindow } from "electron";
+         import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";
+         import type { BrowserWindow, IpcMainEvent } from "electron";
+
+         let lastPortConnectionId = 0;
+         const portEnds = new Map<string, { win: BrowserWindow; close: () => void }>();
+         const portDisconnectChannels = new Set<string>();
+
+         function listenForPortDisconnects(channel: string): void {
+            if (portDisconnectChannels.has(channel)) {
+               return;
+            }
+            portDisconnectChannels.add(channel);
+            electronIpcMain.on(\`\${channel}:disconnect\`, (event: IpcMainEvent, key: unknown) => {
+               const end = typeof key === 'string' ? portEnds.get(key) : undefined;
+               if (end && !end.win.isDestroyed() && end.win.webContents === event.sender) {
+                  end.close();
+               }
+            });
+         }
 
          function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {
+            const id = ++lastPortConnectionId;
+            const ends = [
+               { key: \`\${id}:a\`, win: winA },
+               { key: \`\${id}:b\`, win: winB },
+            ];
             const windows = winA === winB ? [winA] : [winA, winB];
             let closed = false;
             const isReady = (win: BrowserWindow) =>
@@ -808,8 +830,8 @@ describe("MainBindingsWriter", () => {
                   return;
                }
                const { port1, port2 } = new MessageChannelMain();
-               winA.webContents.postMessage(channel, null, [port1]);
-               winB.webContents.postMessage(channel, null, [port2]);
+               winA.webContents.postMessage(channel, ends[0].key, [port1]);
+               winB.webContents.postMessage(channel, ends[1].key, [port2]);
             };
             const close = () => {
                if (closed) {
@@ -821,10 +843,19 @@ describe("MainBindingsWriter", () => {
                   if (!win.isDestroyed()) {
                      win.off('closed', close);
                      win.webContents.off('did-finish-load', pair);
-                     win.webContents.send(\`\${channel}:close\`);
+                  }
+               }
+               for (const end of ends) {
+                  portEnds.delete(end.key);
+                  if (!end.win.isDestroyed()) {
+                     end.win.webContents.send(\`\${channel}:close\`, end.key);
                   }
                }
             };
+            for (const end of ends) {
+               portEnds.set(end.key, { win: end.win, close });
+            }
+            listenForPortDisconnects(channel);
             for (const win of windows) {
                win.on('closed', close);
                win.webContents.on('did-finish-load', pair);
@@ -859,7 +890,7 @@ describe("MainBindingsWriter", () => {
       expect(output).not.toMatch(/\b(propagate|onBeta|sendZeta)\b/);
    });
 
-   it("should import ipcMain from electron only for RendererToMain channels", async () => {
+   it("should import ipcMain from electron only where it is used", async () => {
       // Regression for T65: the import was unused, and failed under noUnusedLocals, without them.
       const render = async (...channels: shared.SimpleChannel[]) => {
          const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
@@ -882,8 +913,10 @@ describe("MainBindingsWriter", () => {
       expect(
          toRenderer.startsWith('import { webContents as electronWebContents } from "electron";'),
       ).toBe(true);
-      expect(port).not.toContain("electronIpcMain");
-      expect(port.startsWith('import { MessageChannelMain } from "electron";')).toBe(true);
+      // A port channel listens for the page that ends a connection.
+      expect(
+         port.startsWith("import { ipcMain as electronIpcMain, MessageChannelMain } from"),
+      ).toBe(true);
       expect(toMain.startsWith('import { ipcMain as electronIpcMain } from "electron";')).toBe(
          true,
       );
@@ -1040,8 +1073,9 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain("electronIpcMain.off('app:sendIt', listener);");
          expect(output).toContain("webContents.send('app:pushIt', ");
          expect(output).toContain("connectPorts('app:chatIt', winA, winB)");
-         expect(output).toContain("webContents.postMessage(channel, null, [port1]);");
-         expect(output).toContain("webContents.send(`${channel}:close`);");
+         expect(output).toContain("webContents.postMessage(channel, ends[0].key, [port1]);");
+         expect(output).toContain("webContents.send(`${channel}:close`, end.key);");
+         expect(output).toContain("electronIpcMain.on(`${channel}:disconnect`, ");
       });
 
       it("leaves the names for hooks, errors and the registry as they are in the schema", async () => {

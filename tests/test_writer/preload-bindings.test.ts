@@ -105,18 +105,18 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain("function createPortChannel(): PortChannel {");
-      expect(output).toContain("ports['vitestChannel'] = createPortChannel();");
+      expect(output).toContain("function createPortChannel(wire: string): PortChannel {");
+      expect(output).toContain("ports['vitestChannel'] = createPortChannel('vitestChannel');");
       expect(output).toContain(
-         "ipcRenderer.on('vitestChannel', (event: IpcRendererEvent) => {\n   ports['vitestChannel'].attach(event.ports[0]);\n});",
+         "ipcRenderer.on('vitestChannel', (event: IpcRendererEvent, key: unknown) => {\n   ports['vitestChannel'].pair(key, event.ports[0]);\n});",
       );
       expect(output).toContain(
-         "ipcRenderer.on('vitestChannel:close', () => {\n   ports['vitestChannel'].detach();\n});",
+         "ipcRenderer.on('vitestChannel:close', (_event: IpcRendererEvent, key: unknown) => {\n   ports['vitestChannel'].end(key);\n});",
       );
       expect(output).toContain(
          "contextBridge.exposeInMainWorld('ipc', {\n   vitestChannel: ports['vitestChannel'].api,\n});",
       );
-      for (const member of ["send", "on", "onReady", "onClose"]) {
+      for (const member of ["send", "on", "onReady", "onClose", "onConnection"]) {
          expect(output).toMatch(new RegExp(`^ {6}${member}: `, "m"));
       }
       expect(output).not.toMatch(/sendMessage|onMessage|getPortObject|PortObject/);
@@ -128,9 +128,21 @@ describe("PreloadBindingsWriter", () => {
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
       expect(output).toContain("queue.push(args);");
-      expect(output).toContain("for (const args of queue.splice(0)) {");
+      expect(output).toContain("pending.push(args);");
+      expect(output).toContain("for (const args of pending.splice(0)) {");
       expect(output).toContain("const listener = { callback };");
       expect(output).toContain("if (port === next) {");
+   });
+
+   it("should keep a connection per key, and end one through the main process", async () => {
+      const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
+      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).toContain("const connections = new Map<string, PortConnection>();");
+      expect(output).toContain("onConnection: (callback: Function) => {");
+      expect(output).toContain("close: () => {");
+      expect(output).toContain("ipcRenderer.send(`${wire}:disconnect`, key);");
    });
 
    it("should write one object per channel, sorted by name, next to the port objects", async () => {
@@ -227,8 +239,14 @@ describe("PreloadBindingsWriter", () => {
          expect(output).toContain("ipcRenderer.on('app:pushIt', listener);");
          expect(output).toContain("ipcRenderer.once('app:pushIt', listener);");
          expect(output).toContain("ipcRenderer.removeListener('app:pushIt', listener);");
-         expect(output).toContain("ipcRenderer.on('app:chatIt', (event: IpcRendererEvent) => {");
-         expect(output).toContain("ipcRenderer.on('app:chatIt:close', () => {");
+         expect(output).toContain(
+            "ipcRenderer.on('app:chatIt', (event: IpcRendererEvent, key: unknown) => {",
+         );
+         expect(output).toContain(
+            "ipcRenderer.on('app:chatIt:close', (_event: IpcRendererEvent, key: unknown) => {",
+         );
+         expect(output).toContain("ports['chatIt'] = createPortChannel('app:chatIt');");
+         expect(output).toContain("ipcRenderer.send(`${wire}:disconnect`, key);");
       });
 
       it("keeps the names of the exposed api and of the port registry", async () => {
@@ -236,7 +254,7 @@ describe("PreloadBindingsWriter", () => {
 
          expect(output).toContain("\n   getIt: {");
          expect(output).toContain("chatIt: ports['chatIt'].api,");
-         expect(output).toContain("ports['chatIt'] = createPortChannel();");
+         expect(output).toContain("ports['chatIt'] = createPortChannel('app:chatIt');");
       });
 
       it("writes the names as they are without a prefix, and when the config has none", async () => {

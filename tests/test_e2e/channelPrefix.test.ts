@@ -127,7 +127,7 @@ describe.each([
 
       expect(win.webContents.send).toHaveBeenCalledWith(`${prefix}progress`, 5, undefined);
       expect(one.webContents.postMessage.mock.calls[0][0]).toBe(`${prefix}chat`);
-      expect(one.webContents.send).toHaveBeenCalledWith(`${prefix}chat:close`);
+      expect(one.webContents.send).toHaveBeenCalledWith(`${prefix}chat:close`, "1:a");
    });
 
    it("listens for the wire name in the preload script, for events and for ports", async () => {

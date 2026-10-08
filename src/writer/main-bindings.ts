@@ -83,6 +83,10 @@ export class MainBindingsWriter extends BaseWriter {
          "readAskReply",
          "askRenderer",
          "connectPorts",
+         "lastPortConnectionId",
+         "portEnds",
+         "portDisconnectChannels",
+         "listenForPortDisconnects",
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -139,6 +143,7 @@ export class MainBindingsWriter extends BaseWriter {
                usesPorts = true;
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
+               electronTypeImportsSet.add("IpcMainEvent");
                channels.push(this.buildPortChannel(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
@@ -158,7 +163,7 @@ export class MainBindingsWriter extends BaseWriter {
       const usesEmits = this.hasChannels("Broadcast");
       const out = this.buildImports(
          [
-            ...(usesIpcMain || usesAsks ? ["ipcMain as electronIpcMain"] : []),
+            ...(usesIpcMain || usesAsks || usesPorts ? ["ipcMain as electronIpcMain"] : []),
             ...electronImportsSet,
          ],
          [...electronTypeImportsSet],
@@ -991,12 +996,40 @@ export class MainBindingsWriter extends BaseWriter {
     * the other window replaces its end. The windows are told through `<channel>:close` when the
     * connection ends, since the main process no longer holds the ports it has transferred. The
     * connection ends when it is closed and when either window is destroyed.
+    *
+    * Every end of a connection has a key, `<id>:a` or `<id>:b`, which is the message that carries its
+    * port and the one that closes it. A page tells the keys apart, so it can hold any number of
+    * connections of the channel, and replaces the port of the one that is paired again. A page ends
+    * a connection through `<channel>:disconnect`, which is honoured only from the window that holds
+    * that end.
     */
    private buildPortHelpers(): string {
       const [i1, i2, i3, i4] = this.indents;
       return [
          "",
+         "let lastPortConnectionId = 0;",
+         "const portEnds = new Map<string, { win: BrowserWindow; close: () => void }>();",
+         "const portDisconnectChannels = new Set<string>();",
+         "",
+         "function listenForPortDisconnects(channel: string): void {",
+         `${i1}if (portDisconnectChannels.has(channel)) {`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}portDisconnectChannels.add(channel);`,
+         `${i1}electronIpcMain.on(\`\${channel}:disconnect\`, (event: IpcMainEvent, key: unknown) => {`,
+         `${i2}const end = typeof key === 'string' ? portEnds.get(key) : undefined;`,
+         `${i2}if (end && !end.win.isDestroyed() && end.win.webContents === event.sender) {`,
+         `${i3}end.close();`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
          "function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {",
+         `${i1}const id = ++lastPortConnectionId;`,
+         `${i1}const ends = [`,
+         `${i2}{ key: \`\${id}:a\`, win: winA },`,
+         `${i2}{ key: \`\${id}:b\`, win: winB },`,
+         `${i1}];`,
          `${i1}const windows = winA === winB ? [winA] : [winA, winB];`,
          `${i1}let closed = false;`,
          `${i1}const isReady = (win: BrowserWindow) =>`,
@@ -1006,8 +1039,8 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}return;`,
          `${i2}}`,
          `${i2}const { port1, port2 } = new MessageChannelMain();`,
-         `${i2}winA.webContents.postMessage(channel, null, [port1]);`,
-         `${i2}winB.webContents.postMessage(channel, null, [port2]);`,
+         `${i2}winA.webContents.postMessage(channel, ends[0].key, [port1]);`,
+         `${i2}winB.webContents.postMessage(channel, ends[1].key, [port2]);`,
          `${i1}};`,
          `${i1}const close = () => {`,
          `${i2}if (closed) {`,
@@ -1019,10 +1052,19 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}if (!win.isDestroyed()) {`,
          `${i4}win.off('closed', close);`,
          `${i4}win.webContents.off('did-finish-load', pair);`,
-         `${i4}win.webContents.send(\`\${channel}:close\`);`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i2}for (const end of ends) {`,
+         `${i3}portEnds.delete(end.key);`,
+         `${i3}if (!end.win.isDestroyed()) {`,
+         `${i4}end.win.webContents.send(\`\${channel}:close\`, end.key);`,
          `${i3}}`,
          `${i2}}`,
          `${i1}};`,
+         `${i1}for (const end of ends) {`,
+         `${i2}portEnds.set(end.key, { win: end.win, close });`,
+         `${i1}}`,
+         `${i1}listenForPortDisconnects(channel);`,
          `${i1}for (const win of windows) {`,
          `${i2}win.on('closed', close);`,
          `${i2}win.webContents.on('did-finish-load', pair);`,

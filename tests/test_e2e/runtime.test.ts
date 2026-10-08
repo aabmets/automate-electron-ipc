@@ -64,6 +64,7 @@ describe("generated preload script", () => {
       expect(callablePaths(exposed.ipc)).toStrictEqual([
          "chat.on",
          "chat.onClose",
+         "chat.onConnection",
          "chat.onReady",
          "chat.send",
          "getTime.invoke",
@@ -186,9 +187,9 @@ describe("generated preload script", () => {
       };
       const [, onPort] = electron.ipcRenderer.on.mock.calls.find(
          ([name]: [string]) => name === wire("chat"),
-      ) as [string, (event: unknown) => void];
+      ) as [string, (event: unknown, key: unknown) => void];
 
-      onPort({ ports: [port] });
+      onPort({ ports: [port] }, "1:a");
       exposed.ipc.chat.send("hi", 1);
       expect(port.postMessage).toHaveBeenCalledWith(["hi", 1]);
 
@@ -499,10 +500,10 @@ describe("generated main process bindings", () => {
 
       ipc.chat.connect(one, two);
 
-      expect(one.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), null, [
+      expect(one.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), "1:a", [
          { name: "port1" },
       ]);
-      expect(two.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), null, [
+      expect(two.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), "1:b", [
          { name: "port2" },
       ]);
    });

@@ -32,6 +32,17 @@ export const stopReady: () => void = ipc.chat.onReady(() => ipc.chat.send("ready
 export const stopClose: () => void = ipc.chat.onClose(() => undefined);
 // @ts-expect-error the callback of onReady takes no arguments
 ipc.chat.onReady((msg: string) => msg);
+export const stopConnections: () => void = ipc.chat.onConnection((peer) => {
+   peer.send("welcome");
+   const stopPeer: () => void = peer.on((msg: string) => console.log(msg));
+   peer.onReady(() => stopPeer());
+   peer.onClose(() => stopPeer());
+   peer.close();
+   // @ts-expect-error the messages of a connection are typed like the channel
+   peer.send(1);
+});
+// @ts-expect-error the callback of onConnection takes the connection only
+ipc.chat.onConnection((_peer, extra: string) => extra);
 // @ts-expect-error a port channel has no close, the main process closes the connection
 ipc.chat.close();
 

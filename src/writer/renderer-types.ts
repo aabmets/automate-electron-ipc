@@ -139,13 +139,21 @@ export class RendererTypesWriter extends BaseWriter {
    }
    private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
       const definition = spec.signature.definition;
+      const subscribe = `(callback: ${definition}) => () => void`;
+      const listen = "(callback: () => void) => () => void";
+      // The connection to one peer: the channel itself, with `close`.
+      const connection = `{ send: ${definition}; on: ${subscribe}; onReady: ${listen}; onClose: ${listen}; close: () => void }`;
       return {
          name: spec.name,
          methods: [
             this.method("send", definition),
-            this.method("on", `(callback: ${definition}) => () => void`),
-            this.method("onReady", "(callback: () => void) => () => void"),
-            this.method("onClose", "(callback: () => void) => () => void"),
+            this.method("on", subscribe),
+            this.method("onReady", listen),
+            this.method("onClose", listen),
+            this.method(
+               "onConnection",
+               `(callback: (connection: ${connection}) => void) => () => void`,
+            ),
          ],
       };
    }

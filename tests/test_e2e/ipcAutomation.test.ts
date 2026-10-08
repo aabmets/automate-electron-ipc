@@ -666,12 +666,12 @@ describe("ipcAutomation, schema with only port channels", () => {
       expect(await project.typecheck()).toBe("");
    });
 
-   // Regression for T65: main.ts imported `ipcMain` without using it.
+   // Regression for T65: main.ts imported `ipcMain` without using it. T25 uses it, to hear a page
+   // end a connection.
    it("imports nothing unused, so the files type-check under noUnusedLocals", async () => {
       project = await runFixture("port-only");
-      expect(project.generated["main.ts"]).not.toContain("electronIpcMain");
       expect(project.generated["main.ts"]).toContain(
-         'import { MessageChannelMain } from "electron";',
+         'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
       );
       expect(await project.typecheck({ noUnusedLocals: true })).toBe("");
    });
