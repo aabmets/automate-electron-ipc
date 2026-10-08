@@ -6,6 +6,9 @@
       "useIgnoreFile": true,
       "defaultBranch": "main"
    },
+   "files": {
+      "includes": ["**", "!tests/fixtures/syntax-error"]
+   },
    "assist": { "actions": { "source": { "organizeImports": "on" } } },
    "formatter": {
       "enabled": true,

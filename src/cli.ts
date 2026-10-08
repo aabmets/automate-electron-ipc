@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import { program } from "commander";
 import { ipcAutomation } from "./automation.js";
+import logger from "./logger.js";
 import utils from "./utils.js";
 
 program
@@ -15,6 +16,13 @@ program
       })(),
       "-v, --version",
    )
-   .action(ipcAutomation);
+   .action(async () => {
+      try {
+         await ipcAutomation();
+      } catch (error) {
+         logger.fatalError(error);
+         process.exitCode = 1;
+      }
+   });
 
-program.parse();
+await program.parseAsync();

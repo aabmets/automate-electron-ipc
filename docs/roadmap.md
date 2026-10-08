@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 10 delivered, 48 remaining, 1 dropped.
+**Progress:** 11 delivered, 47 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -29,7 +29,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T05: Wrong generated types (B6, B7)](./tasks/T05-wrong-generated-types.md) · depends on: T01
 - [ ] [T06: Deterministic output ordering (B8)](./tasks/T06-deterministic-output-ordering.md) · depends on: T01
 - [ ] [T07: Correct project root resolution (monorepos)](./tasks/T07-correct-project-root-resolution.md) · depends on: T01
-- [ ] [T08: Schema file filtering, and surfacing parse errors](./tasks/T08-schema-file-filtering-and-surfacing.md) · depends on: T01
+- [x] [T08: Schema file filtering, and surfacing parse errors](./tasks/T08-schema-file-filtering-and-surfacing.md) · depends on: T01
 - [ ] [T09: Type-definition edge cases](./tasks/T09-type-definition-edge-cases.md) · depends on: T01
 - [x] [T10: Stale metadata and packaging dependencies (B10)](./tasks/T10-stale-metadata-and-packaging-dependencies.md) · depends on: none
 - [x] [T11: CI on Node, plus e2e type-check job](./tasks/T11-ci-on-node-plus-e2e.md) · depends on: T01

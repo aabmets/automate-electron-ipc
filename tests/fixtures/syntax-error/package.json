@@ -1,0 +1,9 @@
+{
+   "name": "fixture-syntax-error",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

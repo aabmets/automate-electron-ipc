@@ -12,7 +12,7 @@
 import { styleText } from "node:util";
 import type * as t from "@types";
 
-function paint(color: "yellow" | "green", text: string): string {
+function paint(color: "yellow" | "green" | "red", text: string): string {
    return styleText(color, text, { stream: process.stderr });
 }
 
@@ -35,6 +35,10 @@ function success(messages: string[]): void {
    console.warn(paint("green", formatOutput(messages, "✔")));
 }
 
+function error(messages: string[]): void {
+   console.error(paint("red", formatOutput(messages, "✖")));
+}
+
 export function nonExistentSchemaPath(path: string): void {
    warn(["Skipping IPC automation, because schema path does not exist:", path]);
 }
@@ -48,6 +52,11 @@ export function cannotExecuteChannels(): void {
       warn(["IPC automation channel expressions have no effect when executed by JavaScript."]);
       (global as any).warnedIncorrectUsageOnce = true;
    }
+}
+
+export function fatalError(err: unknown): void {
+   const message = err instanceof Error ? err.message : String(err);
+   error(["IPC automation failed:", ...message.split("\n")]);
 }
 
 export function reportSuccess(pfsArray: t.ParsedFileSpecs[]): void {
@@ -68,5 +77,6 @@ export default {
    nonExistentSchemaPath,
    noChannelExpressions,
    cannotExecuteChannels,
+   fatalError,
    reportSuccess,
 };

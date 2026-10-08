@@ -61,6 +61,17 @@ export function resolveUserProjectPath(subPath = ""): string {
 }
 
 /**
+ * Tells whether a file name in a schema directory is a schema source file:
+ * a `.ts`, `.mts` or `.cts` file that is not a declaration file (`.d.ts`, `.d.mts`, `.d.cts`).
+ *
+ * @param fileName - File name or path to check.
+ * @returns True if the file may contain channel declarations.
+ */
+export function isSchemaSourceFile(fileName: string): boolean {
+   return /\.[mc]?ts$/.test(fileName) && !/\.d\.[mc]?ts$/.test(fileName);
+}
+
+/**
  * Concatenates an array of regular expressions into a single regular expression.
  *
  * @param parts - An array of smaller regex patterns to be concatenated.
@@ -137,6 +148,7 @@ export function findDuplicates<T>(array: T[]): T[] {
 export default {
    searchUpwards,
    resolveUserProjectPath,
+   isSchemaSourceFile,
    concatRegex,
    isPathInside,
    dedent,

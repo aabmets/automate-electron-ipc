@@ -15,6 +15,7 @@ import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import parser from "./parser.js";
+import utils from "./utils.js";
 import vld from "./validators.js";
 import writer from "./writer/index.js";
 
@@ -43,7 +44,7 @@ export async function ipcAutomation(): Promise<void> {
       const files = await fsp.readdir(config.ipcSchema.path, { recursive: true });
       const rawFileContents: t.RawFileContents[] = [];
       await Promise.all(
-         files.map(async (file) => {
+         files.filter(utils.isSchemaSourceFile).map(async (file) => {
             const fullPath = path.join(config.ipcSchema.path, file);
             const stat = await fsp.stat(fullPath);
             if (stat.isFile()) {

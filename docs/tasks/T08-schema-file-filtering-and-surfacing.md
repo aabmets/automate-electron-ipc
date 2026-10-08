@@ -11,4 +11,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - Report parse errors with file path and line:column, and exit non-zero.
 - **Tests:** unit tests for the filter. A regression test that a syntax error is reported, not
   ignored.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Parse errors are thrown by `parseSpecs` as `Syntax error in schema file 'path:line:col': reason` (position taken from the swc code frame), and `ipcgen` prints them via `logger.fatalError` and sets a non-zero exit code. `tests/fixtures/syntax-error` is excluded from Biome in `biome.json`.

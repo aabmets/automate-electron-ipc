@@ -216,6 +216,25 @@ describe("parseSpecs", () => {
       ).toThrow("Schema file '/app/src/ipc/schema/user.ts': channel 'userChannel': no signature");
    });
 
+   it("should report syntax errors with the file path, line and column", () => {
+      // Regression for T08: parse errors were swallowed and reported as "no channels found".
+      const parse = () =>
+         parser.parseSpecs({
+            contents: "const a = 1;\nexport default defineChannels({ a: ;\n});",
+            relativePath: "schema/user.ts",
+            fullPath: "/app/src/ipc/schema/user.ts",
+         });
+      expect(parse).toThrow(
+         "Syntax error in schema file '/app/src/ipc/schema/user.ts:2:36': Expression expected",
+      );
+   });
+
+   it("should fall back to the relative path when naming a file with a syntax error", () => {
+      expect(() =>
+         parser.parseSpecs({ contents: "const = ;", relativePath: "user.ts", fullPath: "" }),
+      ).toThrow(/^Syntax error in schema file 'user\.ts:1:\d+': /);
+   });
+
    it("should validate parsed channels", () => {
       const parse = (entries: string) =>
          parser.parseSpecs({
@@ -231,5 +250,40 @@ describe("parseSpecs", () => {
       expect(() => parse("same: invoke<() => void>(), same: send<() => void>()")).toThrow(
          /not unique/,
       );
+   });
+});
+
+describe("describeSyntaxError", () => {
+   it("reads the position from the caret of the code frame", () => {
+      const message = [
+         "  x Expression expected",
+         "   ,-[2:1]",
+         " 1 | const a = 1;",
+         " 2 | export default f({ a: ;",
+         "   :                       ^",
+         " 3 | });",
+         "   `----",
+      ].join("\n");
+      expect(parser.describeSyntaxError(new Error(message))).toStrictEqual({
+         reason: "Expression expected",
+         line: 2,
+         column: 23,
+      });
+   });
+
+   it("falls back to the header position when there is no caret", () => {
+      const message = "  x Unexpected token\n   ,-[7:3]\n";
+      expect(parser.describeSyntaxError(new Error(message))).toStrictEqual({
+         reason: "Unexpected token",
+         line: 7,
+         column: 3,
+      });
+   });
+
+   it("returns only the reason when the position is unknown", () => {
+      expect(parser.describeSyntaxError("boom")).toStrictEqual({ reason: "boom" });
+      expect(parser.describeSyntaxError(new Error("\n"))).toStrictEqual({
+         reason: "Syntax error",
+      });
    });
 });

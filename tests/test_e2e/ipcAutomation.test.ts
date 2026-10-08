@@ -88,6 +88,13 @@ describe("ipcAutomation, schema directory", () => {
       expect(generated["window.d.ts"]).toContain("logStream");
    });
 
+   // Regression for T08: a README, a JSON file and a `.d.ts` that repeats a channel name used
+   // to be read from the schema directory.
+   it("ignores files that are not schema sources", async () => {
+      project = await runFixture("schema-dir");
+      expect(project.generated["main.ts"].match(/getUser/g)).toHaveLength(1);
+   });
+
    it("generates files that type-check", async () => {
       project = await runFixture("schema-dir");
       expect(await project.typecheck()).toBe("");
@@ -178,5 +185,14 @@ describe("ipcAutomation, schema with only port channels", () => {
    it("generates files that type-check", async () => {
       project = await runFixture("port-only");
       expect(await project.typecheck()).toBe("");
+   });
+});
+
+describe("ipcAutomation, schema with a syntax error", () => {
+   // Regression for T08: the parse error was swallowed and reported as "no channels found".
+   it("rejects with the file path, line and column", async () => {
+      await expect(runFixture("syntax-error")).rejects.toThrowError(
+         /Syntax error in schema file '.*schema\.ts:4:\d+': /,
+      );
    });
 });

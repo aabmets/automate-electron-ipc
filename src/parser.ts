@@ -235,6 +235,47 @@ class SchemaError extends Error {
    }
 }
 
+/**
+ * Extracts the reason and the position of a syntax error from the message of an swc parse error,
+ * which is a miette-style code frame. The caret line locates the column; the frame header
+ * only gives the line.
+ */
+export function describeSyntaxError(error: unknown): {
+   reason: string;
+   line?: number;
+   column?: number;
+} {
+   const message = error instanceof Error ? error.message : String(error);
+   const lines = message.split("\n");
+   const reason =
+      lines
+         .find((row) => row.trim())
+         ?.replace(/^\s*x\s+/, "")
+         .trim() ?? "Syntax error";
+   const caretIndex = lines.findIndex((row) => /^\s*:\s*\^/.test(row));
+   const codeRow = caretIndex > 0 ? /^\s*(\d+)\s*\|\s?(.*)$/.exec(lines[caretIndex - 1]) : null;
+   if (caretIndex > 0 && codeRow) {
+      const gutter = lines[caretIndex - 1].indexOf("|") + 2;
+      const column = lines[caretIndex].indexOf("^") - gutter + 1;
+      return { reason, line: Number(codeRow[1]), column: Math.max(column, 1) };
+   }
+   const header = /\[(\d+):(\d+)\]/.exec(message);
+   return header ? { reason, line: Number(header[1]), column: Number(header[2]) } : { reason };
+}
+
+/**
+ * Raised when a schema file is not valid TypeScript. The message names the file,
+ * as `path:line:column` when the position is known.
+ */
+class SchemaSyntaxError extends Error {
+   constructor(file: string, cause: unknown) {
+      const { reason, line, column } = describeSyntaxError(cause);
+      const where = line === undefined ? file : `${file}:${line}:${column}`;
+      super(`Syntax error in schema file '${where}': ${reason}`);
+      this.name = "SchemaSyntaxError";
+   }
+}
+
 interface ParseContext {
    file: string;
    src: Source;
@@ -540,20 +581,14 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
    const importSpecArray: t.ImportSpec[] = [];
    const typeSpecArray: t.TypeSpec[] = [];
 
+   const file = fileData.fullPath || fileData.relativePath || "<unknown>";
    let parsed: { module: Module; src: Source };
    try {
       parsed = parseModule(fileData.contents);
-   } catch {
-      // Files which are not valid TypeScript cannot contain channel definitions.
-      return {
-         typeSpecArray: [],
-         channelSpecArray: [],
-         importSpecArray: [],
-         channelMapExport: null,
-      };
+   } catch (error) {
+      throw new SchemaSyntaxError(file, error);
    }
    const { module, src } = parsed;
-   const file = fileData.fullPath || fileData.relativePath || "<unknown>";
    const { channelSpecs, channelMapExport } = parseChannelMapModule(module, src, file);
 
    module.body.forEach((node: ModuleItem) => {
@@ -581,6 +616,7 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
 
 export default {
    parseModule,
+   describeSyntaxError,
    forEachChild,
    isBuiltinType,
    collectCustomTypes,

@@ -37,6 +37,18 @@ describe("logger", () => {
       expect(output()).toContain("/p/schema.ts");
    });
 
+   it("prints a fatal error to stderr, one row per message line", () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      logger.fatalError(new Error("first line\nsecond line"));
+      logger.fatalError("plain text");
+      const first = String(errorSpy.mock.calls[0][0]);
+      expect(first).toContain("IPC automation failed:");
+      expect(first).toContain("first line");
+      expect(first).toContain("second line");
+      expect(String(errorSpy.mock.calls[1][0])).toContain("plain text");
+      expect(warnSpy).not.toHaveBeenCalled();
+   });
+
    it("warns about executing channels only once", () => {
       logger.cannotExecuteChannels();
       logger.cannotExecuteChannels();

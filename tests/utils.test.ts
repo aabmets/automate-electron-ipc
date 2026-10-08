@@ -81,6 +81,27 @@ describe("resolveUserProjectPath", () => {
    });
 });
 
+describe("isSchemaSourceFile", () => {
+   it("accepts .ts, .mts and .cts files", () => {
+      expect(utils.isSchemaSourceFile("schema.ts")).toBe(true);
+      expect(utils.isSchemaSourceFile("nested/user.mts")).toBe(true);
+      expect(utils.isSchemaSourceFile("nested/user.cts")).toBe(true);
+      expect(utils.isSchemaSourceFile("d.ts")).toBe(true);
+   });
+
+   it("rejects declaration files", () => {
+      expect(utils.isSchemaSourceFile("types.d.ts")).toBe(false);
+      expect(utils.isSchemaSourceFile("nested/types.d.mts")).toBe(false);
+      expect(utils.isSchemaSourceFile("types.d.cts")).toBe(false);
+   });
+
+   it("rejects other file types", () => {
+      for (const name of ["README.md", "data.json", "user.js", "user.tsx", "user.ts.bak", "ts"]) {
+         expect(utils.isSchemaSourceFile(name)).toBe(false);
+      }
+   });
+});
+
 describe("concatRegex", () => {
    it("should concatenate multiple regex patterns into a single pattern", () => {
       const pattern = utils.concatRegex([

@@ -68,6 +68,47 @@ describe("ipcAutomation", () => {
       );
    });
 
+   it("reads only .ts, .mts and .cts files, ignoring declaration files", async () => {
+      // Regression for T08: every file under schema/ was read and parsed.
+      const schemaDir = path.join(dir, "schema");
+      await fsp.mkdir(schemaDir, { recursive: true });
+      const source = (channel: string) =>
+         [
+            'import { defineChannels, invoke } from "automate-electron-ipc";',
+            `export default defineChannels({ ${channel}: invoke<() => Promise<void>>() });`,
+         ].join("\n");
+      await fsp.writeFile(path.join(schemaDir, "a.ts"), source("alpha"));
+      await fsp.writeFile(path.join(schemaDir, "b.mts"), source("bravo"));
+      await fsp.writeFile(path.join(schemaDir, "c.cts"), source("charlie"));
+      await fsp.writeFile(path.join(schemaDir, "d.d.ts"), source("alpha"));
+      await fsp.writeFile(path.join(schemaDir, "e.d.mts"), source("alpha"));
+      await fsp.writeFile(path.join(schemaDir, "f.js"), source("alpha"));
+      await fsp.writeFile(path.join(schemaDir, "notes.md"), "export default defineChannels({ [");
+      await fsp.writeFile(path.join(schemaDir, "data.json"), "{");
+      await fsp.mkdir(path.join(schemaDir, "folder.ts"));
+      mockConfig({ ipcSchema: { path: schemaDir, stats: await fsp.stat(schemaDir) } } as never);
+      const success = vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+
+      await ipcAutomation();
+
+      const reported = success.mock.calls[0][0].map((pfs) => pfs.relativePath);
+      expect(reported.sort()).toStrictEqual(["a.ts", "b.mts", "c.cts"]);
+   });
+
+   it("rejects with the file position when a schema file has a syntax error", async () => {
+      // Regression for T08: swc parse errors were swallowed.
+      const schemaPath = path.join(dir, "schema.ts");
+      await fsp.writeFile(schemaPath, "export default defineChannels({ a: ;\n});");
+      mockConfig({
+         ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+      } as never);
+
+      await expect(ipcAutomation()).rejects.toThrowError(
+         `Syntax error in schema file '${schemaPath}:1:36'`,
+      );
+      await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toThrowError();
+   });
+
    it("skips schema directory files without channels", async () => {
       const schemaDir = path.join(dir, "schema");
       await fsp.mkdir(path.join(schemaDir, "nested"), { recursive: true });
