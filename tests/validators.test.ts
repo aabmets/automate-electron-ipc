@@ -140,7 +140,6 @@ describe("validateChannelSpecs", () => {
       const invalidChannelSpecsArray = [
          csg.generate("RendererToRenderer", "Broadcast"),
          csg.generate("RendererToRenderer", "Unicast"),
-         csg.generate("MainToRenderer", "Unicast"),
          csg.generate("MainToRenderer", "Port"),
          csg.generate("RendererToMain", "Port"),
       ];
@@ -298,6 +297,47 @@ describe("validateTypeSpecs, error types", () => {
          /Type 'Hidden' is used by channel .* must be exported/,
       );
       expect(() => vld.validateTypeSpecs([{ ...spec, isExported: true }], [channel])).not.toThrow();
+   });
+});
+
+describe("validateChannelSpecs, ask channels", () => {
+   const generate = (returnType = "void") =>
+      new ChannelSpecGenerator().generate("MainToRenderer", "Unicast", returnType);
+
+   it("accepts a Unicast channel from the main process to a renderer, with any return type", () => {
+      for (const returnType of ["void", "boolean", "Promise<Document>", "Promise<void>"]) {
+         expect(() => vld.validateChannelSpecs([generate(returnType)])).not.toThrowError();
+      }
+   });
+
+   it("still rejects a Unicast channel between two renderers", () => {
+      const spec = new ChannelSpecGenerator().generate("RendererToRenderer", "Unicast");
+      expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         "Channel kind 'Unicast' is not allowed when channel direction is 'RendererToRenderer'.",
+      );
+   });
+
+   it("rejects the error types, the origins, the validator and the trigger of other verbs", () => {
+      const ref = { name: "args", exported: "args", fromPath: "./v" };
+      for (const extra of [
+         { errors: { definition: "Error", customTypes: [] } },
+         { allowedOrigins: ["app://."] },
+         { validate: ref },
+         { trigger: "focus" },
+      ]) {
+         const [key] = Object.keys(extra);
+         expect(() => vld.validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
+            new RegExp(key),
+         );
+      }
+   });
+
+   it("keeps the names of the asks unique among all channels", () => {
+      const spec = generate();
+      const clash = { ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast") };
+      expect(() => vld.validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
+         `Channel name '${spec.name}' is not unique across application.`,
+      );
    });
 });
 

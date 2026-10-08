@@ -93,10 +93,12 @@ export class BaseWriter {
 
    /**
     * The channel name that Electron sees, as a quoted literal: the name of the channel in the
-    * schema behind `channelPrefix`. Hooks and errors keep the name from the schema.
+    * schema behind `channelPrefix`. Hooks and errors keep the name from the schema. `suffix` names
+    * a second wire channel of the same schema channel, such as `:reply`. A schema channel name is
+    * an identifier, so a name with a colon cannot be the wire name of another channel.
     */
-   protected wireName(name: string): string {
-      return `'${this.config.channelPrefix ?? ""}${name}'`;
+   protected wireName(name: string, suffix = ""): string {
+      return `'${this.config.channelPrefix ?? ""}${name}${suffix}'`;
    }
 
    protected getCodeIndents(): string[] {

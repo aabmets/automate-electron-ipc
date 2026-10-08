@@ -1042,4 +1042,119 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain("broadcastMessage('app:pushIt', ");
       });
    });
+
+   describe("ask channels", () => {
+      const ask = {
+         name: "askIt",
+         kind: "Unicast",
+         direction: "MainToRenderer",
+         params: ["id: number"],
+         returnType: "boolean",
+      } as const;
+      const askAsync = {
+         name: "askLater",
+         kind: "Unicast",
+         direction: "MainToRenderer",
+         returnType: "Promise<string>",
+      } as const;
+      const emit = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const render = async (
+         channels: Parameters<typeof shared.buildFileSpecs>,
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestMainBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("generates invoke and invokeWith, which share one helper", async () => {
+         const output = await render([ask, askAsync]);
+
+         expect(output).toContain(
+            "invoke: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, id: number): Promise<Awaited<boolean>> =>",
+         );
+         expect(output).toContain(
+            "askRenderer('askIt', 'askIt', 'askIt:reply', target, [id]) as Promise<Awaited<boolean>>,",
+         );
+         expect(output).toContain(
+            "invokeWith: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, options: IpcAskOptions, id: number): Promise<Awaited<boolean>> =>",
+         );
+         expect(output).toContain(
+            "askRenderer('askIt', 'askIt', 'askIt:reply', target, [id], options) as Promise<Awaited<boolean>>,",
+         );
+         expect(output).toContain("export class IpcAskError extends Error {");
+         expect(output).toContain("export interface IpcAskOptions {");
+         expect(output.match(/^function askRenderer\(/gm)).toHaveLength(1);
+      });
+
+      it("does not wrap the promise of an async signature again", async () => {
+         const output = await render([askAsync]);
+
+         expect(output).toContain(
+            "invoke: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain): Promise<string> =>",
+         );
+         expect(output).toContain("target, []) as Promise<string>,");
+      });
+
+      it("imports ipcMain and the types of the reply listener, and no sender validation", async () => {
+         const output = await render([ask]);
+
+         expect(output).toContain(
+            'import { ipcMain as electronIpcMain, webContents as electronWebContents } from "electron";',
+         );
+         expect(output).toContain(
+            'import type { BrowserWindow, WebContents, WebContentsView, WebFrameMain, IpcMainEvent } from "electron";',
+         );
+         expect(output).not.toContain("isSenderAllowed");
+         expect(output).not.toContain("IpcForbiddenError");
+         expect(output).not.toContain("registeredHandlers");
+         expect(output).not.toContain("settleInvoke");
+      });
+
+      it("declares broadcastMessage and sendToSenderFrame for an emit only", async () => {
+         const asks = await render([ask]);
+         const emits = await render([emit]);
+         const both = await render([ask, emit]);
+
+         expect(asks).toContain("function resolveSendTarget(");
+         expect(asks).not.toContain("function broadcastMessage(");
+         expect(asks).not.toContain("function sendToSenderFrame(");
+         expect(emits).not.toContain("askRenderer");
+         expect(emits).not.toContain("IpcAskError");
+         expect(emits).toContain("function broadcastMessage(");
+         expect(emits).toContain("function sendToSenderFrame(");
+         expect(both).toContain("function broadcastMessage(");
+         expect(both).toContain("function askRenderer(");
+         expect(both.match(/^function resolveSendTarget\(/gm)).toHaveLength(1);
+      });
+
+      it("keeps the envelope and the reply listener of the other channels", async () => {
+         const output = await render([ask, unicast]);
+
+         expect(output).toContain("function settleInvoke(");
+         expect(output).toContain("function isSenderAllowed(");
+         expect(output).toContain("function listenForAskReplies(");
+         expect(output.match(/import \{ ipcMain as electronIpcMain/g)).toHaveLength(1);
+      });
+
+      it("is not changed by rawErrors, since the reply is always an envelope", async () => {
+         expect(await render([ask], { rawErrors: true })).toBe(await render([ask]));
+      });
+
+      it("puts the prefix in front of the request and the reply channel only", async () => {
+         const output = await render([ask], { channelPrefix: "app:" });
+
+         expect(output).toContain(
+            "askRenderer('askIt', 'app:askIt', 'app:askIt:reply', target, [id])",
+         );
+         expect(output).not.toContain("'app:askIt:reply:");
+         const bare = await render([ask], { channelPrefix: "" });
+         expect(bare).toContain("askRenderer('askIt', 'askIt', 'askIt:reply', target, [id])");
+         expect(await render([ask], {})).toBe(bare);
+      });
+   });
 });

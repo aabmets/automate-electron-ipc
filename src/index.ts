@@ -24,4 +24,5 @@ export const defineChannels: typeof api.defineChannels = (channels) => {
 export const invoke: typeof api.invoke = verb;
 export const send: typeof api.send = verb;
 export const emit: typeof api.emit = verb;
+export const ask: typeof api.ask = verb;
 export const port: typeof api.port = verb;

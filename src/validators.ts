@@ -105,6 +105,7 @@ function getChannelSpecStruct(
    kind: t.ChannelKind,
    triggerable = false,
    restrictable = false,
+   asking = false,
 ): Struct<any, any> {
    return object({
       name: refine(string(), "identifier", (value) =>
@@ -123,7 +124,7 @@ function getChannelSpecStruct(
          if (kind === "Broadcast") {
             choices.push("RendererToMain", "MainToRenderer");
          } else if (kind === "Unicast") {
-            choices.push("RendererToMain");
+            choices.push(asking ? "MainToRenderer" : "RendererToMain");
          } else if (kind === "Port") {
             choices.push("RendererToRenderer");
          }
@@ -164,7 +165,7 @@ function getChannelSpecStruct(
          ),
       }),
       errors:
-         kind === "Unicast"
+         kind === "Unicast" && !asking
             ? optional(
                  object({
                     definition: string(),
@@ -186,6 +187,7 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", true),
       BroadcastStruct: getChannelSpecStruct("Broadcast", false, true),
       UnicastStruct: getChannelSpecStruct("Unicast", false, true),
+      AskStruct: getChannelSpecStruct("Unicast", false, false, true),
       PortStruct: getChannelSpecStruct("Port"),
    };
    if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
@@ -195,7 +197,13 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
          assert(spec, structMap.BroadcastStruct);
       }
    } else if (spec?.kind === ("Unicast" as t.ChannelKind)) {
-      assert(spec, structMap.UnicastStruct);
+      // An `ask` goes from the main process to a renderer, an `invoke` the other way.
+      assert(
+         spec,
+         spec?.direction === ("MainToRenderer" as t.ChannelDirection)
+            ? structMap.AskStruct
+            : structMap.UnicastStruct,
+      );
    } else {
       assert(spec, structMap.PortStruct);
    }

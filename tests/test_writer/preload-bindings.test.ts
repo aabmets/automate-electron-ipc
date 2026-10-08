@@ -227,4 +227,72 @@ describe("PreloadBindingsWriter", () => {
          expect(await render({})).toBe(bare);
       });
    });
+
+   describe("ask channels", () => {
+      const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
+      const askToo = { name: "askAlso", kind: "Unicast", direction: "MainToRenderer" } as const;
+      const emit = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
+      const render = async (
+         channels: Parameters<typeof shared.buildFileSpecs>,
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("exposes handle only, and listens for the questions of the channel", async () => {
+         const output = await render([ask]);
+
+         expect(output).toContain("\n   askIt: {\n      handle: (callback: Function) => {");
+         expect(output).toContain("askHandlers['askIt'] = callback;");
+         expect(output).toContain("if (askHandlers['askIt'] === callback) {");
+         expect(output).toContain("delete askHandlers['askIt'];");
+         expect(output).toContain(
+            "ipcRenderer.on('askIt', (_event: unknown, id: unknown, ...args: any[]) => {",
+         );
+         expect(output).toContain("void answerAsk('askIt', 'askIt:reply', id, args);");
+         expect(output).not.toContain("askIt: {\n      on:");
+      });
+
+      it("generates the answering code only when there is an ask", async () => {
+         const emits = await render([emit]);
+
+         expect(emits).not.toContain("answerAsk");
+         expect(emits).not.toContain("askHandlers");
+         expect(emits).not.toContain("toIpcError");
+         expect(emits).toContain("on: (callback: Function) => {");
+         const asks = await render([ask, emit]);
+         expect(asks.match(/^async function answerAsk\(/gm)).toHaveLength(1);
+         expect(asks.match(/^function toIpcError\(/gm)).toHaveLength(1);
+         expect(asks).toContain("pushIt: {\n      on: (callback: Function) => {");
+      });
+
+      it("lists the listeners of the asks in name order, whatever the order of the schema", async () => {
+         const output = await render([ask, askToo]);
+
+         expect(output.indexOf("ipcRenderer.on('askAlso'")).toBeGreaterThan(-1);
+         expect(output.indexOf("ipcRenderer.on('askAlso'")).toBeLessThan(
+            output.indexOf("ipcRenderer.on('askIt'"),
+         );
+         expect(output).toBe(await render([askToo, ask]));
+      });
+
+      it("puts the prefix in front of the request and the reply channel", async () => {
+         const output = await render([ask], { channelPrefix: "app:" });
+
+         expect(output).toContain("ipcRenderer.on('app:askIt', ");
+         expect(output).toContain("answerAsk('askIt', 'app:askIt:reply', id, args)");
+         const bare = await render([ask], { channelPrefix: "" });
+         expect(bare).toContain("answerAsk('askIt', 'askIt:reply', id, args)");
+         expect(await render([ask], {})).toBe(bare);
+      });
+
+      it("is not changed by rawErrors, since the answer is always an envelope", async () => {
+         expect(await render([ask], { rawErrors: true })).toBe(await render([ask]));
+      });
+   });
 });

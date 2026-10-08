@@ -339,4 +339,47 @@ describe("RendererTypesWriter", () => {
          expect(prefixed).toBe(await render({ channelPrefix: "" }));
       });
    });
+
+   describe("ask channels", () => {
+      const render = async (
+         channels: Parameters<typeof shared.buildFileSpecs>,
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestRendererTypesWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const ask = {
+         name: "askIt",
+         kind: "Unicast",
+         direction: "MainToRenderer",
+         params: ["id: number", "...rest: string[]"],
+         returnType: "Promise<boolean>",
+      } as const;
+
+      it("declares a handle method which takes the responder and returns its disposer", async () => {
+         const output = await render([ask]);
+
+         expect(output).toContain(
+            "askIt: {\n      handle: (callback: (id: number, ...rest: string[]) => Promise<boolean>) => () => void;\n   };",
+         );
+      });
+
+      it("declares no error type, since the questions are asked by the main process", async () => {
+         const output = await render([ask]);
+
+         expect(output).not.toContain("IpcError");
+         expect(output).not.toContain("@throws");
+      });
+
+      it("is the same with rawErrors and with a prefix", async () => {
+         const plain = await render([ask]);
+
+         expect(await render([ask], { rawErrors: true })).toBe(plain);
+         expect(await render([ask], { channelPrefix: "app:" })).toBe(plain);
+      });
+   });
 });

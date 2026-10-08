@@ -502,6 +502,18 @@ describe("ipcAutomation, schema types named like generated names", () => {
       expect(importLine(main, "sendToSenderFrame", "./schema")).toBe(
          'import type { sendToSenderFrame as sendToSenderFrame_2 } from "./schema";',
       );
+      // The ask channels declare their own error, options and helpers, and use `Awaited`.
+      for (const name of ["IpcAskError", "IpcAskOptions", "askRenderer", "PendingAsk", "Awaited"]) {
+         expect(importLine(main, name, "./schema")).toBe(
+            `import type { ${name} as ${name}_2 } from "./schema";`,
+         );
+      }
+      expect(main).toContain(
+         "_options: IpcAskOptions, options: IpcAskOptions_2): Promise<Awaited<IpcAskError_2>>",
+      );
+      expect(main).toContain("Promise<askRenderer_2>");
+      expect(main).toContain("Promise<Awaited<Awaited_2>>");
+      expect(main).toContain("export class IpcAskError extends Error");
       expect(importLine(main, "WebFrameMain", "./schema")).toBe(
          'import type { WebFrameMain as WebFrameMain_2 } from "./schema";',
       );
@@ -543,6 +555,16 @@ describe("ipcAutomation, schema types named like generated names", () => {
       );
       expect(types).toContain("Promise<IpcApi_2>");
       expect(types).toContain("interface IpcApi {");
+      // Only `Awaited` is a global that window.d.ts uses, so the other names keep theirs.
+      expect(importLine(types, "Awaited", "./schema")).toBe(
+         'import type { Awaited as Awaited_2 } from "./schema";',
+      );
+      expect(importLine(types, "IpcAskError", "./schema")).toBe(
+         'import type { IpcAskError } from "./schema";',
+      );
+      expect(types).toContain(
+         "handle: (callback: (pending: PendingAsk) => Awaited_2) => () => void;",
+      );
       expect(importLine(types, "Window", "./schema")).toBe(
          'import type { Window } from "./schema";',
       );

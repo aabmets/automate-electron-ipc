@@ -27,6 +27,7 @@ Node library for generating IPC components for Electron apps.
 4) Generation of typehints for the `ipc` object of the renderer, also reachable as `window.ipc`
 5) Automatic import of user-defined types for generated components
 6) BrowserWindow event triggers for `emit` channels
+7) `ask` channels, with which the main process asks a renderer and awaits the answer
 
 
 ### Installation
@@ -153,7 +154,7 @@ meaning you can use any front-end framework or library like React, Vue or Angula
 Each verb declares one kind of channel in one direction:
 
 ```typescript
-import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
+import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
@@ -166,6 +167,9 @@ export default defineChannels({
    // optionally with a generated binder which sends when a BrowserWindow event fires
    progress: emit<(n: number) => void>({ trigger: "focus" }),
 
+   // Request from the main process to a renderer process with return data
+   hasUnsavedChanges: ask<(documentId: number) => boolean>(),
+
    // Sender and listener on same port for each of two renderer processes
    chat: port<(msg: string) => void>(),
 });
@@ -176,6 +180,7 @@ export default defineChannels({
 | `invoke` | RendererToMain     | any value or promise         |
 | `send`   | RendererToMain     | `void` or `Promise<void>`    |
 | `emit`   | MainToRenderer     | `void` or `Promise<void>`    |
+| `ask`    | MainToRenderer     | any value or promise         |
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
 
 The only supported option is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
@@ -209,6 +214,7 @@ on the verb of the channel and on the process that uses it:
 | `invoke` | `ipc.<name>.handle(callback)`       | `ipc.<name>.invoke(...args)`                      |
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
+| `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
@@ -269,6 +275,66 @@ ipc.theme.broadcastTo((contents) => contents.getURL().startsWith("app://settings
 only some of them should get the message. The filter comes first, because the options of a signature
 may end in optional or rest parameters, which would swallow an options argument. `send` still throws
 for a target that is destroyed, since the caller handed it over.
+
+#### Asking a renderer
+
+Electron has no invoke from the main process to a renderer. An `ask` channel adds one, for questions
+such as "are there unsaved changes?" when a window closes:
+
+```typescript
+// schema.ts
+hasUnsavedChanges: ask<(documentId: number) => boolean>(),
+
+// main process
+window.on("close", async (event) => {
+   event.preventDefault();
+   const unsaved = await ipc.hasUnsavedChanges.invoke(window, currentDocument);
+   if (!unsaved) window.destroy();
+});
+
+// renderer: one responder per channel, which may answer in a promise
+const dispose = ipc.hasUnsavedChanges.handle((documentId) => editor.isDirty(documentId));
+```
+
+`invoke(target, ...args)` takes the same targets as the `send` of an `emit` channel (a window, a view,
+contents or a frame) and returns a promise of what the responder returns. The request carries a
+correlation ID, and the renderer answers on a reply channel, named like the channel with `:reply`
+behind it, with the same ID. The reply counts only when it comes from the contents (and the frame)
+that were asked, so another renderer cannot answer for them, and only the first reply counts.
+
+The promise rejects with an `IpcAskError`, which has the `channel` and a `code`:
+
+| `code`                | When                                                                       |
+|-----------------------|----------------------------------------------------------------------------|
+| `IPC_ASK_TIMEOUT`     | the renderer has not answered within `timeoutMs`                           |
+| `IPC_ASK_DESTROYED`   | the target is destroyed, its renderer process is gone, or the frame is detached |
+| `IPC_ASK_NO_HANDLER`  | the renderer has no responder registered, such as before the page has loaded it |
+| `IPC_ASK_INVALID_REPLY` | the reply is not an answer or an error                                   |
+
+If the responder throws, the promise rejects with an `IpcAskError` which has the `name`, `message`,
+`code` and `data` of that error, in the form of the errors of `invoke` channels (see Errors). The
+renderer should throw a plain object, `{ name, message, code, data }`, if it wants more than the
+message to arrive: `contextBridge` copies an `Error` thrown by the page with its message only. The
+`rawErrors` option does not apply to `ask`, since the answers do not travel through Electron's own
+`invoke`. A destroyed target and a failing send both reject the promise, and never throw.
+
+There is no timeout unless one is given. To bound the wait, use
+`invokeWith(target, { timeoutMs }, ...args)`:
+
+```typescript
+const unsaved = await ipc.hasUnsavedChanges.invokeWith(window, { timeoutMs: 3000 }, currentDocument);
+```
+
+The options come before the arguments, because the signature may end in optional or rest parameters,
+which would swallow trailing options. A `timeoutMs` that is not a non-negative number rejects with a
+`TypeError`; `Infinity` waits for ever. A reply that comes after the timeout is ignored. A frame has
+no event for its own destruction, so a frame that goes away after the question was sent is detected
+through its contents or the timeout, which is why a timeout is worth setting for frames.
+
+A renderer has a single responder per channel. Calling `handle` again replaces the previous one,
+and the function that `handle` returns removes only its own responder: the disposer of a replaced
+responder does nothing. The preload script listens from the start, so a question that arrives while
+no responder is registered is answered with `IPC_ASK_NO_HANDLER` at once, and not left to time out.
 
 #### Sender validation
 

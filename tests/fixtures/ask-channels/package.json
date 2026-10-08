@@ -1,0 +1,9 @@
+{
+   "name": "fixture-ask-channels",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

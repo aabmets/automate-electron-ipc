@@ -125,6 +125,11 @@ export class RendererTypesWriter extends BaseWriter {
       return { name: spec.name, throws: true, methods: [this.method(method, ipcSignature, doc)] };
    }
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
+      if (spec.kind === "Unicast") {
+         // The single responder to the questions of the main process. It may answer in a promise.
+         const respond = `(callback: ${spec.signature.definition}) => () => void`;
+         return { name: spec.name, methods: [this.method("handle", respond)] };
+      }
       // Subscribing returns a function which removes that one listener.
       const subscribe = `(callback: ${spec.signature.definition}) => () => void`;
       return {

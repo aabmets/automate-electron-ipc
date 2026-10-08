@@ -4,12 +4,13 @@
  * Channels are declared in an exported channel map in the schema file:
  *
  * @example
- * import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
+ * import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";
  *
  * export default defineChannels({
  *    getUser: invoke<(id: number) => Promise<User>>(),
  *    echoUserName: send<(userName: string) => void>(),
  *    progress: emit<(n: number) => void>({ trigger: "focus" }),
+ *    hasUnsavedChanges: ask<() => boolean>(),
  *    chat: port<(msg: string) => void>(),
  * });
  */
@@ -114,6 +115,13 @@ export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
 }
 
 /**
+ * Options of `ask` channels. There are none yet.
+ */
+export interface AskConfig<_S extends ChannelSignature = ChannelSignature> {
+   [option: string]: never;
+}
+
+/**
  * Options of `emit` channels.
  *
  * @property trigger - Name of a BrowserWindow event. For a channel with a trigger, the main
@@ -214,6 +222,26 @@ export function send<S extends ChannelSignature = never>(
  */
 export function emit<S extends ChannelSignature = never>(
    config?: EmitConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * Request and response from the main process to a renderer process: the main process asks and
+ * awaits the answer, such as "are there unsaved changes?" on `close`. Electron has no invoke
+ * in this direction, so the generated code sends the request with a correlation ID and the
+ * renderer answers on a reply channel.
+ *
+ * The main process calls `ipc.<name>.invoke(target, ...args)`, or
+ * `ipc.<name>.invokeWith(target, { timeoutMs }, ...args)`, and gets a promise of the answer.
+ * It rejects with an `IpcAskError` when the target is destroyed, when the timeout passes, when
+ * the renderer has no handler, and when the handler throws. The renderer registers its single
+ * responder with `ipc.<name>.handle(callback)`, which returns a function that removes it.
+ * The signature may return any value, or a promise of it.
+ *
+ * @example
+ * hasUnsavedChanges: ask<(documentId: number) => boolean>()
+ */
+export function ask<S extends ChannelSignature = never>(
+   config?: AskConfig<NoInfer<S>>,
 ): ChannelResult<S>;
 
 /**

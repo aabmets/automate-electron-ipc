@@ -303,6 +303,7 @@ const VERBS = new Map<string, VerbInfo>([
       { kind: "Broadcast", direction: "RendererToMain", options: ["allowedOrigins", "validate"] },
    ],
    ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
+   ["ask", { kind: "Unicast", direction: "MainToRenderer", options: [] }],
    ["port", { kind: "Port", direction: "RendererToRenderer", options: [] }],
 ]);
 

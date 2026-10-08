@@ -12,7 +12,8 @@
 import { typecheck } from "@testutils/tsc-utils.js";
 import { describe, expect, it } from "vitest";
 
-const IMPORT = 'import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";';
+const IMPORT =
+   'import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";';
 
 describe("public types", () => {
    it("accepts the generic form and the as form", async () => {
@@ -34,6 +35,35 @@ describe("public types", () => {
          `,
       });
       expect(diagnostics).toBe("");
+   });
+
+   it("accepts the generic form and the as form of ask", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            export default defineChannels({
+               hasUnsavedChanges: ask<(documentId: number) => boolean>(),
+               getEditorState: ask<() => Promise<string>>({}),
+               hasUnsavedChangesAlt: ask() as (documentId: number) => boolean,
+            });
+         `,
+      });
+      expect(diagnostics).toBe("");
+   });
+
+   it("rejects options and error types on ask", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            export default defineChannels({
+               withOption: ask<() => void>({ timeoutMs: 1 }),
+               withErrors: ask<() => void, Error>(),
+            });
+         `,
+      });
+      // The option is not accepted, and the second type argument does not exist.
+      expect(diagnostics).toContain("schema.ts(4,46): error TS2322");
+      expect(diagnostics).toContain("schema.ts(5,32): error TS2558");
    });
 
    it("keeps the signature of each channel in the type of the map", async () => {

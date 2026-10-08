@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 47 delivered, 25 remaining, 1 dropped.
+**Progress:** 48 delivered, 24 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -74,7 +74,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 
 - [x] [T21: Main → renderer targets and broadcast-to-all](./tasks/T21-main-renderer-targets-and-broadcast.md) · depends on: T12
 - [x] [T22: Frame-targeted sends](./tasks/T22-frame-targeted-sends.md) · depends on: T21
-- [ ] [T23: `ask` channels (main asks a renderer and awaits the answer)](./tasks/T23-ask-channels.md) · depends on: T18, T21
+- [x] [T23: `ask` channels (main asks a renderer and awaits the answer)](./tasks/T23-ask-channels.md) · depends on: T18, T21
 - [ ] [T24: Robust port lifecycle (B9)](./tasks/T24-robust-port-lifecycle.md) · depends on: T14
 - [ ] [T25: One-to-many port topologies](./tasks/T25-one-to-many-port-topologies.md) · depends on: T24
 - [ ] [T26: Main ↔ renderer port channels](./tasks/T26-main-renderer-port-channels.md) · depends on: T24

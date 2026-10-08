@@ -1,0 +1,9 @@
+{
+   "name": "fixture-ask-only",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

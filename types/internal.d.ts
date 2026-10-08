@@ -146,7 +146,7 @@ export interface ChannelSpec {
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;
-   /** The error types that a RendererToMain Unicast channel may reject with. */
+   /** The error types that a RendererToMain Unicast channel may reject with. An `ask` has none. */
    errors?: ErrorsSpec;
    trigger?: string;
    /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */

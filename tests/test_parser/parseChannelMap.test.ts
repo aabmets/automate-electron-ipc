@@ -13,7 +13,8 @@ import parser from "@src/parser.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-const IMPORT = 'import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";';
+const IMPORT =
+   'import { defineChannels, invoke, send, emit, ask, port } from "automate-electron-ipc";';
 
 function parseMap(code: string, imports = IMPORT) {
    const { module, src } = parser.parseModule(`${imports}\n${code}`);
@@ -43,6 +44,7 @@ describe("parseChannelMapModule", () => {
          ["invoke", "Unicast", "RendererToMain"],
          ["send", "Broadcast", "RendererToMain"],
          ["emit", "Broadcast", "MainToRenderer"],
+         ["ask", "Unicast", "MainToRenderer"],
          ["port", "Port", "RendererToRenderer"],
       ] as const;
 
@@ -331,7 +333,7 @@ describe("parseChannelMapModule", () => {
          });
 
          it("rejects validate on emit and port", () => {
-            for (const verb of ["emit", "port"]) {
+            for (const verb of ["emit", "ask", "port"]) {
                const msg = parseError(
                   `export default defineChannels({ chan: ${verb}<() => void>({ validate: idArgs }) });`,
                   imports('import { idArgs } from "./v";'),
@@ -341,8 +343,8 @@ describe("parseChannelMapModule", () => {
          });
       });
 
-      it("rejects allowedOrigins on emit and port", () => {
-         for (const verb of ["emit", "port"]) {
+      it("rejects allowedOrigins on emit, ask and port", () => {
+         for (const verb of ["emit", "ask", "port"]) {
             const msg = parseError(
                wrap(`chan: ${verb}<() => void>({ allowedOrigins: ["app://."] })`),
             );
@@ -545,7 +547,7 @@ describe("parseChannelMapModule", () => {
          expect(parseError(wrap("chan: invoke<() => void, Error, string>()"))).toContain(
             "at most two type arguments",
          );
-         for (const verb of ["send", "emit", "port"]) {
+         for (const verb of ["send", "emit", "ask", "port"]) {
             const msg = parseError(wrap(`chan: ${verb}<() => void, Error>()`));
             expect(msg).toContain("exactly one type argument");
          }
@@ -615,7 +617,7 @@ describe("parseChannelMapModule", () => {
       });
 
       it("rejects options that the verb does not support", () => {
-         for (const verb of ["invoke", "send", "port"]) {
+         for (const verb of ["invoke", "send", "ask", "port"]) {
             const msg = parseError(wrap(`chan: ${verb}<() => void>({ trigger: "focus" })`));
             expect(msg).toContain("channel 'chan'");
             expect(msg).toContain(`option 'trigger' is not supported by '${verb}'`);

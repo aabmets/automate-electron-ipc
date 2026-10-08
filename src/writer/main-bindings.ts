@@ -72,11 +72,25 @@ export class MainBindingsWriter extends BaseWriter {
          "IpcEnvelope",
          "toIpcError",
          "settleInvoke",
+         "IpcAskError",
+         "IpcAskOptions",
+         "PendingAsk",
+         "pendingAsks",
+         "askReplyListeners",
+         "lastAskId",
+         "isSameFrame",
+         "listenForAskReplies",
+         "readAskReply",
+         "askRenderer",
          // Globals that the generated code uses.
          "Promise",
          "Error",
+         "TypeError",
          "Array",
+         "Awaited",
          "structuredClone",
+         "setTimeout",
+         "clearTimeout",
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -115,12 +129,7 @@ export class MainBindingsWriter extends BaseWriter {
             } else if (spec.direction === "MainToRenderer") {
                usesSenders = true;
                electronImportsSet.add("webContents as electronWebContents");
-               for (const type of [
-                  "BrowserWindow",
-                  "WebContents",
-                  "WebContentsView",
-                  "WebFrameMain",
-               ]) {
+               for (const type of this.getSenderTypes(spec)) {
                   electronTypeImportsSet.add(type);
                }
                channels.push(this.buildMainToRendererChannel(spec));
@@ -142,22 +151,27 @@ export class MainBindingsWriter extends BaseWriter {
             }
          }
       }
-      const electronImports = [
-         ...(usesIpcMain ? ["ipcMain as electronIpcMain"] : []),
-         ...electronImportsSet,
-      ];
-      const out: string[] = [
-         ...(electronImports.length > 0
-            ? [`import { ${electronImports.join(", ")} } from "electron";`]
-            : []),
-         ...(electronTypeImportsSet.size > 0
-            ? [`import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`]
-            : []),
-         ...importDeclarationsArray.sort(utils.compareStrings),
-      ];
+      const usesAsks = this.hasChannels("Unicast");
+      const usesEmits = this.hasChannels("Broadcast");
+      const out = this.buildImports(
+         [
+            ...(usesIpcMain || usesAsks ? ["ipcMain as electronIpcMain"] : []),
+            ...electronImportsSet,
+         ],
+         [...electronTypeImportsSet],
+         importDeclarationsArray,
+      );
       const [i0] = this.indents;
       const bindingsExpression = this.buildSupport(
-         { usesIpcMain, usesHandlers, usesValidation, usesEnvelope, usesSenders },
+         {
+            usesIpcMain,
+            usesHandlers,
+            usesValidation,
+            usesEnvelope,
+            usesSenders,
+            usesEmits,
+            usesAsks,
+         },
          [...eventTypes].sort(utils.compareStrings),
       );
       bindingsExpression.push("\nexport const ipc = {");
@@ -169,6 +183,28 @@ export class MainBindingsWriter extends BaseWriter {
       out.push(bindingsExpression.join(""));
       return out.join("\n");
    }
+   /** The import lines: the values and the types of `electron`, then the ones from the schema files. */
+   private buildImports(values: string[], types: string[], declarations: string[]): string[] {
+      return [
+         ...(values.length > 0 ? [`import { ${values.join(", ")} } from "electron";`] : []),
+         ...(types.length > 0 ? [`import type { ${types.join(", ")} } from "electron";`] : []),
+         ...declarations.sort(utils.compareStrings),
+      ];
+   }
+   /** Whether any schema file declares a channel of the kind from the main process to a renderer. */
+   private hasChannels(kind: t.ChannelKind): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some(
+            (spec) => spec.direction === "MainToRenderer" && spec.kind === kind,
+         ),
+      );
+   }
+   /** The electron types that the channels which send to a renderer use. */
+   private getSenderTypes(spec: t.ChannelSpec): string[] {
+      const types = ["BrowserWindow", "WebContents", "WebContentsView", "WebFrameMain"];
+      // The listener of the replies of an `ask` channel takes the event of `ipcMain.on`.
+      return spec.kind === "Unicast" ? [...types, "IpcMainEvent"] : types;
+   }
    /** The helpers that the channels of the file use, in the order that they are declared. */
    private buildSupport(
       uses: {
@@ -177,6 +213,8 @@ export class MainBindingsWriter extends BaseWriter {
          usesValidation: boolean;
          usesEnvelope: boolean;
          usesSenders: boolean;
+         usesEmits: boolean;
+         usesAsks: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -191,7 +229,10 @@ export class MainBindingsWriter extends BaseWriter {
          support.push(this.buildErrorEnvelope());
       }
       if (uses.usesSenders) {
-         support.push(this.buildSenderHelpers());
+         support.push(this.buildSenderHelpers(uses.usesEmits));
+      }
+      if (uses.usesAsks) {
+         support.push(this.buildAskHelpers());
       }
       if (uses.usesHandlers) {
          // The handler that each invoke channel has now, which its disposer compares against.
@@ -598,18 +639,18 @@ export class MainBindingsWriter extends BaseWriter {
       ];
    }
    /**
-    * The helpers of the `emit` channels. `resolveSendTarget` takes the receiver out of what
-    * `send` is given: a window or a view has contents as `webContents`, while a `WebContents` and
-    * a `WebFrameMain` receive the message themselves.
-    * `broadcastMessage` sends to every contents that is not destroyed, optionally only to those
+    * The helpers of the channels from the main process to a renderer. `resolveSendTarget` takes
+    * the receiver out of what `send` or `invoke` is given: a window or a view has contents as
+    * `webContents`, while a `WebContents` and a `WebFrameMain` receive the message themselves.
+    * The `emit` channels also get these two. `broadcastMessage` sends to every contents that is not destroyed, optionally only to those
     * that `filter` accepts. Destroyed contents are skipped, since sending to them throws.
     * `sendToSenderFrame` replies to the frame that sent the event. Electron clears `senderFrame`
     * once the frame navigates or is destroyed, so it is read first, and a missing, destroyed or
     * detached frame is skipped, which the return value reports.
     */
-   private buildSenderHelpers(): string {
+   private buildSenderHelpers(emits: boolean): string {
       const [i1, i2, i3] = this.indents;
-      return [
+      const resolve = [
          "",
          "function resolveSendTarget(",
          `${i1}target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,`,
@@ -617,6 +658,12 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}return 'webContents' in target ? target.webContents : target;`,
          "}",
          "",
+      ];
+      if (!emits) {
+         return resolve.join("\n");
+      }
+      return [
+         ...resolve,
          "function broadcastMessage(",
          `${i1}channel: string,`,
          `${i1}args: unknown[],`,
@@ -660,6 +707,9 @@ export class MainBindingsWriter extends BaseWriter {
     * signature may end in optional or rest parameters, which would swallow an options argument.
     */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
+      if (spec.kind === "Unicast") {
+         return this.buildAskChannel(spec);
+      }
       const [, i1, i2] = this.indents;
       // The names of the generated parameters must not shadow a parameter of the signature.
       const taken = this.collectIdentifiers([spec.signature.definition]);
@@ -689,6 +739,208 @@ export class MainBindingsWriter extends BaseWriter {
       if (spec.trigger) {
          members.push(`\n${this.buildTriggerBinder(spec)}`);
       }
+      return { name: spec.name, members };
+   }
+   /**
+    * The helpers of the `ask` channels. Electron has no invoke from the main process to a
+    * renderer, so `askRenderer` sends the question with a correlation ID as its first argument,
+    * and the preload script answers on the reply channel with the same ID and the envelope of the
+    * `invoke` channels. Everything on the reply channel is untrusted, so a reply counts only when
+    * the ID is pending for that reply channel, the sender is the contents (and frame) that was asked, and
+    * the envelope has a known shape. Another renderer cannot answer for the one that was asked.
+    *
+    * The promise is settled once: by the answer, by the timeout, or because the contents are
+    * destroyed or their renderer process is gone, whichever comes first. A frame is also checked
+    * when the question is sent, but has no event of its own, so a frame that goes away
+    * afterwards is caught by the destruction of its contents or by the timeout.
+    * `IpcAskError` carries the `name`, `message`, `code` and `data` of an error of the responder,
+    * and the code `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` or
+    * `IPC_ASK_INVALID_REPLY` for the failures of the library itself.
+    */
+   private buildAskHelpers(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "export class IpcAskError extends Error {",
+         `${i1}readonly code: string | number | undefined;`,
+         `${i1}readonly channel: string;`,
+         `${i1}readonly data: unknown;`,
+         `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcAskError', data?: unknown) {`,
+         `${i2}super(message);`,
+         `${i2}this.name = name;`,
+         `${i2}this.channel = channel;`,
+         `${i2}this.code = code;`,
+         `${i2}this.data = data;`,
+         `${i1}}`,
+         "}",
+         "",
+         "export interface IpcAskOptions {",
+         `${i1}/** Rejects with the code 'IPC_ASK_TIMEOUT' when the renderer has not answered by then. */`,
+         `${i1}timeoutMs?: number;`,
+         "}",
+         "",
+         "interface PendingAsk {",
+         `${i1}reply: string;`,
+         `${i1}contents: WebContents | undefined;`,
+         `${i1}frame: WebFrameMain | undefined;`,
+         `${i1}answer: (envelope: unknown) => void;`,
+         "}",
+         "",
+         "const pendingAsks: { [id: string]: unknown } = { __proto__: null };",
+         "const askReplyListeners: { [reply: string]: unknown } = { __proto__: null };",
+         "let lastAskId = 0;",
+         "",
+         "function isSameFrame(a: WebFrameMain, b: WebFrameMain): boolean {",
+         `${i1}try {`,
+         `${i2}return a === b || (a.processId === b.processId && a.routingId === b.routingId);`,
+         `${i1}} catch {`,
+         `${i2}return false;`,
+         `${i1}}`,
+         "}",
+         "",
+         "function listenForAskReplies(reply: string): void {",
+         `${i1}if (askReplyListeners[reply]) {`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}askReplyListeners[reply] = true;`,
+         `${i1}electronIpcMain.on(reply, (event: IpcMainEvent, id: unknown, envelope: unknown) => {`,
+         `${i2}const pending = typeof id === 'number' ? (pendingAsks[id] as PendingAsk | undefined) : undefined;`,
+         `${i2}if (!pending || pending.reply !== reply) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}let allowed = false;`,
+         `${i2}try {`,
+         `${i3}const frame = event.senderFrame;`,
+         `${i3}allowed =`,
+         `${i4}(!pending.contents || event.sender === pending.contents) &&`,
+         `${i4}(!pending.frame || (frame != null && isSameFrame(frame, pending.frame)));`,
+         `${i2}} catch {`,
+         `${i3}allowed = false;`,
+         `${i2}}`,
+         `${i2}if (allowed) {`,
+         `${i3}pending.answer(envelope);`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
+         "function readAskReply(channel: string, envelope: unknown): { value: unknown } | { error: IpcAskError } {",
+         `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
+         `${i1}if (source && source.ok === true) {`,
+         `${i2}return { value: source.value };`,
+         `${i1}}`,
+         `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
+         `${i1}if (!source || source.ok !== false || !error) {`,
+         `${i2}return { error: new IpcAskError(channel, 'The renderer sent an unreadable reply', 'IPC_ASK_INVALID_REPLY') };`,
+         `${i1}}`,
+         `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
+         `${i1}const message = typeof error.message === 'string' ? error.message : 'The renderer failed without a message';`,
+         `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
+         `${i1}return { error: new IpcAskError(channel, message, code, name, error.data) };`,
+         "}",
+         "",
+         "function askRenderer(",
+         `${i1}channel: string,`,
+         `${i1}wire: string,`,
+         `${i1}reply: string,`,
+         `${i1}target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,`,
+         `${i1}args: unknown[],`,
+         `${i1}options?: IpcAskOptions,`,
+         "): Promise<unknown> {",
+         `${i1}return new Promise<unknown>((resolve, reject) => {`,
+         `${i2}const timeoutMs = options?.timeoutMs;`,
+         `${i2}if (timeoutMs !== undefined && !(typeof timeoutMs === 'number' && timeoutMs >= 0)) {`,
+         `${i3}throw new TypeError('timeoutMs must be a number which is not negative');`,
+         `${i2}}`,
+         `${i2}const destination = resolveSendTarget(target);`,
+         `${i2}const frame = 'getURL' in destination ? undefined : destination;`,
+         `${i2}const contents = 'getURL' in destination ? destination : electronWebContents.fromFrame(destination);`,
+         `${i2}const destroyed = new IpcAskError(`,
+         `${i3}channel,`,
+         `${i3}\`The renderer that was asked on the channel '\${channel}' is gone\`,`,
+         `${i3}'IPC_ASK_DESTROYED',`,
+         `${i2});`,
+         `${i2}let isGone = false;`,
+         `${i2}try {`,
+         `${i3}isGone = !!(contents && contents.isDestroyed()) || !!(frame && (frame.isDestroyed?.() || frame.detached));`,
+         `${i2}} catch {`,
+         `${i3}isGone = true;`,
+         `${i2}}`,
+         `${i2}if (isGone) {`,
+         `${i3}reject(destroyed);`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}listenForAskReplies(reply);`,
+         `${i2}const id = ++lastAskId;`,
+         `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
+         `${i2}let onGone = (): void => undefined;`,
+         `${i2}const finish = (settle: () => void): void => {`,
+         `${i3}clearTimeout(timer);`,
+         `${i3}delete pendingAsks[id];`,
+         `${i3}contents?.removeListener('destroyed', onGone);`,
+         `${i3}contents?.removeListener('render-process-gone', onGone);`,
+         `${i3}settle();`,
+         `${i2}};`,
+         `${i2}onGone = () => finish(() => reject(destroyed));`,
+         `${i2}const pending: PendingAsk = {`,
+         `${i3}reply,`,
+         `${i3}contents,`,
+         `${i3}frame,`,
+         `${i3}answer: (envelope) => {`,
+         `${i4}const outcome = readAskReply(channel, envelope);`,
+         `${i4}finish(() => ('error' in outcome ? reject(outcome.error) : resolve(outcome.value)));`,
+         `${i3}},`,
+         `${i2}};`,
+         `${i2}pendingAsks[id] = pending;`,
+         `${i2}contents?.once('destroyed', onGone);`,
+         `${i2}contents?.once('render-process-gone', onGone);`,
+         `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
+         `${i3}const error = new IpcAskError(`,
+         `${i4}channel,`,
+         `${i4}\`The renderer did not answer the channel '\${channel}' within \${timeoutMs} ms\`,`,
+         `${i4}'IPC_ASK_TIMEOUT',`,
+         `${i3});`,
+         `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
+         `${i2}}`,
+         `${i2}try {`,
+         `${i3}destination.send(wire, id, ...args);`,
+         `${i2}} catch (error) {`,
+         `${i3}finish(() => reject(error));`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `ipc.<name>.invoke(target, ...args)` asks one window, view, contents or frame, and
+    * `ipc.<name>.invokeWith(target, { timeoutMs }, ...args)` does so with a timeout. The options
+    * come before the arguments, since a signature that ends in optional or rest parameters would
+    * swallow trailing options. Both return a promise of what the responder in the renderer returns.
+    */
+   private buildAskChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2] = this.indents;
+      // The names of the generated parameters must not shadow a parameter of the signature.
+      const taken = this.collectIdentifiers([spec.signature.definition]);
+      const targetName = this.uniqueName("target", taken);
+      const optionsName = this.uniqueName("options", taken);
+      const senderParams = this.getOriginalParams(spec, true);
+      const ipcParams = this.getOriginalParams(spec, false);
+      const typeParams = this.getTypeParams(spec.signature);
+      const targetType = "BrowserWindow | WebContents | WebContentsView | WebFrameMain";
+      const returned = spec.signature.async
+         ? spec.signature.returnType
+         : `Promise<Awaited<${spec.signature.returnType}>>`;
+      const channel = `'${spec.name}'`;
+      const rest = senderParams ? `[${senderParams}]` : "[]";
+      const params = (generated: string[]) => [...generated, ipcParams].filter(Boolean).join(", ");
+      const ask = (options: string) =>
+         `askRenderer(${channel}, ${this.wireName(spec.name)}, ${this.wireName(spec.name, ":reply")}, ${targetName}, ${rest}${options}) as ${returned}`;
+      const members = [
+         `\n${i1}invoke: ${typeParams}(${params([`${targetName}: ${targetType}`])}): ${returned} =>`,
+         `\n${i2}${ask("")},`,
+         `\n${i1}invokeWith: ${typeParams}(${params([`${targetName}: ${targetType}`, `${optionsName}: IpcAskOptions`])}): ${returned} =>`,
+         `\n${i2}${ask(`, ${optionsName}`)},`,
+      ];
       return { name: spec.name, members };
    }
    /**
