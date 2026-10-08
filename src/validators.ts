@@ -228,6 +228,7 @@ export function validateTypeSpecs(
       generics: nullable(string()),
       isExported: boolean(),
       isDefault: optional(boolean()),
+      exportedAs: optional(string()),
    });
    for (const spec of specs) {
       assert(spec, TypeSpecStruct);

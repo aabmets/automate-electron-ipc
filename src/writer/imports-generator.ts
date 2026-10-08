@@ -132,7 +132,7 @@ export class ImportsGenerator {
       }
       const typeSpec = typeSpecArray.find((spec) => spec.name === name);
       if (typeSpec) {
-         const exported = typeSpec.isDefault ? "default" : name;
+         const exported = typeSpec.isDefault ? "default" : (typeSpec.exportedAs ?? name);
          const fileName = path.basename(pfs.fullPath);
          const filePath = this.adjustImportPath(this.getImportPath(fileName), pfs.fullPath);
          const fileId = this.splitScriptExtension(pfs.fullPath).base;

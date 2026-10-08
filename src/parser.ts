@@ -791,14 +791,56 @@ const TYPE_KINDS = new Map<string, t.TypeKind>([
    ["TsEnumDeclaration", "enum"],
    ["TsModuleDeclaration", "namespace"],
    ["ClassDeclaration", "class"],
+   // swc parses `export default class X {}` as a class expression.
+   ["ClassExpression", "class"],
 ]);
 
 function isTypeDefinition(node: AstNode): boolean {
-   if (node.type === "TsModuleDeclaration") {
+   if (node.type === "ClassExpression") {
+      // `export default class {}` declares no name.
+      return !!node.identifier;
+   } else if (node.type === "TsModuleDeclaration") {
       // `declare module "name"` and `declare global` declare no name.
       return node.id.type === "Identifier" && !node.global;
    }
    return TYPE_KINDS.has(node.type);
+}
+
+/**
+ * Marks the local types that the module exports through `export { X }`, `export { X as Y }`,
+ * `export { X as default }` or `export default X`. Re-exports from another module declare no
+ * local type, and neither do specifiers of values, so they match no spec and are ignored.
+ * When a type is exported several times, the export under its own name wins, then the first.
+ */
+export function applyExportSpecifiers(body: AstNode[], typeSpecs: t.TypeSpec[]): void {
+   const exportNames = new Map<string, string[]>();
+   const add = (local: string, exported: string) => {
+      exportNames.set(local, [...(exportNames.get(local) ?? []), exported]);
+   };
+   for (const item of body) {
+      if (item.type === "ExportDefaultExpression" && item.expression.type === "Identifier") {
+         add(item.expression.value, "default");
+      } else if (item.type === "ExportNamedDeclaration" && !item.source) {
+         for (const spec of item.specifiers as AstNode[]) {
+            if (spec.type === "ExportSpecifier") {
+               add(spec.orig.value, (spec.exported ?? spec.orig).value);
+            }
+         }
+      }
+   }
+   for (const spec of typeSpecs) {
+      const names = exportNames.get(spec.name);
+      if (spec.isExported || !names) {
+         continue;
+      }
+      const exported = names.includes(spec.name) ? spec.name : names[0];
+      spec.isExported = true;
+      if (exported === "default") {
+         spec.isDefault = true;
+      } else if (exported !== spec.name) {
+         spec.exportedAs = exported;
+      }
+   }
 }
 
 export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
@@ -828,6 +870,8 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
       }
    });
 
+   applyExportSpecifiers(module.body as AstNode[], typeSpecArray);
+
    const channelSpecArray = vld.validateChannelSpecs(channelSpecs);
    return {
       typeSpecArray: vld.validateTypeSpecs(typeSpecArray, channelSpecArray),
@@ -851,5 +895,6 @@ export default {
    parseChannelMapModule,
    parseImportDeclarations,
    parseTypeDefinitions,
+   applyExportSpecifiers,
    parseSpecs,
 };

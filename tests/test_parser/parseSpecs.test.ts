@@ -422,6 +422,101 @@ describe("parseSpecs, names of globals that the schema binds", () => {
    });
 });
 
+describe("parseSpecs, export specifiers and default classes", () => {
+   const header = 'import { defineChannels, invoke } from "automate-electron-ipc";\n';
+   const parse = (contents: string) =>
+      parser.parseSpecs({ contents: header + contents, relativePath: "", fullPath: "" });
+   const channels = (...types: string[]) =>
+      `export default defineChannels({ ${types.map((x, i) => `chan${i}: invoke<() => ${x}>()`).join(", ")} });`;
+
+   // Regression for T61: `interface X {}` + `export { X }` failed with "must be exported".
+   it("accepts a type that `export { X }` exports", () => {
+      const { typeSpecArray } = parse(`interface X {}\nexport { X };\n${channels("X")}`);
+      expect(typeSpecArray).toStrictEqual([
+         { name: "X", kind: "interface", generics: null, isExported: true },
+      ]);
+   });
+
+   it("accepts a type that `export type { X }` exports", () => {
+      const { typeSpecArray } = parse(`type X = string;\nexport type { X };\n${channels("X")}`);
+      expect(typeSpecArray[0]).toMatchObject({ name: "X", isExported: true });
+   });
+
+   it("records the name of a renamed export", () => {
+      const { typeSpecArray } = parse(`interface X {}\nexport { X as Y };\n${channels("X")}`);
+      expect(typeSpecArray).toStrictEqual([
+         { name: "X", kind: "interface", generics: null, isExported: true, exportedAs: "Y" },
+      ]);
+   });
+
+   it("records `export { X as default }` and `export default X` as default exports", () => {
+      for (const form of ["export { X as default };", "export default X;"]) {
+         const { typeSpecArray } = parse(`interface X {}\n${form}\n${channels("X")}`);
+         expect(typeSpecArray[0]).toMatchObject({ isExported: true, isDefault: true });
+         expect(typeSpecArray[0]).not.toHaveProperty("exportedAs");
+      }
+   });
+
+   it("prefers the export under the type's own name", () => {
+      const { typeSpecArray } = parse(`interface X {}\nexport { X as Y, X };\n${channels("X")}`);
+      expect(typeSpecArray[0]).not.toHaveProperty("exportedAs");
+      expect(typeSpecArray[0]).not.toHaveProperty("isDefault");
+   });
+
+   it("keeps the first of several renamed exports", () => {
+      const { typeSpecArray } = parse(
+         `interface X {}\nexport { X as B, X as A };\n${channels("X")}`,
+      );
+      expect(typeSpecArray[0]).toMatchObject({ exportedAs: "B" });
+   });
+
+   it("exports every declaration that shares the name", () => {
+      const { typeSpecArray } = parse(`interface X {}\nnamespace X {}\nexport { X };`);
+      expect(typeSpecArray.map((spec) => spec.isExported)).toStrictEqual([true, true]);
+   });
+
+   it("ignores re-exports and values", () => {
+      const { typeSpecArray } = parse(
+         `interface X {}\nconst X2 = 1;\nexport { X as Z } from "./other";\nexport { X2 };`,
+      );
+      expect(typeSpecArray).toStrictEqual([
+         { name: "X", kind: "interface", generics: null, isExported: false },
+      ]);
+   });
+
+   it("still requires a type to be exported when a channel uses it", () => {
+      expect(() => parse(`interface X {}\nexport { Y };\n${channels("X")}`)).toThrow(
+         "Type 'X' is used by channel 'chan0' and must be exported.",
+      );
+   });
+
+   it("records a default exported class", () => {
+      const { typeSpecArray, channelSpecArray } = parse(
+         `export default class Account<T> { id!: T }\n${channels("Account<number>").replace("export default", "export const channels =")}`,
+      );
+      expect(typeSpecArray).toStrictEqual([
+         {
+            name: "Account",
+            kind: "class",
+            generics: "<T>",
+            isExported: true,
+            isDefault: true,
+         },
+      ]);
+      expect(channelSpecArray[0].signature.customTypes).toStrictEqual(["Account"]);
+   });
+
+   it("ignores an anonymous default exported class", () => {
+      const { typeSpecArray } = parse("export default class {}");
+      expect(typeSpecArray).toStrictEqual([]);
+   });
+
+   it("binds the name of a default exported class", () => {
+      const module = parser.parseModule("export default class Account {}").module;
+      expect([...parser.collectModuleBindings(module)]).toStrictEqual(["Account"]);
+   });
+});
+
 describe("collectModuleBindings", () => {
    const bindings = (code: string) => [
       ...parser.collectModuleBindings(parser.parseModule(code).module),

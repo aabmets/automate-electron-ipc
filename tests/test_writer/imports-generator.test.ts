@@ -63,6 +63,32 @@ describe("ImportsGenerator", () => {
       );
    });
 
+   // Regression for T61.
+   it("imports a type that the schema exports under another name", () => {
+      const pfs: t.ParsedFileSpecs = {
+         fullPath: "/project/src/autoipc/schema.ts",
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: [],
+            typeSpecArray: [
+               {
+                  name: "Payload",
+                  kind: "interface" as t.TypeKind,
+                  generics: null,
+                  isExported: true,
+                  exportedAs: "PublicPayload",
+               },
+            ],
+         },
+      };
+      const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+      expect(ig.getDeclaration(pfs, "Payload")).toStrictEqual(
+         'import type { PublicPayload as Payload } from "./schema";',
+      );
+   });
+
    it("imports a type of the IPC schema only once", () => {
       const pfs: t.ParsedFileSpecs = {
          fullPath: "/project/src/autoipc/schema.ts",

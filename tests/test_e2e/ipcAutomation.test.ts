@@ -238,6 +238,30 @@ describe("ipcAutomation, type definition edge cases", () => {
    });
 });
 
+describe("ipcAutomation, types exported by specifiers and default classes", () => {
+   // Regression for T61: `export { X }` failed validation, `export default class` got no import.
+   it("imports the types under the names that the schema exports", async () => {
+      project = await runFixture("export-specifiers");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*schema";$/gm);
+         expect(imports).toStrictEqual([
+            'import type { Main as Primary } from "./schema";',
+            'import type { Plain } from "./schema";',
+            'import type { PublicRenamed as Renamed } from "./schema";',
+            'import type { default as Account } from "./schema";',
+         ]);
+         expect(generated[file]).not.toContain("Hidden");
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("export-specifiers");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, import paths with dots in the file name", () => {
    // Regression for T55: "./types/user.model" was imported as "./types/user" (TS2307).
    it("keeps the dotted file names, and maps script extensions for NodeNext", async () => {

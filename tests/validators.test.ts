@@ -257,6 +257,13 @@ describe("validateTypeSpecs", () => {
       ).toThrowError("Type 'VitestInterface' is used by channel 'vitestChannel'");
    });
 
+   it("should accept a type that is exported under another name", () => {
+      const spec = { ...hiddenSpec, isExported: true, exportedAs: "Public" };
+      expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([
+         spec,
+      ]);
+   });
+
    it("should accept exported types that a channel uses", () => {
       const spec = { ...hiddenSpec, isExported: true, isDefault: true };
       expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([

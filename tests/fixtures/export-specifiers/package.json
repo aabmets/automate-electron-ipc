@@ -1,0 +1,9 @@
+{
+   "name": "fixture-export-specifiers",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

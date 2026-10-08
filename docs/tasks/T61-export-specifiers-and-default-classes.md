@@ -11,4 +11,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** record export specifiers of local types (including renames, and `as default`), and
   record default-exported classes like T09's default-exported interfaces.
 - **Tests:** parser and validator unit tests, plus an e2e fixture that type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `export { X }`, `export type { X }`, `export { X as Y }`,
+  `export { X as default }` and `export default X` now mark the local type as exported (a rename is
+  recorded as `exportedAs` and imported as `Y as X`). `export default class X {}` is recorded as a
+  default-exported class; an anonymous default class declares no name and is ignored. Re-exports
+  with a `from` source are not local types and stay ignored.

@@ -43,8 +43,10 @@ export interface TypeSpec {
    kind: TypeKind;
    generics: string | null;
    isExported: boolean;
-   /** Set for `export default interface X`, which is imported as `default as X`. */
+   /** Set for `export default interface X` and `export { X as default }`: `default as X`. */
    isDefault?: boolean;
+   /** The name of `export { X as Y }`, which is imported as `Y as X`. */
+   exportedAs?: string;
 }
 
 export interface CallableParam {
