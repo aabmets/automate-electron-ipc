@@ -143,7 +143,9 @@ export class RendererTypesWriter extends BaseWriter {
          name: spec.name,
          methods: [
             this.method("send", definition),
-            this.method("on", `(callback: ${definition}) => void`),
+            this.method("on", `(callback: ${definition}) => () => void`),
+            this.method("onReady", "(callback: () => void) => () => void"),
+            this.method("onClose", "(callback: () => void) => () => void"),
          ],
       };
    }

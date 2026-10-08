@@ -789,7 +789,7 @@ describe("MainBindingsWriter", () => {
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write a connect method for Port channels", async () => {
+   it("should write a connect method for Port channels, which pairs the windows once they have loaded", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
@@ -798,17 +798,44 @@ describe("MainBindingsWriter", () => {
          import { MessageChannelMain } from "electron";
          import type { BrowserWindow } from "electron";
 
+         function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {
+            const windows = winA === winB ? [winA] : [winA, winB];
+            let closed = false;
+            const isReady = (win: BrowserWindow) =>
+               !win.isDestroyed() && !win.webContents.isLoading() && win.webContents.getURL() !== '';
+            const pair = () => {
+               if (closed || !isReady(winA) || !isReady(winB)) {
+                  return;
+               }
+               const { port1, port2 } = new MessageChannelMain();
+               winA.webContents.postMessage(channel, null, [port1]);
+               winB.webContents.postMessage(channel, null, [port2]);
+            };
+            const close = () => {
+               if (closed) {
+                  return;
+               }
+               closed = true;
+               for (const win of windows) {
+                  // A destroyed window has dropped its listeners, and cannot be reached.
+                  if (!win.isDestroyed()) {
+                     win.off('closed', close);
+                     win.webContents.off('did-finish-load', pair);
+                     win.webContents.send(\`\${channel}:close\`);
+                  }
+               }
+            };
+            for (const win of windows) {
+               win.on('closed', close);
+               win.webContents.on('did-finish-load', pair);
+            }
+            pair();
+            return { close };
+         }
+
          export const ipc = {
             vitestChannel: {
-               connect: (winA: BrowserWindow, winB: BrowserWindow) => {
-                  const { port1, port2 } = new MessageChannelMain();
-                  winA.once('ready-to-show', () => {
-                     winA.webContents.postMessage('vitestChannel', null, [port1]);
-                  });
-                  winB.once('ready-to-show', () => {
-                     winB.webContents.postMessage('vitestChannel', null, [port2]);
-                  });
-               },
+               connect: (winA: BrowserWindow, winB: BrowserWindow) => connectPorts('vitestChannel', winA, winB),
             },
          }
       `);
@@ -1012,8 +1039,9 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain("electronIpcMain.on('app:sendIt', listener);");
          expect(output).toContain("electronIpcMain.off('app:sendIt', listener);");
          expect(output).toContain("webContents.send('app:pushIt', ");
-         expect(output).toContain("webContents.postMessage('app:chatIt', null, [port1]);");
-         expect(output).toContain("webContents.postMessage('app:chatIt', null, [port2]);");
+         expect(output).toContain("connectPorts('app:chatIt', winA, winB)");
+         expect(output).toContain("webContents.postMessage(channel, null, [port1]);");
+         expect(output).toContain("webContents.send(`${channel}:close`);");
       });
 
       it("leaves the names for hooks, errors and the registry as they are in the schema", async () => {

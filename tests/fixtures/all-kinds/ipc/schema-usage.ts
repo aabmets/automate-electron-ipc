@@ -27,7 +27,13 @@ export const stopProgress: () => void = ipc.progress.on(() => undefined);
 export const stopProgressOnce: () => void = ipc.progress.once((percent: number) => percent);
 stopProgress();
 ipc.chat.send("hi");
-ipc.chat.on((msg: string) => console.log(msg));
+export const stopChat: () => void = ipc.chat.on((msg: string) => console.log(msg));
+export const stopReady: () => void = ipc.chat.onReady(() => ipc.chat.send("ready"));
+export const stopClose: () => void = ipc.chat.onClose(() => undefined);
+// @ts-expect-error the callback of onReady takes no arguments
+ipc.chat.onReady((msg: string) => msg);
+// @ts-expect-error a port channel has no close, the main process closes the connection
+ipc.chat.close();
 
 // Renderer: each verb allows only its own methods.
 // @ts-expect-error invoke channels cannot be sent or listened to
@@ -83,7 +89,10 @@ mainIpc.progress.broadcast(50, "half", { filter: () => true });
 mainIpc.logLine.broadcast("line");
 // @ts-expect-error invoke channels have no broadcast
 mainIpc.getUser.broadcast(1);
-mainIpc.chat.connect(win, win);
+export const connection: { close: () => void } = mainIpc.chat.connect(win, win);
+connection.close();
+// @ts-expect-error the handle closes the connection, it does not send
+connection.send("hi");
 
 // @ts-expect-error invoke channels are only handled in the main process
 mainIpc.getUser.invoke(1);

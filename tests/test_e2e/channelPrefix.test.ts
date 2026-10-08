@@ -25,11 +25,17 @@ afterEach(async () => {
    project = undefined;
 });
 
-/** The channel names that the generated code passes to Electron, as written in the text. */
+/**
+ * The channel names that the generated code passes to Electron, as written in the text. The
+ * `:close` name of a port channel is the name of the channel with a suffix, which the main process
+ * builds at runtime, so it is counted as the channel.
+ */
 function wireNames(text: string): string[] {
    const calls =
-      /(?:electronIpcMain|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage)\(\s*'([^']+)'/g;
-   const names = Array.from(text.matchAll(calls), (match) => match[1] ?? match[2]);
+      /(?:electronIpcMain|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage|connectPorts)\(\s*'([^']+)'/g;
+   const names = Array.from(text.matchAll(calls), (match) =>
+      (match[1] ?? match[2]).replace(/:close$/, ""),
+   );
    return Array.from(new Set(names)).sort();
 }
 
@@ -102,15 +108,26 @@ describe.each([
       });
       const main = loadGenerated(project.generated["main.ts"], { electron });
       const win = createFakeWindow();
-      const one = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
-      const two = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
+      const loaded = () =>
+         Object.assign(createFakeWindow(), {
+            webContents: {
+               postMessage: vi.fn(),
+               send: vi.fn(),
+               on: vi.fn(),
+               off: vi.fn(),
+               isLoading: () => false,
+               getURL: () => "app://.",
+            },
+         });
+      const one = loaded();
+      const two = loaded();
 
       main.ipc.progress.send(win, 5);
-      main.ipc.chat.connect(one, two);
-      one.emit("ready-to-show");
+      main.ipc.chat.connect(one, two).close();
 
       expect(win.webContents.send).toHaveBeenCalledWith(`${prefix}progress`, 5, undefined);
       expect(one.webContents.postMessage.mock.calls[0][0]).toBe(`${prefix}chat`);
+      expect(one.webContents.send).toHaveBeenCalledWith(`${prefix}chat:close`);
    });
 
    it("listens for the wire name in the preload script, for events and for ports", async () => {

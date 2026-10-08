@@ -654,7 +654,7 @@ describe("ipcAutomation, schema with only port channels", () => {
 
       expect(generated["main.ts"]).toContain("export const ipc = {\n   chat: {\n      connect:");
       expect(generated["preload.ts"]).toContain(
-         "exposeInMainWorld('ipc', {\n   chat: getPortObject('chat'),",
+         "exposeInMainWorld('ipc', {\n   chat: ports['chat'].api,",
       );
       expect(generated["window.d.ts"]).toContain("interface IpcApi {\n   chat: {\n      send:");
       expect(generated["main.ts"]).not.toMatch(/\{\s*,/);

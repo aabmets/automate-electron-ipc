@@ -63,6 +63,8 @@ describe("generated preload script", () => {
 
       expect(callablePaths(exposed.ipc)).toStrictEqual([
          "chat.on",
+         "chat.onClose",
+         "chat.onReady",
          "chat.send",
          "getTime.invoke",
          "getUser.invoke",
@@ -176,8 +178,12 @@ describe("generated preload script", () => {
 
    it("stores the port of a port channel and posts and receives messages through it", async () => {
       const { exposed, electron } = await loadPreload("all-kinds");
-      const port: { postMessage: ReturnType<typeof vi.fn>; onmessage?: (event: unknown) => void } =
-         { postMessage: vi.fn() };
+      const port = {
+         postMessage: vi.fn(),
+         close: vi.fn(),
+         addEventListener: vi.fn(),
+         onmessage: undefined as ((event: unknown) => void) | undefined,
+      };
       const [, onPort] = electron.ipcRenderer.on.mock.calls.find(
          ([name]: [string]) => name === wire("chat"),
       ) as [string, (event: unknown) => void];
@@ -475,15 +481,23 @@ describe("generated main process bindings", () => {
       expect(handlers.has("getUser")).toBe(false);
    });
 
-   it("posts the two ends of a port channel to the two windows once they are ready", async () => {
+   it("posts the two ends of a port channel to the two windows once they have loaded", async () => {
       const { ipc } = await loadMain();
-      const one = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
-      const two = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
+      const loaded = () =>
+         Object.assign(createFakeWindow(), {
+            webContents: {
+               postMessage: vi.fn(),
+               send: vi.fn(),
+               on: vi.fn(),
+               off: vi.fn(),
+               isLoading: () => false,
+               getURL: () => "app://.",
+            },
+         });
+      const one = loaded();
+      const two = loaded();
 
       ipc.chat.connect(one, two);
-      expect(one.webContents.postMessage).not.toHaveBeenCalled();
-      one.emit("ready-to-show");
-      two.emit("ready-to-show");
 
       expect(one.webContents.postMessage).toHaveBeenCalledWith(wire("chat"), null, [
          { name: "port1" },

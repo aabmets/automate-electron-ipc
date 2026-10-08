@@ -47,7 +47,7 @@ export class PreloadBindingsWriter extends BaseWriter {
                portNamesArray.push(spec.name);
                channels.push({
                   name: spec.name,
-                  property: `\n${this.indents[0]}${spec.name}: getPortObject('${spec.name}'),`,
+                  property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
                });
             }
          }
@@ -57,7 +57,9 @@ export class PreloadBindingsWriter extends BaseWriter {
          out.push(
             'import type { IpcRendererEvent } from "electron";',
             this.getPortComponents(),
-            ...portNamesArray.map((portName) => this.getPortInitializer(portName).trim()),
+            ...portNamesArray
+               .sort(utils.compareStrings)
+               .map((portName) => this.getPortInitializer(portName)),
          );
       }
       if (askNames.length > 0) {
@@ -241,26 +243,126 @@ export class PreloadBindingsWriter extends BaseWriter {
       return { name, property: `\n${i0}${name}: {\n${i1}${method}: ${implementation},\n${i0}},` };
    }
 
-   private getPortComponents() {
-      return utils.dedent(`
-         const ports: { [key: string]: MessagePort } = {};\n
-         type PortObject = { send: Function, on: Function };\n
-         function getPortObject(portName: string): PortObject {
-            return {
-               send: (...args: any[]) => ports[portName].postMessage(args),
-               on: (callback: Function) => {
-                  ports[portName].onmessage = (event: MessageEvent) => callback(...event.data);
-               },
-            }
-         }
-      `);
+   /**
+    * `createPortChannel`, which holds the end of a port channel that this page has. The page is
+    * given only `api`. The port arrives some time after the page starts, and a new one replaces it
+    * after a reload of the other page, so the channel outlives its port:
+    * - `send` queues the messages until a port is there, and flushes them in order;
+    * - `on`, `onReady` and `onClose` keep any number of subscribers, each with its own disposer. The
+    *   subscribers are wrapped here because contextBridge hands over a new proxy of a callback on
+    *   every crossing, so the same function could not be found again;
+    * - `onReady` runs at once if a port is there, and again for every new port;
+    * - `onClose` runs when the connection ends, which the main process or the other page does. The
+    *   replaced port is closed without it, since the connection goes on.
+    */
+   private getPortComponents(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "type PortListener = { callback: Function };",
+         "",
+         "interface PortChannel {",
+         `${i1}api: { send: Function; on: Function; onReady: Function; onClose: Function };`,
+         `${i1}attach: (next: MessagePort | undefined) => void;`,
+         `${i1}detach: () => void;`,
+         "}",
+         "",
+         "function createPortChannel(): PortChannel {",
+         `${i1}let port: MessagePort | null = null;`,
+         `${i1}const queue: any[][] = [];`,
+         `${i1}const subscribers = new Set<PortListener>();`,
+         `${i1}const readyListeners = new Set<PortListener>();`,
+         `${i1}const closeListeners = new Set<PortListener>();`,
+         `${i1}const notify = (listeners: Iterable<PortListener>, args: any[]) => {`,
+         `${i2}for (const listener of [...listeners]) {`,
+         `${i3}try {`,
+         `${i4}listener.callback(...args);`,
+         `${i3}} catch (error) {`,
+         `${i4}console.error(error);`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const subscribe = (listeners: Set<PortListener>, callback: Function) => {`,
+         `${i2}const listener = { callback };`,
+         `${i2}listeners.add(listener);`,
+         `${i2}return { listener, dispose: () => void listeners.delete(listener) };`,
+         `${i1}};`,
+         `${i1}const attach = (next: MessagePort | undefined) => {`,
+         `${i2}if (!next) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}if (port) {`,
+         `${i3}port.onmessage = null;`,
+         `${i3}port.close();`,
+         `${i2}}`,
+         `${i2}port = next;`,
+         `${i2}next.onmessage = (event: MessageEvent) => {`,
+         `${i3}if (Array.isArray(event.data)) {`,
+         `${i4}notify(subscribers, event.data);`,
+         `${i3}}`,
+         `${i2}};`,
+         `${i2}next.addEventListener('close', () => {`,
+         `${i3}if (port === next) {`,
+         `${i4}port = null;`,
+         `${i4}notify(closeListeners, []);`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i2}for (const args of queue.splice(0)) {`,
+         `${i3}try {`,
+         `${i4}next.postMessage(args);`,
+         `${i3}} catch (error) {`,
+         `${i4}console.error(error);`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i2}notify(readyListeners, []);`,
+         `${i1}};`,
+         `${i1}const detach = () => {`,
+         `${i2}const current = port;`,
+         `${i2}if (!current) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}port = null;`,
+         `${i2}current.onmessage = null;`,
+         `${i2}current.close();`,
+         `${i2}notify(closeListeners, []);`,
+         `${i1}};`,
+         `${i1}const api = {`,
+         `${i2}send: (...args: any[]) => {`,
+         `${i3}if (port) {`,
+         `${i4}port.postMessage(args);`,
+         `${i3}} else {`,
+         `${i4}queue.push(args);`,
+         `${i3}}`,
+         `${i2}},`,
+         `${i2}on: (callback: Function) => subscribe(subscribers, callback).dispose,`,
+         `${i2}onReady: (callback: Function) => {`,
+         `${i3}const { listener, dispose } = subscribe(readyListeners, callback);`,
+         `${i3}if (port) {`,
+         `${i4}notify([listener], []);`,
+         `${i3}}`,
+         `${i3}return dispose;`,
+         `${i2}},`,
+         `${i2}onClose: (callback: Function) => subscribe(closeListeners, callback).dispose,`,
+         `${i1}};`,
+         `${i1}return { api, attach, detach };`,
+         "}",
+         "",
+         "const ports: { [channel: string]: PortChannel } = { __proto__: null } as any;",
+         "",
+      ].join("\n");
    }
 
-   private getPortInitializer(portName: string) {
-      return utils.dedent(`
-         ipcRenderer.on(${this.wireName(portName)}, (event: IpcRendererEvent) => {
-            ports.${portName} = event.ports[0];
-         });
-      `);
+   /** Creates the channel, and hands it the port and the end of the connection when they arrive. */
+   private getPortInitializer(portName: string): string {
+      const [i1] = this.indents;
+      return [
+         `ports['${portName}'] = createPortChannel();`,
+         `ipcRenderer.on(${this.wireName(portName)}, (event: IpcRendererEvent) => {`,
+         `${i1}ports['${portName}'].attach(event.ports[0]);`,
+         "});",
+         `ipcRenderer.on(${this.wireName(portName, ":close")}, () => {`,
+         `${i1}ports['${portName}'].detach();`,
+         "});",
+      ].join("\n");
    }
 }

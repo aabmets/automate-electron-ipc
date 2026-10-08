@@ -82,6 +82,7 @@ export class MainBindingsWriter extends BaseWriter {
          "listenForAskReplies",
          "readAskReply",
          "askRenderer",
+         "connectPorts",
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -107,6 +108,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesValidation = false;
       let usesEnvelope = false;
       let usesSenders = false;
+      let usesPorts = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -134,6 +136,7 @@ export class MainBindingsWriter extends BaseWriter {
                }
                channels.push(this.buildMainToRendererChannel(spec));
             } else if (spec.direction === "RendererToRenderer") {
+               usesPorts = true;
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
                channels.push(this.buildPortChannel(spec));
@@ -171,6 +174,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesSenders,
             usesEmits,
             usesAsks,
+            usesPorts,
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -215,6 +219,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesSenders: boolean;
          usesEmits: boolean;
          usesAsks: boolean;
+         usesPorts: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -233,6 +238,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesAsks) {
          support.push(this.buildAskHelpers());
+      }
+      if (uses.usesPorts) {
+         support.push(this.buildPortHelpers());
       }
       if (uses.usesHandlers) {
          // The handler that each invoke channel has now, which its disposer compares against.
@@ -975,20 +983,63 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}},`,
       ].join("\n");
    }
-   /** `ipc.<name>.connect(winA, winB)`, which hands one end of a new port to each window. */
-   private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
-      const [, i1, i2, i3] = this.indents;
-      const connector = [
-         `\n${i1}connect: (winA: BrowserWindow, winB: BrowserWindow) => {`,
+   /**
+    * `connectPorts`, which `ipc.<name>.connect` calls. A pair of ports is made only when both
+    * windows have loaded their page, since a port that is posted earlier arrives before the preload
+    * script listens for it. It is made right away if both have, and again on every
+    * `did-finish-load`, so a window that is shown late and a page that reloads get a fresh port, and
+    * the other window replaces its end. The windows are told through `<channel>:close` when the
+    * connection ends, since the main process no longer holds the ports it has transferred. The
+    * connection ends when it is closed and when either window is destroyed.
+    */
+   private buildPortHelpers(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {",
+         `${i1}const windows = winA === winB ? [winA] : [winA, winB];`,
+         `${i1}let closed = false;`,
+         `${i1}const isReady = (win: BrowserWindow) =>`,
+         `${i2}!win.isDestroyed() && !win.webContents.isLoading() && win.webContents.getURL() !== '';`,
+         `${i1}const pair = () => {`,
+         `${i2}if (closed || !isReady(winA) || !isReady(winB)) {`,
+         `${i3}return;`,
+         `${i2}}`,
          `${i2}const { port1, port2 } = new MessageChannelMain();`,
-         `${i2}winA.once('ready-to-show', () => {`,
-         `${i3}winA.webContents.postMessage(${this.wireName(spec.name)}, null, [port1]);`,
-         `${i2}});`,
-         `${i2}winB.once('ready-to-show', () => {`,
-         `${i3}winB.webContents.postMessage(${this.wireName(spec.name)}, null, [port2]);`,
-         `${i2}});`,
-         `${i1}},`,
+         `${i2}winA.webContents.postMessage(channel, null, [port1]);`,
+         `${i2}winB.webContents.postMessage(channel, null, [port2]);`,
+         `${i1}};`,
+         `${i1}const close = () => {`,
+         `${i2}if (closed) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}closed = true;`,
+         `${i2}for (const win of windows) {`,
+         `${i3}// A destroyed window has dropped its listeners, and cannot be reached.`,
+         `${i3}if (!win.isDestroyed()) {`,
+         `${i4}win.off('closed', close);`,
+         `${i4}win.webContents.off('did-finish-load', pair);`,
+         `${i4}win.webContents.send(\`\${channel}:close\`);`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}for (const win of windows) {`,
+         `${i2}win.on('closed', close);`,
+         `${i2}win.webContents.on('did-finish-load', pair);`,
+         `${i1}}`,
+         `${i1}pair();`,
+         `${i1}return { close };`,
+         "}",
+         "",
       ].join("\n");
+   }
+   /** `ipc.<name>.connect(winA, winB)`, which pairs the windows and returns a handle to close the connection. */
+   private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
+      const i1 = this.indents[1];
+      const connector = [
+         `\n${i1}connect: (winA: BrowserWindow, winB: BrowserWindow) =>`,
+         ` connectPorts(${this.wireName(spec.name)}, winA, winB),`,
+      ].join("");
       return { name: spec.name, members: [connector] };
    }
 }

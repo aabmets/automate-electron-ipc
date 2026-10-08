@@ -215,7 +215,7 @@ on the verb of the channel and on the process that uses it:
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
-| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
+| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -335,6 +335,29 @@ A renderer has a single responder per channel. Calling `handle` again replaces t
 and the function that `handle` returns removes only its own responder: the disposer of a replaced
 responder does nothing. The preload script listens from the start, so a question that arrives while
 no responder is registered is answered with `IPC_ASK_NO_HANDLER` at once, and not left to time out.
+
+#### Port channels
+
+A `port` channel connects two windows with a `MessagePort` pair, so they talk without the main
+process in between. The main process pairs them, the renderers send and listen:
+
+```typescript
+// main process
+const connection = ipc.chat.connect(winA, winB); // call connection.close() to end it
+
+// renderer
+const stop = ipc.chat.on((msg) => show(msg)); // any number of subscribers, each with a disposer
+ipc.chat.send("hi"); // queued until the port has arrived, then sent in order
+ipc.chat.onReady(() => console.log("connected")); // for every new port, at once if one is there
+ipc.chat.onClose(() => console.log("the connection ended"));
+```
+
+`connect` can be called before the windows have loaded: it pairs them as soon as both have, and again
+after either of them reloads, so a reloaded page gets a fresh port and the other page switches to
+it (`onReady` runs again, `onClose` does not, since the connection goes on). The handle that `connect`
+returns has a `close()`, which ends the connection and runs `onClose` in both windows. Destroying
+either window ends it as well, for the other window. After the end, `send` queues again until a
+new `connect` pairs the windows.
 
 #### Sender validation
 
