@@ -84,4 +84,15 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     - A type-level test (tsc on a fixture) for the verified typing behavior above.
   - **README:** write every example in the generic form. Document the `as` form in one short
     section as an alternative, noting what it loses. Add a short "Migrating from 0.2" note.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Notes:
+  - Channel keys must still be PascalCase (3+ characters, not starting with `on`). The validators and
+    the generated names (`send<Name>`, `on<Name>`) are unchanged in this task, so the `getUser`-style
+    keys in the example above are rejected for now. README examples use PascalCase. T13 rewrites the
+    naming and should relax this rule.
+  - `timeoutMs` in the example is T28's option and is not accepted yet (`invoke` has no options).
+  - Parsing also accepts `import * as ns` namespace imports, and a map that is exported after
+    assignment (`const m = defineChannels(...); export default m;` or `export { m }`).
+  - `ChannelSpec.listeners` and its validation stay in the validators until T13 removes them; the
+    parser never sets it. `SpecsCollection` gained `channelMapExport` for T44.
+  - Test utils needed no change: they build specs directly and never used the old syntax.
+  - Config interfaces keep a reserved, unused `_S` type parameter for T17's signature-dependent options.

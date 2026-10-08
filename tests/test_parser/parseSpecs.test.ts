@@ -73,16 +73,19 @@ describe("parseSpecs", () => {
       });
    });
 
-   it("should parse simple unicast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs({
+   it("should parse simple unicast channels", () => {
+      const { channelSpecArray, channelMapExport } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").RendererToMain.Unicast({
-               signature: type as (arg1: string, arg2: number) => boolean,
-            })
+            import { defineChannels, invoke } from "automate-electron-ipc";
+
+            export default defineChannels({
+               UserChannel: invoke<(arg1: string, arg2: number) => boolean>(),
+            });
          `,
          relativePath: "",
          fullPath: "",
       });
+      expect(channelMapExport).toStrictEqual({ kind: "default" });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
@@ -90,18 +93,8 @@ describe("parseSpecs", () => {
          direction: "RendererToMain",
          signature: {
             params: [
-               {
-                  name: "arg1",
-                  type: "string",
-                  rest: false,
-                  optional: false,
-               },
-               {
-                  name: "arg2",
-                  type: "number",
-                  rest: false,
-                  optional: false,
-               },
+               { name: "arg1", type: "string", rest: false, optional: false },
+               { name: "arg2", type: "number", rest: false, optional: false },
             ],
             returnType: "boolean",
             customTypes: [],
@@ -110,37 +103,28 @@ describe("parseSpecs", () => {
       });
    });
 
-   it("should parse simple broadcast channel expressions", () => {
-      const { channelSpecArray } = parser.parseSpecs({
+   it("should parse simple broadcast channels", () => {
+      const { channelSpecArray, channelMapExport } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").RendererToMain.Broadcast({
-               signature: type as (arg1: string, arg2: number) => void,
-               listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
-            })
+            import { defineChannels, send } from "automate-electron-ipc";
+
+            export const channels = defineChannels({
+               UserChannel: send() as (arg1: string, arg2: number) => void,
+            });
          `,
          relativePath: "",
          fullPath: "",
       });
+      expect(channelMapExport).toStrictEqual({ kind: "named", name: "channels" });
       expect(channelSpecArray).toHaveLength(1);
       expect(channelSpecArray[0]).toMatchObject({
          name: "UserChannel",
          kind: "Broadcast",
          direction: "RendererToMain",
-         listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
          signature: {
             params: [
-               {
-                  name: "arg1",
-                  type: "string",
-                  rest: false,
-                  optional: false,
-               },
-               {
-                  name: "arg2",
-                  type: "number",
-                  rest: false,
-                  optional: false,
-               },
+               { name: "arg1", type: "string", rest: false, optional: false },
+               { name: "arg2", type: "number", rest: false, optional: false },
             ],
             returnType: "void",
             customTypes: [],
@@ -149,12 +133,14 @@ describe("parseSpecs", () => {
       });
    });
 
-   it("should parse complex unicast channel expressions", () => {
+   it("should parse complex unicast channels", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").RendererToMain.Unicast({
-               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<CustomType3>,
-            })
+            import { defineChannels, invoke } from "automate-electron-ipc";
+
+            export default defineChannels({
+               UserChannel: invoke<(arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[]) => Promise<CustomType3>>(),
+            });
          `,
          relativePath: "",
          fullPath: "",
@@ -166,18 +152,8 @@ describe("parseSpecs", () => {
          direction: "RendererToMain",
          signature: {
             params: [
-               {
-                  name: "arg1",
-                  type: "CustomType1<string>",
-                  rest: false,
-                  optional: true,
-               },
-               {
-                  name: "arg2",
-                  type: "{ asd: CustomType2 }[]",
-                  rest: true,
-                  optional: false,
-               },
+               { name: "arg1", type: "CustomType1<string>", rest: false, optional: true },
+               { name: "arg2", type: "{ asd: CustomType2 }[]", rest: true, optional: false },
             ],
             returnType: "Promise<CustomType3>",
             customTypes: ["CustomType1", "CustomType2", "CustomType3"],
@@ -186,42 +162,74 @@ describe("parseSpecs", () => {
       });
    });
 
-   it("should parse complex broadcast channel expressions", () => {
+   it("should parse triggered emit channels and ports in one map", () => {
       const { channelSpecArray } = parser.parseSpecs({
          contents: `
-            Channel("UserChannel").MainToRenderer.Broadcast({
-               signature: type as (arg1?: CustomType1<string>, ...arg2: { asd: CustomType2 }[] ) => Promise<void>,
-               listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
-            })
+            import { defineChannels, emit, port } from "automate-electron-ipc";
+
+            export default defineChannels({
+               Progress: emit<(n: number) => Promise<void>>({ trigger: "focus" }),
+               Chat: port<(msg: CustomType) => void>(),
+            });
          `,
          relativePath: "",
          fullPath: "",
       });
-      expect(channelSpecArray).toHaveLength(1);
+      expect(channelSpecArray).toHaveLength(2);
       expect(channelSpecArray[0]).toMatchObject({
-         name: "UserChannel",
+         name: "Progress",
          kind: "Broadcast",
          direction: "MainToRenderer",
-         listeners: ["onUserChannel_Handler1", "onUserChannel_Handler2"],
-         signature: {
-            params: [
-               {
-                  name: "arg1",
-                  type: "CustomType1<string>",
-                  rest: false,
-                  optional: true,
-               },
-               {
-                  name: "arg2",
-                  type: "{ asd: CustomType2 }[]",
-                  rest: true,
-                  optional: false,
-               },
-            ],
-            returnType: "Promise<void>",
-            customTypes: ["CustomType1", "CustomType2"],
-            async: true,
-         },
+         trigger: "focus",
+         signature: { returnType: "Promise<void>", async: true },
       });
+      expect(channelSpecArray[1]).toMatchObject({
+         name: "Chat",
+         kind: "Port",
+         direction: "RendererToRenderer",
+         signature: { customTypes: ["CustomType"] },
+      });
+      expect(channelSpecArray[1]).not.toHaveProperty("trigger");
+   });
+
+   it("should ignore files which do not declare a channel map", () => {
+      const out = parser.parseSpecs({
+         contents: "export type Shared = { id: number };",
+         relativePath: "",
+         fullPath: "",
+      });
+      expect(out.channelSpecArray).toStrictEqual([]);
+      expect(out.channelMapExport).toBeNull();
+      expect(out.typeSpecArray).toHaveLength(1);
+   });
+
+   it("should name the file in schema errors", () => {
+      expect(() =>
+         parser.parseSpecs({
+            contents: `
+               import { defineChannels, invoke } from "automate-electron-ipc";
+               export default defineChannels({ UserChannel: invoke() });
+            `,
+            relativePath: "schema/user.ts",
+            fullPath: "/app/src/ipc/schema/user.ts",
+         }),
+      ).toThrow("Schema file '/app/src/ipc/schema/user.ts': channel 'UserChannel': no signature");
+   });
+
+   it("should validate parsed channels", () => {
+      const parse = (entries: string) =>
+         parser.parseSpecs({
+            contents: `
+               import { defineChannels, invoke, send, emit } from "automate-electron-ipc";
+               export default defineChannels({ ${entries} });
+            `,
+            relativePath: "",
+            fullPath: "",
+         });
+      expect(() => parse("lowerCase: invoke<() => void>()")).toThrow(/capital letter/);
+      expect(() => parse("SendChan: send<() => string>()")).toThrow(/not allowed/);
+      expect(() => parse("Same: invoke<() => void>(), Same: send<() => void>()")).toThrow(
+         /not unique/,
+      );
    });
 });

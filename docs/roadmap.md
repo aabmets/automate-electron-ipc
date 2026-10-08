@@ -14,11 +14,11 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 0 delivered, 48 remaining, 1 dropped.
+**Progress:** 1 delivered, 47 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
-- [ ] [T00: New channel declaration syntax: a `defineChannels` map with verb helpers](./tasks/T00-new-channel-declaration-syntax.md) · depends on: none
+- [x] [T00: New channel declaration syntax: a `defineChannels` map with verb helpers](./tasks/T00-new-channel-declaration-syntax.md) · depends on: none
 - [ ] [T01: E2E harness, and fix schema-dir crash on Node (B1)](./tasks/T01-e2e-harness-and-fix-schema.md) · depends on: T00
 
 ## Phase 1: Bug fixes

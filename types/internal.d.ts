@@ -11,10 +11,6 @@
 
 import type { Stats } from "node:fs";
 
-import { BroadcastConfig, Channels, IpcAutomationPlugin, UnicastConfig } from "./index";
-
-export type { BroadcastConfig, Channels, IpcAutomationPlugin, UnicastConfig };
-
 export interface IPCOptionalConfig {
    projectUsesNodeNext?: boolean;
    ipcDataDir?: string;
@@ -76,8 +72,11 @@ export interface ChannelSpec {
    trigger?: string;
 }
 
+export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };
+
 export interface SpecsCollection {
    channelSpecArray: ChannelSpec[];
+   channelMapExport: ChannelMapExport | null;
    importSpecArray: ImportSpec[];
    typeSpecArray: TypeSpec[];
 }

@@ -23,7 +23,6 @@ import type {
 } from "@swc/core";
 import { parseSync } from "@swc/core";
 import type * as t from "@types";
-import utils from "./utils.js";
 import vld from "./validators.js";
 
 export interface AstNode {
@@ -112,25 +111,87 @@ export function collectCustomTypes(node: AstNode, src: Source, set: Set<string>)
    forEachChild(node, (child) => collectCustomTypes(child, src, set));
 }
 
-export const channelPattern = utils.concatRegex([
-   /^Channel\(['"](?<name>\w+)['"]\)/,
-   /.(?<direction>RendererToMain|MainToRenderer|RendererToRenderer)/,
-   /.(?<kind>Broadcast|Unicast|Port)$/,
+const PACKAGE_NAME = "automate-electron-ipc";
+const MIGRATION_HINT = "See 'Migrating from 0.2' in the README.";
+
+interface VerbInfo {
+   kind: t.ChannelKind;
+   direction: t.ChannelDirection;
+   options: string[];
+}
+
+const VERBS = new Map<string, VerbInfo>([
+   ["invoke", { kind: "Unicast", direction: "RendererToMain", options: [] }],
+   ["send", { kind: "Broadcast", direction: "RendererToMain", options: [] }],
+   ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
+   ["port", { kind: "Port", direction: "RendererToRenderer", options: [] }],
 ]);
 
-export function isSignatureAssignment(text: string): boolean {
-   const regex = /^signature\s*:\s*type +as\s*\(/;
-   return regex.test(text);
+/**
+ * Names that the schema file imports from this library, keyed by their local name.
+ * Values are the exported names, such as `invoke` for `import { invoke as inv }`.
+ */
+export interface LibraryImports {
+   named: Map<string, string>;
+   namespaces: Set<string>;
 }
 
-export function isListenersAssignment(text: string): boolean {
-   const regex = /^listeners\s*:\s*\[\s*['"\w\s,]{0,1000}]$/;
-   return regex.test(text);
+export function collectLibraryImports(module: Module): LibraryImports {
+   const imports: LibraryImports = { named: new Map(), namespaces: new Set() };
+   for (const item of module.body) {
+      if (item.type !== "ImportDeclaration" || item.source.value !== PACKAGE_NAME) {
+         continue;
+      }
+      for (const spec of item.specifiers) {
+         if (spec.type === "ImportNamespaceSpecifier") {
+            imports.namespaces.add(spec.local.value);
+         } else if (spec.type === "ImportSpecifier") {
+            imports.named.set(spec.local.value, spec.imported?.value ?? spec.local.value);
+         }
+      }
+   }
+   return imports;
 }
 
-export function isTriggerAssignment(text: string): boolean {
-   const regex = /^trigger\s*:\s*['"][\w-]*['"]\s*,?/;
-   return regex.test(text);
+/**
+ * Resolves the callee of a call expression to the name that the library exports,
+ * following aliased and namespace imports. Returns null for unrelated callees.
+ */
+function resolveLibraryName(callee: AstNode, imports: LibraryImports): string | null {
+   if (callee.type === "Identifier") {
+      return imports.named.get(callee.value) ?? null;
+   } else if (
+      callee.type === "MemberExpression" &&
+      callee.object.type === "Identifier" &&
+      callee.property.type === "Identifier" &&
+      imports.namespaces.has(callee.object.value)
+   ) {
+      return callee.property.value;
+   }
+   return null;
+}
+
+function unwrapParentheses(node: AstNode): AstNode {
+   let current = node;
+   while (current.type === "ParenthesisExpression") {
+      current = current.expression;
+   }
+   return current;
+}
+
+function unwrapTypeParentheses(node: AstNode): AstNode {
+   let current = node;
+   while (current.type === "TsParenthesizedType") {
+      current = current.typeAnnotation;
+   }
+   return current;
+}
+
+function isDefineChannelsCall(node: AstNode, imports: LibraryImports): boolean {
+   return (
+      node.type === "CallExpression" &&
+      resolveLibraryName(node.callee, imports) === "defineChannels"
+   );
 }
 
 function getParamInfo(param: Param["pat"], src: Source): t.CallableParam {
@@ -149,58 +210,286 @@ function getParamInfo(param: Param["pat"], src: Source): t.CallableParam {
    return { name, type, rest: false, optional: !!node.optional };
 }
 
-export function parseChannelExpressions(
-   node: AstNode,
-   src: Source,
-   spec: Partial<t.ChannelSpec>,
-): void {
-   if (node.type === "MemberExpression") {
-      const text = src.text(node as { span: Span }).replaceAll(/\s*/gm, "");
-      const groups = text.match(channelPattern)?.groups;
-      Object.assign(spec, groups);
-   } else if (node.type === "KeyValueProperty") {
-      const start = node.key.span.start;
-      const end = node.value.span.end;
-      const text = src.text({ span: { start, end, ctxt: 0 } });
+export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSignature {
+   const set = new Set<string>();
+   collectCustomTypes(fn as AstNode, src, set);
 
-      if (isSignatureAssignment(text)) {
-         const fn = node.value.typeAnnotation as TsFunctionType | undefined;
+   const returnType = src.text(fn.typeAnnotation.typeAnnotation) || "void";
+   return {
+      definition: src.text(fn),
+      params: fn.params.map((param) => getParamInfo(param, src)),
+      customTypes: Array.from(set),
+      returnType,
+      async: returnType.startsWith("Promise"),
+   };
+}
 
-         if (node.value.type === "TsAsExpression" && fn?.type === "TsFunctionType") {
-            const set = new Set<string>();
-            collectCustomTypes(fn as AstNode, src, set);
+/**
+ * Raised for channel declarations that cannot be turned into channel specs.
+ * The message names the schema file and, when known, the channel.
+ */
+class SchemaError extends Error {
+   constructor(file: string, message: string, channel?: string) {
+      const where = channel === undefined ? "" : ` channel '${channel}':`;
+      super(`Schema file '${file}':${where} ${message}`);
+      this.name = "SchemaError";
+   }
+}
 
-            const returnType = src.text(fn.typeAnnotation.typeAnnotation) || "void";
-            const async = returnType.startsWith("Promise");
+interface ParseContext {
+   file: string;
+   src: Source;
+   imports: LibraryImports;
+}
 
-            spec.signature = {
-               definition: src.text(fn),
-               params: fn.params.map((param) => getParamInfo(param, src)),
-               customTypes: Array.from(set),
-               returnType,
-               async,
-            } as t.CallableSignature;
-         }
-      } else if (isListenersAssignment(text)) {
-         const regex = /(['"])(\w*)\1/g;
-         const matches = [...text.matchAll(regex)];
-         if (matches.length > 0) {
-            spec.listeners = [];
-            matches.forEach((match) => {
-               if (spec.listeners && match[2].length > 0) {
-                  spec.listeners.push(match[2]);
-               }
-            });
-         }
-      } else if (isTriggerAssignment(text)) {
-         const regex = /['"](?<trigger>[\w-]*)['"]/;
-         const match = text.match(regex);
-         if (match) {
-            spec.trigger = match?.groups?.trigger;
+function parseChannelConfig(
+   call: AstNode,
+   verb: string,
+   info: VerbInfo,
+   name: string,
+   ctx: ParseContext,
+): Partial<t.ChannelSpec> {
+   const fail = (message: string) => new SchemaError(ctx.file, message, name);
+   const result: Partial<t.ChannelSpec> = {};
+   if (call.arguments.length === 0) {
+      return result;
+   }
+   const arg = call.arguments[0];
+   const config = arg.spread ? null : unwrapParentheses(arg.expression);
+   if (call.arguments.length > 1 || config?.type !== "ObjectExpression") {
+      throw fail(`'${verb}' accepts one optional config object literal.`);
+   }
+   for (const prop of config.properties as AstNode[]) {
+      const key = prop.type === "KeyValueProperty" ? prop.key : null;
+      if (key?.type !== "Identifier") {
+         throw fail(`'${verb}' config keys must be plain identifiers.`);
+      }
+      if (key.value === "signature") {
+         throw fail(
+            `the 'signature' option was removed. Pass the signature as a type argument, ` +
+               `such as ${verb}<(arg: string) => void>(). ${MIGRATION_HINT}`,
+         );
+      } else if (key.value === "listeners") {
+         throw fail(
+            `the 'listeners' option was removed. Subscribe more than once instead. ${MIGRATION_HINT}`,
+         );
+      } else if (!info.options.includes(key.value)) {
+         throw fail(`option '${key.value}' is not supported by '${verb}'.`);
+      }
+      const value = unwrapParentheses(prop.value);
+      if (value.type !== "StringLiteral") {
+         throw fail(`option '${key.value}' must be a string literal.`);
+      }
+      Object.assign(result, { [key.value]: value.value });
+   }
+   return result;
+}
+
+/**
+ * Parses one `Name: verb<Sig>(config?)` or `Name: verb(config?) as Sig` property.
+ */
+function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.ChannelSpec> {
+   if (prop.type === "SpreadElement") {
+      throw new SchemaError(ctx.file, "spread elements are not allowed in a channel map.");
+   }
+   const key = prop.type === "KeyValueProperty" ? prop.key : null;
+   if (key?.type !== "Identifier") {
+      throw new SchemaError(
+         ctx.file,
+         `channel names must be plain identifier keys, found a ${prop.type}.`,
+      );
+   }
+   const name: string = key.value;
+   const fail = (message: string) => new SchemaError(ctx.file, message, name);
+
+   let value = unwrapParentheses(prop.value);
+   let asType: AstNode | null = null;
+   if (value.type === "TsAsExpression") {
+      asType = unwrapTypeParentheses(value.typeAnnotation);
+      value = unwrapParentheses(value.expression);
+   }
+   if (value.type === "ObjectExpression") {
+      throw fail("nested objects are not supported in a channel map.");
+   } else if (value.type !== "CallExpression") {
+      throw fail(`expected a call to one of: ${Array.from(VERBS.keys()).join(", ")}.`);
+   }
+   const verb = resolveLibraryName(value.callee, ctx.imports);
+   const info = verb ? VERBS.get(verb) : undefined;
+   if (!(verb && info)) {
+      const callee = ctx.src.text(value.callee);
+      throw fail(`unknown verb '${callee}'. Use one of: ${Array.from(VERBS.keys()).join(", ")}.`);
+   }
+
+   const config = parseChannelConfig(value, verb, info, name, ctx);
+   const typeArgs: AstNode[] = value.typeArguments?.params ?? [];
+   if (typeArgs.length > 1) {
+      throw fail(`'${verb}' takes exactly one type argument, the signature.`);
+   } else if (typeArgs.length === 1 && asType) {
+      throw fail(
+         `the signature is given twice, as a type argument and with 'as'. ` +
+            `Use only one of them.`,
+      );
+   }
+   const signature = asType ?? (typeArgs.length === 1 ? unwrapTypeParentheses(typeArgs[0]) : null);
+   if (!signature) {
+      throw fail(
+         `no signature. Write ${verb}<(arg: string) => void>() ` +
+            `or ${verb}() as (arg: string) => void.`,
+      );
+   } else if (signature.type !== "TsFunctionType") {
+      const text = ctx.src.text(signature as { span: Span });
+      throw fail(`the signature must be a function type, found '${text}'.`);
+   }
+   return {
+      name,
+      kind: info.kind,
+      direction: info.direction,
+      signature: parseSignature(signature as unknown as TsFunctionType, ctx.src),
+      ...config,
+   };
+}
+
+function parseChannelMap(call: AstNode, ctx: ParseContext): Partial<t.ChannelSpec>[] {
+   const arg = call.arguments[0];
+   const map =
+      call.arguments.length === 1 && !arg.spread ? unwrapParentheses(arg.expression) : null;
+   if (map?.type !== "ObjectExpression") {
+      throw new SchemaError(ctx.file, "defineChannels accepts one object literal.");
+   }
+   return (map.properties as AstNode[]).map((prop) => parseChannelProperty(prop, ctx));
+}
+
+/**
+ * Whether the statement is a leftover `Channel(...)...` expression from the 0.2 syntax.
+ */
+function isLegacyChannelStatement(item: AstNode, imports: LibraryImports): boolean {
+   if (item.type !== "ExpressionStatement") {
+      return false;
+   }
+   let node = item.expression as AstNode;
+   while (node.type === "CallExpression" || node.type === "MemberExpression") {
+      node = (node.type === "CallExpression" ? node.callee : node.object) as AstNode;
+   }
+   return (
+      node.type === "Identifier" &&
+      (node.value === "Channel" || imports.named.get(node.value) === "Channel")
+   );
+}
+
+interface ExportedMap {
+   call: AstNode;
+   exported: t.ChannelMapExport;
+}
+
+/**
+ * Finds the `defineChannels` call that a module-level statement exports, if any.
+ */
+function findExportedMap(item: AstNode, imports: LibraryImports): ExportedMap | null {
+   if (item.type === "ExportDefaultExpression") {
+      const call = unwrapParentheses(item.expression);
+      return isDefineChannelsCall(call, imports) ? { call, exported: { kind: "default" } } : null;
+   } else if (
+      item.type === "ExportDeclaration" &&
+      item.declaration.type === "VariableDeclaration"
+   ) {
+      for (const decl of item.declaration.declarations as AstNode[]) {
+         const init = decl.init ? unwrapParentheses(decl.init) : null;
+         if (decl.id.type === "Identifier" && init && isDefineChannelsCall(init, imports)) {
+            return { call: init, exported: { kind: "named", name: decl.id.value } };
          }
       }
    }
-   forEachChild(node, (child) => parseChannelExpressions(child, src, spec));
+   return null;
+}
+
+/**
+ * Finds the name under which `export default m` or `export { m }` exports the local `m`.
+ */
+function findExportOfLocal(body: AstNode[], local: string): t.ChannelMapExport | null {
+   for (const item of body) {
+      if (item.type === "ExportDefaultExpression") {
+         const expr = unwrapParentheses(item.expression);
+         if (expr.type === "Identifier" && expr.value === local) {
+            return { kind: "default" };
+         }
+      } else if (item.type === "ExportNamedDeclaration" && !item.source) {
+         const spec = (item.specifiers as AstNode[]).find(
+            (s) => s.type === "ExportSpecifier" && s.orig.value === local,
+         );
+         if (spec) {
+            const name: string = spec.exported?.value ?? local;
+            return name === "default" ? { kind: "default" } : { kind: "named", name };
+         }
+      }
+   }
+   return null;
+}
+
+/**
+ * Finds a `const m = defineChannels(...)` that is exported later through
+ * `export default m` or `export { m }`.
+ */
+function findIndirectlyExportedMap(body: AstNode[], imports: LibraryImports): ExportedMap | null {
+   const declarators = body
+      .filter((item) => item.type === "VariableDeclaration")
+      .flatMap((item) => item.declarations as AstNode[]);
+   for (const decl of declarators) {
+      const init = decl.init ? unwrapParentheses(decl.init) : null;
+      if (decl.id.type === "Identifier" && init && isDefineChannelsCall(init, imports)) {
+         const exported = findExportOfLocal(body, decl.id.value);
+         if (exported) {
+            return { call: init, exported };
+         }
+      }
+   }
+   return null;
+}
+
+function collectDefineChannelsCalls(node: AstNode, imports: LibraryImports, out: AstNode[]): void {
+   if (isDefineChannelsCall(node, imports)) {
+      out.push(node);
+   }
+   forEachChild(node, (child) => collectDefineChannelsCalls(child, imports, out));
+}
+
+/**
+ * Parses the channel map of a schema module: the single exported `defineChannels` call.
+ * Throws a `SchemaError` that names the file (and the channel) for invalid declarations.
+ */
+export function parseChannelMapModule(
+   module: Module,
+   src: Source,
+   file: string,
+): { channelSpecs: Partial<t.ChannelSpec>[]; channelMapExport: t.ChannelMapExport | null } {
+   const imports = collectLibraryImports(module);
+   const body = module.body as AstNode[];
+
+   if (body.some((item) => isLegacyChannelStatement(item, imports))) {
+      throw new SchemaError(
+         file,
+         "Channel(...) expressions were removed in 0.3.0. Declare channels in an exported " +
+            `defineChannels({...}) map instead. ${MIGRATION_HINT}`,
+      );
+   }
+   const calls: AstNode[] = [];
+   collectDefineChannelsCalls(module as unknown as AstNode, imports, calls);
+   if (calls.length === 0) {
+      return { channelSpecs: [], channelMapExport: null };
+   } else if (calls.length > 1) {
+      throw new SchemaError(file, "only one defineChannels call is allowed per file.");
+   }
+   const found =
+      body.map((item) => findExportedMap(item, imports)).find((map) => map !== null) ??
+      findIndirectlyExportedMap(body, imports);
+   if (!found || found.call !== calls[0]) {
+      throw new SchemaError(
+         file,
+         "the defineChannels call must be exported, with " +
+            "'export default defineChannels({...})' or 'export const <name> = defineChannels({...})'.",
+      );
+   }
+   const channelSpecs = parseChannelMap(found.call, { file, src, imports });
+   return { channelSpecs, channelMapExport: found.exported };
 }
 
 export function parseImportDeclarations(
@@ -273,7 +562,6 @@ function isTypeDefinition(node: AstNode): boolean {
 }
 
 export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
-   const channelSpecArray: Partial<t.ChannelSpec>[] = [];
    const importSpecArray: t.ImportSpec[] = [];
    const typeSpecArray: t.TypeSpec[] = [];
 
@@ -282,19 +570,20 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
       parsed = parseModule(fileData.contents);
    } catch {
       // Files which are not valid TypeScript cannot contain channel definitions.
-      return { typeSpecArray: [], channelSpecArray: [], importSpecArray: [] };
+      return {
+         typeSpecArray: [],
+         channelSpecArray: [],
+         importSpecArray: [],
+         channelMapExport: null,
+      };
    }
    const { module, src } = parsed;
+   const file = fileData.fullPath || fileData.relativePath || "<unknown>";
+   const { channelSpecs, channelMapExport } = parseChannelMapModule(module, src, file);
 
    module.body.forEach((node: ModuleItem) => {
       const item = node as AstNode;
-      if (item.type === "ExpressionStatement") {
-         if (src.text(item as { span: Span }).startsWith("Channel")) {
-            const spec: Partial<t.ChannelSpec> = {};
-            parseChannelExpressions(item, src, spec);
-            channelSpecArray.push(spec);
-         }
-      } else if (item.type === "ImportDeclaration") {
+      if (item.type === "ImportDeclaration") {
          parseImportDeclarations(item as ImportDeclaration, src, importSpecArray);
       } else if (isTypeDefinition(item)) {
          parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
@@ -307,10 +596,11 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
 
    return {
       typeSpecArray: vld.validateTypeSpecs(typeSpecArray),
-      channelSpecArray: vld.validateChannelSpecs(channelSpecArray),
+      channelSpecArray: vld.validateChannelSpecs(channelSpecs),
       importSpecArray: importSpecArray.filter((item) => {
          return item.customTypes.length > 0 || item.namespace !== null;
       }),
+      channelMapExport,
    };
 }
 
@@ -319,11 +609,9 @@ export default {
    forEachChild,
    isBuiltinType,
    collectCustomTypes,
-   channelPattern,
-   isSignatureAssignment,
-   isListenersAssignment,
-   isTriggerAssignment,
-   parseChannelExpressions,
+   collectLibraryImports,
+   parseSignature,
+   parseChannelMapModule,
    parseImportDeclarations,
    parseTypeDefinitions,
    parseSpecs,

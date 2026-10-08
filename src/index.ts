@@ -9,22 +9,19 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import type * as t from "@types";
+import type * as api from "../types/index.js";
 import logger from "./logger.js";
 
-export function Channel(): t.Channels {
-   return {
-      RendererToMain: {
-         Unicast: logger.cannotExecuteChannels,
-         Broadcast: logger.cannotExecuteChannels,
-      },
-      MainToRenderer: {
-         Broadcast: logger.cannotExecuteChannels,
-      },
-      RendererToRenderer: {
-         Port: logger.cannotExecuteChannels,
-      },
-   };
+function verb(): never {
+   logger.cannotExecuteChannels();
+   return undefined as never;
 }
 
-export const type = null;
+export const defineChannels: typeof api.defineChannels = (channels) => {
+   logger.cannotExecuteChannels();
+   return channels;
+};
+export const invoke: typeof api.invoke = verb;
+export const send: typeof api.send = verb;
+export const emit: typeof api.emit = verb;
+export const port: typeof api.port = verb;

@@ -21,12 +21,12 @@ Node library for generating IPC components for Electron apps.
 
 ### Features
 
-1) Declarative IPC schema using channel expressions
+1) Declarative IPC schema using a typed channel map
 2) Generation of sender and listener callables for the main process
 3) Generation of preload bindings for renderer processes
 4) Generation of typehints for the renderer Window object
 5) Automatic import of user-defined types for generated components
-6) BrowserWindow event triggers for MainToRenderer Broadcast channels
+6) BrowserWindow event triggers for `emit` channels
 
 
 ### Installation
@@ -72,16 +72,16 @@ file or directory, which will contain the channel expressions that will be parse
 
 By default, IPC automation looks for a file named `schema.ts` in the IPC data directory. 
 If you create a directory named `schema` into the IPC data directory, then IPC automation 
-will recursively parse all files within it for Channel expressions, meaning it is possible 
-to structure and segment channel expressions according to the needs of larger applications. 
+will recursively parse all files within it for channel maps, meaning it is possible 
+to structure and segment channels according to the needs of larger applications. 
 
 
-### Channel Expressions
+### Channel Maps
 
-IPC automation uses its own Domain-Specific Language to generate IPC bindings. We call this language `CHEX`, 
-which masquerades itself as regular JavaScript/TypeScript, but it's code is never executed by Node. Instead, 
-this library uses the TypeScript library internally to parse the channel expressions from schema files to 
-deduce the meanings behind their definitions.
+IPC automation reads channels from a channel map: an object passed to `defineChannels` that is exported from a schema file.
+The key of each property is the channel name, the verb helper picks the kind of the channel, and the type argument
+of the verb is the signature. The schema file is never executed by Node. Instead, this library parses it to deduce
+the meanings behind the declarations, so the config of a verb must be written as an object literal.
 
 Since this library is well-documented through its type definitions, the developer is encouraged to use an IDE 
 which facilitates easy type inference and hints within its user interface. To that end, you should configure your 
@@ -90,19 +90,25 @@ For the renderer process, you should include the generated `window.d.ts` file in
 
 _Note: IPC automation does not make a distinction between senders/listeners and invokers/handlers as they are 
 defined in the IPC documentation of the Electron library. Whether an IPC component is generated as a sender/listener
-or invoker/handler under the hood depends on the direction and the kind of the channel expression. The reason
+or invoker/handler under the hood depends on the verb of the channel. The reason
 behind this design choice was to allow the user to focus on IPC arguments and return types without having to
 concern themselves with IPC internals._
+
+Rules of the schema file:
+ - Export the map with `export default defineChannels({...})` or `export const channels = defineChannels({...})`.
+ - Use only one `defineChannels` call per file. In a `schema` directory, each file may have its own map.
+ - Channel names are plain identifier keys. Spreads, computed keys and nested objects are not supported.
+ - Aliased imports work, such as `import { invoke as call } from "automate-electron-ipc"`.
 
 
 ### Simple Example
 
 Schema file content at path `src/autoipc/schema.ts`:
 ```typescript
-import { Channel, type } from "automate-electron-ipc";
+import { defineChannels, send } from "automate-electron-ipc";
 
-Channel("EchoUserName").RendererToMain.Broadcast({
-   signature: type as (userName: string) => void
+export default defineChannels({
+   EchoUserName: send<(userName: string) => void>(),
 });
 ```
 
@@ -128,26 +134,82 @@ The example code provides only basic HTML, because this library is front-end-tec
 meaning you can use any front-end framework or library like React, Vue or Angular.
 
 
-### Channel Directions and Kinds
+### Verbs
 
-Channels may be defined with three directions:
-
-```typescript
-Channel("Channel1").RendererToMain  // IPC call from a renderer process to the main process
-
-Channel("Channel2").MainToRenderer  // IPC call from the main process to a renderer process
-
-Channel("Channel3").RendererToRenderer  // Port binding between two renderer processes
-```
-
-Each direction supports specific kinds of transmissions:
+Each verb declares one kind of channel in one direction:
 
 ```typescript
-Channel("Channel1").RendererToMain.Broadcast()  // Message from one sender to one or multiple listeners without return data
+import { defineChannels, invoke, send, emit, port } from "automate-electron-ipc";
 
-Channel("Channel2").RendererToMain.Unicast()  // Message from one sender to one listener with return data
+export default defineChannels({
+   // Request from a renderer process to the main process with return data
+   GetUser: invoke<(id: number) => Promise<User>>(),
 
-Channel("Channel3").MainToRenderer.Broadcast()  // Message from one sender to one or multiple listeners without return data
+   // Message from a renderer process to the main process without return data
+   EchoUserName: send<(userName: string) => void>(),
 
-Channel("Channel4").RendererToRenderer.Port()  // Sender and listener on same port for each process
+   // Message from the main process to a renderer process without return data,
+   // optionally sent automatically when a BrowserWindow event fires
+   Progress: emit<(n: number) => void>({ trigger: "focus" }),
+
+   // Sender and listener on same port for each of two renderer processes
+   Chat: port<(msg: string) => void>(),
+});
 ```
+
+| Verb     | Direction          | Return type of the signature |
+|----------|--------------------|------------------------------|
+| `invoke` | RendererToMain     | any value or promise         |
+| `send`   | RendererToMain     | `void` or `Promise<void>`    |
+| `emit`   | MainToRenderer     | `void` or `Promise<void>`    |
+| `port`   | RendererToRenderer | `void` or `Promise<void>`    |
+
+The only supported option is `trigger` of `emit`.
+
+
+### The `as` Form
+
+The signature can also be written after the call with `as`. It is an alternative to the type argument,
+and the two cannot be combined on one channel:
+
+```typescript
+export default defineChannels({
+   GetUser: invoke() as (id: number) => Promise<User>,
+   Progress: emit({ trigger: "focus" }) as (n: number) => void,
+});
+```
+
+What it loses: the type argument form lets TypeScript check the config against the signature,
+and it is the only form which will be able to carry error types. In the `as` form the config is not
+checked against the signature.
+
+
+### Migrating from 0.2
+
+Version 0.3.0 replaces the `Channel(...)` expressions. The old syntax is removed and `ipcgen` fails
+with an error that points to this section when it finds it.
+
+```typescript
+// 0.2
+Channel("GetUser").RendererToMain.Unicast({
+   signature: type as (id: number) => Promise<User>,
+});
+
+// 0.3
+export default defineChannels({
+   GetUser: invoke<(id: number) => Promise<User>>(),
+});
+```
+
+| 0.2                                     | 0.3                                                     |
+|-----------------------------------------|---------------------------------------------------------|
+| `Channel("X").RendererToMain.Unicast`   | `invoke`                                                |
+| `Channel("X").RendererToMain.Broadcast` | `send`                                                  |
+| `Channel("X").MainToRenderer.Broadcast` | `emit`                                                  |
+| `Channel("X").RendererToRenderer.Port`  | `port`                                                  |
+| `signature: type as Sig`                | type argument `<Sig>` of the verb                       |
+| `trigger: "focus"`                      | unchanged, in the config of `emit`                      |
+| `listeners: [...]`                      | removed; call the listener function once per subscriber |
+
+The `type` export is removed. The channel name moves from the `Channel("X")` string to the key of the map.
+The generated bindings are unchanged in this version.
