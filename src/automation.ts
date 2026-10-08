@@ -78,6 +78,9 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       }
    }
    vld.validateGlobalChannelSpecs(pfsArray);
+   logger.cloneWarnings(
+      pfsArray.flatMap((pfs) => vld.getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
+   );
    await Promise.all([
       new writer.MainBindingsWriter(config, pfsArray).write(),
       new writer.PreloadBindingsWriter(config, pfsArray).write(),

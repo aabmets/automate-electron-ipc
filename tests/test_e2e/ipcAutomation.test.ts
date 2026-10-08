@@ -437,8 +437,8 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       );
    });
 
-   // Regression for T69: a type inside `${...}` kept its old name, and a method name was renamed.
-   it("renames types inside template literal types, but not method names", async () => {
+   // Regression for T69: a type inside `${...}` kept its old name, and a member name was renamed.
+   it("renames types inside template literal types, but not member names", async () => {
       project = await runFixture("name-collisions");
       const main = project.generated["main.ts"];
       const userC = importedAs(main, "User", "./schema/c");
@@ -446,10 +446,10 @@ describe("ipcAutomation, type names that collide across schema files", () => {
 
       expect(methodLine(main, "tagUserC", "handle")).toContain(
          `(callback: (event: IpcMainInvokeEvent, tag: \`user-\${${userC}["email"]}\`, ` +
-            `shape: { User(): ${userC} }) => Promise<${userC}["email"]>)`,
+            `shape: { User: ${userC} }) => Promise<${userC}["email"]>)`,
       );
       expect(methodLine(project.generated["window.d.ts"], "tagUserC", "invoke")).toContain(
-         `(tag: \`user-\${${userC}["email"]}\`, shape: { User(): ${userC} }) => `,
+         `(tag: \`user-\${${userC}["email"]}\`, shape: { User: ${userC} }) => `,
       );
    });
 

@@ -273,4 +273,63 @@ describe("ipcAutomation", () => {
       ]);
       expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).toContain("getUser");
    });
+
+   describe("structured clone", () => {
+      const schema = (signature: string) =>
+         [
+            'import { defineChannels, invoke } from "automate-electron-ipc";',
+            "export class User {}",
+            "export default defineChannels({",
+            `   save: invoke<${signature}>(),`,
+            "});",
+            "",
+         ].join("\n");
+
+      const run = async (contents: string) => {
+         const schemaPath = path.join(dir, "ipc/schema.ts");
+         await fsp.mkdir(path.dirname(schemaPath), { recursive: true });
+         await fsp.writeFile(schemaPath, contents);
+         mockConfig({
+            ipcDataDir: "ipc/schema.ts",
+            ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+         } as never);
+         vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+         return ipcAutomation();
+      };
+
+      it("warns about a class instance, and still generates the bindings", async () => {
+         const warn = vi.spyOn(logger, "cloneWarnings").mockImplementation(() => undefined);
+
+         await run(schema("(user: User) => Promise<void>"));
+
+         expect(warn).toHaveBeenCalledTimes(1);
+         expect(warn.mock.calls[0][0]).toStrictEqual([
+            expect.stringContaining(
+               "Schema file 'ipc/schema.ts': Channel 'save': parameter 'user'",
+            ),
+         ]);
+         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).toContain("save");
+      });
+
+      it("rejects a function parameter and writes nothing", async () => {
+         // Regression for T19: Electron threw 'An object could not be cloned' when it was called.
+         vi.spyOn(logger, "cloneWarnings").mockImplementation(() => undefined);
+
+         await expect(run(schema("(cb: () => void) => Promise<void>"))).rejects.toThrowError(
+            /Channel 'save': parameter 'cb' contains a function \('\(\) => void'\)/,
+         );
+
+         await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toMatchObject({
+            code: "ENOENT",
+         });
+      });
+
+      it("warns about nothing for plain data", async () => {
+         const warn = vi.spyOn(logger, "cloneWarnings").mockImplementation(() => undefined);
+
+         await run(schema("(id: number, tags: string[]) => Promise<{ name: string }>"));
+
+         expect(warn.mock.calls[0][0]).toStrictEqual([]);
+      });
+   });
 });

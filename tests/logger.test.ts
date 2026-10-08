@@ -37,6 +37,18 @@ describe("logger", () => {
       expect(output()).toContain("/p/schema.ts");
    });
 
+   it("prints clone warnings as one warning, one row per message", () => {
+      logger.cloneWarnings(["first problem", "second problem"]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(output()).toContain("first problem");
+      expect(output()).toContain("second problem");
+   });
+
+   it("prints nothing when there are no clone warnings", () => {
+      logger.cloneWarnings([]);
+      expect(warnSpy).not.toHaveBeenCalled();
+   });
+
    it("prints a fatal error to stderr, one row per message line", () => {
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
       logger.fatalError(new Error("first line\nsecond line"));

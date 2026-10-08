@@ -467,10 +467,235 @@ function returnsVoid(returnNode: AstNode, isAsync: boolean): boolean {
    return args?.length === 1 && isVoidType(args[0]);
 }
 
+/** Local type declarations of the schema file by name, which a signature may refer to. */
+export type TypeDeclarations = ReadonlyMap<string, AstNode[]>;
+
+const RESOLVABLE_DECLARATIONS = new Set([
+   "TsTypeAliasDeclaration",
+   "TsInterfaceDeclaration",
+   "ClassDeclaration",
+   "ClassExpression",
+]);
+
+/**
+ * The aliases, interfaces and classes that the schema file declares at module level, by name.
+ * An interface may be declared several times.
+ */
+export function collectTypeDeclarations(module: Module): TypeDeclarations {
+   const declarations = new Map<string, AstNode[]>();
+   for (const node of module.body) {
+      const item = node as AstNode;
+      const declaration =
+         item.type === "ExportDeclaration"
+            ? item.declaration
+            : item.type === "ExportDefaultDeclaration"
+              ? item.decl
+              : item;
+      if (!RESOLVABLE_DECLARATIONS.has(declaration.type)) {
+         continue;
+      }
+      const name = (declaration.id ?? declaration.identifier)?.value;
+      if (name) {
+         declarations.set(name, [...(declarations.get(name) ?? []), declaration]);
+      }
+   }
+   return declarations;
+}
+
+/** Global types that the structured clone algorithm rejects. */
+const UNCLONABLE_GLOBALS = new Map([
+   ["Function", "a function"],
+   ["WeakMap", "a WeakMap"],
+   ["WeakSet", "a WeakSet"],
+]);
+
+/**
+ * Utility types whose result is not made of their type arguments as they are: they compute from
+ * a function type, or they drop members and union branches, such as `Exclude<T, Function>`.
+ * What they produce cannot be told without evaluating them, so their arguments are not checked.
+ */
+const CLONE_SKIPPED_ARGUMENTS = new Set([
+   "Parameters",
+   "ReturnType",
+   "InstanceType",
+   "ConstructorParameters",
+   "Exclude",
+   "Extract",
+   "Omit",
+   "Pick",
+]);
+
+/** Nodes that stand for no type that is sent: values, keys and patterns to match against. */
+const CLONE_SKIPPED_NODES = new Set([
+   "TsTypeQuery",
+   "TsImportType",
+   "TsInferType",
+   "TsLiteralType",
+   "TsTemplateLiteralType",
+   "TsThisType",
+   "TsTypePredicate",
+   "TsSetterSignature",
+]);
+
+const CLONE_FUNCTION_NODES = new Set([
+   "TsFunctionType",
+   "TsConstructorType",
+   "TsMethodSignature",
+   "TsCallSignatureDeclaration",
+   "TsConstructSignatureDeclaration",
+]);
+
+interface CloneWalk {
+   src: Source;
+   locals: ReadonlySet<string>;
+   declarations: TypeDeclarations;
+   /** `parameter 'x'` or `return type`, for the issues found. */
+   where: string;
+   /** A Promise is sent by `invoke` as its result only, so it is an error in parameters. */
+   inParam: boolean;
+   /** The local types being followed, which guards against recursive types. */
+   active: string[];
+   /** The type parameters in scope, with their constraints. */
+   scope: ReadonlyMap<string, AstNode | undefined>;
+   issues: t.CloneIssue[];
+}
+
+function reportCloneIssue(
+   walk: CloneWalk,
+   level: t.CloneIssue["level"],
+   node: AstNode,
+   reason: string,
+): void {
+   const type = walk.src.text(node);
+   const via = walk.active.length > 0 ? walk.active.join(" → ") : undefined;
+   const issue: t.CloneIssue = { level, where: walk.where, type, reason, ...(via ? { via } : {}) };
+   const key = JSON.stringify(issue);
+   if (!walk.issues.some((other) => JSON.stringify(other) === key)) {
+      walk.issues.push(issue);
+   }
+}
+
+function typeParamScope(
+   node: AstNode,
+   scope: ReadonlyMap<string, AstNode | undefined>,
+): ReadonlyMap<string, AstNode | undefined> {
+   const params: AstNode[] = node.typeParams?.parameters ?? [];
+   if (params.length === 0) {
+      return scope;
+   }
+   const result = new Map(scope);
+   for (const param of params) {
+      result.set(param.name.value, param.constraint);
+   }
+   return result;
+}
+
+/** Follows a reference to a type that the schema file declares. */
+function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
+   const declarations = walk.declarations.get(name);
+   if (!declarations || walk.active.includes(name)) {
+      return;
+   }
+   for (const declaration of declarations) {
+      if (declaration.type === "TsTypeAliasDeclaration") {
+         const inner = {
+            ...walk,
+            active: [...walk.active, name],
+            scope: typeParamScope(declaration, walk.scope),
+         };
+         walkCloneType(declaration.typeAnnotation, inner);
+      } else if (declaration.type === "TsInterfaceDeclaration") {
+         const inner = {
+            ...walk,
+            active: [...walk.active, name],
+            scope: typeParamScope(declaration, walk.scope),
+         };
+         for (const member of declaration.body.body as AstNode[]) {
+            walkCloneType(member, inner);
+         }
+         for (const parent of declaration.extends as AstNode[]) {
+            if (parent.expression.type === "Identifier") {
+               walkLocalType(parent.expression.value, parent, inner);
+            }
+         }
+      } else {
+         // Class instances are sent as plain objects: the prototype and the methods are lost.
+         reportCloneIssue(walk, "warning", node, `an instance of the class '${name}'`);
+      }
+   }
+}
+
+function walkCloneReference(node: AstNode, walk: CloneWalk): void {
+   const args: AstNode[] = node.typeParams?.params ?? [];
+   const walkArgs = (list: AstNode[]) => {
+      for (const arg of list) {
+         walkCloneType(arg, walk);
+      }
+   };
+   if (node.typeName.type !== "Identifier") {
+      // A qualified name such as `Models.User` cannot be resolved without its module.
+      walkArgs(args);
+      return;
+   }
+   const name: string = node.typeName.value;
+   if (walk.scope.has(name)) {
+      const constraint = walk.scope.get(name);
+      const outer = new Map(walk.scope);
+      outer.delete(name);
+      walkCloneType(constraint, { ...walk, scope: outer });
+   } else if (walk.locals.has(name)) {
+      walkArgs(args);
+      walkLocalType(name, node, walk);
+   } else if (UNCLONABLE_GLOBALS.has(name)) {
+      reportCloneIssue(walk, "error", node, UNCLONABLE_GLOBALS.get(name) as string);
+   } else if (name === "Promise" && walk.inParam) {
+      reportCloneIssue(walk, "error", node, "a Promise");
+   } else if (!CLONE_SKIPPED_ARGUMENTS.has(name)) {
+      walkArgs(args);
+   }
+}
+
+/**
+ * Collects what the structured clone algorithm cannot send from a type, including the members
+ * of object types, arrays, tuples, unions, type arguments and the local types it refers to.
+ */
+function walkCloneType(node: AstNode | undefined, walk: CloneWalk): void {
+   if (!node || CLONE_SKIPPED_NODES.has(node.type)) {
+      return;
+   } else if (CLONE_FUNCTION_NODES.has(node.type)) {
+      reportCloneIssue(walk, "error", node, "a function");
+   } else if (node.type === "TsKeywordType") {
+      if (node.kind === "symbol") {
+         reportCloneIssue(walk, "error", node, "a symbol");
+      }
+   } else if (node.type === "TsTypeOperator") {
+      if (node.op === "unique") {
+         reportCloneIssue(walk, "error", node, "a symbol");
+      } else if (node.op !== "keyof") {
+         walkCloneType(node.typeAnnotation, walk);
+      }
+   } else if (node.type === "TsTypeReference") {
+      walkCloneReference(node, walk);
+   } else if (node.type === "TsConditionalType") {
+      // The checked and `extends` types only select a branch.
+      walkCloneType(node.trueType, walk);
+      walkCloneType(node.falseType, walk);
+   } else if (node.type === "TsIndexedAccessType") {
+      walkCloneType(node.objectType, walk);
+   } else if (
+      ["TsPropertySignature", "TsGetterSignature", "TsIndexSignature"].includes(node.type)
+   ) {
+      walkCloneType(node.typeAnnotation?.typeAnnotation, walk);
+   } else {
+      forEachChild(node, (child) => walkCloneType(child, walk));
+   }
+}
+
 export function parseSignature(
    fn: TsFunctionType,
    src: Source,
    locals: ReadonlySet<string> = new Set(),
+   declarations: TypeDeclarations = new Map(),
 ): t.CallableSignature {
    const set = new Set<string>();
    const spanRefs: SpanRef[] = [];
@@ -485,20 +710,42 @@ export function parseSignature(
    const returnNode = fn.typeAnnotation.typeAnnotation;
    const returnType = src.text(returnNode) || "void";
    const isAsync = !locals.has("Promise") && isPromiseType(returnNode as AstNode);
+
+   const cloneIssues: t.CloneIssue[] = [];
+   const walk: CloneWalk = {
+      src,
+      locals,
+      declarations,
+      where: "",
+      inParam: true,
+      active: [],
+      scope: typeParamScope(fn as AstNode, new Map()),
+      issues: cloneIssues,
+   };
+   const params = fn.params.map((param) => {
+      const info = getParamInfo(param, src);
+      const annotation = (param as AstNode).typeAnnotation?.typeAnnotation;
+      walkCloneType(annotation, { ...walk, where: `parameter '${info.name}'` });
+      return annotation ? { ...info, typeStart: offsetOf(annotation.span.start) } : info;
+   });
+   // The result of an async signature is the value that the Promise resolves to.
+   const result: AstNode[] = isAsync
+      ? (unwrapTypeParentheses(returnNode as AstNode).typeParams?.params ?? [])
+      : [returnNode as AstNode];
+   for (const node of result) {
+      walkCloneType(node, { ...walk, where: "return type", inParam: false });
+   }
    return {
       definition: src.text(fn),
       paramsStart: findParamsStart(fn, src),
-      params: fn.params.map((param) => {
-         const info = getParamInfo(param, src);
-         const annotation = (param as AstNode).typeAnnotation?.typeAnnotation;
-         return annotation ? { ...info, typeStart: offsetOf(annotation.span.start) } : info;
-      }),
+      params,
       customTypes: Array.from(set),
       returnType,
       returnStart: offsetOf(returnNode.span.start),
       returnsVoid: returnsVoid(returnNode as AstNode, isAsync),
       async: isAsync,
       typeRefs,
+      ...(cloneIssues.length > 0 ? { cloneIssues } : {}),
    };
 }
 
@@ -687,6 +934,8 @@ function collectImportBindings(module: Module): Map<string, ImportBinding> {
 interface ParseContext {
    file: string;
    src: Source;
+   /** The aliases, interfaces and classes of the schema file, see `collectTypeDeclarations`. */
+   declarations: TypeDeclarations;
    imports: LibraryImports;
    /** The imports of the schema file by local name, which `validate` refers to. */
    importBindings: ReadonlyMap<string, ImportBinding>;
@@ -870,7 +1119,12 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       name,
       kind: info.kind,
       direction: info.direction,
-      signature: parseSignature(signature as unknown as TsFunctionType, ctx.src, ctx.locals),
+      signature: parseSignature(
+         signature as unknown as TsFunctionType,
+         ctx.src,
+         ctx.locals,
+         ctx.declarations,
+      ),
       ...(typeArgs.length === 2 ? { errors: parseErrors(typeArgs[1], ctx) } : {}),
       ...config,
    };
@@ -995,6 +1249,7 @@ export function parseChannelMapModule(
    const channelSpecs = parseChannelMap(found.call, {
       file,
       src,
+      declarations: collectTypeDeclarations(module),
       imports,
       importBindings: collectImportBindings(module),
       locals,
@@ -1248,6 +1503,7 @@ export default {
    isBuiltinType,
    collectModuleBindings,
    collectCustomTypes,
+   collectTypeDeclarations,
    collectLibraryImports,
    parseSignature,
    parseChannelMapModule,

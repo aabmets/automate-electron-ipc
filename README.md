@@ -385,6 +385,24 @@ needs to read `error.message`, which now holds the message of the handler's erro
 keep the old behavior.
 
 
+### What Can Be Sent
+
+Arguments and results travel by the structured clone algorithm. `ipcgen` checks every signature
+against it, so a mistake is found when the bindings are generated and not when the channel is used:
+
+- A **function type**, `Function`, `symbol`, `WeakMap` or `WeakSet` in a parameter or a return type
+  is an error, and so is a `Promise` in a parameter. Electron throws `An object could not be cloned`
+  for them. The check looks inside arrays, tuples, unions, object members, type arguments, type
+  parameter constraints, and the aliases, interfaces and generic types of the schema file.
+  Send plain data instead, and use a channel to call back.
+- An instance of a **class declared in the schema file** is a warning: it arrives as a plain
+  object without its prototype and methods. Use an interface or a type alias for the data.
+
+The result of an `invoke` channel may be a `Promise`, since that is how it is awaited. Types that
+come from other files, `typeof` queries and the results of utility types such as `Omit` or
+`Exclude` are not followed, so they are never reported.
+
+
 ### The `as` Form
 
 The signature can also be written after the call with `as`. It is an alternative to the type argument,

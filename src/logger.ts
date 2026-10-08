@@ -48,6 +48,12 @@ export function noChannelExpressions(path: string): void {
    warn(["Skipping IPC automation, because no channels were found in path:", path]);
 }
 
+export function cloneWarnings(messages: string[]): void {
+   if (messages.length > 0) {
+      warn(messages);
+   }
+}
+
 export function cannotExecuteChannels(): void {
    if (!(global as any)?.warnedIncorrectUsageOnce) {
       warn(["IPC automation channel expressions have no effect when executed by JavaScript."]);
@@ -82,6 +88,7 @@ export default {
    nonExistentSchemaPath,
    noChannelExpressions,
    cannotExecuteChannels,
+   cloneWarnings,
    fatalError,
    reportSuccess,
 };

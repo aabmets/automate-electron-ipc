@@ -76,6 +76,24 @@ export interface TypeRef {
    end: number;
 }
 
+/**
+ * A part of a signature that the structured clone algorithm cannot send as written. Electron
+ * throws "An object could not be cloned" for a function, a symbol, a WeakMap or a WeakSet, and
+ * for a Promise in a parameter, and an instance of a class arrives without its prototype.
+ */
+export interface CloneIssue {
+   /** "error" for what throws at runtime, "warning" for what arrives changed. */
+   level: "error" | "warning";
+   /** Where in the signature: `parameter 'cb'` or `return type`. */
+   where: string;
+   /** The offending type as written. */
+   type: string;
+   /** What it is, such as `a function`. */
+   reason: string;
+   /** The local types that lead to it, such as `Options → Callback`. */
+   via?: string;
+}
+
 export interface CallableSignature {
    definition: string;
    /** Offset in `definition` just after the `(` that opens the parameter list. */
@@ -90,6 +108,8 @@ export interface CallableSignature {
    async: boolean;
    /** The type references of the signature, ordered by position, which writers may rename. */
    typeRefs?: TypeRef[];
+   /** What the structured clone algorithm cannot send. Absent when there is nothing. */
+   cloneIssues?: CloneIssue[];
 }
 
 /** The error types that an `invoke` channel declares in its second type argument. */

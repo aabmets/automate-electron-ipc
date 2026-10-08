@@ -249,12 +249,14 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         "(callback: <T extends (x: number) => void>(event: IpcMainEvent, cb: T) => void)",
+         "(callback: <T extends Parameters<(x: number) => void>>(event: IpcMainEvent, cb: T) => void)",
       );
-      expect(main).toContain("<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => {");
+      expect(main).toContain(
+         "<T extends Parameters<(x: number) => void>>(event: IpcMainEvent, cb: T) => {",
+      );
       expect(main).toContain("return callback(event, cb);");
       expect(main).toContain(
-         "send: <T extends (x: number) => void>(browserWindow: BrowserWindow, cb: T) =>",
+         "send: <T extends Parameters<(x: number) => void>>(browserWindow: BrowserWindow, cb: T) =>",
       );
       expect(project.generated["window.d.ts"]).toContain(
          "invoke: <T>(value: T) => Promise<Awaited<T>>;",

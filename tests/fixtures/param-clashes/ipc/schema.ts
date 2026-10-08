@@ -6,8 +6,8 @@ export default defineChannels({
    handlerClash: send<(event: string, callback: number, args: boolean) => void>(),
    invokeClash: invoke<(event: string, callback: number) => Promise<string>>(),
    noParams: send<() => void>(),
-   // Signatures whose text has a `(` before the parameter list.
-   genericEmit: emit<<T extends (x: number) => void>(cb: T) => void>(),
-   genericSend: send<<T extends (x: number) => void>(cb: T) => void>(),
+   // Signatures whose text has a `(` before the parameter list, in a constraint that is cloneable.
+   genericEmit: emit<<T extends Parameters<(x: number) => void>>(cb: T) => void>(),
+   genericSend: send<<T extends Parameters<(x: number) => void>>(cb: T) => void>(),
    genericInvoke: invoke<<T>(value: T) => T>(),
 });
