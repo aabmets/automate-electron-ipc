@@ -154,19 +154,29 @@ describe("RendererTypesWriter", () => {
       );
    });
 
-   it("should write send, on, onReady, onClose and onConnection methods for Port channels", async () => {
+   it("should write send, on, onReady, onClose, onOverflow and onConnection methods for Port channels", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
+         interface IpcPortOverflowInfo {
+            channel: string;
+            max: number;
+            dropped: number;
+            warnings: number;
+         }
+
+         type IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';
+
          interface IpcApi {
             vitestChannel: {
                send: (arg1: string, arg2: string) => void;
                on: (callback: (arg1: string, arg2: string) => void) => () => void;
                onReady: (callback: () => void) => () => void;
                onClose: (callback: () => void) => () => void;
-               onConnection: (callback: (connection: { send: (arg1: string, arg2: string) => void; on: (callback: (arg1: string, arg2: string) => void) => () => void; onReady: (callback: () => void) => () => void; onClose: (callback: () => void) => () => void; close: () => void }) => void) => () => void;
+               onOverflow: (callback: (message: Parameters<(arg1: string, arg2: string) => void>, info: IpcPortOverflowInfo) => IpcPortOverflowAction) => () => void;
+               onConnection: (callback: (connection: { send: (arg1: string, arg2: string) => void; on: (callback: (arg1: string, arg2: string) => void) => () => void; onReady: (callback: () => void) => () => void; onClose: (callback: () => void) => () => void; onOverflow: (callback: (message: Parameters<(arg1: string, arg2: string) => void>, info: IpcPortOverflowInfo) => IpcPortOverflowAction) => () => void; close: () => void }) => void) => () => void;
             };
          }
 
@@ -177,6 +187,23 @@ describe("RendererTypesWriter", () => {
          export {};
       `);
       expect(buffer.toString()).toStrictEqual(`${expectedOutput.trim()}\n`);
+   });
+
+   it("should declare the overflow types only if a port channel uses them", async () => {
+      const render = async (...channels: shared.SimpleChannel[]) => {
+         const obj = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...channels));
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      const withPort = await render({ name: "a", kind: "Port", direction: "RendererToRenderer" });
+      const without = await render({ name: "b", kind: "Broadcast", direction: "RendererToMain" });
+
+      expect(withPort).toContain("interface IpcPortOverflowInfo {");
+      expect(withPort).toContain(
+         "type IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';",
+      );
+      expect(without).not.toContain("IpcPortOverflow");
    });
 
    it("should type a mainPort channel like a port channel, since the page has the same API", async () => {

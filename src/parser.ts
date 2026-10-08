@@ -304,8 +304,8 @@ const VERBS = new Map<string, VerbInfo>([
    ],
    ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
    ["ask", { kind: "Unicast", direction: "MainToRenderer", options: [] }],
-   ["port", { kind: "Port", direction: "RendererToRenderer", options: [] }],
-   ["mainPort", { kind: "Port", direction: "MainToRenderer", options: [] }],
+   ["port", { kind: "Port", direction: "RendererToRenderer", options: ["maxQueue"] }],
+   ["mainPort", { kind: "Port", direction: "MainToRenderer", options: ["maxQueue"] }],
 ]);
 
 /** The options whose value is an array of string literals. The others are string literals. */
@@ -979,6 +979,55 @@ function parseValidatorRef(
    return { name: value.value, exported: binding.exported, fromPath: binding.fromPath };
 }
 
+/**
+ * Resolves the `maxQueue` option: a non-negative integer literal, or the global `Infinity`.
+ */
+function parseMaxQueue(value: AstNode, fail: (message: string) => Error, src: Source): number {
+   const expected = "option 'maxQueue' must be a non-negative integer literal or Infinity";
+   if (value.type === "Identifier" && value.value === "Infinity") {
+      return Number.POSITIVE_INFINITY;
+   } else if (value.type !== "NumericLiteral") {
+      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`);
+   } else if (!Number.isInteger(value.value)) {
+      throw fail(`${expected}, found '${value.value}'.`);
+   } else if (!Number.isSafeInteger(value.value)) {
+      throw fail(`option 'maxQueue' cannot exceed ${Number.MAX_SAFE_INTEGER}. Use Infinity.`);
+   }
+   return value.value;
+}
+
+/**
+ * Parses the value of one config option, as the entry of the config that it sets.
+ */
+function parseOption(
+   key: string,
+   value: AstNode,
+   fail: (message: string) => Error,
+   ctx: ParseContext,
+): Partial<t.ChannelSpec> {
+   if (key === "validate") {
+      return { validate: parseValidatorRef(value, fail, ctx) };
+   } else if (key === "maxQueue") {
+      return { maxQueue: parseMaxQueue(value, fail, ctx.src) };
+   } else if (ARRAY_OPTIONS.has(key)) {
+      const elements: (AstNode | undefined)[] =
+         value.type === "ArrayExpression" ? value.elements : [];
+      const literals = elements.map((element) =>
+         !element || element.spread ? null : unwrapParentheses(element.expression),
+      );
+      if (
+         value.type !== "ArrayExpression" ||
+         literals.some((literal) => literal?.type !== "StringLiteral")
+      ) {
+         throw fail(`option '${key}' must be an array of string literals.`);
+      }
+      return { [key]: literals.map((literal) => literal?.value) };
+   } else if (value.type !== "StringLiteral") {
+      throw fail(`option '${key}' must be a string literal.`);
+   }
+   return { [key]: value.value };
+}
+
 function parseChannelConfig(
    call: AstNode,
    verb: string,
@@ -1004,30 +1053,7 @@ function parseChannelConfig(
       if (!info.options.includes(key.value)) {
          throw fail(`option '${key.value}' is not supported by '${verb}'.`);
       }
-      const value = unwrapParentheses(prop.value);
-      if (key.value === "validate") {
-         result.validate = parseValidatorRef(value, fail, ctx);
-         continue;
-      }
-      if (ARRAY_OPTIONS.has(key.value)) {
-         const elements: (AstNode | undefined)[] =
-            value.type === "ArrayExpression" ? value.elements : [];
-         const literals = elements.map((element) =>
-            !element || element.spread ? null : unwrapParentheses(element.expression),
-         );
-         if (
-            value.type !== "ArrayExpression" ||
-            literals.some((literal) => literal?.type !== "StringLiteral")
-         ) {
-            throw fail(`option '${key.value}' must be an array of string literals.`);
-         }
-         Object.assign(result, { [key.value]: literals.map((literal) => literal?.value) });
-         continue;
-      }
-      if (value.type !== "StringLiteral") {
-         throw fail(`option '${key.value}' must be a string literal.`);
-      }
-      Object.assign(result, { [key.value]: value.value });
+      Object.assign(result, parseOption(key.value, unwrapParentheses(prop.value), fail, ctx));
    }
    return result;
 }

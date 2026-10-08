@@ -109,17 +109,28 @@ export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
 }
 
 /**
- * Options of `port` channels. There are none yet.
+ * Options of `port` channels.
+ *
+ * @property maxQueue - The most messages that `send` queues while there is no port to send to:
+ *    before the page has loaded, after a port has closed, and, for the channel itself, while
+ *    there is no connection yet. A non-negative integer literal, or `Infinity`. The default is
+ *    1000. `0` queues nothing. A message that does not fit is handled by the overflow callback,
+ *    which the page registers with `ipc.<name>.onOverflow`, and the oldest message is dropped by
+ *    default. The first drop is logged with `console.warn`, and then every 100th.
  */
 export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
+   maxQueue?: number;
 }
 
 /**
- * Options of `mainPort` channels. There are none yet.
+ * Options of `mainPort` channels.
+ *
+ * @property maxQueue - The most messages that a send queue holds while there is no port, in the
+ *    preload script and in the main process. See `PortConfig`. The main process registers its
+ *    overflow callback with `configurePorts` and `connection.onOverflow`.
  */
 export interface MainPortConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
+   maxQueue?: number;
 }
 
 /**

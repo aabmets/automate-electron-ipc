@@ -65,6 +65,7 @@ describe("generated preload script", () => {
          "chat.on",
          "chat.onClose",
          "chat.onConnection",
+         "chat.onOverflow",
          "chat.onReady",
          "chat.send",
          "getTime.invoke",

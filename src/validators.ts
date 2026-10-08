@@ -106,6 +106,7 @@ function getChannelSpecStruct(
    triggerable = false,
    restrictable = false,
    asking = false,
+   bounded = false,
 ): Struct<any, any> {
    return object({
       name: refine(string(), "identifier", (value) =>
@@ -179,6 +180,7 @@ function getChannelSpecStruct(
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
+      maxQueue: bounded ? optional(number()) : optional(never()),
    });
 }
 
@@ -188,7 +190,7 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       BroadcastStruct: getChannelSpecStruct("Broadcast", false, true),
       UnicastStruct: getChannelSpecStruct("Unicast", false, true),
       AskStruct: getChannelSpecStruct("Unicast", false, false, true),
-      PortStruct: getChannelSpecStruct("Port"),
+      PortStruct: getChannelSpecStruct("Port", false, false, false, true),
    };
    if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
       if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
@@ -206,6 +208,23 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       );
    } else {
       assert(spec, structMap.PortStruct);
+   }
+}
+
+/**
+ * Throws if `maxQueue` is not a non-negative safe integer or `Infinity`. The parser reports the
+ * same for the schema file, so this guards the specs that did not come from it.
+ */
+function validateMaxQueue(spec: Partial<t.ChannelSpec>, file?: string): void {
+   const value = spec.maxQueue;
+   if (value === undefined || value === Number.POSITIVE_INFINITY) {
+      return;
+   } else if (!Number.isSafeInteger(value) || value < 0) {
+      const where = file === undefined ? "" : `Schema file '${file}': `;
+      throw new Error(
+         `${where}Channel '${spec.name}': maxQueue must be a non-negative integer or Infinity, ` +
+            `found ${value}.`,
+      );
    }
 }
 
@@ -280,6 +299,7 @@ export function validateChannelSpecs(
          );
       }
       validateChannelSpecWithStruct(spec);
+      validateMaxQueue(spec, file);
       validateCloneIssues(spec, file);
 
       if (spec?.name) {

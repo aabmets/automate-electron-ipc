@@ -460,12 +460,13 @@ async function loadPreload() {
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
 
 describe("generated preload script of a port channel", () => {
-   it("exposes the five methods and nothing else", async () => {
+   it("exposes the six methods and nothing else", async () => {
       const { chat } = await loadPreload();
       expect(Object.keys(chat).sort()).toStrictEqual([
          "on",
          "onClose",
          "onConnection",
+         "onOverflow",
          "onReady",
          "send",
       ]);
@@ -806,6 +807,7 @@ describe("connections of a port channel in the generated preload script", () => 
                "close",
                "on",
                "onClose",
+               "onOverflow",
                "onReady",
                "send",
             ]);

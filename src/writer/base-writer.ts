@@ -38,6 +38,9 @@ function renameTypeReferences(
    }
    return result + text.slice(last);
 }
+/** The `maxQueue` of a port channel which does not set it: how many messages a send queue holds. */
+export const DEFAULT_MAX_QUEUE = 1000;
+
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
 
@@ -194,6 +197,11 @@ export class BaseWriter {
          }
          return { ...param, name: this.uniqueName(`arg${index}`, taken) };
       });
+   }
+
+   /** The `maxQueue` of a port channel as source text: a number, or `Infinity`. */
+   protected getMaxQueue(spec: t.ChannelSpec): string {
+      return String(spec.maxQueue ?? DEFAULT_MAX_QUEUE);
    }
 
    protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {

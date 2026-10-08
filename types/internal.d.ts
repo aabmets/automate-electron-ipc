@@ -153,6 +153,11 @@ export interface ChannelSpec {
    allowedOrigins?: string[];
    /** A Standard Schema for the arguments of a RendererToMain channel, run before the handler. */
    validate?: ValidatorRef;
+   /**
+    * The most messages that a send queue of a port channel holds while there is no port, or
+    * `Infinity`. Absent means the default of the generated code.
+    */
+   maxQueue?: number;
 }
 
 export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };

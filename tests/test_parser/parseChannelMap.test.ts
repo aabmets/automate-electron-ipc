@@ -743,3 +743,76 @@ describe("parseChannelMapModule, error types", () => {
       expect(spec.errors?.customTypes).toStrictEqual(["AuthError"]);
    });
 });
+
+describe("parseChannelMapModule, maxQueue", () => {
+   it.each(["port", "mainPort"])("reads a non-negative integer literal on %s", (verb) => {
+      for (const [text, value] of [
+         ["0", 0],
+         ["1", 1],
+         ["1000", 1000],
+         ["1e3", 1000],
+         ["(5)", 5],
+      ] as const) {
+         const spec = parseOne(`chan: ${verb}<(a: string) => void>({ maxQueue: ${text} })`);
+         expect(spec.maxQueue).toBe(value);
+      }
+   });
+
+   it.each(["port", "mainPort"])("reads Infinity on %s", (verb) => {
+      const spec = parseOne(`chan: ${verb}<(a: string) => void>({ maxQueue: Infinity })`);
+      expect(spec.maxQueue).toBe(Number.POSITIVE_INFINITY);
+   });
+
+   it("reads the option of the alternative form", () => {
+      const spec = parseOne("chan: port({ maxQueue: 7 }) as (a: string) => void");
+      expect(spec.maxQueue).toBe(7);
+   });
+
+   it("leaves the option out when it is not given, so that the default applies", () => {
+      expect(parseOne("chan: port<() => void>()")).not.toHaveProperty("maxQueue");
+      expect(parseOne("chan: mainPort<() => void>({})")).not.toHaveProperty("maxQueue");
+   });
+
+   it.each(["-1", "-0", "1.5", "0.5", "1e400", "9007199254740993", "+1", "NaN", "-Infinity"])(
+      "rejects %s, naming the channel",
+      (text) => {
+         const message = parseError(
+            `export default defineChannels({ chan: port<() => void>({ maxQueue: ${text} }) });`,
+         );
+         expect(message).toMatch(/chan/);
+         expect(message).toMatch(/maxQueue/);
+      },
+   );
+
+   it.each(['"10"', "true", "null", "limit", "1000 + 1", "Number.MAX_VALUE", "[1]"])(
+      "rejects %s, which is not a number literal",
+      (text) => {
+         const message = parseError(
+            `const limit = 3; export default defineChannels({ chan: mainPort<() => void>({ maxQueue: ${text} }) });`,
+         );
+         expect(message).toMatch(
+            /option 'maxQueue' must be a non-negative integer literal or Infinity/,
+         );
+         expect(message).toMatch(/chan/);
+      },
+   );
+
+   it.each([
+      "invoke<() => Promise<void>>",
+      "send<() => void>",
+      "emit<() => void>",
+      "ask<() => void>",
+   ])("is not an option of %s", (verb) => {
+      const message = parseError(
+         `export default defineChannels({ chan: ${verb}({ maxQueue: 5 }) });`,
+      );
+      expect(message).toMatch(/option 'maxQueue' is not supported by/);
+   });
+
+   it("names the size limit for numbers beyond the safe integers", () => {
+      const message = parseError(
+         "export default defineChannels({ chan: port<() => void>({ maxQueue: 9007199254740993 }) });",
+      );
+      expect(message).toMatch(/cannot exceed 9007199254740991\. Use Infinity/);
+   });
+});

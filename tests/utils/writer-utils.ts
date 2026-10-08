@@ -120,6 +120,8 @@ export interface SimpleChannel {
    trigger?: string;
    allowedOrigins?: string[];
    validate?: t.ValidatorRef;
+   /** The size of the send queues of a port channel. */
+   maxQueue?: number;
    /** The error types of an invoke channel, such as `"NotFoundError | AuthError"`. */
    errors?: string;
 }

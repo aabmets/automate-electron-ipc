@@ -900,7 +900,8 @@ describe("MainBindingsWriter", () => {
                "on: (callback: (arg1: string, arg2: string) => void) => () => void; " +
                "onReady: (callback: () => void) => () => void; " +
                "onClose: (callback: () => void) => () => void; " +
-               "close: () => void } => connectMainPort('vitestChannel', target),",
+               "onOverflow: (callback: ((queue: Parameters<(arg1: string, arg2: string) => void>[], message: Parameters<(arg1: string, arg2: string) => void>, info: PortOverflowInfo) => Parameters<(arg1: string, arg2: string) => void>[]) | undefined) => () => void; " +
+               "close: () => void } => connectMainPort('vitestChannel', 'vitestChannel', 1000, target),",
          );
          // The helper for two windows is not there.
          expect(output).not.toContain("connectPorts");
@@ -931,8 +932,10 @@ describe("MainBindingsWriter", () => {
       it("should send the messages in order once the port is there, never before", async () => {
          const output = await render(mainPort);
 
-         expect(output).toContain("pending.push(args);");
-         expect(output).toContain("for (const args of pending.splice(0)) {");
+         expect(output).toContain(
+            "enqueueMainPort(pending, args, name, max, ownOverflow ?? portsConfig.onOverflow);",
+         );
+         expect(output).toContain("for (const args of pending.items.splice(0)) {");
       });
 
       it("should declare only the helpers that the port channels use", async () => {
@@ -959,6 +962,9 @@ describe("MainBindingsWriter", () => {
 
          for (const name of [
             "connectMainPort",
+            "configurePorts",
+            "PortOverflowInfo",
+            "PortsConfig",
             "MainPortConnection",
             "MainPortListener",
             "MessagePortMain",
@@ -970,6 +976,42 @@ describe("MainBindingsWriter", () => {
          }
       });
 
+      it("should pass the maxQueue of the channel to the connection, and the default of 1000 without one", async () => {
+         const output = await render(
+            { ...mainPort, name: "bounded", maxQueue: 5 },
+            { ...mainPort, name: "none", maxQueue: 0 },
+            { ...mainPort, name: "unbounded", maxQueue: Number.POSITIVE_INFINITY },
+            { ...mainPort, name: "plain" },
+         );
+
+         expect(output).toContain("connectMainPort('bounded', 'bounded', 5, target)");
+         expect(output).toContain("connectMainPort('none', 'none', 0, target)");
+         expect(output).toContain("connectMainPort('unbounded', 'unbounded', Infinity, target)");
+         expect(output).toContain("connectMainPort('plain', 'plain', 1000, target)");
+      });
+
+      it("should declare configurePorts and the overflow types only for mainPort channels", async () => {
+         const onlyMain = await render(mainPort);
+         const onlyRenderers = await render(port);
+
+         expect(onlyMain).toContain("export function configurePorts(config: PortsConfig): void {");
+         expect(onlyMain).toContain("export interface PortOverflowInfo {");
+         expect(onlyMain).toContain("function enqueueMainPort(");
+         expect(onlyRenderers).not.toContain("configurePorts");
+         expect(onlyRenderers).not.toContain("PortOverflowInfo");
+         expect(onlyRenderers).not.toContain("enqueueMainPort");
+      });
+
+      it("should type the overflow callback of a connection with the parameters of the signature", async () => {
+         const output = await render({ ...mainPort, params: ["line: string", "level?: number"] });
+
+         expect(output).toContain(
+            "onOverflow: (callback: ((queue: Parameters<(line: string, level?: number) => void>[], " +
+               "message: Parameters<(line: string, level?: number) => void>, info: PortOverflowInfo) " +
+               "=> Parameters<(line: string, level?: number) => void>[]) | undefined) => () => void;",
+         );
+      });
+
       it("should put the prefix in front of the name that is passed to Electron", async () => {
          const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(mainPort), {
             channelPrefix: "app:",
@@ -977,7 +1019,7 @@ describe("MainBindingsWriter", () => {
          await obj.write(false);
          const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
-         expect(output).toContain("connectMainPort('app:tail', target)");
+         expect(output).toContain("connectMainPort('app:tail', 'tail', 1000, target)");
       });
    });
 

@@ -613,6 +613,7 @@ describe("the generated files of a mainPort channel", () => {
          "on",
          "onClose",
          "onConnection",
+         "onOverflow",
          "onReady",
          "send",
       ]);

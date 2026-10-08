@@ -105,8 +105,12 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain("function createPortChannel(wire: string): PortChannel {");
-      expect(output).toContain("ports['vitestChannel'] = createPortChannel('vitestChannel');");
+      expect(output).toContain(
+         "function createPortChannel(channel: string, wire: string, max: number): PortChannel {",
+      );
+      expect(output).toContain(
+         "ports['vitestChannel'] = createPortChannel('vitestChannel', 'vitestChannel', 1000);",
+      );
       expect(output).toContain(
          "ipcRenderer.on('vitestChannel', (event: IpcRendererEvent, key: unknown) => {\n   ports['vitestChannel'].pair(key, event.ports[0]);\n});",
       );
@@ -116,7 +120,7 @@ describe("PreloadBindingsWriter", () => {
       expect(output).toContain(
          "contextBridge.exposeInMainWorld('ipc', {\n   vitestChannel: ports['vitestChannel'].api,\n});",
       );
-      for (const member of ["send", "on", "onReady", "onClose", "onConnection"]) {
+      for (const member of ["send", "on", "onReady", "onClose", "onOverflow", "onConnection"]) {
          expect(output).toMatch(new RegExp(`^ {6}${member}: `, "m"));
       }
       expect(output).not.toMatch(/sendMessage|onMessage|getPortObject|PortObject/);
@@ -127,11 +131,49 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain("queue.push(args);");
-      expect(output).toContain("pending.push(args);");
-      expect(output).toContain("for (const args of pending.splice(0)) {");
+      expect(output).toContain("enqueue(queue, args, channel, max, overflow);");
+      expect(output).toContain("enqueue(pending, args, channel, max, ownOverflow ?? overflow);");
+      expect(output).toContain("for (const args of pending.items.splice(0)) {");
       expect(output).toContain("const listener = { callback };");
       expect(output).toContain("if (port === next) {");
+   });
+
+   it("should create each port channel with its name, wire name and maxQueue", async () => {
+      const specs = shared.buildFileSpecs(
+         { name: "bounded", kind: "Port", direction: "RendererToRenderer", maxQueue: 5 },
+         { name: "none", kind: "Port", direction: "MainToRenderer", maxQueue: 0 },
+         {
+            name: "unbounded",
+            kind: "Port",
+            direction: "RendererToRenderer",
+            maxQueue: Number.POSITIVE_INFINITY,
+         },
+         { name: "plain", kind: "Port", direction: "MainToRenderer" },
+      );
+      const obj = new shared.VitestPreloadBindingsWriter(specs, { channelPrefix: "app:" });
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain(
+         "ports['bounded'] = createPortChannel('bounded', 'app:bounded', 5);",
+      );
+      expect(output).toContain("ports['none'] = createPortChannel('none', 'app:none', 0);");
+      expect(output).toContain(
+         "ports['unbounded'] = createPortChannel('unbounded', 'app:unbounded', Infinity);",
+      );
+      expect(output).toContain("ports['plain'] = createPortChannel('plain', 'app:plain', 1000);");
+   });
+
+   it("should hand the new message but not the queue to the overflow callback of the page", async () => {
+      const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
+      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain(
+         "action = overflow(args, { channel, max, dropped: before, warnings: queue.warnings });",
+      );
+      expect(output).not.toMatch(/overflow\([^)]*queue\.items/);
    });
 
    it("should keep a connection per key, and end one through the main process", async () => {
@@ -256,7 +298,9 @@ describe("PreloadBindingsWriter", () => {
          expect(output).toContain(
             "ipcRenderer.on('app:chatIt:close', (_event: IpcRendererEvent, key: unknown) => {",
          );
-         expect(output).toContain("ports['chatIt'] = createPortChannel('app:chatIt');");
+         expect(output).toContain(
+            "ports['chatIt'] = createPortChannel('chatIt', 'app:chatIt', 1000);",
+         );
          expect(output).toContain("ipcRenderer.send(`${wire}:disconnect`, key);");
       });
 
@@ -265,7 +309,9 @@ describe("PreloadBindingsWriter", () => {
 
          expect(output).toContain("\n   getIt: {");
          expect(output).toContain("chatIt: ports['chatIt'].api,");
-         expect(output).toContain("ports['chatIt'] = createPortChannel('app:chatIt');");
+         expect(output).toContain(
+            "ports['chatIt'] = createPortChannel('chatIt', 'app:chatIt', 1000);",
+         );
       });
 
       it("writes the names as they are without a prefix, and when the config has none", async () => {

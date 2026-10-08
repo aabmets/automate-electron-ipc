@@ -684,3 +684,56 @@ describe("getCloneWarnings", () => {
       expect(warnings[0]).toContain("('User') through 'Row'.");
    });
 });
+
+describe("validateChannelSpecs, maxQueue", () => {
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      maxQueue: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      return [{ ...spec, maxQueue } as Partial<t.ChannelSpec>];
+   };
+
+   it.each([
+      ["RendererToRenderer", 0],
+      ["RendererToRenderer", 1],
+      ["RendererToRenderer", 1000],
+      ["MainToRenderer", 0],
+      ["MainToRenderer", Number.POSITIVE_INFINITY],
+      ["MainToRenderer", Number.MAX_SAFE_INTEGER],
+      ["MainToRenderer", undefined],
+   ] as const)("accepts %s %s on Port channels", (direction, maxQueue) => {
+      expect(() => vld.validateChannelSpecs(make(direction, "Port", maxQueue))).not.toThrowError();
+   });
+
+   it.each([-1, 1.5, Number.NEGATIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2])(
+      "rejects %s and names the channel and the file",
+      (maxQueue) => {
+         const specs = make("RendererToRenderer", "Port", maxQueue);
+         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+            /Schema file 'schema\.ts': Channel 'vitestChannel_0': maxQueue must be a non-negative integer or Infinity/,
+         );
+      },
+   );
+
+   it("rejects a number that is not a number", () => {
+      expect(() =>
+         vld.validateChannelSpecs(make("MainToRenderer", "Port", Number.NaN)),
+      ).toThrowError(/maxQueue/);
+      expect(() => vld.validateChannelSpecs(make("MainToRenderer", "Port", "10"))).toThrowError(
+         /maxQueue/,
+      );
+   });
+
+   it("rejects maxQueue on the channels that have no send queue", () => {
+      for (const [direction, kind] of [
+         ["RendererToMain", "Unicast"],
+         ["RendererToMain", "Broadcast"],
+         ["MainToRenderer", "Broadcast"],
+         ["MainToRenderer", "Unicast"],
+      ] as const) {
+         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/maxQueue/);
+      }
+   });
+});

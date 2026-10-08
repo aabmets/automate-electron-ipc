@@ -17,6 +17,8 @@ interface ChannelEntry {
    name: string;
    /** Whether the promise of the channel can be rejected with an `IpcError`. */
    throws?: boolean;
+   /** Whether the channel has an overflow callback, which uses the types of the overflow. */
+   overflows?: boolean;
    /** The methods of the channel, one per line, starting with a newline. */
    methods: string[];
 }
@@ -26,9 +28,18 @@ export class RendererTypesWriter extends BaseWriter {
       return this.config.rendererTypesFilePath;
    }
    protected getReservedNames(): string[] {
-      // `IpcApi` is declared by the generated file. `Promise` and `Awaited` are globals
-      // that the generated code uses.
-      return ["IpcApi", "IpcError", "Error", "Promise", "Awaited"];
+      // `IpcApi` is declared by the generated file. `Promise`, `Awaited` and `Parameters` are
+      // globals that the generated code uses.
+      return [
+         "IpcApi",
+         "IpcError",
+         "IpcPortOverflowInfo",
+         "IpcPortOverflowAction",
+         "Error",
+         "Promise",
+         "Awaited",
+         "Parameters",
+      ];
    }
    protected renderEmptyFileContents(): string {
       return this.renderDeclaration([]);
@@ -100,7 +111,20 @@ export class RendererTypesWriter extends BaseWriter {
            ].join("\n")
          : "";
       const globals = [`${i0}var ipc: IpcApi;`, ...(errorType ? [errorType] : [])];
+      // The types of the overflow callbacks, declared only if a port channel has them.
+      const overflowTypes = channels.some((channel) => channel.overflows)
+         ? [
+              `\ninterface IpcPortOverflowInfo {`,
+              `${i0}channel: string;`,
+              `${i0}max: number;`,
+              `${i0}dropped: number;`,
+              `${i0}warnings: number;`,
+              "}",
+              `\ntype IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';`,
+           ]
+         : [];
       return [
+         ...overflowTypes,
          `\ninterface IpcApi {${body}}`,
          `\ndeclare global {\n${globals.join("\n")}\n}`,
          "\nexport {};\n",
@@ -142,15 +166,20 @@ export class RendererTypesWriter extends BaseWriter {
       const definition = spec.signature.definition;
       const subscribe = `(callback: ${definition}) => () => void`;
       const listen = "(callback: () => void) => () => void";
+      // The callback of a full send queue gets the new message, not the queue, and decides what to drop.
+      const message = `Parameters<${definition}>`;
+      const overflow = `(callback: (message: ${message}, info: IpcPortOverflowInfo) => IpcPortOverflowAction) => () => void`;
       // The connection to one peer: the channel itself, with `close`.
-      const connection = `{ send: ${definition}; on: ${subscribe}; onReady: ${listen}; onClose: ${listen}; close: () => void }`;
+      const connection = `{ send: ${definition}; on: ${subscribe}; onReady: ${listen}; onClose: ${listen}; onOverflow: ${overflow}; close: () => void }`;
       return {
          name: spec.name,
+         overflows: true,
          methods: [
             this.method("send", definition),
             this.method("on", subscribe),
             this.method("onReady", listen),
             this.method("onClose", listen),
+            this.method("onOverflow", overflow),
             this.method(
                "onConnection",
                `(callback: (connection: ${connection}) => void) => () => void`,

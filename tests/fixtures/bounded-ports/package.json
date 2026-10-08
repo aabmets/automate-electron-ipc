@@ -1,0 +1,9 @@
+{
+   "name": "fixture-bounded-ports",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

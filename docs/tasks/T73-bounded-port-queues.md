@@ -70,4 +70,33 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - The warning policy: one at the first drop, none until the 100th, one at the 100th and the 200th,
     the counts in `info` and in the text, and no reset after a drain.
   - An e2e type-check of a schema that uses `maxQueue` and both callbacks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Notes:
+  - `maxQueue` is parsed by the parser (a number literal, or `Infinity`; an integer from 0 up to
+    `Number.MAX_SAFE_INTEGER`, anything else is an error that names the channel) and checked again by
+    the validator for specs that did not come from it. It is a `port` and `mainPort` option only. The
+    default (`DEFAULT_MAX_QUEUE = 1000`) is written into the generated code as a number, so no
+    constant is needed at run time.
+  - `preload.ts` has a shared `enqueue` for the queue of the channel and of every connection. The page
+    callback gets `(message, info)` and answers `'dropOldest'`, `'dropNewest'` or `'clear'`.
+    `ipc.<name>.onOverflow(callback)` and `connection.onOverflow(callback)` return disposers that
+    remove only their own callback. `window.d.ts` declares `IpcPortOverflowInfo` and
+    `IpcPortOverflowAction` when a port channel exists.
+  - `main.ts` has `enqueueMainPort`, a per-connection `onOverflow(callback | undefined)` (it also
+    returns a disposer, for consistency with the page) and `configurePorts({ onOverflow })`, both only
+    when a `mainPort` channel exists.
+  - Deviations:
+    - `configurePorts`, `PortOverflowInfo` and `PortsConfig` are generated for `mainPort` channels, not
+      for every port channel: `port` channels have no queue in the main process, and an unused
+      `portsConfig` fails `noUnusedLocals` (T65).
+    - The global callback of `configurePorts` serves all channels, so its messages are typed
+      `unknown[]`. The per-connection callback is typed from the signature of the channel
+      (`Parameters<Sig>`), and so are the page callbacks.
+    - The number of dropped messages of a main callback is the waiting messages and the new one that the
+      returned array leaves out, plus the oldest that are cut because the array is longer than
+      `maxQueue`.
+  - Follow-up, not done: a linter with `useNumberNamespace` (Biome's default) asks for
+    `Number.POSITIVE_INFINITY` where the schema needs `Infinity`. The parser accepts only the decided
+    form, so the README tells the user to disable the rule on that line.
+  - Tests: `tests/test_e2e/portQueues.test.ts` runs the generated preload script (fake ports) and main
+    bindings (fake `MessageChannelMain`) from the `bounded-ports` fixture, which is also type-checked,
+    with misuse of both callbacks in `schema-usage.ts`.

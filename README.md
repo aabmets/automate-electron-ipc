@@ -219,7 +219,7 @@ on the verb of the channel and on the process that uses it:
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
-| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onConnection(callback)` |
+| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onOverflow(callback)`, `onConnection(callback)` |
 | `mainPort` | `ipc.<name>.connect(target)`      | the same as `port`                                |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
@@ -428,6 +428,63 @@ destroyed, and when the page calls `close()` on its connection.
 The renderer has the API of a `port` channel (see above), with the main process as the peer. Several
 `connect` calls make several connections, for one or for different contents, and a page gets each of
 them from `onConnection`. A channel is either a `port` channel or a `mainPort` channel, not both.
+
+#### Bounded send queues
+
+`send` of a `port` or `mainPort` channel queues its messages whenever there is no port to send to:
+before the page has loaded, after a port has closed while the contents are still alive, and, for
+the channel itself, while it has no connection yet. A main process that tails a log into a window
+which has not loaded would otherwise hold every line in memory, so these queues are bounded:
+
+```typescript
+// schema.ts
+logTail: mainPort<(line: string) => void>({ maxQueue: 5000 }),
+meters: mainPort<(level: number) => void>({ maxQueue: 0 }), // nothing is queued
+frames: mainPort<(frame: Uint8Array) => void>({ maxQueue: Infinity }), // never drops
+```
+
+`maxQueue` is a non-negative integer literal, or `Infinity`, and the default is 1000. Messages are
+counted, not bytes. It applies to every queue of the channel: the queue of each connection in the
+preload script, the queue of the channel that waits for the first connection, and, for `mainPort`,
+the queue of each connection in the main process. With `0` nothing is queued, and every message
+that is sent while there is no port goes through the overflow path below. `Infinity` is a plain
+identifier, so a linter with the `useNumberNamespace` rule asks for `Number.POSITIVE_INFINITY`; the
+schema does not accept that form, and the rule is best disabled for the line.
+
+A message that does not fit is handled by the overflow callback, and the oldest message is dropped
+when there is none. A callback is registered at run time, since the schema is only parsed, never
+executed. The page and the main process differ on purpose:
+
+```typescript
+// renderer: gets the new message, and answers with an action
+const stop = ipc.logTail.onOverflow((message, info) => {
+   // message: the argument list, [line]
+   // info: { channel: "logTail", max: 5000, dropped: 12, warnings: 1 }
+   return "dropOldest"; // or "dropNewest", or "clear" (drop the queue, keep the new message)
+});
+connection.onOverflow(callback); // on a connection from onConnection: wins over the channel's callback
+
+// main process: gets the queue, and returns the messages to keep
+configurePorts({
+   onOverflow: (queue, message, info) => [...queue.slice(1), message], // the default of all channels
+});
+tail.onOverflow((queue, message, info) => [...queue, message]); // for one connection only
+tail.onOverflow(undefined); // back to the global callback
+```
+
+The page callback never gets the queue, because `contextBridge` copies every argument that crosses
+it, and a queue at its limit would be copied again for every message that is dropped. The main
+process has no bridge, so its callback gets a copy of the queue (each message is an argument list)
+and returns the array to keep, which covers dropping the oldest or the newest, coalescing and
+clearing. If it returns more than `maxQueue` messages, the oldest are dropped to fit. A callback that
+throws, or returns something else, is logged with `console.error` and the oldest message is dropped.
+`info.dropped` and `info.warnings` count what this queue has dropped and warned about so far.
+
+The first drop of a queue is logged with `console.warn`, and then every 100th (100, 200, ...). The
+text names the channel and `maxQueue`, and gives the counts. The counts belong to the queue and are
+never reset, so a queue that drains and overflows again continues them. `configurePorts` is
+generated when the schema has a `mainPort` channel; a `port` channel queues only in the preload
+script.
 
 #### Sender validation
 

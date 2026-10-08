@@ -30,7 +30,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       ].join("\n");
    }
    protected renderFileContents(): string {
-      const portNamesArray: string[] = [];
+      const portSpecs: t.ChannelSpec[] = [];
       const askNames: string[] = [];
       const channels: ChannelEntry[] = [];
 
@@ -38,7 +38,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.kind === "Port") {
                // The page has the same API for both peers: another page, or the main process.
-               portNamesArray.push(spec.name);
+               portSpecs.push(spec);
                channels.push({
                   name: spec.name,
                   property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
@@ -54,13 +54,13 @@ export class PreloadBindingsWriter extends BaseWriter {
          }
       }
       const out: string[] = ['import { contextBridge, ipcRenderer } from "electron";'];
-      if (portNamesArray.length > 0) {
+      if (portSpecs.length > 0) {
          out.push(
             'import type { IpcRendererEvent } from "electron";',
             this.getPortComponents(),
-            ...portNamesArray
-               .sort(utils.compareStrings)
-               .map((portName) => this.getPortInitializer(portName)),
+            ...portSpecs
+               .sort((a, b) => utils.compareStrings(a.name, b.name))
+               .map((spec) => this.getPortInitializer(spec)),
          );
       }
       if (askNames.length > 0) {
@@ -255,6 +255,14 @@ export class PreloadBindingsWriter extends BaseWriter {
     * - `send` of a connection queues the messages until a port is there, and flushes them in order;
     * - `send` of the channel goes to every connection, and queues while there is none, for the first
     *   one that comes;
+    * - every queue holds at most `maxQueue` messages. `enqueue` handles the message that does not
+    *   fit: it asks the overflow callback of the connection, or else the one of the channel, which
+    *   gets only the new message and answers `'dropOldest'`, `'dropNewest'` or `'clear'`. The queue
+    *   is not handed over, since contextBridge copies every argument that crosses it, and a queue
+    *   at its limit would be copied again for every message that is dropped. Without a callback,
+    *   or when it fails, the oldest message is dropped. A queue counts the messages that it has
+    *   dropped and the warnings that it has logged for good, and warns at the first drop and then
+    *   at every 100th;
     * - `on`, `onReady` and `onClose` of the channel hear every connection. All of the subscribers
     *   keep their own disposers. They are wrapped here because contextBridge hands over a new proxy of
     *   a callback on every crossing, so the same function could not be found again;
@@ -263,20 +271,26 @@ export class PreloadBindingsWriter extends BaseWriter {
     *   replaced port is closed without it, since the connection goes on.
     */
    private getPortComponents(): string {
-      const [i1, i2, i3, i4, i5] = this.indents;
+      const [i1, i2, i3, i4, i5, i6] = this.indents;
       return [
          "",
          "type PortListener = { callback: Function };",
          "",
+         "interface PortQueue {",
+         `${i1}items: any[][];`,
+         `${i1}dropped: number;`,
+         `${i1}warnings: number;`,
+         "}",
+         "",
          "interface PortConnection {",
-         `${i1}api: { send: Function; on: Function; onReady: Function; onClose: Function; close: Function };`,
+         `${i1}api: { send: Function; on: Function; onReady: Function; onClose: Function; onOverflow: Function; close: Function };`,
          `${i1}hasPort: () => boolean;`,
          `${i1}attach: (next: MessagePort) => void;`,
          `${i1}detach: () => void;`,
          "}",
          "",
          "interface PortChannel {",
-         `${i1}api: { send: Function; on: Function; onReady: Function; onClose: Function; onConnection: Function };`,
+         `${i1}api: { send: Function; on: Function; onReady: Function; onClose: Function; onOverflow: Function; onConnection: Function };`,
          `${i1}pair: (key: unknown, next: MessagePort | undefined) => void;`,
          `${i1}end: (key: unknown) => void;`,
          "}",
@@ -297,9 +311,48 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i1}return { listener, dispose: () => void listeners.delete(listener) };`,
          "}",
          "",
-         "function createPortChannel(wire: string): PortChannel {",
+         "function createPortQueue(): PortQueue {",
+         `${i1}return { items: [], dropped: 0, warnings: 0 };`,
+         "}",
+         "",
+         "function enqueue(queue: PortQueue, args: any[], channel: string, max: number, overflow: Function | undefined) {",
+         `${i1}if (queue.items.length < max) {`,
+         `${i2}queue.items.push(args);`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}const before = queue.dropped;`,
+         `${i1}let action: unknown = 'dropOldest';`,
+         `${i1}if (overflow) {`,
+         `${i2}try {`,
+         `${i3}action = overflow(args, { channel, max, dropped: before, warnings: queue.warnings });`,
+         `${i3}if (action !== 'dropOldest' && action !== 'dropNewest' && action !== 'clear') {`,
+         `${i4}throw new TypeError(\`The overflow callback of the channel '\${channel}' must return 'dropOldest', 'dropNewest' or 'clear'\`);`,
+         `${i3}}`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i3}action = 'dropOldest';`,
+         `${i2}}`,
+         `${i1}}`,
+         `${i1}let dropped = 1;`,
+         `${i1}if (max > 0 && action === 'clear') {`,
+         `${i2}dropped = queue.items.length;`,
+         `${i2}queue.items.length = 0;`,
+         `${i2}queue.items.push(args);`,
+         `${i1}} else if (max > 0 && action === 'dropOldest') {`,
+         `${i2}queue.items.shift();`,
+         `${i2}queue.items.push(args);`,
+         `${i1}}`,
+         `${i1}queue.dropped += dropped;`,
+         `${i1}if (before === 0 || Math.floor(queue.dropped / 100) > Math.floor(before / 100)) {`,
+         `${i2}queue.warnings += 1;`,
+         `${i2}console.warn(\`The send queue of the port channel '\${channel}' is full (maxQueue \${max}), so messages are being dropped. Dropped so far: \${queue.dropped}. Warnings so far: \${queue.warnings}.\`);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function createPortChannel(channel: string, wire: string, max: number): PortChannel {",
          `${i1}const connections = new Map<string, PortConnection>();`,
-         `${i1}const queue: any[][] = [];`,
+         `${i1}const queue = createPortQueue();`,
+         `${i1}let overflow: Function | undefined;`,
          `${i1}const subscribers = new Set<PortListener>();`,
          `${i1}const readyListeners = new Set<PortListener>();`,
          `${i1}const closeListeners = new Set<PortListener>();`,
@@ -317,7 +370,8 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}let port: MessagePort | null = null;`,
          `${i2}let ended = false;`,
          `${i2}// What the channel was asked to send while it had no connection is for the first one.`,
-         `${i2}const pending: any[][] = queue.splice(0);`,
+         `${i2}const pending: PortQueue = { items: queue.items.splice(0), dropped: 0, warnings: 0 };`,
+         `${i2}let ownOverflow: Function | undefined;`,
          `${i2}const ownSubscribers = new Set<PortListener>();`,
          `${i2}const ownReadyListeners = new Set<PortListener>();`,
          `${i2}const ownCloseListeners = new Set<PortListener>();`,
@@ -340,7 +394,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i5}notify(closeListeners, []);`,
          `${i4}}`,
          `${i3}});`,
-         `${i3}for (const args of pending.splice(0)) {`,
+         `${i3}for (const args of pending.items.splice(0)) {`,
          `${i4}try {`,
          `${i5}next.postMessage(args);`,
          `${i4}} catch (error) {`,
@@ -352,7 +406,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}};`,
          `${i2}const detach = () => {`,
          `${i3}ended = true;`,
-         `${i3}pending.length = 0;`,
+         `${i3}pending.items.length = 0;`,
          `${i3}const current = port;`,
          `${i3}if (!current) {`,
          `${i4}return;`,
@@ -371,7 +425,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i4}if (port) {`,
          `${i5}port.postMessage(args);`,
          `${i4}} else {`,
-         `${i5}pending.push(args);`,
+         `${i5}enqueue(pending, args, channel, max, ownOverflow ?? overflow);`,
          `${i4}}`,
          `${i3}},`,
          `${i3}on: (callback: Function) => subscribe(ownSubscribers, callback).dispose,`,
@@ -383,6 +437,14 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i4}return dispose;`,
          `${i3}},`,
          `${i3}onClose: (callback: Function) => subscribe(ownCloseListeners, callback).dispose,`,
+         `${i3}onOverflow: (callback: Function) => {`,
+         `${i4}ownOverflow = callback;`,
+         `${i4}return () => {`,
+         `${i5}if (ownOverflow === callback) {`,
+         `${i6}ownOverflow = undefined;`,
+         `${i5}}`,
+         `${i4}};`,
+         `${i3}},`,
          `${i3}close: () => {`,
          `${i4}if (!ended) {`,
          `${i5}ipcRenderer.send(\`\${wire}:disconnect\`, key);`,
@@ -411,7 +473,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i1}const api = {`,
          `${i2}send: (...args: any[]) => {`,
          `${i3}if (connections.size === 0) {`,
-         `${i4}queue.push(args);`,
+         `${i4}enqueue(queue, args, channel, max, overflow);`,
          `${i3}} else {`,
          `${i4}for (const connection of [...connections.values()]) {`,
          `${i5}connection.api.send(...args);`,
@@ -427,6 +489,14 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}return dispose;`,
          `${i2}},`,
          `${i2}onClose: (callback: Function) => subscribe(closeListeners, callback).dispose,`,
+         `${i2}onOverflow: (callback: Function) => {`,
+         `${i3}overflow = callback;`,
+         `${i3}return () => {`,
+         `${i4}if (overflow === callback) {`,
+         `${i5}overflow = undefined;`,
+         `${i4}}`,
+         `${i3}};`,
+         `${i2}},`,
          `${i2}onConnection: (callback: Function) => {`,
          `${i3}const { listener, dispose } = subscribe(connectionListeners, callback);`,
          `${i3}for (const connection of [...connections.values()]) {`,
@@ -444,10 +514,11 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
 
    /** Creates the channel, and hands it the ports and the ends of the connections when they arrive. */
-   private getPortInitializer(portName: string): string {
+   private getPortInitializer(spec: t.ChannelSpec): string {
       const [i1] = this.indents;
+      const portName = spec.name;
       return [
-         `ports['${portName}'] = createPortChannel(${this.wireName(portName)});`,
+         `ports['${portName}'] = createPortChannel('${portName}', ${this.wireName(portName)}, ${this.getMaxQueue(spec)});`,
          `ipcRenderer.on(${this.wireName(portName)}, (event: IpcRendererEvent, key: unknown) => {`,
          `${i1}ports['${portName}'].pair(key, event.ports[0]);`,
          "});",

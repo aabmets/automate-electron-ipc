@@ -97,6 +97,12 @@ export class MainBindingsWriter extends BaseWriter {
          "notifyMainPortListeners",
          "addMainPortListener",
          "connectMainPort",
+         "PortOverflowInfo",
+         "PortsConfig",
+         "portsConfig",
+         "configurePorts",
+         "MainPortQueue",
+         "enqueueMainPort",
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -104,6 +110,9 @@ export class MainBindingsWriter extends BaseWriter {
          "Array",
          "Awaited",
          "structuredClone",
+         "Math",
+         "Infinity",
+         "Parameters",
          "setTimeout",
          "clearTimeout",
       ];
@@ -1136,13 +1145,19 @@ export class MainBindingsWriter extends BaseWriter {
       return { name: spec.name, members: [connector] };
    }
    /**
-    * `connectMainPort`, which `ipc.<name>.connect` of a `mainPort` channel calls. The main process
+    * `connectMainPort`, which `ipc.<name>.connect` of a `mainPort` channel calls, and
+    * `configurePorts`, which sets the overflow callback that the send queues use by default. The main process
     * keeps one end of a `MessageChannelMain` and transfers the other to the page, with the key of
     * the connection. It pairs once the page has loaded, since a port that is posted earlier arrives
     * before the preload script listens for it, and again on every `did-finish-load`, so a page that
     * reloads gets a fresh port, and the old port is dropped without ending the connection. The
     * connection has the shape of the one that a page gets from `onConnection`:
-    * - `send` queues the messages until a port is there, and flushes them in order;
+    * - `send` queues the messages until a port is there, and flushes them in order. The queue holds
+    *   at most `maxQueue` messages. A message that does not fit goes to the overflow callback of
+    *   the connection, or else to the global one of `configurePorts`, with a copy of the queue, the
+    *   message and the counts. The callback returns the messages to keep, the oldest are dropped if
+    *   there are too many, and it is the oldest message that is dropped without a callback, and
+    *   when the callback fails. The first drop is logged with `console.warn`, then every 100th;
     * - `on`, `onReady` and `onClose` keep any number of subscribers with their own disposers, and a
     *   subscriber which throws is reported to `console.error` and does not stop the others;
     * - `onReady` runs at once if a port is there, and again for every new port;
@@ -1152,18 +1167,79 @@ export class MainBindingsWriter extends BaseWriter {
     *   and when the page asks for it.
     */
    private buildMainPortHelpers(): string {
-      const [i1, i2, i3, i4] = this.indents;
+      const [i1, i2, i3, i4, i5] = this.indents;
       return [
+         "",
+         "export interface PortOverflowInfo {",
+         `${i1}channel: string;`,
+         `${i1}max: number;`,
+         `${i1}dropped: number;`,
+         `${i1}warnings: number;`,
+         "}",
+         "",
+         "export interface PortsConfig {",
+         `${i1}onOverflow?: (queue: unknown[][], message: unknown[], info: PortOverflowInfo) => unknown[][];`,
+         "}",
+         "",
+         "let portsConfig: PortsConfig = {};",
+         "",
+         "export function configurePorts(config: PortsConfig): void {",
+         `${i1}portsConfig = { onOverflow: config.onOverflow };`,
+         "}",
          "",
          "interface MainPortConnection {",
          `${i1}send: (...args: any[]) => void;`,
          `${i1}on: (callback: Function) => () => void;`,
          `${i1}onReady: (callback: () => void) => () => void;`,
          `${i1}onClose: (callback: () => void) => () => void;`,
+         `${i1}onOverflow: (callback: Function | undefined) => () => void;`,
          `${i1}close: () => void;`,
          "}",
          "",
          "type MainPortListener = { callback: Function };",
+         "",
+         "interface MainPortQueue {",
+         `${i1}items: unknown[][];`,
+         `${i1}dropped: number;`,
+         `${i1}warnings: number;`,
+         "}",
+         "",
+         "function enqueueMainPort(",
+         `${i1}queue: MainPortQueue,`,
+         `${i1}args: unknown[],`,
+         `${i1}channel: string,`,
+         `${i1}max: number,`,
+         `${i1}overflow: Function | undefined,`,
+         "): void {",
+         `${i1}if (queue.items.length < max) {`,
+         `${i2}queue.items.push(args);`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}const before = queue.dropped;`,
+         `${i1}let kept: unknown[][] | undefined;`,
+         `${i1}if (overflow) {`,
+         `${i2}try {`,
+         `${i3}const result = overflow([...queue.items], args, { channel, max, dropped: before, warnings: queue.warnings });`,
+         `${i3}if (!Array.isArray(result) || !result.every((item) => Array.isArray(item))) {`,
+         `${i4}throw new TypeError(\`The overflow callback of the channel '\${channel}' must return an array of messages\`);`,
+         `${i3}}`,
+         `${i3}kept = result;`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i2}}`,
+         `${i1}}`,
+         `${i1}if (!kept) {`,
+         `${i2}kept = max > 0 ? [...queue.items.slice(1), args] : [];`,
+         `${i1}}`,
+         `${i1}// The oldest messages that do not fit, and the waiting ones and the new one that were left out.`,
+         `${i1}const truncated = Math.max(0, kept.length - max);`,
+         `${i1}queue.dropped += truncated + Math.max(0, queue.items.length + 1 - kept.length);`,
+         `${i1}queue.items = kept.slice(truncated);`,
+         `${i1}if (before === 0 || Math.floor(queue.dropped / 100) > Math.floor(before / 100)) {`,
+         `${i2}queue.warnings += 1;`,
+         `${i2}console.warn(\`The send queue of the port channel '\${channel}' is full (maxQueue \${max}), so messages are being dropped. Dropped so far: \${queue.dropped}. Warnings so far: \${queue.warnings}.\`);`,
+         `${i1}}`,
+         "}",
          "",
          "function notifyMainPortListeners(listeners: Iterable<MainPortListener>, args: unknown[]): void {",
          `${i1}for (const listener of [...listeners]) {`,
@@ -1183,6 +1259,8 @@ export class MainBindingsWriter extends BaseWriter {
          "",
          "function connectMainPort(",
          `${i1}channel: string,`,
+         `${i1}name: string,`,
+         `${i1}max: number,`,
          `${i1}target: BrowserWindow | WebContents | WebContentsView,`,
          "): MainPortConnection {",
          `${i1}const contents = 'webContents' in target ? target.webContents : target;`,
@@ -1190,7 +1268,8 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}const subscribers = new Set<MainPortListener>();`,
          `${i1}const readyListeners = new Set<MainPortListener>();`,
          `${i1}const closeListeners = new Set<MainPortListener>();`,
-         `${i1}const pending: unknown[][] = [];`,
+         `${i1}const pending: MainPortQueue = { items: [], dropped: 0, warnings: 0 };`,
+         `${i1}let ownOverflow: Function | undefined;`,
          `${i1}let port: MessagePortMain | null = null;`,
          `${i1}let closed = false;`,
          `${i1}const isReady = () =>`,
@@ -1217,7 +1296,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}}`,
          `${i2}});`,
          `${i2}next.start();`,
-         `${i2}for (const args of pending.splice(0)) {`,
+         `${i2}for (const args of pending.items.splice(0)) {`,
          `${i3}try {`,
          `${i4}next.postMessage(args);`,
          `${i3}} catch (error) {`,
@@ -1239,7 +1318,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}return;`,
          `${i2}}`,
          `${i2}closed = true;`,
-         `${i2}pending.length = 0;`,
+         `${i2}pending.items.length = 0;`,
          `${i2}portEnds.delete(key);`,
          `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
          `${i2}if (!contents.isDestroyed()) {`,
@@ -1264,7 +1343,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}if (port) {`,
          `${i4}port.postMessage(args);`,
          `${i3}} else {`,
-         `${i4}pending.push(args);`,
+         `${i4}enqueueMainPort(pending, args, name, max, ownOverflow ?? portsConfig.onOverflow);`,
          `${i3}}`,
          `${i2}},`,
          `${i2}on: (callback: Function) => addMainPortListener(subscribers, callback).dispose,`,
@@ -1276,6 +1355,14 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}return dispose;`,
          `${i2}},`,
          `${i2}onClose: (callback: () => void) => addMainPortListener(closeListeners, callback).dispose,`,
+         `${i2}onOverflow: (callback: Function | undefined) => {`,
+         `${i3}ownOverflow = callback;`,
+         `${i3}return () => {`,
+         `${i4}if (ownOverflow === callback) {`,
+         `${i5}ownOverflow = undefined;`,
+         `${i4}}`,
+         `${i3}};`,
+         `${i2}},`,
          `${i2}close,`,
          `${i1}};`,
          "}",
@@ -1291,16 +1378,19 @@ export class MainBindingsWriter extends BaseWriter {
       const i1 = this.indents[1];
       const typeParams = this.getTypeParams(spec.signature);
       const send = `${typeParams}(${this.getOriginalParams(spec, false)}) => void`;
+      const message = `Parameters<${spec.signature.definition}>`;
+      const overflow = `(queue: ${message}[], message: ${message}, info: PortOverflowInfo) => ${message}[]`;
       const connection = [
          `{ send: ${send};`,
          ` on: (callback: ${spec.signature.definition}) => () => void;`,
          " onReady: (callback: () => void) => () => void;",
          " onClose: (callback: () => void) => () => void;",
+         ` onOverflow: (callback: (${overflow}) | undefined) => () => void;`,
          " close: () => void }",
       ].join("");
       const connector = [
          `\n${i1}connect: (target: BrowserWindow | WebContents | WebContentsView): ${connection} =>`,
-         ` connectMainPort(${this.wireName(spec.name)}, target),`,
+         ` connectMainPort(${this.wireName(spec.name)}, '${spec.name}', ${this.getMaxQueue(spec)}, target),`,
       ].join("");
       return { name: spec.name, members: [connector] };
    }
