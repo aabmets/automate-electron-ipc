@@ -36,7 +36,7 @@ describe("ipcAutomation, triggers", () => {
       expect(main).toContain('browserWindow.on("page-title-updated", listener);');
       expect(main.match(/\bbind:/g)).toHaveLength(2);
       expect(main).toContain(
-         "plain: {\n      send: (target: BrowserWindow | WebContents | WebContentsView, n: number) =>",
+         "plain: {\n      send: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, n: number) =>",
       );
    });
 
@@ -244,14 +244,14 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         "send: (target: BrowserWindow | WebContents | WebContentsView, browserWindow: number, event: string, callback: boolean) =>",
+         "send: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, browserWindow: number, event: string, callback: boolean) =>",
       );
       expect(main).toContain(
          "resolveSendTarget(target).send('autoipc:windowClash', browserWindow, event, callback)",
       );
       // The names of the sender and of the broadcast filter yield to the parameters too.
       expect(main).toContain(
-         "send: (_target: BrowserWindow | WebContents | WebContentsView, target: string, filter: number, contents: boolean) =>",
+         "send: (_target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, target: string, filter: number, contents: boolean) =>",
       );
       expect(main).toContain(
          "broadcastTo: (_filter: (contents: WebContents) => boolean, target: string, filter: number, contents: boolean) =>",
@@ -259,6 +259,11 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       expect(main).toContain(
          "broadcastMessage('autoipc:senderClash', [target, filter, contents], _filter)",
       );
+      // The event of sendToSender yields to a parameter of the signature as well.
+      expect(main).toContain(
+         "sendToSender: (_event: { readonly senderFrame: WebFrameMain | null }, event: string, frame: number) =>",
+      );
+      expect(main).toContain("sendToSenderFrame(_event, 'autoipc:frameClash', [event, frame])");
       expect(main).toContain(
          "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => {",
       );
@@ -278,7 +283,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       );
       expect(main).toContain("return callback(event, cb);");
       expect(main).toContain(
-         "send: <T extends Parameters<(x: number) => void>>(target: BrowserWindow | WebContents | WebContentsView, cb: T) =>",
+         "send: <T extends Parameters<(x: number) => void>>(target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, cb: T) =>",
       );
       expect(project.generated["window.d.ts"]).toContain(
          "invoke: <T>(value: T) => Promise<Awaited<T>>;",

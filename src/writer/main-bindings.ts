@@ -63,9 +63,11 @@ export class MainBindingsWriter extends BaseWriter {
          "validateArguments",
          "WebContents",
          "WebContentsView",
+         "WebFrameMain",
          "electronWebContents",
          "resolveSendTarget",
          "broadcastMessage",
+         "sendToSenderFrame",
          "IpcErrorInfo",
          "IpcEnvelope",
          "toIpcError",
@@ -113,7 +115,12 @@ export class MainBindingsWriter extends BaseWriter {
             } else if (spec.direction === "MainToRenderer") {
                usesSenders = true;
                electronImportsSet.add("webContents as electronWebContents");
-               for (const type of ["BrowserWindow", "WebContents", "WebContentsView"]) {
+               for (const type of [
+                  "BrowserWindow",
+                  "WebContents",
+                  "WebContentsView",
+                  "WebFrameMain",
+               ]) {
                   electronTypeImportsSet.add(type);
                }
                channels.push(this.buildMainToRendererChannel(spec));
@@ -591,16 +598,22 @@ export class MainBindingsWriter extends BaseWriter {
       ];
    }
    /**
-    * The helpers of the `emit` channels. `resolveSendTarget` takes the contents out of what
-    * `send` is given: a window or a view has them as `webContents`, and a `WebContents` is them.
+    * The helpers of the `emit` channels. `resolveSendTarget` takes the receiver out of what
+    * `send` is given: a window or a view has contents as `webContents`, while a `WebContents` and
+    * a `WebFrameMain` receive the message themselves.
     * `broadcastMessage` sends to every contents that is not destroyed, optionally only to those
     * that `filter` accepts. Destroyed contents are skipped, since sending to them throws.
+    * `sendToSenderFrame` replies to the frame that sent the event. Electron clears `senderFrame`
+    * once the frame navigates or is destroyed, so it is read first, and a missing, destroyed or
+    * detached frame is skipped, which the return value reports.
     */
    private buildSenderHelpers(): string {
       const [i1, i2, i3] = this.indents;
       return [
          "",
-         "function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {",
+         "function resolveSendTarget(",
+         `${i1}target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,`,
+         "): WebContents | WebFrameMain {",
          `${i1}return 'webContents' in target ? target.webContents : target;`,
          "}",
          "",
@@ -616,10 +629,32 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}}`,
          "}",
          "",
+         "function sendToSenderFrame(",
+         `${i1}event: { readonly senderFrame: WebFrameMain | null },`,
+         `${i1}channel: string,`,
+         `${i1}args: unknown[],`,
+         "): boolean {",
+         `${i1}let frame: WebFrameMain | null = null;`,
+         `${i1}try {`,
+         `${i2}frame = event.senderFrame;`,
+         `${i2}if (frame && (frame.isDestroyed?.() || frame.detached)) {`,
+         `${i3}frame = null;`,
+         `${i2}}`,
+         `${i1}} catch {`,
+         `${i2}frame = null;`,
+         `${i1}}`,
+         `${i1}if (!frame) {`,
+         `${i2}return false;`,
+         `${i1}}`,
+         `${i1}frame.send(channel, ...args);`,
+         `${i1}return true;`,
+         "}",
+         "",
       ].join("\n");
    }
    /**
-    * `ipc.<name>.send(target, ...args)` to one window, view or contents, `broadcast(...args)` to
+    * `ipc.<name>.send(target, ...args)` to one window, view, contents or frame,
+    * `sendToSender(event, ...args)` to the frame that sent the event, `broadcast(...args)` to
     * all contents, `broadcastTo(filter, ...args)` to those that the filter accepts, and
     * `ipc.<name>.bind(window, provider)` with a trigger. The filter comes first, since the
     * signature may end in optional or rest parameters, which would swallow an options argument.
@@ -630,18 +665,22 @@ export class MainBindingsWriter extends BaseWriter {
       const taken = this.collectIdentifiers([spec.signature.definition]);
       const targetName = this.uniqueName("target", taken);
       const filterName = this.uniqueName("filter", taken);
+      const eventName = this.uniqueName("event", taken);
       const senderParams = this.getOriginalParams(spec, true);
       const wire = this.wireName(spec.name);
       const sender = `resolveSendTarget(${targetName}).send(${wire}, ${senderParams})`;
       const ipcParams = this.getOriginalParams(spec, false);
       const typeParams = this.getTypeParams(spec.signature);
-      const targetType = "BrowserWindow | WebContents | WebContentsView";
+      const targetType = "BrowserWindow | WebContents | WebContentsView | WebFrameMain";
       const ipcSignature = `${typeParams}(${targetName}: ${targetType}, ${ipcParams})`;
       const filterType = `(contents: WebContents) => boolean`;
+      const eventType = "{ readonly senderFrame: WebFrameMain | null }";
       const rest = senderParams ? `[${senderParams}]` : "[]";
       const members = [
          `\n${i1}send: ${ipcSignature} =>`,
          `\n${i2}${sender},`,
+         `\n${i1}sendToSender: ${typeParams}(${eventName}: ${eventType}, ${ipcParams}) =>`,
+         `\n${i2}sendToSenderFrame(${eventName}, ${wire}, ${rest}),`,
          `\n${i1}broadcast: ${typeParams}(${ipcParams}) =>`,
          `\n${i2}broadcastMessage(${wire}, ${rest}),`,
          `\n${i1}broadcastTo: ${typeParams}(${filterName}: ${filterType}, ${ipcParams}) =>`,

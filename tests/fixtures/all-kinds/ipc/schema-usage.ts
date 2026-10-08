@@ -1,11 +1,21 @@
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when a channel exposes the wrong methods.
-import type { BrowserWindow, WebContents, WebContentsView } from "electron";
+import type {
+   BrowserWindow,
+   IpcMainEvent,
+   IpcMainInvokeEvent,
+   WebContents,
+   WebContentsView,
+   WebFrameMain,
+} from "electron";
 import { ipc as mainIpc } from "./main";
 
 declare const win: BrowserWindow;
 declare const contents: WebContents;
 declare const view: WebContentsView;
+declare const frame: WebFrameMain;
+declare const event: IpcMainEvent;
+declare const invokeEvent: IpcMainInvokeEvent;
 
 // Renderer: the bare global, `window.ipc` and `globalThis.ipc` are the same typed object.
 export const user: Promise<string> = ipc.getUser.invoke(1);
@@ -48,6 +58,9 @@ stopLogLine();
 mainIpc.progress.send(win, 50, "half");
 mainIpc.progress.send(contents, 50);
 mainIpc.progress.send(view, 50, "half");
+mainIpc.progress.send(frame, 50, "half");
+export const delivered: boolean = mainIpc.progress.sendToSender(event, 50, "half");
+export const deliveredToInvoker: boolean = mainIpc.progress.sendToSender(invokeEvent, 50);
 mainIpc.progress.broadcast(50, "half");
 mainIpc.progress.broadcastTo((target: WebContents) => target.id === contents.id, 50);
 mainIpc.titleChanged.broadcast("title");
@@ -56,6 +69,12 @@ mainIpc.titleChanged.broadcast("title");
 mainIpc.progress.send(50);
 // @ts-expect-error the target of a send is a window, a view or contents
 mainIpc.progress.send("window", 50);
+// @ts-expect-error sendToSender takes the event, not a target
+mainIpc.progress.sendToSender(win, 50);
+// @ts-expect-error sendToSender takes the arguments of the signature after the event
+mainIpc.progress.sendToSender(event, "50");
+// @ts-expect-error send channels have no sendToSender
+mainIpc.logLine.sendToSender(event, "line");
 // @ts-expect-error the filter of broadcastTo comes first
 mainIpc.progress.broadcastTo(50, (target: WebContents) => target.id > 0);
 // @ts-expect-error broadcast takes the arguments of the signature, not an options object

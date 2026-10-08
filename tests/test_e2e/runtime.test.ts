@@ -211,10 +211,12 @@ describe("generated main process bindings", () => {
          "progress.broadcast",
          "progress.broadcastTo",
          "progress.send",
+         "progress.sendToSender",
          "titleChanged.bind",
          "titleChanged.broadcast",
          "titleChanged.broadcastTo",
          "titleChanged.send",
+         "titleChanged.sendToSender",
       ]);
    });
 

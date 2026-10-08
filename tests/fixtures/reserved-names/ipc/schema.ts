@@ -20,6 +20,10 @@ export interface WebContents {
 }
 export type broadcastMessage = { sent: number };
 export type resolveSendTarget = { found: boolean };
+export interface WebFrameMain {
+   frameId: number;
+}
+export type sendToSenderFrame = { delivered: boolean };
 
 export default defineChannels({
    getApi: invoke<() => Promise<IpcApi>>(),
@@ -28,6 +32,7 @@ export default defineChannels({
    getWindow: invoke<(id: number) => Promise<Window>>(),
    openWindow: send<(options: BrowserWindow) => void>(),
    pageChanged: emit<(contents: WebContents, sent: broadcastMessage) => void>(),
+   frameReplied: emit<(frame: WebFrameMain, delivered: sendToSenderFrame) => void>(),
    targetResolved: emit<(found: resolveSendTarget) => void>(),
    eventHappened: emit<(event: IpcMainEvent) => void>({ trigger: "focus" }),
 });

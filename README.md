@@ -208,7 +208,7 @@ on the verb of the channel and on the process that uses it:
 |----------|-------------------------------------|---------------------------------------------------|
 | `invoke` | `ipc.<name>.handle(callback)`       | `ipc.<name>.invoke(...args)`                      |
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
-| `emit`   | `ipc.<name>.send(target, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
+| `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
@@ -230,14 +230,31 @@ hot-restarting the main process works. The disposer of a replaced handler does n
 
 #### Sending to windows
 
-`ipc.<name>.send(target, ...args)` of an `emit` channel takes a `BrowserWindow`, a `WebContentsView`
-or a `WebContents`, so a message can go to a window, to a view inside it, or to one frame tree:
+`ipc.<name>.send(target, ...args)` of an `emit` channel takes a `BrowserWindow`, a `WebContentsView`,
+a `WebContents` or a `WebFrameMain`, so a message can go to a window, to a view inside it, to its
+contents, or to one frame:
 
 ```typescript
 ipc.progress.send(mainWindow, 50);
 ipc.progress.send(view, 50);
 ipc.progress.send(mainWindow.webContents, 50);
+ipc.progress.send(mainWindow.webContents.mainFrame, 50);
 ```
+
+`sendToSender(event, ...args)` replies to the exact frame that sent the event you are handling, such
+as an iframe, which a `send` to the window would not reach. It takes the event of any handler:
+
+```typescript
+ipc.search.on((event, query) => {
+   ipc.searchStarted.sendToSender(event, query); // replies to the iframe that asked
+});
+```
+
+Electron clears `event.senderFrame` once the frame navigates or is destroyed, and `sendToSender`
+reads it at the moment of the call, so call it before the first `await`; after one, the frame may
+already be gone. It returns `true` when the message went out, and `false` when there was nobody to send
+to: no frame, or a frame that is destroyed or detached. Unlike `send`, which throws for a target
+that the caller handed over and that is destroyed, a reply to a sender that has gone is not an error.
 
 `broadcast(...args)` sends to every open `WebContents`, such as the windows and views of the app,
 for something that all of them show (a theme or a setting). Contents that are destroyed are skipped.

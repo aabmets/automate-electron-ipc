@@ -279,9 +279,11 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { webContents as electronWebContents } from "electron";
-         import type { BrowserWindow, WebContents, WebContentsView } from "electron";
+         import type { BrowserWindow, WebContents, WebContentsView, WebFrameMain } from "electron";
 
-         function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {
+         function resolveSendTarget(
+            target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,
+         ): WebContents | WebFrameMain {
             return 'webContents' in target ? target.webContents : target;
          }
 
@@ -297,10 +299,33 @@ describe("MainBindingsWriter", () => {
             }
          }
 
+         function sendToSenderFrame(
+            event: { readonly senderFrame: WebFrameMain | null },
+            channel: string,
+            args: unknown[],
+         ): boolean {
+            let frame: WebFrameMain | null = null;
+            try {
+               frame = event.senderFrame;
+               if (frame && (frame.isDestroyed?.() || frame.detached)) {
+                  frame = null;
+               }
+            } catch {
+               frame = null;
+            }
+            if (!frame) {
+               return false;
+            }
+            frame.send(channel, ...args);
+            return true;
+         }
+
          export const ipc = {
             vitestChannel: {
-               send: (target: BrowserWindow | WebContents | WebContentsView, arg1: number, ...arg2: number[]) =>
+               send: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, arg1: number, ...arg2: number[]) =>
                   resolveSendTarget(target).send('vitestChannel', arg1, ...arg2),
+               sendToSender: (event: { readonly senderFrame: WebFrameMain | null }, arg1: number, ...arg2: number[]) =>
+                  sendToSenderFrame(event, 'vitestChannel', [arg1, ...arg2]),
                broadcast: (arg1: number, ...arg2: number[]) =>
                   broadcastMessage('vitestChannel', [arg1, ...arg2]),
                broadcastTo: (filter: (contents: WebContents) => boolean, arg1: number, ...arg2: number[]) =>
@@ -691,9 +716,11 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { webContents as electronWebContents } from "electron";
-         import type { BrowserWindow, WebContents, WebContentsView } from "electron";
+         import type { BrowserWindow, WebContents, WebContentsView, WebFrameMain } from "electron";
 
-         function resolveSendTarget(target: BrowserWindow | WebContents | WebContentsView): WebContents {
+         function resolveSendTarget(
+            target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,
+         ): WebContents | WebFrameMain {
             return 'webContents' in target ? target.webContents : target;
          }
 
@@ -709,10 +736,33 @@ describe("MainBindingsWriter", () => {
             }
          }
 
+         function sendToSenderFrame(
+            event: { readonly senderFrame: WebFrameMain | null },
+            channel: string,
+            args: unknown[],
+         ): boolean {
+            let frame: WebFrameMain | null = null;
+            try {
+               frame = event.senderFrame;
+               if (frame && (frame.isDestroyed?.() || frame.detached)) {
+                  frame = null;
+               }
+            } catch {
+               frame = null;
+            }
+            if (!frame) {
+               return false;
+            }
+            frame.send(channel, ...args);
+            return true;
+         }
+
          export const ipc = {
             focused: {
-               send: (target: BrowserWindow | WebContents | WebContentsView, state: boolean, ...tags: string[]) =>
+               send: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, state: boolean, ...tags: string[]) =>
                   resolveSendTarget(target).send('focused', state, ...tags),
+               sendToSender: (event: { readonly senderFrame: WebFrameMain | null }, state: boolean, ...tags: string[]) =>
+                  sendToSenderFrame(event, 'focused', [state, ...tags]),
                broadcast: (state: boolean, ...tags: string[]) =>
                   broadcastMessage('focused', [state, ...tags]),
                broadcastTo: (filter: (contents: WebContents) => boolean, state: boolean, ...tags: string[]) =>
