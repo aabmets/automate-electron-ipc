@@ -194,6 +194,81 @@ describe("validateChannelSpecs", () => {
    });
 });
 
+describe("validateChannelSpecs, allowedOrigins", () => {
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      allowedOrigins: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      return [{ ...spec, allowedOrigins } as Partial<t.ChannelSpec>];
+   };
+
+   it("accepts origins of Unicast and Broadcast channels from a renderer", () => {
+      for (const kind of ["Unicast", "Broadcast"] as const) {
+         const specs = make("RendererToMain", kind, [
+            "app://.",
+            "http://localhost:5173",
+            "https://example.com",
+            "file://",
+            "https://[::1]:8080",
+         ]);
+         expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      }
+   });
+
+   it("accepts a channel without allowedOrigins", () => {
+      const specs = [new ChannelSpecGenerator().generate("RendererToMain", "Unicast")];
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
+
+   it("rejects allowedOrigins on MainToRenderer and Port channels", () => {
+      for (const [direction, kind] of [
+         ["MainToRenderer", "Broadcast"],
+         ["RendererToRenderer", "Port"],
+      ] as const) {
+         const specs = make(direction, kind, ["app://."]);
+         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/allowedOrigins/);
+      }
+   });
+
+   it("rejects an empty list, since it would allow no caller", () => {
+      const specs = make("RendererToMain", "Unicast", []);
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/at least one origin/);
+   });
+
+   it.each([
+      "*",
+      "app://.*",
+      "*.example.com",
+      "https://*.example.com",
+      "example.com",
+      "localhost:5173",
+      "http://localhost:5173/",
+      "http://localhost:5173/index.html",
+      "http://localhost:5173?x=1",
+      "http://localhost:5173#x",
+      "http://user:pass@example.com",
+      "HTTP://example.com",
+      "http://EXAMPLE.com",
+      "http://exa mple.com",
+      " app://.",
+      "null",
+      "",
+      "://host",
+   ])("rejects '%s' as it is not an origin", (origin) => {
+      const specs = make("RendererToMain", "Broadcast", ["app://.", origin]);
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/is not an origin/);
+   });
+
+   it("rejects a value which is not an array of strings", () => {
+      for (const value of ["app://.", [1], { a: 1 }]) {
+         const specs = make("RendererToMain", "Unicast", value);
+         expect(() => vld.validateChannelSpecs(specs)).toThrowError();
+      }
+   });
+});
+
 describe("validateGlobalChannelSpecs", () => {
    const file = (relativePath: string, specs: t.ChannelSpec[]): t.ParsedFileSpecs => ({
       fullPath: `/project/ipc/schema/${relativePath}`,

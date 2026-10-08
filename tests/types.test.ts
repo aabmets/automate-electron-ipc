@@ -96,6 +96,28 @@ describe("public types", () => {
       }
    });
 
+   it("accepts allowedOrigins on invoke and send only", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            export default defineChannels({
+               a: invoke<() => void>({ allowedOrigins: ["app://."] }),
+               b: send<() => void>({ allowedOrigins: ["app://.", "http://localhost:5173"] }),
+               c: send({ allowedOrigins: ["app://."] }) as () => void,
+               d: emit<() => void>({ allowedOrigins: ["app://."] }),
+               e: port<() => void>({ allowedOrigins: ["app://."] }),
+               f: invoke<() => void>({ allowedOrigins: "app://." }),
+            });
+         `,
+      });
+      for (const line of [4, 5, 6]) {
+         expect(diagnostics).not.toContain(`schema.ts(${line},`);
+      }
+      for (const line of [7, 8, 9]) {
+         expect(diagnostics).toContain(`schema.ts(${line},`);
+      }
+   });
+
    it("rejects a trigger which is not a BrowserWindow event", async () => {
       const diagnostics = await typecheck({
          "schema.ts": `

@@ -195,6 +195,54 @@ describe("parseChannelMapModule", () => {
          expect(parseOne("chan: emit<() => void>()")).not.toHaveProperty("trigger");
       });
 
+      it("reads allowedOrigins of invoke and send in both forms", () => {
+         const generic = parseOne(
+            "chan: invoke<() => Promise<void>>({ allowedOrigins: [\"app://.\", 'http://localhost:5173'] })",
+         );
+         const alternative = parseOne('chan: send({ allowedOrigins: ["app://."] }) as () => void');
+         expect(generic.allowedOrigins).toStrictEqual(["app://.", "http://localhost:5173"]);
+         expect(alternative.allowedOrigins).toStrictEqual(["app://."]);
+      });
+
+      it("reads allowedOrigins through parentheses and an empty list", () => {
+         const spec = parseOne("chan: send<() => void>({ allowedOrigins: (['app://.']) })");
+         expect(spec.allowedOrigins).toStrictEqual(["app://."]);
+         expect(
+            parseOne("chan: send<() => void>({ allowedOrigins: [] })").allowedOrigins,
+         ).toStrictEqual([]);
+      });
+
+      it("does not set allowedOrigins when none are given", () => {
+         expect(parseOne("chan: invoke<() => void>()")).not.toHaveProperty("allowedOrigins");
+      });
+
+      const wrap = (entry: string) => `export default defineChannels({ ${entry} });`;
+
+      it("rejects allowedOrigins that are not an array of string literals", () => {
+         for (const value of [
+            '"app://."',
+            "origins",
+            "[origin]",
+            '[...origins, "app://."]',
+            '["app://.", , "b"]',
+            "[`app://.`]",
+            "[1]",
+         ]) {
+            const msg = parseError(wrap(`chan: send<() => void>({ allowedOrigins: ${value} })`));
+            expect(msg).toContain("channel 'chan'");
+            expect(msg).toContain("option 'allowedOrigins' must be an array of string literals");
+         }
+      });
+
+      it("rejects allowedOrigins on emit and port", () => {
+         for (const verb of ["emit", "port"]) {
+            const msg = parseError(
+               wrap(`chan: ${verb}<() => void>({ allowedOrigins: ["app://."] })`),
+            );
+            expect(msg).toContain(`option 'allowedOrigins' is not supported by '${verb}'`);
+         }
+      });
+
       it("rejects a trigger that is not a string literal", () => {
          const msg = parseError(
             "export default defineChannels({ chan: emit<() => void>({ trigger: x }) });",

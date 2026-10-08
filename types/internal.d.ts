@@ -94,6 +94,8 @@ export interface ChannelSpec {
    direction: ChannelDirection;
    signature: CallableSignature;
    trigger?: string;
+   /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */
+   allowedOrigins?: string[];
 }
 
 export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };

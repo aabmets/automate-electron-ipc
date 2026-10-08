@@ -224,7 +224,7 @@ describe("generated main process bindings", () => {
    }
 
    /** Backs the fake ipcMain with a real emitter, so that registrations are observable. */
-   async function loadMainWithEmitter() {
+   async function loadMainWithEmitter(fixture = "all-kinds") {
       const { EventEmitter } = await import("node:events");
       const emitter = new EventEmitter();
       const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -249,9 +249,9 @@ describe("generated main process bindings", () => {
             handlers.delete(channel);
          },
       });
-      project = await runFixture("all-kinds");
-      const { ipc } = loadGenerated(project.generated["main.ts"], { electron });
-      return { emitter, handlers, ipc };
+      project = await runFixture(fixture);
+      const generated = loadGenerated(project.generated["main.ts"], { electron });
+      return { emitter, handlers, ipc: generated.ipc, generated };
    }
 
    it("registers a handle wrapper which passes the event and arguments to the callback", async () => {
@@ -325,14 +325,29 @@ describe("generated main process bindings", () => {
 
       const dispose = ipc.logLine.once(callback);
 
-      const [channel, wrapper] = electron.ipcMain.once.mock.calls[0];
+      // A normal listener, which removes itself, so that a rejected sender cannot use it up.
+      const [channel, wrapper] = electron.ipcMain.on.mock.calls[0];
       expect(channel).toBe("logLine");
-      expect(electron.ipcMain.on).not.toHaveBeenCalled();
+      expect(electron.ipcMain.once).not.toHaveBeenCalled();
       wrapper("event", "line", 1, 2);
       expect(callback).toHaveBeenCalledWith("event", "line", 1, 2);
+      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", wrapper);
 
+      electron.ipcMain.off.mockClear();
       dispose();
       expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", wrapper);
+   });
+
+   it("once delivers to the first message only, with a real emitter", async () => {
+      const { emitter, ipc } = await loadMainWithEmitter();
+      const callback = vi.fn();
+      ipc.logLine.once(callback);
+
+      emitter.emit("logLine", {}, "a");
+      emitter.emit("logLine", {}, "b");
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(emitter.listenerCount("logLine")).toBe(0);
    });
 
    it("replaces the handler of a channel when it is registered again", async () => {
@@ -350,12 +365,12 @@ describe("generated main process bindings", () => {
       const order: string[] = [];
       electron.ipcMain.removeHandler.mockImplementation(() => order.push("remove"));
       electron.ipcMain.handle.mockImplementation(() => order.push("handle"));
-      electron.ipcMain.handleOnce.mockImplementation(() => order.push("handleOnce"));
 
       ipc.getUser.handle(async () => "a");
       ipc.getUser.handleOnce(async () => "b");
 
-      expect(order).toStrictEqual(["remove", "handle", "remove", "handleOnce"]);
+      expect(order).toStrictEqual(["remove", "handle", "remove", "handle"]);
+      expect(electron.ipcMain.handleOnce).not.toHaveBeenCalled();
       expect(electron.ipcMain.removeHandler).toHaveBeenCalledWith("getUser");
    });
 
@@ -426,5 +441,297 @@ describe("generated main process bindings", () => {
 
       expect(one.webContents.postMessage).toHaveBeenCalledWith("chat", null, [{ name: "port1" }]);
       expect(two.webContents.postMessage).toHaveBeenCalledWith("chat", null, [{ name: "port2" }]);
+   });
+
+   describe("sender validation", () => {
+      const frame = (origin: unknown) => ({ senderFrame: { origin, url: `${origin}/index.html` } });
+      const load = () => loadMainWithEmitter("sender-validation");
+      const secret = (
+         handlers: Map<string, (...args: unknown[]) => unknown>,
+         event: unknown,
+         id = 1,
+      ) => handlers.get("getSecret")?.(event, id);
+
+      it("exports configureIpc and IpcForbiddenError only when there are renderer-to-main channels", async () => {
+         const { generated } = await load();
+         expect(typeof generated.configureIpc).toBe("function");
+         expect(new generated.IpcForbiddenError("x")).toBeInstanceOf(Error);
+
+         project = await runFixture("port-only");
+         expect(project.generated["main.ts"]).not.toContain("configureIpc");
+         await project.cleanup();
+         project = undefined;
+      });
+
+      it("describes the rejected channel in an IpcForbiddenError", async () => {
+         const { generated } = await load();
+         const error = new generated.IpcForbiddenError("getSecret");
+
+         expect(error.name).toBe("IpcForbiddenError");
+         expect(error.channel).toBe("getSecret");
+         expect(error.message).toContain("'getSecret'");
+      });
+
+      it("checks nothing when no validator and no origins apply", async () => {
+         const { emitter, handlers, ipc } = await load();
+         const callback = vi.fn();
+         ipc.getPublic.handle(async () => 7);
+         ipc.ping.on(callback);
+
+         // Not even a frame: nothing is configured for these channels.
+         await expect(handlers.get("getPublic")?.({})).resolves.toBe(7);
+         emitter.emit("ping", { senderFrame: null });
+         expect(callback).toHaveBeenCalledOnce();
+      });
+
+      it.each(["app://.", "http://localhost:5173"])(
+         "lets the allowed origin %s call an invoke channel",
+         async (origin) => {
+            const { handlers, ipc } = await load();
+            const callback = vi.fn(async (_event: unknown, id: number) => `secret ${id}`);
+            ipc.getSecret.handle(callback);
+
+            const event = frame(origin);
+            await expect(secret(handlers, event, 4)).resolves.toBe("secret 4");
+            expect(callback).toHaveBeenCalledWith(event, 4);
+         },
+      );
+
+      it("rejects a call from another origin with an IpcForbiddenError and does not run the handler", async () => {
+         const { generated, handlers, ipc } = await load();
+         const callback = vi.fn(async () => "secret");
+         ipc.getSecret.handle(callback);
+
+         const call = () => secret(handlers, frame("https://example.com"));
+         expect(call).toThrowError(generated.IpcForbiddenError);
+         expect(call).toThrowError(expect.objectContaining({ channel: "getSecret" }));
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("drops a send from another origin and delivers one from an allowed origin", async () => {
+         const { emitter, ipc } = await load();
+         const callback = vi.fn();
+         ipc.logLine.on(callback);
+
+         expect(() => emitter.emit("logLine", frame("https://example.com"), "bad")).not.toThrow();
+         emitter.emit("logLine", frame("app://."), "good");
+
+         expect(callback).toHaveBeenCalledOnce();
+         expect(callback).toHaveBeenCalledWith(expect.anything(), "good");
+      });
+
+      it("allows only the origins of its own channel", async () => {
+         const { emitter, ipc } = await load();
+         const callback = vi.fn();
+         ipc.logLine.on(callback);
+
+         // `http://localhost:5173` may call getSecret but not logLine.
+         emitter.emit("logLine", frame("http://localhost:5173"), "text");
+
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("rejects a null sender frame, a missing one and a frame without a string origin", async () => {
+         const { emitter, handlers, ipc } = await load();
+         const callback = vi.fn();
+         ipc.logLine.on(callback);
+         ipc.getSecret.handle(async () => "secret");
+
+         for (const event of [
+            { senderFrame: null },
+            {},
+            frame(undefined),
+            frame(null),
+            frame(5173),
+            frame(["app://."]),
+         ]) {
+            emitter.emit("logLine", event, "text");
+            expect(() => secret(handlers, event)).toThrowError(/not allowed/);
+         }
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it.each([
+         "app://.attacker.com",
+         "app://./",
+         "app://",
+         "http://localhost:5173.attacker.com",
+         "http://localhost:51730",
+         "http://localhost:5173/",
+         "http://localhost",
+         "https://localhost:5173",
+         "http://example.com.attacker.com",
+         "http://example.com#http://localhost:5173",
+         "HTTP://LOCALHOST:5173",
+         " app://.",
+         "",
+      ])(
+         "rejects the lookalike origin '%s', since origins are compared for equality",
+         async (origin) => {
+            const { handlers, ipc } = await load();
+            ipc.getSecret.handle(async () => "secret");
+
+            expect(() => secret(handlers, frame(origin))).toThrowError(/not allowed/);
+         },
+      );
+
+      it("reads the sender frame before the handler runs, since it can become null", async () => {
+         const { handlers, ipc } = await load();
+         let reads = 0;
+         const event = {
+            get senderFrame() {
+               reads += 1;
+               // Detached after the first read, as Electron does for a frame which is gone.
+               return reads === 1 ? { origin: "app://." } : null;
+            },
+         };
+         const callback = vi.fn(async () => {
+            await Promise.resolve();
+            return "secret";
+         });
+         ipc.getSecret.handle(callback);
+
+         await expect(secret(handlers, event)).resolves.toBe("secret");
+         expect(reads).toBe(1);
+      });
+
+      it("runs the global validator with the event and the channel name, for every channel", async () => {
+         const { generated, emitter, handlers, ipc } = await load();
+         const validateSender = vi.fn(() => true);
+         generated.configureIpc({ validateSender });
+         const callback = vi.fn();
+         ipc.ping.on(callback);
+         ipc.getPublic.handle(async () => 7);
+
+         const event = frame("app://.");
+         emitter.emit("ping", event);
+         await handlers.get("getPublic")?.(event);
+
+         expect(validateSender).toHaveBeenCalledWith(event, "ping");
+         expect(validateSender).toHaveBeenCalledWith(event, "getPublic");
+         expect(callback).toHaveBeenCalledOnce();
+      });
+
+      it("rejects when the global validator says no, even for an allowed origin", async () => {
+         const { generated, handlers, ipc } = await load();
+         generated.configureIpc({ validateSender: () => false });
+         ipc.getSecret.handle(async () => "secret");
+         ipc.getPublic.handle(async () => 7);
+
+         expect(() => secret(handlers, frame("app://."))).toThrowError(/not allowed/);
+         expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+      });
+
+      it("rejects an origin which the channel does not allow, even when the global validator says yes", async () => {
+         const { generated, handlers, ipc } = await load();
+         generated.configureIpc({ validateSender: () => true });
+         ipc.getSecret.handle(async () => "secret");
+
+         expect(() => secret(handlers, frame("https://example.com"))).toThrowError(/not allowed/);
+         await expect(secret(handlers, frame("app://."))).resolves.toBe("secret");
+      });
+
+      it("rejects a null frame when only the global validator applies", async () => {
+         const { generated, handlers, ipc } = await load();
+         const validateSender = vi.fn(() => true);
+         generated.configureIpc({ validateSender });
+         ipc.getPublic.handle(async () => 7);
+
+         expect(() => handlers.get("getPublic")?.({ senderFrame: null })).toThrowError(
+            /not allowed/,
+         );
+         expect(validateSender).not.toHaveBeenCalled();
+      });
+
+      it("rejects when the global validator throws or returns a value which is not true", async () => {
+         const { generated, handlers, ipc } = await load();
+         ipc.getPublic.handle(async () => 7);
+
+         for (const validateSender of [
+            () => {
+               throw new Error("broken");
+            },
+            () => "yes",
+            () => 1,
+            () => undefined,
+         ]) {
+            generated.configureIpc({ validateSender });
+            expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+         }
+      });
+
+      it("calls onRejected for each rejected call, with the event and the channel, and never for an allowed one", async () => {
+         const { generated, emitter, handlers, ipc } = await load();
+         const onRejected = vi.fn();
+         generated.configureIpc({ onRejected });
+         ipc.getSecret.handle(async () => "secret");
+         ipc.logLine.on(vi.fn());
+
+         const bad = frame("https://example.com");
+         expect(() => secret(handlers, bad)).toThrowError(/not allowed/);
+         emitter.emit("logLine", bad, "text");
+         await secret(handlers, frame("app://."));
+         emitter.emit("logLine", frame("app://."), "text");
+
+         expect(onRejected.mock.calls).toStrictEqual([
+            [bad, "getSecret"],
+            [bad, "logLine"],
+         ]);
+      });
+
+      it("rejects as usual when onRejected throws", async () => {
+         const { generated, emitter, handlers, ipc } = await load();
+         generated.configureIpc({
+            onRejected: () => {
+               throw new Error("hook failed");
+            },
+         });
+         const callback = vi.fn();
+         ipc.getSecret.handle(async () => "secret");
+         ipc.logLine.on(callback);
+
+         expect(() => secret(handlers, frame("https://example.com"))).toThrowError(/not allowed/);
+         expect(() => emitter.emit("logLine", frame("https://example.com"), "x")).not.toThrow();
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("replaces the whole configuration on each configureIpc call", async () => {
+         const { generated, handlers, ipc } = await load();
+         ipc.getPublic.handle(async () => 7);
+         generated.configureIpc({ validateSender: () => false });
+         expect(() => handlers.get("getPublic")?.(frame("app://."))).toThrowError(/not allowed/);
+
+         generated.configureIpc({});
+
+         await expect(handlers.get("getPublic")?.({})).resolves.toBe(7);
+      });
+
+      it("does not use up handleOnce or once with a rejected sender", async () => {
+         const { emitter, handlers, ipc } = await load();
+         const answer = vi.fn(async () => "secret");
+         const heard = vi.fn();
+         ipc.getSecret.handleOnce(answer);
+         ipc.logLine.once(heard);
+         const bad = frame("https://example.com");
+
+         expect(() => secret(handlers, bad)).toThrowError(/not allowed/);
+         emitter.emit("logLine", bad, "x");
+         expect(handlers.has("getSecret")).toBe(true);
+         expect(emitter.listenerCount("logLine")).toBe(1);
+
+         await expect(secret(handlers, frame("app://."))).resolves.toBe("secret");
+         emitter.emit("logLine", frame("app://."), "y");
+         emitter.emit("logLine", frame("app://."), "z");
+
+         expect(answer).toHaveBeenCalledOnce();
+         expect(handlers.has("getSecret")).toBe(false);
+         expect(heard).toHaveBeenCalledOnce();
+         expect(emitter.listenerCount("logLine")).toBe(0);
+      });
+
+      it("generates files that type-check", async () => {
+         project = await runFixture("sender-validation");
+         expect(await project.typecheck()).toBe("");
+      });
    });
 });

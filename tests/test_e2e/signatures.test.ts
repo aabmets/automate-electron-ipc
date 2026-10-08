@@ -238,8 +238,9 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
          "_browserWindow.webContents.send('windowClash', browserWindow, event, callback)",
       );
       expect(main).toContain(
-         "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => _callback(_event, event, callback, args)",
+         "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => {",
       );
+      expect(main).toContain("return _callback(_event, event, callback, args);");
       expect(main).toContain("on: (callback: (event: IpcMainEvent) => void)");
    });
 
@@ -250,9 +251,8 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       expect(main).toContain(
          "(callback: <T extends (x: number) => void>(event: IpcMainEvent, cb: T) => void)",
       );
-      expect(main).toContain(
-         "<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => callback(event, cb)",
-      );
+      expect(main).toContain("<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => {");
+      expect(main).toContain("return callback(event, cb);");
       expect(main).toContain(
          "send: <T extends (x: number) => void>(browserWindow: BrowserWindow, cb: T) =>",
       );

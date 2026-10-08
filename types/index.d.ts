@@ -38,17 +38,24 @@ export type ChannelResult<S extends ChannelSignature> = [S] extends [never]
    : ChannelDef<S>;
 
 /**
- * Options of `invoke` channels. There are none yet.
+ * Options of `invoke` channels.
+ *
+ * @property allowedOrigins - The origins which may call the channel, such as
+ *    `["app://.", "http://localhost:5173"]`. The generated main bindings compare each one for
+ *    equality with `event.senderFrame.origin`, and reject calls from any other origin. An origin
+ *    is a scheme, a host and an optional port, in lower case, without a path or a wildcard.
  */
 export interface InvokeConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
+   allowedOrigins?: readonly string[];
 }
 
 /**
- * Options of `send` channels. There are none yet.
+ * Options of `send` channels.
+ *
+ * @property allowedOrigins - The origins which may send to the channel. See `InvokeConfig`.
  */
 export interface SendConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
+   allowedOrigins?: readonly string[];
 }
 
 /**

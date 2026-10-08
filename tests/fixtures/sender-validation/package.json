@@ -1,0 +1,9 @@
+{
+   "name": "fixture-sender-validation",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

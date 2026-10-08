@@ -55,7 +55,30 @@ const TriggerStruct = refine(string(), "event", (value) => {
    );
 });
 
-function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<any, any> {
+/** `scheme://host[:port]` in lower case, as Chromium serializes the origin of a frame. */
+const ORIGIN_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[a-z0-9._~%[\]:-]*$/;
+
+const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
+   if (values.length === 0) {
+      return "allowedOrigins must list at least one origin, since an empty list allows no caller";
+   }
+   for (const value of values) {
+      if (!ORIGIN_PATTERN.test(value)) {
+         return (
+            `'${value}' is not an origin. Write the scheme, the host and an optional port, ` +
+            "in lower case and without a path, wildcard or credentials, " +
+            "such as 'app://.' or 'http://localhost:5173'"
+         );
+      }
+   }
+   return true;
+});
+
+function getChannelSpecStruct(
+   kind: t.ChannelKind,
+   triggerable = false,
+   restrictable = false,
+): Struct<any, any> {
    return object({
       name: refine(string(), "camelcase", (value) => {
          if (value.length < 3) {
@@ -109,14 +132,15 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
          typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
       }),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
+      allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
    });
 }
 
 export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): void {
    const structMap = {
       TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", true),
-      BroadcastStruct: getChannelSpecStruct("Broadcast"),
-      UnicastStruct: getChannelSpecStruct("Unicast"),
+      BroadcastStruct: getChannelSpecStruct("Broadcast", false, true),
+      UnicastStruct: getChannelSpecStruct("Unicast", false, true),
       PortStruct: getChannelSpecStruct("Port"),
    };
    if (spec?.kind === ("Broadcast" as t.ChannelKind)) {

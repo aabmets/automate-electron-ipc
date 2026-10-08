@@ -219,6 +219,43 @@ An `invoke` channel has one handler. Registering `handle` or `handleOnce` again 
 previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
 hot-restarting the main process works. The disposer of a replaced handler does nothing.
 
+#### Sender validation
+
+By default, any frame of any window can call every `invoke` and `send` channel, iframes and child
+windows included. Restrict a channel to the origins that you trust with `allowedOrigins`:
+
+```typescript
+export default defineChannels({
+   readSecret: invoke<(id: number) => Promise<string>>({
+      allowedOrigins: ["app://.", "http://localhost:5173"],
+   }),
+});
+```
+
+An origin is a scheme, a host and an optional port, in lower case, without a path, a wildcard or
+credentials. The generated main bindings compare it for equality with `event.senderFrame.origin`,
+never as a prefix, so `http://localhost:5173.attacker.com` does not match. A call without a frame
+(`senderFrame` is `null` once the frame is gone) is always rejected.
+
+For rules that depend on more than the origin, call `configureIpc` once at start-up. Its
+`validateSender` runs for every `invoke` and `send` channel, in addition to `allowedOrigins`:
+a call needs to pass both. A validator which throws or returns anything but `true` rejects the call.
+
+```typescript
+import { configureIpc, IpcForbiddenError } from "./main";
+
+configureIpc({
+   validateSender: (event, channel) => event.sender === mainWindow.webContents,
+   onRejected: (event, channel) => console.warn("Rejected", channel, event.senderFrame?.url),
+});
+```
+
+A rejected `invoke` throws an `IpcForbiddenError` in the main process, which the renderer sees as
+a rejected promise (Electron passes on the message of the error only). A rejected `send` is
+dropped. `onRejected` is called for both. `configureIpc` replaces the previous configuration, and
+`configureIpc({})` removes it. Channels with neither `allowedOrigins` nor a validator are not
+checked. `once` and `handleOnce` are not used up by a rejected call.
+
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
 

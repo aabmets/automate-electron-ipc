@@ -430,9 +430,8 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       expect(methodLine(main, "findUserC", "handle")).toContain(
          `(callback: <T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => Promise<T>)`,
       );
-      expect(main).toContain(
-         `<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => callback(event, user)`,
-      );
+      expect(main).toContain(`<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => {`);
+      expect(main).toContain("return callback(event, user);");
       expect(methodLine(main, "pushUserC", "send")).toContain(
          `<T extends ${userC}>(browserWindow: BrowserWindow, user: T)`,
       );
@@ -549,11 +548,14 @@ describe("ipcAutomation, schema types named like globals", () => {
       project = await runFixture("shadowed-globals");
       const main = project.generated["main.ts"];
 
-      expect(importLine(main, "Error", "./schema")).toBe('import type { Error } from "./schema";');
+      // The generated `IpcForbiddenError` extends the global `Error`, so the schema type is aliased.
+      expect(importLine(main, "Error", "./schema")).toBe(
+         'import type { Error as Error_2 } from "./schema";',
+      );
       expect(importLine(main, "Map", "./types/map")).toBe(
          'import type { Map } from "./types/map";',
       );
-      expect(main).toContain("(callback: (event: IpcMainEvent, error: Error) => void)");
+      expect(main).toContain("(callback: (event: IpcMainEvent, error: Error_2) => void)");
       // The global `Date` has no local binding and needs no import.
       expect(main).not.toMatch(/import type \{[^}]*\bDate\b/);
    });
@@ -653,10 +655,11 @@ describe("ipcAutomation, handler and sender types", () => {
 
       expect(main).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
       expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent, id: number)");
-      expect(main).toContain("(event: IpcMainInvokeEvent, id: number) => callback(event, id)");
+      expect(main).toContain("(event: IpcMainInvokeEvent, id: number) => {");
+      expect(main).toContain("return callback(event, id);");
       expect(main).toContain("on: (callback: (event: IpcMainEvent, text: string,");
-      expect(main).toContain("(event: IpcMainEvent, text: string, ...rest: number[]) =>");
-      expect(main).toContain("callback(event, text, ...rest)");
+      expect(main).toContain("(event: IpcMainEvent, text: string, ...rest: number[]) => {");
+      expect(main).toContain("return callback(event, text, ...rest);");
       // No loosely typed parameter, as a whole word.
       expect(main).not.toMatch(/\bany\b/);
    });
@@ -713,7 +716,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
          '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
       );
       expect(generated["main.ts"]).toContain(
-         `const listener = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => callback(event, arg);`,
+         `const listener = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => {`,
       );
       expect(methodLine(generated["window.d.ts"], "getÜser", "invoke")).toContain(
          '(id: "ñ", size: Größe) => Promise<Üser>',
@@ -735,7 +738,7 @@ describe("ipcAutomation, locale-independent output order", () => {
    // Regression for T67: members were ordered with `localeCompare`, which depends on the locale
    // of the process and compared the whole callable, so `sendItem` and `sendItem2` swapped places.
    const members = (text: string): string[] =>
-      Array.from(text.matchAll(/^ {3}([^\s:]+): /gmu), (match) => match[1]);
+      Array.from(text.matchAll(/^ {3}([\p{L}\p{N}_$]+): /gmu), (match) => match[1]);
 
    // Order of the code units: `L` < `l`, `2` < `X` < `_`, and `ö` after all ASCII letters.
    const names = [

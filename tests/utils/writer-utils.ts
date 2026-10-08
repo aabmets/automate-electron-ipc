@@ -118,6 +118,7 @@ export interface SimpleChannel {
    params?: string[];
    returnType?: string;
    trigger?: string;
+   allowedOrigins?: string[];
 }
 
 /**

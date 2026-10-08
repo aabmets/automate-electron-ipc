@@ -33,8 +33,14 @@ export class MainBindingsWriter extends BaseWriter {
          "IpcMainInvokeEvent",
          // Declared by the generated code.
          "registeredHandlers",
+         "IpcForbiddenError",
+         "IpcConfig",
+         "ipcConfig",
+         "configureIpc",
+         "isSenderAllowed",
          // Globals that the generated code uses.
          "Promise",
+         "Error",
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -48,6 +54,7 @@ export class MainBindingsWriter extends BaseWriter {
       const importDeclarationsArray: string[] = [];
       const channels: ChannelEntry[] = [];
       let usesHandlers = false;
+      const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
@@ -56,6 +63,7 @@ export class MainBindingsWriter extends BaseWriter {
             if (spec.direction === "RendererToMain") {
                usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
+               eventTypes.add(this.getEventType(spec));
                usesHandlers ||= spec.kind !== "Broadcast";
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
@@ -94,6 +102,11 @@ export class MainBindingsWriter extends BaseWriter {
       ];
       const [i0] = this.indents;
       const bindingsExpression = [];
+      if (usesIpcMain) {
+         bindingsExpression.push(
+            this.buildSenderValidation([...eventTypes].sort(utils.compareStrings)),
+         );
+      }
       if (usesHandlers) {
          // The handler that each invoke channel has now, which its disposer compares against.
          // It uses no global, which a schema type could shadow, and has no prototype.
@@ -118,11 +131,79 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
    }
    /**
+    * The sender validation of the main process: `configureIpc`, which sets the global validator
+    * and the rejection hook, `IpcForbiddenError`, and `isSenderAllowed`, which every listener
+    * and handler of a renderer-to-main channel calls first.
+    *
+    * Electron sets `senderFrame` to `null` when the frame is gone, so a missing frame is always
+    * rejected, and the frame is read before any other work. The origin of the frame is compared
+    * for equality with the allowed origins, never as a prefix, which `example.com.attacker.com`
+    * would pass. A validator which throws counts as a rejection. Nothing is checked, as before,
+    * until a validator or an `allowedOrigins` list applies to the channel.
+    */
+   private buildSenderValidation(eventTypes: string[]): string {
+      const [i1, i2, i3] = this.indents;
+      const event = eventTypes.join(" | ");
+      return [
+         "",
+         "export class IpcForbiddenError extends Error {",
+         `${i1}readonly channel: string;`,
+         `${i1}constructor(channel: string) {`,
+         `${i2}super(\`The sender of the message is not allowed to use the channel '\${channel}'\`);`,
+         `${i2}this.name = 'IpcForbiddenError';`,
+         `${i2}this.channel = channel;`,
+         `${i1}}`,
+         "}",
+         "",
+         "export interface IpcConfig {",
+         `${i1}validateSender?: (event: ${event}, channel: string) => boolean;`,
+         `${i1}onRejected?: (event: ${event}, channel: string) => void;`,
+         "}",
+         "",
+         "let ipcConfig: IpcConfig = {};",
+         "",
+         "export function configureIpc(config: IpcConfig): void {",
+         `${i1}ipcConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
+         "}",
+         "",
+         `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[]): boolean {`,
+         `${i1}const validateSender = ipcConfig.validateSender;`,
+         `${i1}if (!allowedOrigins && !validateSender) {`,
+         `${i2}return true;`,
+         `${i1}}`,
+         `${i1}let allowed = false;`,
+         `${i1}try {`,
+         `${i2}const frame = event.senderFrame;`,
+         `${i2}const origin = frame ? frame.origin : null;`,
+         `${i2}allowed =`,
+         `${i3}frame != null &&`,
+         `${i3}(!allowedOrigins || (typeof origin === 'string' && allowedOrigins.includes(origin))) &&`,
+         `${i3}(!validateSender || validateSender(event, channel) === true);`,
+         `${i1}} catch {`,
+         `${i2}allowed = false;`,
+         `${i1}}`,
+         `${i1}if (!allowed && ipcConfig.onRejected) {`,
+         `${i2}try {`,
+         `${i3}ipcConfig.onRejected(event, channel);`,
+         `${i2}} catch {`,
+         `${i3}// A failing hook must not decide whether the call is rejected.`,
+         `${i2}}`,
+         `${i1}}`,
+         `${i1}return allowed;`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
     * `ipc.<name>.on(callback)` and `once` for `send` channels, and `handle` and `handleOnce` for
     * `invoke` channels. Each returns a function which removes that registration.
     * A channel has one handler, so registering a handler replaces the previous one instead of
     * throwing, which window re-creation and a hot restart of the main process need. The disposer
     * of a replaced handler does nothing, so that it cannot remove its replacement.
+    * Every listener checks the sender first: a `send` from a rejected sender is dropped and a
+    * rejected `invoke` throws an `IpcForbiddenError`.
+    * `once` and `handleOnce` register a normal listener which removes itself after the first
+    * allowed message, since `ipcMain.once` would be used up by a message from a rejected sender.
     */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const [, i1, i2, i3, i4] = this.indents;
@@ -134,41 +215,68 @@ export class MainBindingsWriter extends BaseWriter {
       const listenerName = this.uniqueName("listener", taken);
       const wrapperParams = [`${eventName}: ${eventType}`, this.getOriginalParams(spec, false)];
       const forwarded = [eventName, this.getOriginalParams(spec, true)];
-      const listener =
-         `${this.getTypeParams(spec.signature)}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
-         `${callbackName}(${forwarded.filter(Boolean).join(", ")})`;
+      const typeParams = this.getTypeParams(spec.signature);
       const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
       const channel = `'${spec.name}'`;
-      const register = (method: string) => {
+      const isBroadcast = spec.kind === "Broadcast";
+      const origins = spec.allowedOrigins
+         ? `, [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
+         : "";
+      // The generated names that the listener calls must not be shadowed by its parameters,
+      // so the listener only calls the local functions below, whose names are unique.
+      const guardName = this.uniqueName("guard", taken);
+      const removeName = this.uniqueName("remove", taken);
+      const allowed = `isSenderAllowed(${eventName}, ${channel}${origins})`;
+      const guard = isBroadcast
+         ? [`${i2}const ${guardName} = (${eventName}: ${eventType}) => ${allowed};`]
+         : [
+              `${i2}const ${guardName} = (${eventName}: ${eventType}) => {`,
+              `${i3}if (!${allowed}) {`,
+              `${i4}throw new IpcForbiddenError(${channel});`,
+              `${i3}}`,
+              `${i2}};`,
+           ];
+      const unregister = isBroadcast
+         ? [`${i3}electronIpcMain.off(${channel}, ${listenerName});`]
+         : [
+              `${i3}if (registeredHandlers[${channel}] === ${listenerName}) {`,
+              `${i4}delete registeredHandlers[${channel}];`,
+              `${i4}electronIpcMain.removeHandler(${channel});`,
+              `${i3}}`,
+           ];
+      const register = (method: string, once: boolean) => {
+         const params = wrapperParams.filter(Boolean).join(", ");
+         const check = isBroadcast
+            ? [`${i3}if (!${guardName}(${eventName})) {`, `${i4}return;`, `${i3}}`]
+            : [`${i3}${guardName}(${eventName});`];
          const lines = [
             `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
-            `${i2}const ${listenerName} = ${listener};`,
+            ...guard,
+            `${i2}const ${removeName} = () => {`,
+            ...unregister,
+            `${i2}};`,
+            `${i2}const ${listenerName} = ${typeParams}(${params}) => {`,
+            ...check,
+            ...(once ? [`${i3}${removeName}();`] : []),
+            `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
+            `${i2}};`,
          ];
-         if (spec.kind === "Broadcast") {
-            lines.push(
-               `${i2}electronIpcMain.${method}(${channel}, ${listenerName});`,
-               `${i2}return () => {`,
-               `${i3}electronIpcMain.off(${channel}, ${listenerName});`,
-               `${i2}};`,
-            );
+         if (isBroadcast) {
+            lines.push(`${i2}electronIpcMain.on(${channel}, ${listenerName});`);
          } else {
             lines.push(
                `${i2}electronIpcMain.removeHandler(${channel});`,
-               `${i2}electronIpcMain.${method}(${channel}, ${listenerName});`,
+               `${i2}electronIpcMain.handle(${channel}, ${listenerName});`,
                `${i2}registeredHandlers[${channel}] = ${listenerName};`,
-               `${i2}return () => {`,
-               `${i3}if (registeredHandlers[${channel}] === ${listenerName}) {`,
-               `${i4}delete registeredHandlers[${channel}];`,
-               `${i4}electronIpcMain.removeHandler(${channel});`,
-               `${i3}}`,
-               `${i2}};`,
             );
          }
-         lines.push(`${i1}},`);
+         lines.push(`${i2}return ${removeName};`, `${i1}},`);
          return lines.join("\n");
       };
-      const methods = spec.kind === "Broadcast" ? ["on", "once"] : ["handle", "handleOnce"];
-      return { name: spec.name, members: methods.map(register) };
+      const members = isBroadcast
+         ? [register("on", false), register("once", true)]
+         : [register("handle", false), register("handleOnce", true)];
+      return { name: spec.name, members };
    }
    /** `ipc.<name>.send(window, ...args)`, and `ipc.<name>.bind(window, provider)` with a trigger. */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {

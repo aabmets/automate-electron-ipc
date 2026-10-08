@@ -287,11 +287,14 @@ interface VerbInfo {
 }
 
 const VERBS = new Map<string, VerbInfo>([
-   ["invoke", { kind: "Unicast", direction: "RendererToMain", options: [] }],
-   ["send", { kind: "Broadcast", direction: "RendererToMain", options: [] }],
+   ["invoke", { kind: "Unicast", direction: "RendererToMain", options: ["allowedOrigins"] }],
+   ["send", { kind: "Broadcast", direction: "RendererToMain", options: ["allowedOrigins"] }],
    ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
    ["port", { kind: "Port", direction: "RendererToRenderer", options: [] }],
 ]);
+
+/** The options whose value is an array of string literals. The others are string literals. */
+const ARRAY_OPTIONS = new Set(["allowedOrigins"]);
 
 /**
  * Names that the schema file imports from this library, keyed by their local name.
@@ -670,6 +673,21 @@ function parseChannelConfig(
          throw fail(`option '${key.value}' is not supported by '${verb}'.`);
       }
       const value = unwrapParentheses(prop.value);
+      if (ARRAY_OPTIONS.has(key.value)) {
+         const elements: (AstNode | undefined)[] =
+            value.type === "ArrayExpression" ? value.elements : [];
+         const literals = elements.map((element) =>
+            !element || element.spread ? null : unwrapParentheses(element.expression),
+         );
+         if (
+            value.type !== "ArrayExpression" ||
+            literals.some((literal) => literal?.type !== "StringLiteral")
+         ) {
+            throw fail(`option '${key.value}' must be an array of string literals.`);
+         }
+         Object.assign(result, { [key.value]: literals.map((literal) => literal?.value) });
+         continue;
+      }
       if (value.type !== "StringLiteral") {
          throw fail(`option '${key.value}' must be a string literal.`);
       }
