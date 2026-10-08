@@ -34,11 +34,35 @@ describe("MainBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain } from "electron";
          import type { IpcMainInvokeEvent } from "electron";
-         
+
+         const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
+
          export const ipc = {
             vitestChannel: {
-               handle: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) =>
-                  electronIpcMain.handle('vitestChannel', (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2)),
+               handle: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => {
+                  const listener = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2);
+                  electronIpcMain.removeHandler('vitestChannel');
+                  electronIpcMain.handle('vitestChannel', listener);
+                  registeredHandlers['vitestChannel'] = listener;
+                  return () => {
+                     if (registeredHandlers['vitestChannel'] === listener) {
+                        delete registeredHandlers['vitestChannel'];
+                        electronIpcMain.removeHandler('vitestChannel');
+                     }
+                  };
+               },
+               handleOnce: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => {
+                  const listener = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2);
+                  electronIpcMain.removeHandler('vitestChannel');
+                  electronIpcMain.handleOnce('vitestChannel', listener);
+                  registeredHandlers['vitestChannel'] = listener;
+                  return () => {
+                     if (registeredHandlers['vitestChannel'] === listener) {
+                        delete registeredHandlers['vitestChannel'];
+                        electronIpcMain.removeHandler('vitestChannel');
+                     }
+                  };
+               },
             },
          }
       `);
@@ -56,8 +80,20 @@ describe("MainBindingsWriter", () => {
 
          export const ipc = {
             vitestChannel: {
-               on: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>
-                  electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
+               on: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => {
+                  const listener = (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2);
+                  electronIpcMain.on('vitestChannel', listener);
+                  return () => {
+                     electronIpcMain.off('vitestChannel', listener);
+                  };
+               },
+               once: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => {
+                  const listener = (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2);
+                  electronIpcMain.once('vitestChannel', listener);
+                  return () => {
+                     electronIpcMain.off('vitestChannel', listener);
+                  };
+               },
             },
          }
       `);
@@ -116,11 +152,9 @@ describe("MainBindingsWriter", () => {
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
       expect(output).toContain(
-         "electronIpcMain.on('restIt', (event: IpcMainEvent, label: string, flag?: boolean, ...rest: number[]) => callback(event, label, flag, ...rest))",
+         "const listener = (event: IpcMainEvent, label: string, flag?: boolean, ...rest: number[]) => callback(event, label, flag, ...rest);",
       );
-      expect(output).toContain(
-         "electronIpcMain.handle('bareIt', (event: IpcMainInvokeEvent) => callback(event))",
-      );
+      expect(output).toContain("const listener = (event: IpcMainInvokeEvent) => callback(event);");
       expect(output).not.toMatch(/\bany\b/);
    });
 
@@ -139,8 +173,38 @@ describe("MainBindingsWriter", () => {
          "on: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void)",
       );
       expect(output).toContain(
-         "(_event: IpcMainEvent, callback: string, event: number) => _callback(_event, callback, event)",
+         "const listener = (_event: IpcMainEvent, callback: string, event: number) => _callback(_event, callback, event);",
       );
+   });
+
+   it("should not shadow the listener or the registry with parameters of the signature", async () => {
+      const pfsArray = shared.buildFileSpecs({
+         name: "clashIt",
+         kind: "Unicast",
+         direction: "RendererToMain",
+         params: ["listener: string"],
+      });
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toContain("const _listener = (event: IpcMainInvokeEvent, listener: string)");
+      expect(output).toContain("electronIpcMain.handle('clashIt', _listener);");
+      expect(output).toContain("if (registeredHandlers['clashIt'] === _listener) {");
+   });
+
+   it("should declare the handler registry only for invoke channels", async () => {
+      const render = async (...channels: shared.SimpleChannel[]) => {
+         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+
+      expect(await render(unicast)).toContain("const registeredHandlers");
+      expect(await render(broadcast)).not.toContain("registeredHandlers");
+      expect(await render(broadcast)).not.toContain("removeHandler");
    });
 
    it("should write an immediate sender and a separate binder for triggered channels", async () => {

@@ -31,6 +31,8 @@ export class MainBindingsWriter extends BaseWriter {
          "BrowserWindow",
          "IpcMainEvent",
          "IpcMainInvokeEvent",
+         // Declared by the generated code.
+         "registeredHandlers",
          // Globals that the generated code uses.
          "Promise",
       ];
@@ -45,6 +47,7 @@ export class MainBindingsWriter extends BaseWriter {
       const electronTypeImportsSet = new Set<string>();
       const importDeclarationsArray: string[] = [];
       const channels: ChannelEntry[] = [];
+      let usesHandlers = false;
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
@@ -53,6 +56,7 @@ export class MainBindingsWriter extends BaseWriter {
             if (spec.direction === "RendererToMain") {
                usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
+               usesHandlers ||= spec.kind !== "Broadcast";
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
@@ -89,7 +93,15 @@ export class MainBindingsWriter extends BaseWriter {
          ...importDeclarationsArray.sort(utils.compareStrings),
       ];
       const [i0] = this.indents;
-      const bindingsExpression = ["\nexport const ipc = {"];
+      const bindingsExpression = [];
+      if (usesHandlers) {
+         // The handler that each invoke channel has now, which its disposer compares against.
+         // It uses no global, which a schema type could shadow, and has no prototype.
+         bindingsExpression.push(
+            "\nconst registeredHandlers: { [channel: string]: unknown } = { __proto__: null };\n",
+         );
+      }
+      bindingsExpression.push("\nexport const ipc = {");
       for (const channel of this.sortChannels(channels)) {
          bindingsExpression.push(`\n${i0}${channel.name}: {`, ...channel.members, `\n${i0}},`);
       }
@@ -105,28 +117,58 @@ export class MainBindingsWriter extends BaseWriter {
    private getEventType(spec: t.ChannelSpec): string {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
    }
-   /** `ipc.<name>.handle(callback)` for `invoke` channels and `ipc.<name>.on(callback)` for `send`. */
+   /**
+    * `ipc.<name>.on(callback)` and `once` for `send` channels, and `handle` and `handleOnce` for
+    * `invoke` channels. Each returns a function which removes that registration.
+    * A channel has one handler, so registering a handler replaces the previous one instead of
+    * throwing, which window re-creation and a hot restart of the main process need. The disposer
+    * of a replaced handler does nothing, so that it cannot remove its replacement.
+    */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
-      const [, i1, i2] = this.indents;
-      const method = spec.kind === "Broadcast" ? "on" : "handle";
+      const [, i1, i2, i3, i4] = this.indents;
       const eventType = this.getEventType(spec);
       // The names of the generated parameters must not shadow the ones of the signature.
       const taken = this.collectIdentifiers([spec.signature.definition]);
       const eventName = this.uniqueName("event", taken);
       const callbackName = this.uniqueName("callback", taken);
+      const listenerName = this.uniqueName("listener", taken);
       const wrapperParams = [`${eventName}: ${eventType}`, this.getOriginalParams(spec, false)];
       const forwarded = [eventName, this.getOriginalParams(spec, true)];
       const listener =
          `${this.getTypeParams(spec.signature)}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
          `${callbackName}(${forwarded.filter(Boolean).join(", ")})`;
       const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
-      return {
-         name: spec.name,
-         members: [
-            `\n${i1}${method}: (${callbackName}: ${modSigDef}) =>`,
-            `\n${i2}electronIpcMain.${method}('${spec.name}', ${listener}),`,
-         ],
+      const channel = `'${spec.name}'`;
+      const register = (method: string) => {
+         const lines = [
+            `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
+            `${i2}const ${listenerName} = ${listener};`,
+         ];
+         if (spec.kind === "Broadcast") {
+            lines.push(
+               `${i2}electronIpcMain.${method}(${channel}, ${listenerName});`,
+               `${i2}return () => {`,
+               `${i3}electronIpcMain.off(${channel}, ${listenerName});`,
+               `${i2}};`,
+            );
+         } else {
+            lines.push(
+               `${i2}electronIpcMain.removeHandler(${channel});`,
+               `${i2}electronIpcMain.${method}(${channel}, ${listenerName});`,
+               `${i2}registeredHandlers[${channel}] = ${listenerName};`,
+               `${i2}return () => {`,
+               `${i3}if (registeredHandlers[${channel}] === ${listenerName}) {`,
+               `${i4}delete registeredHandlers[${channel}];`,
+               `${i4}electronIpcMain.removeHandler(${channel});`,
+               `${i3}}`,
+               `${i2}};`,
+            );
+         }
+         lines.push(`${i1}},`);
+         return lines.join("\n");
       };
+      const methods = spec.kind === "Broadcast" ? ["on", "once"] : ["handle", "handleOnce"];
+      return { name: spec.name, members: methods.map(register) };
    }
    /** `ipc.<name>.send(window, ...args)`, and `ipc.<name>.bind(window, provider)` with a trigger. */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {

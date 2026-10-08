@@ -199,8 +199,11 @@ describe("generated main process bindings", () => {
       expect(callablePaths(ipc)).toStrictEqual([
          "chat.connect",
          "getTime.handle",
+         "getTime.handleOnce",
          "getUser.handle",
+         "getUser.handleOnce",
          "logLine.on",
+         "logLine.once",
          "progress.send",
          "titleChanged.bind",
          "titleChanged.send",
@@ -218,6 +221,37 @@ describe("generated main process bindings", () => {
          electron,
          ipc: loadGenerated(project.generated["main.ts"], { electron }).ipc,
       };
+   }
+
+   /** Backs the fake ipcMain with a real emitter, so that registrations are observable. */
+   async function loadMainWithEmitter() {
+      const { EventEmitter } = await import("node:events");
+      const emitter = new EventEmitter();
+      const handlers = new Map<string, (...args: unknown[]) => unknown>();
+      const electron = createFakeElectron();
+      Object.assign(electron.ipcMain, {
+         on: emitter.on.bind(emitter),
+         once: emitter.once.bind(emitter),
+         off: emitter.off.bind(emitter),
+         handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+            if (handlers.has(channel)) {
+               throw new Error(`Attempted to register a second handler for '${channel}'`);
+            }
+            handlers.set(channel, handler);
+         },
+         handleOnce: (channel: string, handler: (...args: unknown[]) => unknown) => {
+            electron.ipcMain.handle(channel, (...args: unknown[]) => {
+               handlers.delete(channel);
+               return handler(...args);
+            });
+         },
+         removeHandler: (channel: string) => {
+            handlers.delete(channel);
+         },
+      });
+      project = await runFixture("all-kinds");
+      const { ipc } = loadGenerated(project.generated["main.ts"], { electron });
+      return { emitter, handlers, ipc };
    }
 
    it("registers a handle wrapper which passes the event and arguments to the callback", async () => {
@@ -253,6 +287,131 @@ describe("generated main process bindings", () => {
       expect(channel).toBe("logLine");
       wrapper("event", "line", 1, 2);
       expect(callback).toHaveBeenCalledWith("event", "line", 1, 2);
+   });
+
+   it("returns a function from on which removes only that listener with ipcMain.off", async () => {
+      const { electron, ipc } = await loadMain();
+      ipc.logLine.on(vi.fn());
+      const dispose = ipc.logLine.on(vi.fn());
+      const [[, first], [, second]] = electron.ipcMain.on.mock.calls;
+
+      expect(typeof dispose).toBe("function");
+      expect(dispose()).toBeUndefined();
+
+      expect(electron.ipcMain.off).toHaveBeenCalledOnce();
+      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", second);
+      expect(second).not.toBe(first);
+   });
+
+   it("stops delivering to a disposed on listener, and to nobody else", async () => {
+      const { emitter, ipc } = await loadMainWithEmitter();
+      const kept = vi.fn();
+      const removed = vi.fn();
+      ipc.logLine.on(kept);
+      const dispose = ipc.logLine.on(removed);
+
+      emitter.emit("logLine", {}, "a");
+      dispose();
+      emitter.emit("logLine", {}, "b");
+
+      expect(removed).toHaveBeenCalledTimes(1);
+      expect(kept).toHaveBeenCalledTimes(2);
+      expect(emitter.listenerCount("logLine")).toBe(1);
+   });
+
+   it("once delivers a single message with the event, and can be disposed before it", async () => {
+      const { electron, ipc } = await loadMain();
+      const callback = vi.fn();
+
+      const dispose = ipc.logLine.once(callback);
+
+      const [channel, wrapper] = electron.ipcMain.once.mock.calls[0];
+      expect(channel).toBe("logLine");
+      expect(electron.ipcMain.on).not.toHaveBeenCalled();
+      wrapper("event", "line", 1, 2);
+      expect(callback).toHaveBeenCalledWith("event", "line", 1, 2);
+
+      dispose();
+      expect(electron.ipcMain.off).toHaveBeenCalledWith("logLine", wrapper);
+   });
+
+   it("replaces the handler of a channel when it is registered again", async () => {
+      const { handlers, ipc } = await loadMainWithEmitter();
+
+      ipc.getUser.handle(async () => "old");
+      expect(() => ipc.getUser.handle(async () => "new")).not.toThrow();
+
+      expect(handlers.size).toBe(1);
+      await expect(handlers.get("getUser")?.({}, 1)).resolves.toBe("new");
+   });
+
+   it("calls removeHandler before it registers a handler", async () => {
+      const { electron, ipc } = await loadMain();
+      const order: string[] = [];
+      electron.ipcMain.removeHandler.mockImplementation(() => order.push("remove"));
+      electron.ipcMain.handle.mockImplementation(() => order.push("handle"));
+      electron.ipcMain.handleOnce.mockImplementation(() => order.push("handleOnce"));
+
+      ipc.getUser.handle(async () => "a");
+      ipc.getUser.handleOnce(async () => "b");
+
+      expect(order).toStrictEqual(["remove", "handle", "remove", "handleOnce"]);
+      expect(electron.ipcMain.removeHandler).toHaveBeenCalledWith("getUser");
+   });
+
+   it("removes the handler through the disposer of handle", async () => {
+      const { handlers, ipc } = await loadMainWithEmitter();
+
+      const dispose = ipc.getUser.handle(async () => "user");
+      expect(handlers.has("getUser")).toBe(true);
+
+      expect(dispose()).toBeUndefined();
+      expect(handlers.has("getUser")).toBe(false);
+      // The channel is free again.
+      expect(() => ipc.getUser.handle(async () => "again")).not.toThrow();
+   });
+
+   it("leaves the replacement alone when the disposer of a replaced handler is called", async () => {
+      const { handlers, ipc } = await loadMainWithEmitter();
+
+      const disposeOld = ipc.getUser.handle(async () => "old");
+      const disposeNew = ipc.getUser.handle(async () => "new");
+      disposeOld();
+
+      await expect(handlers.get("getUser")?.({}, 1)).resolves.toBe("new");
+      disposeNew();
+      expect(handlers.has("getUser")).toBe(false);
+      // A disposer which is called twice does not remove a later handler either.
+      ipc.getUser.handle(async () => "later");
+      disposeNew();
+      expect(handlers.has("getUser")).toBe(true);
+   });
+
+   it("handleOnce answers one invoke with the event and arguments, then the channel is free", async () => {
+      const { handlers, ipc } = await loadMainWithEmitter();
+      const callback = vi.fn(async (_event: unknown, id: number) => `user ${id}`);
+
+      ipc.getUser.handleOnce(callback);
+      const event = { sender: "renderer" };
+
+      await expect(handlers.get("getUser")?.(event, 7)).resolves.toBe("user 7");
+      expect(callback).toHaveBeenCalledWith(event, 7);
+      expect(handlers.has("getUser")).toBe(false);
+   });
+
+   it("handleOnce replaces an earlier handler, and its disposer works before the invoke", async () => {
+      const { handlers, ipc } = await loadMainWithEmitter();
+      ipc.getUser.handle(async () => "old");
+
+      const dispose = ipc.getUser.handleOnce(async () => "once");
+      await expect(handlers.get("getUser")?.({}, 1)).resolves.toBe("once");
+
+      const disposeAgain = ipc.getUser.handleOnce(async () => "again");
+      expect(handlers.has("getUser")).toBe(true);
+      disposeAgain();
+      expect(handlers.has("getUser")).toBe(false);
+      dispose();
+      expect(handlers.has("getUser")).toBe(false);
    });
 
    it("posts the two ends of a port channel to the two windows once they are ready", async () => {

@@ -38,6 +38,11 @@ window.ipc.ports.chat.sendMessage("hi");
 // Main: each verb allows only its own methods.
 mainIpc.getUser.handle(async (_event, id: number) => `user ${id}`);
 mainIpc.logLine.on((_event, text: string, ...rest: number[]) => console.log(text, rest));
+export const stopLogLine: () => void = mainIpc.logLine.on(() => undefined);
+export const stopLogLineOnce: () => void = mainIpc.logLine.once((_event, text: string) => text);
+export const stopGetUser: () => void = mainIpc.getUser.handle(async () => "user");
+export const stopGetUserOnce: () => void = mainIpc.getUser.handleOnce(async () => "user");
+stopLogLine();
 mainIpc.progress.send(win, 50, "half");
 mainIpc.chat.connect(win, win);
 
@@ -45,6 +50,10 @@ mainIpc.chat.connect(win, win);
 mainIpc.getUser.invoke(1);
 // @ts-expect-error invoke channels are only handled in the main process
 mainIpc.getUser.on(() => undefined);
+// @ts-expect-error handleOnce belongs to invoke channels
+mainIpc.logLine.handleOnce(() => undefined);
+// @ts-expect-error once belongs to send channels
+mainIpc.getUser.once(() => undefined);
 // @ts-expect-error send channels are only listened to in the main process
 mainIpc.logLine.handle(() => undefined);
 // @ts-expect-error emit channels are only sent from the main process

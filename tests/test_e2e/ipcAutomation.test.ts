@@ -503,6 +503,11 @@ describe("ipcAutomation, schema types named like generated names", () => {
       expect(importLine(main, "IpcApi", "./schema")).toBe(
          'import type { IpcApi } from "./schema";',
       );
+      // T15: the registry of the handlers is declared by main.ts, so the type takes an alias.
+      expect(importLine(main, "registeredHandlers", "./schema")).toBe(
+         'import type { registeredHandlers as registeredHandlers_2 } from "./schema";',
+      );
+      expect(main).toContain("Promise<registeredHandlers_2>");
       expect(importLine(main, "IpcMainEvent", "./types/events")).toBe(
          'import type { IpcMainEvent as IpcMainEvent_2 } from "./types/events";',
       );
@@ -708,7 +713,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
          '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
       );
       expect(generated["main.ts"]).toContain(
-         `electronIpcMain.handle('generic', <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => callback(event, arg))`,
+         `const listener = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => callback(event, arg);`,
       );
       expect(methodLine(generated["window.d.ts"], "getÜser", "invoke")).toContain(
          '(id: "ñ", size: Größe) => Promise<Üser>',

@@ -211,6 +211,14 @@ useEffect(() => ipc.progress.on((percent) => setPercent(percent)), []);
 
 `once` delivers a single message. The callback never receives the Electron event.
 
+In the main process, `on` and `once` of a `send` channel, and `handle` and `handleOnce` of an
+`invoke` channel, return a function which removes that registration (`ipcMain.off` and
+`ipcMain.removeHandler`). `once` and `handleOnce` serve a single message or call.
+
+An `invoke` channel has one handler. Registering `handle` or `handleOnce` again replaces the
+previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
+hot-restarting the main process works. The disposer of a replaced handler does nothing.
+
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
 

@@ -52,7 +52,14 @@ export function createFakeWindow() {
 /** A fake `electron` module for the generated main process bindings. */
 export function createFakeElectron() {
    return {
-      ipcMain: { on: vi.fn(), handle: vi.fn() },
+      ipcMain: {
+         on: vi.fn(),
+         once: vi.fn(),
+         off: vi.fn(),
+         handle: vi.fn(),
+         handleOnce: vi.fn(),
+         removeHandler: vi.fn(),
+      },
       MessageChannelMain: class {},
    };
 }
