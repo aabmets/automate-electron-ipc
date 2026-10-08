@@ -437,6 +437,44 @@ describe("ipcAutomation, schema types named like generated names", () => {
    });
 });
 
+describe("ipcAutomation, schema types named like globals", () => {
+   // Regression for T60: `Error`, `Map` and the like were treated as globals by name, so a schema
+   // type of that name got no import and the generated files silently used the global type.
+   const importLine = (text: string, exported: string, from: string): string | undefined =>
+      new RegExp(`^import type \\{ ${exported}(?: as \\w+)? \\} from "${from}";$`, "m").exec(
+         text,
+      )?.[0];
+
+   it("imports the declared and the imported types in main.ts", async () => {
+      project = await runFixture("shadowed-globals");
+      const main = project.generated["main.ts"];
+
+      expect(importLine(main, "Error", "./schema")).toBe('import type { Error } from "./schema";');
+      expect(importLine(main, "Map", "./types/map")).toBe(
+         'import type { Map } from "./types/map";',
+      );
+      expect(main).toContain("(callback: (event: IpcMainEvent, error: Error) => void)");
+      // The global `Date` has no local binding and needs no import.
+      expect(main).not.toMatch(/import type \{[^}]*\bDate\b/);
+   });
+
+   it("keeps a declared Promise apart from the one that the generated code uses", async () => {
+      project = await runFixture("shadowed-globals");
+      const types = project.generated["window.d.ts"];
+
+      expect(importLine(types, "Promise", "./schema")).toBe(
+         'import type { Promise as Promise_2 } from "./schema";',
+      );
+      expect(types).toContain("Promise<Awaited<Promise_2<string>>>");
+      expect(types).toContain("Promise<Awaited<Date>>");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("shadowed-globals");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

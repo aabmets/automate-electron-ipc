@@ -73,8 +73,8 @@ export function forEachChild(node: AstNode, callback: (child: AstNode) => void):
    }
 }
 
-const BUILTIN_TYPES = new Set([
-   // Keywords and the global types that signatures use without an import.
+/** Type keywords. They cannot be declared or imported, so no local name takes their place. */
+const KEYWORD_TYPES = new Set([
    "string",
    "number",
    "boolean",
@@ -85,6 +85,11 @@ const BUILTIN_TYPES = new Set([
    "undefined",
    "never",
    "object",
+]);
+
+const BUILTIN_TYPES = new Set([
+   ...KEYWORD_TYPES,
+   // Global types that signatures use without an import.
    "Function",
    "Promise",
    // ECMAScript globals.
@@ -146,11 +151,39 @@ const BUILTIN_TYPES = new Set([
 ]);
 
 /**
- * Tells whether a name is available in every generated file without an import.
- * A schema that imports or declares a type under one of these names is not supported.
+ * Tells whether a name stands for a type keyword or a global type, which every generated file
+ * has without an import. A name that the schema file binds itself, by declaring or importing it,
+ * is not a global: `locals` are such names, and they take precedence over the global list.
  */
-export function isBuiltinType(typeName: string): boolean {
-   return BUILTIN_TYPES.has(typeName);
+export function isBuiltinType(typeName: string, locals?: ReadonlySet<string>): boolean {
+   return KEYWORD_TYPES.has(typeName) || (BUILTIN_TYPES.has(typeName) && !locals?.has(typeName));
+}
+
+/**
+ * The names that a schema file binds at module level and may use as types: every import
+ * (named, default and namespace) and every interface, type alias, enum, namespace and class.
+ */
+export function collectModuleBindings(module: Module): Set<string> {
+   const names = new Set<string>();
+   for (const node of module.body) {
+      const item = node as AstNode;
+      if (item.type === "ImportDeclaration") {
+         for (const element of item.specifiers as AstNode[]) {
+            names.add(element.local.value);
+         }
+         continue;
+      }
+      const declaration =
+         item.type === "ExportDeclaration"
+            ? item.declaration
+            : item.type === "ExportDefaultDeclaration"
+              ? item.decl
+              : item;
+      if (isTypeDefinition(declaration)) {
+         names.add((declaration.id ?? declaration.identifier).value);
+      }
+   }
+   return names;
 }
 
 /** The first name of a possibly qualified name: `Kind` for `Kind.A`. */
@@ -188,11 +221,16 @@ function declaredTypeParams(node: AstNode): string[] {
    return names;
 }
 
+/**
+ * Collects the names of the types that a node refers to and that the generated files must import.
+ * `scope` are the type parameters in scope, `locals` the names that the schema file binds itself.
+ */
 export function collectCustomTypes(
    node: AstNode,
    src: Source,
    set: Set<string>,
    scope: ReadonlySet<string> = new Set(),
+   locals: ReadonlySet<string> = new Set(),
 ): void {
    if (!node) {
       return;
@@ -203,7 +241,7 @@ export function collectCustomTypes(
       // A qualified name such as `Kind.A` is kept whole. Its head is resolved by the writers.
       const typeName = src.text(node.typeName);
       const head = headOf(typeName);
-      if (!(isBuiltinType(head) || inScope.has(head))) {
+      if (!(isBuiltinType(head, locals) || inScope.has(head))) {
          set.add(typeName);
       }
    } else if (node.type === "TsTypeQuery") {
@@ -214,16 +252,12 @@ export function collectCustomTypes(
    } else if (node.type === "ImportDeclaration") {
       for (const element of node.specifiers) {
          const name = element.local.value;
-         if (
-            element.type === "ImportSpecifier" &&
-            (node.typeOnly || element.isTypeOnly) &&
-            !isBuiltinType(name)
-         ) {
+         if (element.type === "ImportSpecifier" && (node.typeOnly || element.isTypeOnly)) {
             set.add(name);
          }
       }
    }
-   forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope));
+   forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope, locals));
 }
 
 const PACKAGE_NAME = "automate-electron-ipc";
@@ -381,9 +415,13 @@ function findParamsStart(fn: TsFunctionType, src: Source): number {
    throw new Error(`Cannot find the parameter list of the signature '${code}'`);
 }
 
-export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSignature {
+export function parseSignature(
+   fn: TsFunctionType,
+   src: Source,
+   locals: ReadonlySet<string> = new Set(),
+): t.CallableSignature {
    const set = new Set<string>();
-   collectCustomTypes(fn as AstNode, src, set);
+   collectCustomTypes(fn as AstNode, src, set, new Set(), locals);
 
    const returnNode = fn.typeAnnotation.typeAnnotation;
    const returnType = src.text(returnNode) || "void";
@@ -393,7 +431,7 @@ export function parseSignature(fn: TsFunctionType, src: Source): t.CallableSigna
       params: fn.params.map((param) => getParamInfo(param, src)),
       customTypes: Array.from(set),
       returnType,
-      async: isPromiseType(returnNode as AstNode),
+      async: !locals.has("Promise") && isPromiseType(returnNode as AstNode),
    };
 }
 
@@ -454,6 +492,8 @@ interface ParseContext {
    file: string;
    src: Source;
    imports: LibraryImports;
+   /** The names that the schema file binds at module level, see `collectModuleBindings`. */
+   locals: ReadonlySet<string>;
 }
 
 function parseChannelConfig(
@@ -549,7 +589,7 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       name,
       kind: info.kind,
       direction: info.direction,
-      signature: parseSignature(signature as unknown as TsFunctionType, ctx.src),
+      signature: parseSignature(signature as unknown as TsFunctionType, ctx.src, ctx.locals),
       ...config,
    };
 }
@@ -669,7 +709,8 @@ export function parseChannelMapModule(
             "'export default defineChannels({...})' or 'export const <name> = defineChannels({...})'.",
       );
    }
-   const channelSpecs = parseChannelMap(found.call, { file, src, imports });
+   const locals = collectModuleBindings(module);
+   const channelSpecs = parseChannelMap(found.call, { file, src, imports, locals });
    return { channelSpecs, channelMapExport: found.exported };
 }
 
@@ -695,12 +736,13 @@ export function parseImportDeclarations(
       if (element.type === "ImportNamespaceSpecifier") {
          importSpec.namespace = localName;
       } else if (element.type === "ImportDefaultSpecifier") {
-         if (!isBuiltinType(localName)) {
+         if (!KEYWORD_TYPES.has(localName)) {
             customTypes.add(`default as ${localName}`);
          }
       } else {
          const exportedName = element.imported ? element.imported.value : null;
-         if (!isBuiltinType(exportedName || localName)) {
+         // An import takes precedence over a global of the same name, such as `Error`.
+         if (!KEYWORD_TYPES.has(exportedName || localName)) {
             customTypes.add(
                exportedName && exportedName !== localName
                   ? `${exportedName} as ${localName}`
@@ -802,6 +844,7 @@ export default {
    describeSyntaxError,
    forEachChild,
    isBuiltinType,
+   collectModuleBindings,
    collectCustomTypes,
    collectLibraryImports,
    parseSignature,

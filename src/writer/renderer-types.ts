@@ -18,7 +18,8 @@ export class RendererTypesWriter extends BaseWriter {
       return this.config.rendererTypesFilePath;
    }
    protected getReservedNames(): string[] {
-      return ["Window"];
+      // `Promise` and `Awaited` are globals that the generated code uses.
+      return ["Window", "Promise", "Awaited"];
    }
    protected renderEmptyFileContents(): string {
       // `declare global` is only valid inside a module, hence the empty export.

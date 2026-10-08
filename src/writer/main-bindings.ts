@@ -25,6 +25,8 @@ export class MainBindingsWriter extends BaseWriter {
          "BrowserWindow",
          "IpcMainEvent",
          "IpcMainInvokeEvent",
+         // Globals that the generated code uses.
+         "Promise",
       ];
    }
    protected renderEmptyFileContents(): string {

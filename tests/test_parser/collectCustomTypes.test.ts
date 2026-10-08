@@ -12,11 +12,11 @@
 import parser from "@src/parser.js";
 import { describe, expect, it } from "vitest";
 
-function collectCustomTypes(code: string): Set<string> {
+function collectCustomTypes(code: string, locals: string[] = []): Set<string> {
    const { module, src } = parser.parseModule(code);
    const set = new Set<string>();
    parser.forEachChild(module, (node) => {
-      parser.collectCustomTypes(node, src, set);
+      parser.collectCustomTypes(node, src, set, new Set(), new Set(locals));
    });
    return set;
 }
@@ -67,6 +67,27 @@ describe("collectCustomTypes", () => {
          `);
          expect(customTypes).toStrictEqual(new Set());
       });
+   });
+
+   // Regression for T60: a name that the schema binds itself is not the global of that name.
+   it("should collect a global name that the schema file binds itself", () => {
+      const customTypes = collectCustomTypes(
+         `const x = type as (a: Error, b: Map<string, Date>, c: Intl.Thing) => Promise<void>;`,
+         ["Error", "Map", "Intl"],
+      );
+      expect(customTypes).toStrictEqual(new Set(["Error", "Map", "Intl.Thing"]));
+   });
+
+   it("should not collect a bound name that a type parameter hides", () => {
+      const customTypes = collectCustomTypes(`const x = type as <Error>(a: Error) => void;`, [
+         "Error",
+      ]);
+      expect(customTypes).toStrictEqual(new Set());
+   });
+
+   it("should keep treating the type keywords as built in", () => {
+      const customTypes = collectCustomTypes(`const x = type as (a: string) => void;`, ["string"]);
+      expect(customTypes).toStrictEqual(new Set());
    });
 
    it("should collect the custom types that global types wrap", () => {
@@ -208,6 +229,11 @@ describe("collectCustomTypes", () => {
          import type { CustomType } from 'module-name';
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
+   });
+
+   it("should collect a type-only import that is named like a global", () => {
+      const customTypes = collectCustomTypes(`import type { Error, Date } from 'module-name';`);
+      expect(customTypes).toStrictEqual(new Set(["Error", "Date"]));
    });
 
    it("should collect custom types from objects and named types import syntax", () => {

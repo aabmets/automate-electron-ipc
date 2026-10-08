@@ -10,4 +10,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   list. Only names with no local binding are treated as globals.
 - **Tests:** parser and imports-generator unit tests, plus an e2e fixture with a schema `Error`
   type that type-checks and asserts the import.
-- **Delivered:**
+- **Delivered:** 2026-10-08. A module's own imports and type declarations (`collectModuleBindings`) now
+  take precedence over the global list in signatures and in the recorded imports; type keywords stay
+  built in. A declared `Promise` is also not detected as async, and the generated code reserves
+  `Promise` and `Awaited`, so a schema type of that name is imported under an alias.

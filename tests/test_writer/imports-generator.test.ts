@@ -528,6 +528,26 @@ describe("ImportsGenerator", () => {
          );
       });
 
+      // Regression for T60: the schema's own `Error` and `Map` must be imported, not left global.
+      it("imports types that are named like globals under their own names", () => {
+         const a = fileOf(
+            `${dir}/a.ts`,
+            {
+               typeSpecArray: [ownType("Error")],
+               importSpecArray: [importOf("../types/m", "Map", "Set as Bag")],
+            },
+            "Error",
+            "Map",
+            "Bag",
+         );
+         const ig = generator();
+
+         expect(ig.getDeclaration(a, "Error")).toBe('import type { Error } from "./schema/a";');
+         expect(ig.getDeclaration(a, "Map")).toBe('import type { Map } from "./types/m";');
+         expect(ig.getDeclaration(a, "Bag")).toBe('import type { Set as Bag } from "./types/m";');
+         expect(ig.getRenames(a).size).toBe(0);
+      });
+
       it("keeps the names that are not reserved", () => {
          const a = fileOf(`${dir}/a.ts`, { typeSpecArray: [ownType("User")] }, "User");
          const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts", ["BrowserWindow"]);

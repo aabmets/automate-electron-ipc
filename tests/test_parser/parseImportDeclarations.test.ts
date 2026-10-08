@@ -120,6 +120,25 @@ describe("parseImportDeclarations", () => {
          ]);
       });
 
+      // Regression for T60: an import takes precedence over the global of the same name.
+      it("should record imports that are named like globals", () => {
+         const result = parseImportDeclarations(
+            `import type { Error, Map as M, Date as D } from 'module';`,
+         );
+         expect(result).toEqual([
+            {
+               fromPath: "module",
+               customTypes: ["Error", "Map as M", "Date as D"],
+               namespace: null,
+            },
+         ]);
+      });
+
+      it("should record a default import that is named like a global", () => {
+         const result = parseImportDeclarations(`import Error from './error';`);
+         expect(result[0].customTypes).toEqual(["default as Error"]);
+      });
+
       it("should handle named imports with aliasing", () => {
          const code = `import { readFile as rf, writeFile as wf } from 'fs';`;
          const result = parseImportDeclarations(code);

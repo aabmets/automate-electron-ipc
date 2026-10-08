@@ -344,6 +344,115 @@ describe("parseSpecs", () => {
    });
 });
 
+describe("parseSpecs, names of globals that the schema binds", () => {
+   const parse = (contents: string) =>
+      parser.parseSpecs({ contents, relativePath: "", fullPath: "" });
+
+   // Regression for T60.
+   it("collects a declared type that is named like a global", () => {
+      const { channelSpecArray, typeSpecArray } = parse(`
+         import { defineChannels, invoke } from "automate-electron-ipc";
+
+         export interface Error { code: number }
+
+         export default defineChannels({
+            getError: invoke<(id: number) => Error>(),
+            getDate: invoke<() => Date>(),
+         });
+      `);
+      expect(typeSpecArray.map((spec) => spec.name)).toStrictEqual(["Error"]);
+      expect(channelSpecArray.map((spec) => spec.signature.customTypes)).toStrictEqual([
+         ["Error"],
+         [],
+      ]);
+   });
+
+   it("collects an imported type that is named like a global", () => {
+      const { channelSpecArray, importSpecArray } = parse(`
+         import { defineChannels, send } from "automate-electron-ipc";
+         import type { Map, Set as Bag } from "./collections";
+
+         export default defineChannels({
+            put: send<(map: Map, bag: Bag, plain: Set<string>) => void>(),
+         });
+      `);
+      expect(importSpecArray.find((spec) => spec.fromPath === "./collections")).toStrictEqual({
+         fromPath: "./collections",
+         customTypes: ["Map", "Set as Bag"],
+         namespace: null,
+      });
+      expect(channelSpecArray[0].signature.customTypes).toStrictEqual(["Map", "Bag"]);
+   });
+
+   it("collects a namespace import that is named like a global namespace", () => {
+      const { channelSpecArray } = parse(`
+         import { defineChannels, invoke } from "automate-electron-ipc";
+         import type * as Intl from "./intl";
+
+         export default defineChannels({
+            get: invoke<() => Intl.Format>(),
+         });
+      `);
+      expect(channelSpecArray[0].signature.customTypes).toStrictEqual(["Intl.Format"]);
+   });
+
+   it("requires a declared type of a global name to be exported when a channel uses it", () => {
+      expect(() =>
+         parse(`
+            import { defineChannels, invoke } from "automate-electron-ipc";
+
+            interface Error { code: number }
+
+            export default defineChannels({
+               get: invoke<() => Error>(),
+            });
+         `),
+      ).toThrow("Type 'Error' is used by channel 'get' and must be exported.");
+   });
+
+   it("treats the name as a global in a file that does not bind it", () => {
+      const { channelSpecArray } = parse(`
+         import { defineChannels, invoke } from "automate-electron-ipc";
+
+         export default defineChannels({
+            get: invoke<() => Error>(),
+         });
+      `);
+      expect(channelSpecArray[0].signature.customTypes).toStrictEqual([]);
+   });
+});
+
+describe("collectModuleBindings", () => {
+   const bindings = (code: string) => [
+      ...parser.collectModuleBindings(parser.parseModule(code).module),
+   ];
+
+   it("lists imports and declared types, however they are exported", () => {
+      expect(
+         bindings(`
+            import A, { B, C as D } from "m";
+            import * as E from "n";
+            export interface F {}
+            type G = string;
+            export enum H { x }
+            declare class I {}
+            namespace K {}
+         `),
+      ).toStrictEqual(["A", "B", "D", "E", "F", "G", "H", "I", "K"]);
+   });
+
+   it("ignores values and declarations that name nothing", () => {
+      expect(
+         bindings(`
+            const value = 1;
+            function fn() {}
+            declare module "x" {}
+            declare global { interface Window {} }
+         `),
+      ).toStrictEqual([]);
+   });
+});
+
 describe("describeSyntaxError", () => {
    it("reads the position from the caret of the code frame", () => {
       const message = [

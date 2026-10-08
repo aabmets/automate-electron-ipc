@@ -13,10 +13,10 @@ import parser from "@src/parser.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-function parseSignature(definition: string): t.CallableSignature {
+function parseSignature(definition: string, locals: string[] = []): t.CallableSignature {
    const { module, src } = parser.parseModule(`type T = ${definition};`);
    const alias = module.body[0] as any;
-   return parser.parseSignature(alias.typeAnnotation, src);
+   return parser.parseSignature(alias.typeAnnotation, src, new Set(locals));
 }
 
 describe("parseSignature, async detection", () => {
@@ -44,6 +44,22 @@ describe("parseSignature, async detection", () => {
    it("keeps the return type text as written", () => {
       expect(parseSignature("() => PromiseResult").returnType).toBe("PromiseResult");
       expect(parseSignature("(a: string) => Promise<void>").returnType).toBe("Promise<void>");
+   });
+});
+
+describe("parseSignature, names that the schema file binds", () => {
+   // Regression for T60.
+   it("collects a global name that the schema file binds itself", () => {
+      const { customTypes } = parseSignature("(e: Error, d: Date) => Map<string, X>", [
+         "Error",
+         "Map",
+      ]);
+      expect(customTypes).toStrictEqual(["Error", "Map", "X"]);
+   });
+
+   it("does not treat a declared Promise as async", () => {
+      expect(parseSignature("() => Promise<void>", ["Promise"]).async).toBe(false);
+      expect(parseSignature("() => Promise<void>").async).toBe(true);
    });
 });
 
