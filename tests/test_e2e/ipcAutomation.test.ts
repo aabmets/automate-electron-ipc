@@ -281,6 +281,97 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
    });
 });
 
+describe("ipcAutomation, type names that collide across schema files", () => {
+   // Regression for T53: imports were deduped by local name only, so two `User` types were
+   // either declared twice (TS2300) or the second one was dropped and its channels used the first.
+
+   /** The name under which the generated file imports `exported` from `from`. */
+   const importedAs = (text: string, exported: string, from: string): string => {
+      const line = new RegExp(
+         `^import type \\{ ${exported}(?: as (\\w+))? \\} from "${from}";$`,
+         "m",
+      );
+      const match = line.exec(text);
+      if (!match) {
+         throw new Error(`No import of ${exported} from ${from} in:\n${text}`);
+      }
+      return match[1] ?? exported;
+   };
+   const lineOf = (text: string, member: string): string => {
+      return text.split("\n").find((line) => line.includes(`${member}:`)) ?? "";
+   };
+
+   it("imports types of the same name that are declared in two schema files under distinct names", async () => {
+      project = await runFixture("name-collisions");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const userB = importedAs(generated[file], "User", "./schema/b");
+         const userC = importedAs(generated[file], "User", "./schema/c");
+         expect(userB).not.toBe(userC);
+
+         const member = file === "main.ts" ? "onGetUser" : "sendGetUser";
+         expect(lineOf(generated[file], `${member}B`)).toContain(`Promise<${userB}>`);
+         expect(lineOf(generated[file], `${member}C`)).toContain(`Promise<${userC}>`);
+      }
+   });
+
+   it("keeps an imported type and a declared type of the same name apart", async () => {
+      project = await runFixture("name-collisions");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imported = importedAs(generated[file], "User", "./types/user");
+         const declared = importedAs(generated[file], "User", "./schema/b");
+         expect(imported).not.toBe(declared);
+
+         const member = file === "main.ts" ? "onGetUser" : "sendGetUser";
+         expect(lineOf(generated[file], `${member}A`)).toContain(`Promise<${imported}>`);
+         expect(lineOf(generated[file], `${member}B`)).toContain(`Promise<${declared}>`);
+      }
+      // Three declarations are called User: they get User, User_2 and User_3.
+      const names = new Set(
+         ["./types/user", "./schema/b", "./schema/c"].map((from) =>
+            importedAs(generated["window.d.ts"], "User", from),
+         ),
+      );
+      expect(names).toStrictEqual(new Set(["User", "User_2", "User_3"]));
+   });
+
+   it("imports namespaces of the same alias from different modules under distinct aliases", async () => {
+      project = await runFixture("name-collisions");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const text = generated[file];
+         const aliasOf = (from: string) =>
+            new RegExp(`^import type \\* as (\\w+) from "${from}";$`, "m").exec(text)?.[1];
+         const one = aliasOf("./types/one");
+         const two = aliasOf("./types/two");
+         expect(one).toBeDefined();
+         expect(two).toBeDefined();
+         expect(one).not.toBe(two);
+
+         const member = file === "main.ts" ? "onGetItem" : "sendGetItem";
+         expect(lineOf(text, `${member}A`)).toContain(`Promise<${one}.Item>`);
+         expect(lineOf(text, `${member}B`)).toContain(`Promise<${two}.Item>`);
+      }
+   });
+
+   it("imports a type that two schema files import once", async () => {
+      project = await runFixture("name-collisions");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = project.generated[file].match(/^import type .*"\.\/types\/shared";$/gm);
+         expect(imports).toStrictEqual(['import type { Shared } from "./types/shared";']);
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("name-collisions");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

@@ -35,6 +35,9 @@ export class VitestBaseWriter extends BaseWriter {
    public sortCallablesArray(callablesArray: string[]): string[] {
       return super.sortCallablesArray(callablesArray);
    }
+   public getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
+      return super.getChannelSpecs(parsedFileSpecs);
+   }
 }
 
 export class VitestMainBindingsWriter extends writer.MainBindingsWriter {

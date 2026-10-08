@@ -15,6 +15,26 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { ImportsGenerator } from "./imports-generator.js";
 
+/**
+ * Replaces the type names of a signature text, such as `User` with `User_2`. Only references
+ * are replaced, not the members of a qualified name, string literals, property keys or
+ * parameter names.
+ */
+function renameTypeReferences(text: string, renames: ReadonlyMap<string, string>): string {
+   const token = /(["'`])(?:\\.|(?!\1).)*\1|[A-Za-z_$][\w$]*/g;
+   return text.replace(token, (match, quote, offset: number) => {
+      const renamed = quote ? undefined : renames.get(match);
+      if (renamed === undefined) {
+         return match;
+      }
+      const before = text.slice(0, offset);
+      const after = text.slice(offset + match.length);
+      const isMember = /\.\s*$/.test(before);
+      const isKey = /(?:[({,;]|\breadonly)\s*$/.test(before) && /^\s*\??\s*:/.test(after);
+      return isMember || isKey ? match : renamed;
+   });
+}
+
 export class BaseWriter {
    protected config: t.IPCResolvedConfig;
    protected pfsArray: t.ParsedFileSpecs[];
@@ -61,6 +81,30 @@ export class BaseWriter {
       return [1, 2, 3, 4, 5].map((value) => {
          return " ".repeat(this.config.codeIndent).repeat(value);
       });
+   }
+
+   /**
+    * The channel specs of a schema file, with the type names of their signatures replaced by
+    * the names that the generated imports declare (see `ImportsGenerator.getRenames`).
+    */
+   protected getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
+      const specs = parsedFileSpecs.specs.channelSpecArray;
+      const renames = this.importsGenerator.getRenames(parsedFileSpecs);
+      if (renames.size === 0) {
+         return specs;
+      }
+      return specs.map((spec) => ({
+         ...spec,
+         signature: {
+            ...spec.signature,
+            definition: renameTypeReferences(spec.signature.definition, renames),
+            returnType: renameTypeReferences(spec.signature.returnType, renames),
+            params: spec.signature.params.map((param) => ({
+               ...param,
+               type: renameTypeReferences(param.type, renames),
+            })),
+         },
+      }));
    }
 
    protected injectEventTypehint(sigDef: string): string {

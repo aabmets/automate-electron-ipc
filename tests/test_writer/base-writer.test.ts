@@ -109,6 +109,72 @@ describe("BaseWriter", () => {
       ]);
    });
 
+   describe("channel specs of colliding type names", () => {
+      const pfsOf = (
+         fullPath: string,
+         signature: Partial<t.CallableSignature>,
+      ): t.ParsedFileSpecs => ({
+         fullPath,
+         relativePath: "",
+         specs: {
+            channelSpecArray: [
+               {
+                  name: "chan",
+                  signature: {
+                     customTypes: ["User"],
+                     returnType: "void",
+                     params: [],
+                     ...signature,
+                  },
+               } as unknown as t.ChannelSpec,
+            ],
+            channelMapExport: null,
+            importSpecArray: [],
+            typeSpecArray: [
+               { name: "User", kind: "interface" as t.TypeKind, generics: null, isExported: true },
+            ],
+         },
+      });
+      const first = pfsOf("/project/a.ts", { definition: "() => User" });
+
+      it("should return the specs as they are when no type name is taken", () => {
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first]);
+         expect(obj.getChannelSpecs(first)).toBe(first.specs.channelSpecArray);
+      });
+
+      it("should rename the references of the colliding type in the signature", () => {
+         const definition =
+            "(User: User, list: Map<string, User>, o: { User: User; readonly User: User }, " +
+            's: "User", n: NS.User, c: A extends B ? User : User[]) => Promise<User[]>';
+         const second = pfsOf("/project/b.ts", {
+            definition,
+            returnType: "Promise<User[]>",
+            params: [
+               { name: "User", type: "User", rest: false, optional: false },
+               { name: "list", type: "Map<string, User>", rest: false, optional: true },
+            ],
+         });
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+
+         expect(obj.getChannelSpecs(first)).toBe(first.specs.channelSpecArray);
+         const [spec] = obj.getChannelSpecs(second);
+         expect(spec.signature.definition).toStrictEqual(
+            "(User: User_2, list: Map<string, User_2>, o: { User: User_2; readonly User: User_2 }, " +
+               's: "User", n: NS.User, c: A extends B ? User_2 : User_2[]) => Promise<User_2[]>',
+         );
+         expect(spec.signature.returnType).toStrictEqual("Promise<User_2[]>");
+         expect(spec.signature.params).toStrictEqual([
+            { name: "User", type: "User_2", rest: false, optional: false },
+            { name: "list", type: "Map<string, User_2>", rest: false, optional: true },
+         ]);
+         expect(spec.signature.customTypes).toStrictEqual(["User"]);
+         // The parsed spec is not modified.
+         expect(second.specs.channelSpecArray[0].signature.returnType).toStrictEqual(
+            "Promise<User[]>",
+         );
+      });
+   });
+
    it("should render empty file contents when pfsArray is empty", async () => {
       const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
       await obj.write(false);

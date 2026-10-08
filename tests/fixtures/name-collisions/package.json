@@ -1,0 +1,9 @@
+{
+   "name": "fixture-name-collisions",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

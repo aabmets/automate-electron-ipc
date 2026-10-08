@@ -30,7 +30,7 @@ export class MainBindingsWriter extends BaseWriter {
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
 
-         for (const spec of parsedFileSpecs.specs.channelSpecArray) {
+         for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
             if (spec.direction === "RendererToMain") {
                this.addRendererToMainCallables(spec, callablesArray);
             } else if (spec.direction === "MainToRenderer") {

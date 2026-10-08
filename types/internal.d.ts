@@ -96,11 +96,6 @@ export interface ParsedFileSpecs extends FileMeta {
    specs: SpecsCollection;
 }
 
-export interface SeenImports {
-   customTypes: Set<string>;
-   nameSpaces: Set<string>;
-}
-
 export interface VitestChannelSpec {
    channelKind: string;
    channelDirection: string;

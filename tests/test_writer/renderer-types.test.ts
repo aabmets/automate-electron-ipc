@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import utils from "@src/utils.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
+import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
@@ -102,5 +103,41 @@ describe("PreloadBindingsWriter", () => {
          export default Window;
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
+   });
+
+   it("should import colliding type names under distinct names and use them in signatures", async () => {
+      const pfsOf = (file: string, channel: string): t.ParsedFileSpecs => ({
+         fullPath: `/project/${file}.ts`,
+         relativePath: `${file}.ts`,
+         specs: {
+            channelMapExport: { kind: "default" },
+            importSpecArray: [],
+            typeSpecArray: [
+               { name: "User", kind: "interface" as t.TypeKind, generics: null, isExported: true },
+            ],
+            channelSpecArray: [
+               {
+                  name: channel,
+                  kind: "Unicast",
+                  direction: "RendererToMain",
+                  signature: {
+                     definition: "() => Promise<User>",
+                     params: [],
+                     returnType: "Promise<User>",
+                     customTypes: ["User"],
+                     async: true,
+                  },
+               },
+            ],
+         },
+      });
+      const obj = new shared.VitestRendererTypesWriter([pfsOf("a", "getA"), pfsOf("b", "getB")]);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toMatch(/^import type \{ User \} from ".*\/a";$/m);
+      expect(output).toMatch(/^import type \{ User as User_2 \} from ".*\/b";$/m);
+      expect(output).toContain("sendGetA: () => Promise<User>;");
+      expect(output).toContain("sendGetB: () => Promise<User_2>;");
    });
 });

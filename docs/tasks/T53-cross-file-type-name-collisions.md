@@ -14,4 +14,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   that refer to them. Same for namespace imports that share an alias but point to different modules.
 - **Tests:** imports-generator unit tests, plus e2e fixtures for both cases that type-check and
   assert each channel uses its own type.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `ImportsGenerator` now binds each declaration (module, exported name) to one import and aliases clashing names as `Name_2`, `Name_3`, ...; `BaseWriter.getChannelSpecs` applies the per-file rename map to the signature texts (token-based, skips qualified members, string literals, property keys and param names), used by the main and renderer-types writers. `SeenImports` was removed from `types/internal.d.ts`. Follow-up: names that the generated files declare themselves (`BrowserWindow`, `IpcMainEvent`, `Window`) are not reserved, so a schema type with such a name still clashes.

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 17 delivered, 41 remaining, 1 dropped.
+**Progress:** 18 delivered, 40 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -38,7 +38,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T50: E2E type-check must cover `window.d.ts`](./tasks/T50-e2e-typecheck-covers-window-dts.md) · depends on: T01
 - [x] [T51: The empty `window.d.ts` is invalid](./tasks/T51-empty-window-dts-is-invalid.md) · depends on: T50
 - [x] [T52: A schema with only `port` channels generates invalid code](./tasks/T52-port-only-schema-generates-invalid-code.md) · depends on: T50
-- [ ] [T53: Type names that collide across schema files](./tasks/T53-cross-file-type-name-collisions.md) · depends on: T50
+- [x] [T53: Type names that collide across schema files](./tasks/T53-cross-file-type-name-collisions.md) · depends on: T50
 - [x] [T54: Qualified names, `typeof` and destructuring in signatures](./tasks/T54-qualified-names-and-typeof-in-signatures.md) · depends on: T50
 - [x] [T55: Import paths with dots in the file name are truncated](./tasks/T55-import-paths-with-dotted-file-names.md) · depends on: T50
 - [ ] [T56: Async return type detection is a prefix match](./tasks/T56-async-return-type-detection.md) · depends on: T05
