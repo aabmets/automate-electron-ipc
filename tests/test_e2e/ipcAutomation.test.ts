@@ -200,6 +200,20 @@ describe("ipcAutomation, workspace", () => {
    });
 });
 
+describe("ipcAutomation, wrapped channel map export", () => {
+   // Regression for T58: `export default defineChannels({...}) satisfies X` was rejected.
+   it("generates bindings for a map followed by satisfies", async () => {
+      project = await runFixture("export-forms");
+      expect(project.generated["main.ts"]).toContain("getUser");
+      expect(project.generated["preload.ts"]).toContain("sendEchoUserName");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("export-forms");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

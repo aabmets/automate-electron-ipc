@@ -34,6 +34,9 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          return path.isAbsolute(value) ? errMsg : true;
       }),
       codeIndent: refine(number(), "clamped", (value) => {
+         if (!Number.isInteger(value)) {
+            return "value must be an integer";
+         }
          const errMsg = "value cannot be less than 2 or greater than 4";
          return value >= 2 && value <= 4 ? true : errMsg;
       }),

@@ -12,4 +12,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** unwrap `satisfies`, `as` and non-null wrappers around the `defineChannels` call. Remove
   the stale fallback. Require an integer `codeIndent`.
 - **Tests:** parser, automation and validator unit tests.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Export detection also unwraps `as const` and `<T>` assertions, in the three places where an export is recognised. The `"src/ipc"` fallback was unreachable (the merged config always sets `ipcDataDir`), so its test pins the behaviour rather than failing before the change. `codeIndent` now fails with "value must be an integer".

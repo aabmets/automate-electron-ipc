@@ -263,6 +263,50 @@ describe("parseChannelMapModule", () => {
          expect(aliased.channelMapExport).toStrictEqual({ kind: "named", name: "ipc" });
       });
 
+      // Regression for T58: only parentheses were unwrapped, so a wrapped call was reported
+      // as not exported.
+      const wrappers = ["satisfies Foo", "as Foo", "as const", "as unknown as Foo", "!"];
+      for (const wrapper of wrappers) {
+         it(`accepts a default export followed by '${wrapper}'`, () => {
+            const out = parseMap(
+               `type Foo = unknown;\nexport default defineChannels({ chan: send<() => void>() }) ${wrapper};`,
+            );
+            expect(out.channelMapExport).toStrictEqual({ kind: "default" });
+            expect(out.channelSpecs).toHaveLength(1);
+         });
+
+         it(`accepts a named export followed by '${wrapper}'`, () => {
+            const out = parseMap(
+               `type Foo = unknown;\nexport const channels = defineChannels({ chan: send<() => void>() }) ${wrapper};`,
+            );
+            expect(out.channelMapExport).toStrictEqual({ kind: "named", name: "channels" });
+            expect(out.channelSpecs).toHaveLength(1);
+         });
+
+         it(`accepts a const that is wrapped with '${wrapper}' and exported later`, () => {
+            const out = parseMap(
+               `type Foo = unknown;\nconst channels = defineChannels({ chan: send<() => void>() }) ${wrapper};\nexport default channels;`,
+            );
+            expect(out.channelMapExport).toStrictEqual({ kind: "default" });
+            expect(out.channelSpecs).toHaveLength(1);
+         });
+      }
+
+      it("accepts nested parentheses, assertions and a wrapped exported identifier", () => {
+         const call = "defineChannels({ chan: send<() => void>() })";
+         const nested = parseMap(`export default ((${call} satisfies object) as object)!;`);
+         expect(nested.channelMapExport).toStrictEqual({ kind: "default" });
+         const angle = parseMap(`export default <object>${call};`);
+         expect(angle.channelSpecs).toHaveLength(1);
+         const local = parseMap(`const c = ${call};\nexport default (c as object);`);
+         expect(local.channelMapExport).toStrictEqual({ kind: "default" });
+      });
+
+      it("still rejects a wrapped call that is not exported", () => {
+         const msg = parseError("const c = defineChannels({}) satisfies object;");
+         expect(msg).toContain("must be exported");
+      });
+
       it("parses an empty map", () => {
          const out = parseMap("export default defineChannels({});");
          expect(out.channelSpecs).toStrictEqual([]);

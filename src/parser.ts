@@ -178,6 +178,28 @@ function unwrapParentheses(node: AstNode): AstNode {
    return current;
 }
 
+const EXPRESSION_WRAPPERS = new Set([
+   "ParenthesisExpression",
+   "TsAsExpression",
+   "TsSatisfiesExpression",
+   "TsConstAssertion",
+   "TsNonNullExpression",
+   "TsTypeAssertion",
+]);
+
+/**
+ * Unwraps the syntax that does not change the value of an expression: parentheses, and the
+ * `as`, `as const`, `satisfies`, `<T>` and `!` operators, such as in
+ * `export default defineChannels({...}) satisfies Foo`.
+ */
+function unwrapExpression(node: AstNode): AstNode {
+   let current = node;
+   while (EXPRESSION_WRAPPERS.has(current.type)) {
+      current = current.expression;
+   }
+   return current;
+}
+
 function unwrapTypeParentheses(node: AstNode): AstNode {
    let current = node;
    while (current.type === "TsParenthesizedType") {
@@ -400,14 +422,14 @@ interface ExportedMap {
  */
 function findExportedMap(item: AstNode, imports: LibraryImports): ExportedMap | null {
    if (item.type === "ExportDefaultExpression") {
-      const call = unwrapParentheses(item.expression);
+      const call = unwrapExpression(item.expression);
       return isDefineChannelsCall(call, imports) ? { call, exported: { kind: "default" } } : null;
    } else if (
       item.type === "ExportDeclaration" &&
       item.declaration.type === "VariableDeclaration"
    ) {
       for (const decl of item.declaration.declarations as AstNode[]) {
-         const init = decl.init ? unwrapParentheses(decl.init) : null;
+         const init = decl.init ? unwrapExpression(decl.init) : null;
          if (decl.id.type === "Identifier" && init && isDefineChannelsCall(init, imports)) {
             return { call: init, exported: { kind: "named", name: decl.id.value } };
          }
@@ -422,7 +444,7 @@ function findExportedMap(item: AstNode, imports: LibraryImports): ExportedMap | 
 function findExportOfLocal(body: AstNode[], local: string): t.ChannelMapExport | null {
    for (const item of body) {
       if (item.type === "ExportDefaultExpression") {
-         const expr = unwrapParentheses(item.expression);
+         const expr = unwrapExpression(item.expression);
          if (expr.type === "Identifier" && expr.value === local) {
             return { kind: "default" };
          }
@@ -448,7 +470,7 @@ function findIndirectlyExportedMap(body: AstNode[], imports: LibraryImports): Ex
       .filter((item) => item.type === "VariableDeclaration")
       .flatMap((item) => item.declarations as AstNode[]);
    for (const decl of declarators) {
-      const init = decl.init ? unwrapParentheses(decl.init) : null;
+      const init = decl.init ? unwrapExpression(decl.init) : null;
       if (decl.id.type === "Identifier" && init && isDefineChannelsCall(init, imports)) {
          const exported = findExportOfLocal(body, decl.id.value);
          if (exported) {

@@ -20,6 +20,23 @@ describe("validateOptionalConfig", () => {
       expect(() => vld.validateOptionalConfig(config)).toThrowError();
    });
 
+   it("should throw an error if codeIndent is not an integer", () => {
+      // Regression for T58: 2.5 was accepted and silently rounded down by `repeat`.
+      const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
+      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 2.5 })).toThrowError(
+         /integer/,
+      );
+      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 3.999 })).toThrowError(
+         /integer/,
+      );
+      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 1 })).toThrowError(
+         /cannot be less than 2 or greater than 4/,
+      );
+      for (const codeIndent of [2, 3, 4]) {
+         expect(() => vld.validateOptionalConfig({ ...config, codeIndent })).not.toThrowError();
+      }
+   });
+
    it("should throw errors if codeIndent value is out of range", () => {
       expect(() => vld.validateOptionalConfig({ codeIndent: 1 })).toThrowError();
       expect(() => vld.validateOptionalConfig({ codeIndent: 5 })).toThrowError();

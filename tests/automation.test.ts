@@ -157,6 +157,30 @@ describe("ipcAutomation", () => {
       }
    });
 
+   it("reports a single schema file under the configured data dir", async () => {
+      // Regression for T58: a stale "src/ipc" fallback disagreed with the "src/autoipc" default.
+      const schemaPath = path.join(dir, "src/autoipc/schema.ts");
+      await fsp.mkdir(path.dirname(schemaPath), { recursive: true });
+      await fsp.writeFile(
+         schemaPath,
+         [
+            'import { defineChannels, invoke } from "automate-electron-ipc";',
+            "export default defineChannels({ getUser: invoke<() => Promise<string>>() });",
+         ].join("\n"),
+      );
+      mockConfig({
+         ipcDataDir: "src/autoipc",
+         ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+      } as never);
+      const success = vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+
+      await ipcAutomation();
+
+      expect(success.mock.calls[0][0].map((pfs) => pfs.relativePath)).toStrictEqual([
+         "src/autoipc",
+      ]);
+   });
+
    it("reads only .ts, .mts and .cts files, ignoring declaration files", async () => {
       // Regression for T08: every file under schema/ was read and parsed.
       const schemaDir = path.join(dir, "schema");

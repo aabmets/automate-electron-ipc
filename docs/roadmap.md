@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 13 delivered, 45 remaining, 1 dropped.
+**Progress:** 14 delivered, 44 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -43,7 +43,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T55: Import paths with dots in the file name are truncated](./tasks/T55-import-paths-with-dotted-file-names.md) · depends on: T50
 - [ ] [T56: Async return type detection is a prefix match](./tasks/T56-async-return-type-detection.md) · depends on: T05
 - [ ] [T57: Parameter names clash with generated names; event injection](./tasks/T57-generated-wrapper-parameter-handling.md) · depends on: T04, T05
-- [ ] [T58: Config and export-form robustness](./tasks/T58-config-and-export-form-robustness.md) · depends on: T01
+- [x] [T58: Config and export-form robustness](./tasks/T58-config-and-export-form-robustness.md) · depends on: T01
 
 ## Phase 2: Core API, listener lifecycle and security
 

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-export-forms",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -37,7 +37,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       const contents = await fsp.readFile(config.ipcSchema.path);
       const fileData: t.FileMeta = {
          fullPath: config.ipcSchema.path,
-         relativePath: config?.ipcDataDir || "src/ipc",
+         relativePath: config.ipcDataDir,
       };
       const specs = parser.parseSpecs({
          contents: contents.toString(),
