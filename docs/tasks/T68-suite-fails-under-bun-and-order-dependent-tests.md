@@ -19,3 +19,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   paths from the file under test, reset modules in the CLI tests and tighten the regex.
 - **Tests:** the suite passes under Node 22 and under `bun --bun vitest run`, also with
   `--sequence.shuffle` and from another working directory.
+- **Delivered:** 2026-10-08. Test-only change. The relative cwd test now passes a path relative to the real cwd instead of mocking `process.cwd`; the default-base `searchUpwards` test computes its expected path from `src/utils.ts`; `utils.test.ts` restores mocks after every test; the CLI `--version` test uses `importFreshCli` and `commander` is unmocked afterwards; the duplicate-channel regex names `a.ts` and `b.ts`. Also found and fixed: `getConfigFromUserPackage` tests needed a `package.json` above the cwd, so they failed when run from another directory. Verified under Node 22 and `bun --bun`, with `--sequence.shuffle`, and from `/tmp`.

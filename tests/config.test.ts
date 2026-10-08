@@ -16,6 +16,8 @@ import type * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getConfigFromUserPackage", () => {
+   // The manifest path comes from the working directory, which may have no package.json.
+   beforeEach(mocks.mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    it("should not throw errors when user package lacks autoipc config", async () => {
@@ -26,6 +28,7 @@ describe("getConfigFromUserPackage", () => {
       expect(config).toMatchObject({});
       vi.restoreAllMocks();
 
+      mocks.mockResolveUserProjectPath();
       mocks.mockFspReadFile({ config: {} });
       config = await cfg.getConfigFromUserPackage();
       expect(config).toMatchObject({});

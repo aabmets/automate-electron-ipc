@@ -32,6 +32,7 @@ describe("cli", () => {
       process.exitCode = undefined;
       ipcAutomation.mockReset();
       vi.restoreAllMocks();
+      vi.doUnmock("commander");
    });
 
    it("prints the package version for --version", async () => {
@@ -40,7 +41,7 @@ describe("cli", () => {
       vi.spyOn(process, "exit").mockImplementation((() => {
          throw new Error("exit");
       }) as never);
-      await expect(import("@src/cli.js")).rejects.toThrowError("exit");
+      await expect(importFreshCli()).rejects.toThrowError("exit");
       const manifest = await import("../package.json");
       expect(out).toHaveBeenCalledWith(`${manifest.default.version}\n`);
       expect(ipcAutomation).not.toHaveBeenCalled();

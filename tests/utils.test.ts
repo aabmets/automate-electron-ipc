@@ -17,10 +17,18 @@ import url from "node:url";
 import utils from "@src/utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+afterEach(() => {
+   vi.restoreAllMocks();
+});
+
 describe("searchUpwards", () => {
    it("should find an existing file in the default base path", () => {
       const mockForPath = "testfile.txt";
-      const expectedPath = path.resolve(process.cwd(), mockForPath);
+      // The default start is the directory of the file under test, whatever the working directory.
+      const sourceDir = path.dirname(
+         url.fileURLToPath(new URL("../src/utils.ts", import.meta.url)),
+      );
+      const expectedPath = path.join(sourceDir, mockForPath);
 
       vi.spyOn(fs, "existsSync").mockImplementation((filePath) => filePath === expectedPath);
       const result = utils.searchUpwards(mockForPath);
@@ -112,8 +120,11 @@ describe("resolveUserProjectPath", () => {
    });
 
    it("resolves a relative cwd against the working directory", () => {
-      vi.spyOn(process, "cwd").mockReturnValue(root);
-      expect(utils.resolveUserProjectPath("", "packages/app/src")).toBe(posix(app()));
+      // A relative path from the real working directory, since the runtimes differ in whether
+      // their `path.resolve` calls a mocked `process.cwd`.
+      const relative = path.relative(process.cwd(), path.join(app(), "src"));
+      expect(path.isAbsolute(relative)).toBe(false);
+      expect(utils.resolveUserProjectPath("", relative)).toBe(posix(app()));
    });
 
    it("does not reuse a cached result when the cwd changes", () => {
