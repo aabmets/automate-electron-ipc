@@ -90,6 +90,41 @@ describe("BaseWriter", () => {
       expect(result).toStrictEqual("arg1: number, arg2: string");
    });
 
+   it("should forward rest parameters with their spread", () => {
+      // Regression for B4: the spread was dropped, so the renderer received one array argument.
+      const spec = {
+         signature: {
+            params: [
+               { name: "first", type: "string", rest: false, optional: false },
+               { name: "maybe", type: "number", rest: false, optional: true },
+               { name: "values", type: "number[]", rest: true, optional: false },
+            ],
+         },
+      } as t.ChannelSpec;
+      const writer = shared.VitestBaseWriter.prototype;
+      expect(writer.getOriginalParams(spec, true)).toStrictEqual("first, maybe, ...values");
+      expect(writer.getOriginalParams(spec, false)).toStrictEqual(
+         "first: string, maybe?: number, ...values: number[]",
+      );
+   });
+
+   it("should replace destructured parameters with names that clash with nothing", () => {
+      const spec = {
+         signature: {
+            params: [
+               { name: "{ a, b }", type: "Point", rest: false, optional: false },
+               { name: "[arg1, arg2]", type: "number[]", rest: false, optional: false },
+               { name: "arg0", type: "string", rest: false, optional: false },
+            ],
+         },
+      } as t.ChannelSpec;
+      const writer = shared.VitestBaseWriter.prototype;
+      expect(writer.getOriginalParams(spec, true)).toStrictEqual("_arg0, _arg1, arg0");
+      expect(writer.getOriginalParams(spec, false)).toStrictEqual(
+         "_arg0: Point, _arg1: number[], arg0: string",
+      );
+   });
+
    it("should sort callables array by prefixes and alphabetically", () => {
       const result = shared.VitestBaseWriter.prototype.sortCallablesArray([
          "sendEvent3",

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-param-shapes",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

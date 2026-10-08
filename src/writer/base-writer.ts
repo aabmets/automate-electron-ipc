@@ -34,6 +34,8 @@ function renameTypeReferences(text: string, renames: ReadonlyMap<string, string>
       return isMember || isKey ? match : renamed;
    });
 }
+const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
+const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
 
 export class BaseWriter {
    protected config: t.IPCResolvedConfig;
@@ -111,15 +113,54 @@ export class BaseWriter {
       return sigDef.replace("(", "(event: IpcMainEvent, ");
    }
 
+   /**
+    * Returns the parameters of the channel signature with names that are valid identifiers.
+    * Destructured parameters, such as `{ a, b }: Foo`, cannot be forwarded by name,
+    * so they are replaced by generated names that clash with no name in the signature.
+    */
+   protected resolveParams(spec: t.ChannelSpec): t.CallableParam[] {
+      const params = spec.signature.params;
+      const taken = this.collectIdentifiers(params.map((param) => param.name));
+      return params.map((param, index) => {
+         if (IDENTIFIER_PATTERN.test(param.name)) {
+            return param;
+         }
+         return { ...param, name: this.uniqueName(`arg${index}`, taken) };
+      });
+   }
+
    protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {
-      return spec.signature.params
+      return this.resolveParams(spec)
          .map((param) => {
-            const typeHint = onlyNames ? "" : `: ${param.type || "any"}`;
-            const optional = !onlyNames && param.optional ? "?" : "";
-            const rest = !onlyNames && param.rest ? "..." : "";
-            return `${rest}${param.name}${optional}${typeHint}`;
+            const rest = param.rest ? "..." : "";
+            if (onlyNames) {
+               return `${rest}${param.name}`;
+            }
+            const optional = param.optional ? "?" : "";
+            return `${rest}${param.name}${optional}: ${param.type || "any"}`;
          })
          .join(", ");
+   }
+
+   /**
+    * Collects every identifier-like token of the given source snippets.
+    * Names that are absent from the result cannot clash with anything in the snippets.
+    */
+   protected collectIdentifiers(snippets: string[]): Set<string> {
+      return new Set(snippets.flatMap((snippet) => snippet.match(IDENTIFIER_TOKENS) ?? []));
+   }
+
+   /**
+    * Returns `base`, with underscores prepended until it is absent from `taken`,
+    * and adds the result to `taken`.
+    */
+   protected uniqueName(base: string, taken: Set<string>): string {
+      let name = base;
+      while (taken.has(name)) {
+         name = `_${name}`;
+      }
+      taken.add(name);
+      return name;
    }
 
    protected sortCallablesArray(callablesArray: string[]): string[] {

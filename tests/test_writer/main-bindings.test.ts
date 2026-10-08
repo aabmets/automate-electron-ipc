@@ -73,7 +73,7 @@ describe("MainBindingsWriter", () => {
          
          export const ipcMain = {
             sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number) => 
-               browserWindow.webContents.send('vitestChannel', arg1, arg2),
+               browserWindow.webContents.send('vitestChannel', arg1, ...arg2),
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());

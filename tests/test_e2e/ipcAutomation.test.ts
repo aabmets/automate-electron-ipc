@@ -414,3 +414,22 @@ describe("ipcAutomation, schema with a syntax error", () => {
       );
    });
 });
+
+describe("ipcAutomation, rest, optional and destructured parameters", () => {
+   // Regression for B4: the sender dropped the spread, so `webContents.send` received one array.
+   it("forwards rest parameters with their spread", async () => {
+      project = await runFixture("param-shapes");
+      const main = project.generated["main.ts"];
+
+      expect(main).toContain("(browserWindow: BrowserWindow, label: string, ...values: number[])");
+      expect(main).toContain("browserWindow.webContents.send('restSum', label, ...values)");
+      expect(main).toContain("browserWindow.webContents.send('optionalFlag', label, flag)");
+      expect(main).toContain("(browserWindow: BrowserWindow, arg0: Point, arg1: [number, number])");
+      expect(main).toContain("browserWindow.webContents.send('destructured', arg0, arg1)");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("param-shapes");
+      expect(await project.typecheck()).toBe("");
+   });
+});

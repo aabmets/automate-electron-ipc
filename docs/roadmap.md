@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 18 delivered, 40 remaining, 1 dropped.
+**Progress:** 19 delivered, 39 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -25,7 +25,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 
 - [x] [T02: Global duplicate channel and listener validation (B2)](./tasks/T02-global-duplicate-channel-and-listener.md) · depends on: T01
 - [x] [T03: Custom types from value imports are dropped (B3)](./tasks/T03-custom-types-from-value-imports.md) · depends on: T01
-- [ ] [T04: Rest parameters lose their spread in generated call sites (B4)](./tasks/T04-rest-parameters-lose-their-spread.md) · depends on: T01
+- [x] [T04: Rest parameters lose their spread in generated call sites (B4)](./tasks/T04-rest-parameters-lose-their-spread.md) · depends on: T01
 - [ ] [T05: Wrong generated types (B6, B7)](./tasks/T05-wrong-generated-types.md) · depends on: T01
 - [x] [T06: Deterministic output ordering (B8)](./tasks/T06-deterministic-output-ordering.md) · depends on: T01
 - [x] [T07: Correct project root resolution (monorepos)](./tasks/T07-correct-project-root-resolution.md) · depends on: T01
