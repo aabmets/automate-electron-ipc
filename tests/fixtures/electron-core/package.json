@@ -1,0 +1,9 @@
+{
+   "name": "fixture-electron-core",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

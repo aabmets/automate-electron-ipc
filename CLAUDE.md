@@ -14,6 +14,15 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 
 - Type check and lint: `bun run check`
 - Tests: `bunx vitest run` (tests live in `tests/**`, named `*.test.ts`; helpers in `tests/utils/`)
+- Real-Electron tests: `bun run test:electron` (`tests/test_electron/`). They run the generated bindings
+  in the `electron` binary, with hidden sandboxed windows, and need the binary (`node
+  node_modules/electron/install.js`, since `bun install` does not run its postinstall) and a display
+  (on Linux without `$DISPLAY` they start under `xvfb-run -a`). Without them the tests skip, and with
+  `REQUIRE_ELECTRON=1`, as in CI, they fail instead. Root and some CI kernels need
+  `ELECTRON_NO_SANDBOX=1` for the sandbox helper of Chromium, which leaves `sandbox: true` of the windows
+  alone. The scenarios are functions that are turned into text and run in Electron, so they can use
+  only their `ctx` argument (`ctx.data` for constants). A scenario that finds a bug in the generated
+  code is not fixed in the same task: add it as `it.fails`, with the new task's ID in a comment.
 - Biome formats on pre-commit (lefthook). Use 3-space indents, double quotes, and the Apache-2.0 header on new source files.
 
 ## Work tracker: one task per session

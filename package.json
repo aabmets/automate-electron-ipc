@@ -38,6 +38,7 @@
    },
    "scripts": {
       "check": "tsc -p tsconfig.json --noEmit && biome check",
+      "test:electron": "vitest run tests/test_electron --coverage.enabled=false",
       "pubtest": "tsc -p tsconfig.json && bun pm pack --destination ./packages",
       "pubnow": "biome check --error-on-warnings && tsc -p tsconfig.json && bun publish"
    },

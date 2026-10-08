@@ -109,3 +109,41 @@ jobs:
       # Coverage is off, because the thresholds apply to the whole suite, not to this subset.
       - name: Run e2e tests
         run: npx vitest run tests/test_e2e --coverage.enabled=false
+
+  electron:
+    name: electron integration (node 24)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # bun install does not run the postinstall script of electron, which downloads the binary.
+      - name: Install the Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Install xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb
+
+      # Runs the generated bindings in a real Electron process, with hidden sandboxed windows,
+      # under xvfb-run since the runner has no display. REQUIRE_ELECTRON makes the tests fail
+      # instead of skip when the binary or the display is missing. ELECTRON_NO_SANDBOX turns off
+      # the sandbox helper of Chromium, which the runner's kernel does not allow; the windows
+      # still use sandbox: true. Coverage is off, because the thresholds apply to the whole suite.
+      - name: Run Electron tests
+        env:
+          REQUIRE_ELECTRON: "1"
+          ELECTRON_NO_SANDBOX: "1"
+        run: bun run test:electron

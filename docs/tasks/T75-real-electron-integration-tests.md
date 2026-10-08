@@ -50,4 +50,30 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** the scenarios above are the tests. Besides, a harness test that a scenario that
   hangs is killed and fails, that the process and temp dir are gone afterwards, and that the suite
   skips without the binary and fails with `REQUIRE_ELECTRON=1`.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Notes:
+  - The harness is `tests/utils/electron-utils.ts` plus a plain CommonJS main script,
+    `tests/utils/electron-runner.cjs`, which is copied into a temp app dir. The generated files are
+    compiled with swc; the preload file gets one line appended that exposes `process.sandboxed` and
+    `process.contextIsolated`, and the tests assert both. The scenarios are functions that are turned
+    into text and run in Electron, so they use only `ctx` (`ctx.data` carries constants). They run one
+    after another in one process per fixture group, each with a fresh `main.ts`, and the process prints
+    one JSON line. A scenario times out inside the process (20 s), and the whole process is killed after
+    120 s, SIGTERM first so that `xvfb-run` cleans up, with the process group checked afterwards.
+  - Pages come from a custom `app://` scheme, so a page and an iframe have different origins without
+    a server. `ctx.open` waits until `isLoading()` is false, because `loadURL` resolves earlier; the
+    scenarios about that use `ctx.blank()`.
+  - `--no-sandbox` is added for root, or with `ELECTRON_NO_SANDBOX=1` (set in CI); it turns off the
+    sandbox helper of Chromium only, and the windows keep `sandbox: true`. Without the binary or a
+    display the tests skip, and with `REQUIRE_ELECTRON=1` they fail. The harness tests cover both,
+    through a nested vitest run.
+  - Scenarios: invoke, send/emit (targets, broadcast, a destroyed window, `bind`), sender validation with
+    an iframe of another origin, `validate`, `ask`, `port`, `mainPort`, `stream` and `channelPrefix`.
+    Each fixture is also type-checked. CI has an `electron` job (Node 24, xvfb) that runs
+    `bun run test:electron`; `CLAUDE.md` and the README say how to run it.
+  - Two bugs found, recorded as `it.fails` scenarios and new tasks: **T76** (port channels never pair
+    while `isLoading()` is true, so connect-before-load, connect-after-`loadURL` and reload are all
+    dead; six scenarios) and **T77** (`ask` on a destroyed `BrowserWindow` throws a `TypeError`).
+  - Behaviors confirmed in real Electron, now asserted: a thrown custom error reaches the page as a
+    plain object with `name`, `message`, `code` and `data`; an `Error` thrown by an `ask` responder
+    loses its `code` (so the README's advice to throw a plain object holds); an omitted optional
+    parameter arrives as `undefined`; `for await` works on a stream through `contextBridge`.

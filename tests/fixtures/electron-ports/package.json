@@ -1,0 +1,9 @@
+{
+   "name": "fixture-electron-ports",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

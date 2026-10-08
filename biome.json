@@ -146,6 +146,20 @@
          }
       },
       {
+         "includes": ["tests/test_electron/**", "tests/utils/electron-*"],
+         "linter": {
+            "rules": {
+               "performance": {
+                  "noAwaitInLoops": "off"
+               },
+               "suspicious": {
+                  "useAwait": "off",
+                  "noEmptyBlockStatements": "off"
+               }
+            }
+         }
+      },
+      {
          "includes": ["tests/fixtures/stream-channels/**", "tests/test_e2e/streams.test.ts"],
          "linter": {
             "rules": {
