@@ -55,7 +55,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "ipcDataDir": "src/autoipc",
          "codeIndent": 3,
          "rawErrors": false,
-         "channelPrefix": "autoipc:"
+         "channelPrefix": "autoipc:",
+         "timeoutMs": 0
       }
    }
 }
@@ -72,6 +73,8 @@ Config explanation:
    that `validateSender`, `onRejected` and the errors receive. Set it to `""` to turn the prefix off.
    It can contain letters, digits and `_ . : / @ # -`, up to 64 characters. It separates channel names
    and is not a security measure: restrict who can call a channel with `allowedOrigins`.
+ - `timeoutMs` - The default time in milliseconds after which the promise of an `invoke` is rejected
+   with an `IpcTimeoutError`. `0`, the default, waits for ever. See [Timeouts](#timeouts).
 
 
 ### Getting Started
@@ -719,6 +722,35 @@ types, as `NotFoundError` above does with `name = "NotFoundError"`, to tell them
 
 Set `rawErrors` to `true` in the config to turn all of this off: handlers then answer with their value
 and Electron reports their errors as it always did.
+
+#### Timeouts
+
+A handler that never answers leaves the promise of `ipc.<name>.invoke` pending for ever. Give a
+channel a time limit with `timeoutMs`, or set a default for all `invoke` channels in the config:
+
+```typescript
+export default defineChannels({
+   exportAll: invoke<() => Promise<string>>({ timeoutMs: 30_000 }),
+   // `0` turns the timeout off for this channel, also when the config sets a default.
+   waitForUser: invoke<() => Promise<boolean>>({ timeoutMs: 0 }),
+});
+```
+
+When the time has passed without a reply, the preload script rejects the promise with a plain object,
+like the other errors of the library, and `window.d.ts` documents it as `IpcTimeoutError`:
+
+```typescript
+catch (error) {
+   const failure = error as IpcError<IpcTimeoutError>;
+   if (failure.code === "IPC_TIMEOUT") { /* ... */ }
+}
+```
+
+Only the wait of the page ends. The handler in the main process keeps running, since it cannot be
+stopped from the renderer, and its late reply is dropped. The option takes a non-negative integer
+literal and applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
+`invokeWith`. With `rawErrors`, the timeout still rejects with this object, while the errors of the
+handlers stay Electron's.
 
 #### Migrating from 0.2
 

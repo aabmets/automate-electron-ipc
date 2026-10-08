@@ -1,0 +1,10 @@
+{
+   "name": "fixture-invoke-timeouts",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "timeoutMs": 2000
+      }
+   }
+}

@@ -294,7 +294,7 @@ const VERBS = new Map<string, VerbInfo>([
       {
          kind: "Unicast",
          direction: "RendererToMain",
-         options: ["allowedOrigins", "validate"],
+         options: ["allowedOrigins", "validate", "timeoutMs"],
          errors: true,
       },
    ],
@@ -1040,6 +1040,21 @@ function parseMaxQueue(value: AstNode, fail: (message: string) => Error, src: So
 }
 
 /**
+ * Resolves the `timeoutMs` option: a non-negative integer literal.
+ */
+function parseTimeoutMs(value: AstNode, fail: (message: string) => Error, src: Source): number {
+   const expected = "option 'timeoutMs' must be a non-negative integer literal";
+   if (value.type !== "NumericLiteral") {
+      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`);
+   } else if (!Number.isInteger(value.value)) {
+      throw fail(`${expected}, found '${value.value}'.`);
+   } else if (!Number.isSafeInteger(value.value)) {
+      throw fail(`option 'timeoutMs' cannot exceed ${Number.MAX_SAFE_INTEGER}.`);
+   }
+   return value.value;
+}
+
+/**
  * Parses the value of one config option, as the entry of the config that it sets.
  */
 function parseOption(
@@ -1052,6 +1067,8 @@ function parseOption(
       return { validate: parseValidatorRef(value, fail, ctx) };
    } else if (key === "maxQueue") {
       return { maxQueue: parseMaxQueue(value, fail, ctx.src) };
+   } else if (key === "timeoutMs") {
+      return { timeoutMs: parseTimeoutMs(value, fail, ctx.src) };
    } else if (ARRAY_OPTIONS.has(key)) {
       const elements: (AstNode | undefined)[] =
          value.type === "ArrayExpression" ? value.elements : [];

@@ -211,6 +211,24 @@ describe("validateOptionalConfig, rawErrors", () => {
    });
 });
 
+describe("validateOptionalConfig, timeoutMs", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+
+   it.each([0, 1, 30_000, Number.MAX_SAFE_INTEGER, undefined])("accepts %s", (timeoutMs) => {
+      expect(() => vld.validateOptionalConfig({ ...config, timeoutMs })).not.toThrowError();
+   });
+
+   it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "10", null])(
+      "rejects %j, since it is not a non-negative integer",
+      (timeoutMs) => {
+         const value = timeoutMs as unknown as number;
+         expect(() => vld.validateOptionalConfig({ ...config, timeoutMs: value })).toThrowError(
+            /timeoutMs/,
+         );
+      },
+   );
+});
+
 describe("validateOptionalConfig, channelPrefix", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (channelPrefix: unknown) =>
@@ -815,6 +833,51 @@ describe("validateChannelSpecs, maxQueue", () => {
          ["MainToRenderer", "Unicast"],
       ] as const) {
          expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/maxQueue/);
+      }
+   });
+});
+
+describe("validateChannelSpecs, timeoutMs", () => {
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      timeoutMs: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      return [{ ...spec, timeoutMs } as Partial<t.ChannelSpec>];
+   };
+
+   it.each([0, 1, 30_000, Number.MAX_SAFE_INTEGER, undefined])(
+      "accepts %s on invoke channels",
+      (timeoutMs) => {
+         const specs = make("RendererToMain", "Unicast", timeoutMs);
+         expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      },
+   );
+
+   it.each([-1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2])(
+      "rejects %s and names the channel and the file",
+      (timeoutMs) => {
+         const specs = make("RendererToMain", "Unicast", timeoutMs);
+         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+            /Schema file 'schema\.ts': Channel 'vitestChannel_0': timeoutMs must be a non-negative integer/,
+         );
+      },
+   );
+
+   it("rejects a value that is not a number", () => {
+      const specs = make("RendererToMain", "Unicast", "10");
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/timeoutMs/);
+   });
+
+   it("rejects timeoutMs on the channels that do not wait for a reply", () => {
+      for (const [direction, kind] of [
+         ["RendererToMain", "Broadcast"],
+         ["MainToRenderer", "Broadcast"],
+         ["MainToRenderer", "Unicast"],
+         ["RendererToRenderer", "Port"],
+      ] as const) {
+         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/timeoutMs/);
       }
    });
 });

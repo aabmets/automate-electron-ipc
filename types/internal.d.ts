@@ -27,6 +27,12 @@ export interface IPCOptionalConfig {
     * The names in the generated API stay as they are in the schema. `""` turns the prefix off.
     */
    channelPrefix?: string;
+   /**
+    * The default time in milliseconds after which the promise of an `invoke` is rejected with an
+    * `IpcTimeoutError`, when the handler has not answered. `0`, the default, waits for ever. The
+    * `timeoutMs` option of a channel overrides it.
+    */
+   timeoutMs?: number;
 }
 
 export interface IPCResolvedConfig {
@@ -40,6 +46,7 @@ export interface IPCResolvedConfig {
    codeIndent: number;
    rawErrors: boolean;
    channelPrefix: string;
+   timeoutMs: number;
    ipcSchema: {
       path: string;
       stats: Stats | null;
@@ -165,6 +172,12 @@ export interface ChannelSpec {
     * `Infinity`. Absent means the default of the generated code.
     */
    maxQueue?: number;
+   /**
+    * The time in milliseconds after which an `invoke` channel rejects with an `IpcTimeoutError`.
+    * `0` means no timeout, also where the config sets a default. Absent means the default of the
+    * config.
+    */
+   timeoutMs?: number;
 }
 
 export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };

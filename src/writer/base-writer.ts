@@ -104,6 +104,14 @@ export class BaseWriter {
       return `'${this.config.channelPrefix ?? ""}${name}${suffix}'`;
    }
 
+   /**
+    * The time after which an `invoke` channel rejects with an `IpcTimeoutError`: the option of the
+    * channel, or else the default of the config. `0` means no timeout.
+    */
+   protected getTimeoutMs(spec: t.ChannelSpec): number {
+      return spec.timeoutMs ?? this.config.timeoutMs ?? 0;
+   }
+
    protected getCodeIndents(): string[] {
       return [1, 2, 3, 4, 5, 6].map((value) => {
          return " ".repeat(this.config.codeIndent).repeat(value);

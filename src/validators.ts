@@ -45,6 +45,13 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
                : "channelPrefix can contain only letters, digits and _ . : / @ # -";
          }),
       ),
+      timeoutMs: optional(
+         refine(number(), "timeout", (value) =>
+            Number.isSafeInteger(value) && value >= 0
+               ? true
+               : "timeoutMs must be a non-negative integer",
+         ),
+      ),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";
@@ -186,6 +193,7 @@ function getChannelSpecStruct(
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
+      timeoutMs: kind === "Unicast" && !asking ? optional(number()) : optional(never()),
    });
 }
 
@@ -232,6 +240,20 @@ function validateMaxQueue(spec: Partial<t.ChannelSpec>, file?: string): void {
       throw new Error(
          `${where}Channel '${spec.name}': maxQueue must be a non-negative integer or Infinity, ` +
             `found ${value}.`,
+      );
+   }
+}
+
+/**
+ * Throws if `timeoutMs` is not a non-negative safe integer. The parser reports the same for the
+ * schema file, so this guards the specs that did not come from it.
+ */
+function validateTimeoutMs(spec: Partial<t.ChannelSpec>, file?: string): void {
+   const value = spec.timeoutMs;
+   if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      const where = file === undefined ? "" : `Schema file '${file}': `;
+      throw new Error(
+         `${where}Channel '${spec.name}': timeoutMs must be a non-negative integer, found ${value}.`,
       );
    }
 }
@@ -308,6 +330,7 @@ export function validateChannelSpecs(
       }
       validateChannelSpecWithStruct(spec);
       validateMaxQueue(spec, file);
+      validateTimeoutMs(spec, file);
       validateCloneIssues(spec, file);
 
       if (spec?.name) {

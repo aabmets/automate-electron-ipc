@@ -76,6 +76,7 @@ describe("getResolvedConfig", () => {
          codeIndent: 3,
          rawErrors: false,
          channelPrefix: "autoipc:",
+         timeoutMs: 0,
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -96,6 +97,7 @@ describe("getResolvedConfig", () => {
                codeIndent: 4,
                rawErrors: true,
                channelPrefix: "",
+               timeoutMs: 15000,
             },
          },
       });
@@ -109,6 +111,7 @@ describe("getResolvedConfig", () => {
          codeIndent: 4,
          rawErrors: true,
          channelPrefix: "",
+         timeoutMs: 15000,
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,

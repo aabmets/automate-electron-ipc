@@ -91,10 +91,16 @@ export type ArgumentsSchema<S extends ChannelSignature> = [S] extends [never]
  *    `import { getUserArgs } from "./validators"`. The generated main bindings validate the
  *    arguments that the renderer sent before they call the handler, and reject the call with an
  *    `IpcValidationError` when they are invalid. The handler receives the validated output.
+ * @property timeoutMs - A non-negative integer literal. After this many milliseconds without a
+ *    reply, the promise of `ipc.<name>.invoke` is rejected with an `IpcTimeoutError`, which is
+ *    the plain object `{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is
+ *    not stopped, and its late reply is dropped. `0` turns the timeout off for this channel,
+ *    also when the `timeoutMs` of the `autoipc` config in `package.json` sets a default.
  */
 export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
+   timeoutMs?: number;
 }
 
 /**

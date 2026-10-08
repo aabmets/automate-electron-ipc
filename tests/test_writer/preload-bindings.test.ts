@@ -268,6 +268,108 @@ describe("PreloadBindingsWriter", () => {
       });
    });
 
+   describe("invoke timeouts", () => {
+      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+      const other = { name: "getOther", kind: "Unicast", direction: "RendererToMain" } as const;
+      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = async (
+         channels: shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("generates nothing for a channel without a timeout", async () => {
+         const output = await render([unicast]);
+
+         expect(output).not.toContain("withTimeout");
+         expect(output).not.toContain("IpcTimeoutError");
+         expect(output).toBe(await render([unicast], { timeoutMs: 0 }));
+      });
+
+      it("races the invoke of a channel with the timeoutMs option", async () => {
+         const output = await render([{ ...unicast, timeoutMs: 500 }, other]);
+
+         expect(output).toContain(
+            "const result = await withTimeout('getIt', 500, ipcRenderer.invoke('getIt', ...args));",
+         );
+         expect(output).toContain("const result = await ipcRenderer.invoke('getOther', ...args);");
+         expect(output).toContain("function withTimeout<T>(channel: string, timeoutMs: number");
+      });
+
+      it("rejects with the plain object of the timeout error, not with an Error", async () => {
+         const output = await render([{ ...unicast, timeoutMs: 500 }]);
+
+         expect(output).toContain(
+            "reject({ name: 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' });",
+         );
+         expect(output).not.toContain("new Error");
+      });
+
+      it("clears the timer when the call settles, and caps it at what a timer holds", async () => {
+         const output = await render([{ ...unicast, timeoutMs: 500 }]);
+
+         expect(output.match(/clearTimeout\(timer\)/g)).toHaveLength(2);
+         expect(output).toContain("Math.min(timeoutMs, 2147483647)");
+      });
+
+      it("applies the timeout of the config to every invoke", async () => {
+         const output = await render([unicast, other, broadcast], { timeoutMs: 2500 });
+
+         expect(output).toContain(
+            "withTimeout('getIt', 2500, ipcRenderer.invoke('getIt', ...args))",
+         );
+         expect(output).toContain(
+            "withTimeout('getOther', 2500, ipcRenderer.invoke('getOther', ...args))",
+         );
+         expect(output).toContain("send: (...args: any[]) => ipcRenderer.send('sendIt', ...args),");
+         expect(output.match(/function withTimeout/g)).toHaveLength(1);
+      });
+
+      it("lets the option override the config, and 0 turn the timeout off", async () => {
+         const output = await render(
+            [
+               { ...unicast, timeoutMs: 100 },
+               { ...other, timeoutMs: 0 },
+            ],
+            {
+               timeoutMs: 2500,
+            },
+         );
+
+         expect(output).toContain("withTimeout('getIt', 100,");
+         expect(output).toContain("const result = await ipcRenderer.invoke('getOther', ...args);");
+      });
+
+      it("races the raw invoke when rawErrors is set", async () => {
+         const output = await render([{ ...unicast, timeoutMs: 500 }], { rawErrors: true });
+
+         expect(output).toContain(
+            "invoke: (...args: any[]) => withTimeout('getIt', 500, ipcRenderer.invoke('getIt', ...args)),",
+         );
+      });
+
+      it("times the wire name, which carries the prefix", async () => {
+         const output = await render([{ ...unicast, timeoutMs: 500 }], { channelPrefix: "app:" });
+
+         expect(output).toContain(
+            "withTimeout('getIt', 500, ipcRenderer.invoke('app:getIt', ...args))",
+         );
+      });
+
+      it("ignores the timeout for send and ask channels", async () => {
+         const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
+         const output = await render([broadcast, ask], { timeoutMs: 2500 });
+
+         expect(output).not.toContain("withTimeout");
+      });
+   });
+
    describe("channel prefix", () => {
       const channels = [
          { name: "getIt", kind: "Unicast", direction: "RendererToMain" },

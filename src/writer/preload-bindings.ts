@@ -67,6 +67,7 @@ export class PreloadBindingsWriter extends BaseWriter {
                .map((spec) => this.getPortInitializer(spec)),
          );
       }
+      out.push(...this.getTimeoutComponents());
       if (askNames.length > 0 || streamSpecs.length > 0) {
          out.push(this.buildErrorComponents());
       }
@@ -104,7 +105,10 @@ export class PreloadBindingsWriter extends BaseWriter {
     */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
-      const ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ...args)`;
+      let ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ...args)`;
+      if (this.hasTimeout(spec)) {
+         ipcRenderer = `withTimeout('${spec.name}', ${this.getTimeoutMs(spec)}, ${ipcRenderer})`;
+      }
       if (spec.kind === "Unicast" && !this.config.rawErrors) {
          const [, i1, i2, i3] = this.indents;
          const implementation = [
@@ -119,6 +123,57 @@ export class PreloadBindingsWriter extends BaseWriter {
          return this.buildChannel(spec.name, method, implementation);
       }
       return this.buildChannel(spec.name, method, `(...args: any[]) => ${ipcRenderer}`);
+   }
+
+   /** `withTimeout`, if any channel needs it. */
+   private getTimeoutComponents(): string[] {
+      const used = this.pfsArray.some((parsed) =>
+         parsed.specs.channelSpecArray.some((spec) => this.hasTimeout(spec)),
+      );
+      return used ? [this.buildTimeoutComponents()] : [];
+   }
+
+   /** Whether the promise of an `invoke` channel is rejected after a timeout. */
+   private hasTimeout(spec: t.ChannelSpec): boolean {
+      return (
+         spec.kind === "Unicast" &&
+         spec.direction === "RendererToMain" &&
+         this.getTimeoutMs(spec) > 0
+      );
+   }
+
+   /**
+    * `withTimeout`, which races the promise of an `ipcRenderer.invoke` against a timer. When the
+    * timer wins, the promise of the page is rejected with the plain object
+    * `{ name: 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' }`, like the other errors of the
+    * library, since contextBridge does not keep the fields of an `Error`. The handler in the main
+    * process cannot be stopped, and its late reply is dropped. The timer is cleared as soon as the
+    * reply arrives, and does not keep the delay above what a timer can hold.
+    */
+   private buildTimeoutComponents(): string {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "",
+         "function withTimeout<T>(channel: string, timeoutMs: number, call: Promise<T>): Promise<T> {",
+         `${i1}return new Promise<T>((resolve, reject) => {`,
+         `${i2}const timer = setTimeout(() => {`,
+         `${i3}const message = \`The channel '\${channel}' did not answer within \${timeoutMs} ms\`;`,
+         `${i3}reject({ name: 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' });`,
+         `${i2}}, Math.min(timeoutMs, 2147483647));`,
+         `${i2}call.then(`,
+         `${i3}(value) => {`,
+         `${i3}${i1}clearTimeout(timer);`,
+         `${i3}${i1}resolve(value);`,
+         `${i3}},`,
+         `${i3}(error: unknown) => {`,
+         `${i3}${i1}clearTimeout(timer);`,
+         `${i3}${i1}reject(error);`,
+         `${i3}},`,
+         `${i2});`,
+         `${i1}});`,
+         "}",
+         "",
+      ].join("\n");
    }
 
    /**

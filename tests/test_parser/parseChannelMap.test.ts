@@ -744,6 +744,51 @@ describe("parseChannelMapModule, error types", () => {
    });
 });
 
+describe("parseChannelMapModule, timeoutMs", () => {
+   it("reads a non-negative integer literal on invoke", () => {
+      for (const [text, value] of [
+         ["0", 0],
+         ["500", 500],
+         ["1e3", 1000],
+         ["(5)", 5],
+      ] as const) {
+         const spec = parseOne(`chan: invoke<(a: string) => void>({ timeoutMs: ${text} })`);
+         expect(spec.timeoutMs).toBe(value);
+      }
+   });
+
+   it("reads the option of the alternative form", () => {
+      const spec = parseOne("chan: invoke({ timeoutMs: 7 }) as (a: string) => void");
+      expect(spec.timeoutMs).toBe(7);
+   });
+
+   it("leaves the option out when it is not given, so that the config default applies", () => {
+      expect(parseOne("chan: invoke<() => void>()")).not.toHaveProperty("timeoutMs");
+      expect(parseOne("chan: invoke<() => void>({})")).not.toHaveProperty("timeoutMs");
+   });
+
+   it.each(["-1", "1.5", "1e400", "9007199254740993", "+1", "NaN", "Infinity", '"10"', "limit"])(
+      "rejects %s, naming the channel",
+      (text) => {
+         const message = parseError(
+            `export default defineChannels({ chan: invoke<() => void>({ timeoutMs: ${text} }) });`,
+         );
+         expect(message).toMatch(/chan/);
+         expect(message).toMatch(/timeoutMs/);
+      },
+   );
+
+   it.each(["send", "stream", "emit", "ask", "port", "mainPort"])(
+      "rejects the option on %s, which has no reply to wait for",
+      (verb) => {
+         const message = parseError(
+            `export default defineChannels({ chan: ${verb}<() => void>({ timeoutMs: 5 }) });`,
+         );
+         expect(message).toMatch(/option 'timeoutMs' is not supported by/);
+      },
+   );
+});
+
 describe("parseChannelMapModule, maxQueue", () => {
    it.each(["port", "mainPort"])("reads a non-negative integer literal on %s", (verb) => {
       for (const [text, value] of [

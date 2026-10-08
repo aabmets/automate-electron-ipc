@@ -19,6 +19,8 @@ interface ChannelEntry {
    throws?: boolean;
    /** Whether the channel has an overflow callback, which uses the types of the overflow. */
    overflows?: boolean;
+   /** Whether the promise of the channel can be rejected with an `IpcTimeoutError`. */
+   times?: boolean;
    /** Whether the channel returns an `IpcStream`. */
    streams?: boolean;
    /** The methods of the channel, one per line, starting with a newline. */
@@ -35,6 +37,7 @@ export class RendererTypesWriter extends BaseWriter {
       return [
          "IpcApi",
          "IpcError",
+         "IpcTimeoutError",
          "IpcPortOverflowInfo",
          "IpcPortOverflowAction",
          "IpcStream",
@@ -132,7 +135,18 @@ export class RendererTypesWriter extends BaseWriter {
               "}",
            ]
          : [];
-      const globals = [`${i0}var ipc: IpcApi;`, ...(errorType ? [errorType] : [])];
+      // The timeout error is declared only if a channel can time out.
+      const timeoutType = channels.some((channel) => channel.times)
+         ? [
+              `${i0}/** The error that the promise of an \`invoke\` is rejected with after its \`timeoutMs\`. */`,
+              `${i0}type IpcTimeoutError = Error & { name: 'IpcTimeoutError'; code: 'IPC_TIMEOUT' };`,
+           ].join("\n")
+         : "";
+      const globals = [
+         `${i0}var ipc: IpcApi;`,
+         ...(errorType ? [errorType] : []),
+         ...(timeoutType ? [timeoutType] : []),
+      ];
       // The types of the overflow callbacks, declared only if a port channel has them.
       const overflowTypes = channels.some((channel) => channel.overflows)
          ? [
@@ -165,12 +179,22 @@ export class RendererTypesWriter extends BaseWriter {
          ipcSignature = `${signatureHead} => Promise<Awaited<${spec.signature.returnType}>>`;
       }
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
-      if (spec.kind === "Broadcast" || this.config.rawErrors) {
+      const times = spec.kind === "Unicast" && this.getTimeoutMs(spec) > 0;
+      if (spec.kind === "Broadcast" || (this.config.rawErrors && !times)) {
          return { name: spec.name, methods: [this.method(method, ipcSignature)] };
       }
-      const errorType = spec.errors ? `IpcError<${spec.errors.definition}>` : "IpcError";
-      const doc = `/** @throws {${errorType}} */`;
-      return { name: spec.name, throws: true, methods: [this.method(method, ipcSignature, doc)] };
+      // With `rawErrors`, only the timeout is an `IpcError`. The errors of the handler stay Electron's.
+      const declared = this.config.rawErrors ? undefined : spec.errors?.definition;
+      const errorType = [declared, times ? "IpcTimeoutError" : undefined]
+         .filter(Boolean)
+         .join(" | ");
+      const doc = `/** @throws {${errorType ? `IpcError<${errorType}>` : "IpcError"}} */`;
+      return {
+         name: spec.name,
+         throws: true,
+         times,
+         methods: [this.method(method, ipcSignature, doc)],
+      };
    }
    /**
     * `ipc.<name>.stream(...args)` returns an `IpcStream` of the chunks, not the iterable that the
