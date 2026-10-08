@@ -31,6 +31,6 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     names of `main.ts` when a port channel exists, and `Function` for a `mainPort` channel.
   - Deviation: no new `window.d.ts` shape, and no main-side aggregate (`onConnection`, broadcast to
     all connections): main creates every connection, so it holds the handles itself.
-  - Not done: the queue is unbounded. Tests use the real `MessageChannel` of Node, wrapped as a
-    `MessagePortMain`, for a round trip between the generated scripts, and fakes elsewhere; nothing
-    was run in Electron.
+  - Not done: the queue is unbounded (T73 bounds it). Tests use the real `MessageChannel` of Node,
+    wrapped as a `MessagePortMain`, for a round trip between the generated scripts, and fakes
+    elsewhere; nothing was run in Electron.

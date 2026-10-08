@@ -31,5 +31,5 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `onClose` keep any number of subscribers with their own disposers (so the same callback twice is
     two subscriptions); a throwing subscriber is reported to `console.error` and does not stop the
     others. A replaced port is closed without `onClose`. `on` returns a disposer now.
-  - Not done: the queue is unbounded. Tests use the real `MessageChannel` of Node for the preload
-    script and fakes for the main process; nothing was run in Electron.
+  - Not done: the queue is unbounded (T73 bounds it). Tests use the real `MessageChannel` of Node
+    for the preload script and fakes for the main process; nothing was run in Electron.
