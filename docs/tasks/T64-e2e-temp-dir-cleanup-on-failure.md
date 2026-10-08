@@ -8,4 +8,6 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   the test never receives the project handle, so the temp dir is never deleted.
 - **Scope:** `runFixture` deletes its temp dir before rethrowing an error from the generator.
 - **Tests:** a harness test that a failing fixture leaves no temp dir behind.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `runFixture` now deletes the temp dir on any failure after creating it,
+  not only a generator error: a missing fixture or manifest, or an unreadable output file, is
+  covered too. The harness tests are in `tests/test_e2e/e2eUtils.test.ts`.

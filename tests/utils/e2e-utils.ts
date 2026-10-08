@@ -51,38 +51,46 @@ async function listFiles(dir: string): Promise<string[]> {
 /**
  * Copies the fixture project into a temp dir, runs `ipcAutomation` from inside it, so that
  * the project root is resolved from the copy, and reads back the generated files.
+ * If any step fails, the temp dir is deleted before the error is rethrown.
  */
 export async function runFixture(
    fixture: string,
    options: RunFixtureOptions = {},
 ): Promise<E2EProject> {
    const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
-   await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
-   const dir = path.join(root, options.project ?? ".");
-   const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
-   const ipcDataDir: string = manifest.config.autoipc.ipcDataDir;
-
-   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+   const cleanup = () => fsp.rm(root, { recursive: true, force: true });
    try {
-      await ipcAutomation(path.join(root, options.cwd ?? options.project ?? "."));
-   } finally {
-      warnSpy.mockRestore();
-   }
+      await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
+      const dir = path.join(root, options.project ?? ".");
+      const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
+      const ipcDataDir: string = manifest.config.autoipc.ipcDataDir;
 
-   const read = (name: string) => fsp.readFile(path.join(dir, ipcDataDir, name), "utf8");
-   const generated = {
-      "main.ts": await read("main.ts"),
-      "preload.ts": await read("preload.ts"),
-      "window.d.ts": await read("window.d.ts"),
-   };
-   return {
-      root,
-      dir,
-      ipcDataDir,
-      generated,
-      typecheck: () => typecheckProject(dir, ipcDataDir),
-      cleanup: () => fsp.rm(root, { recursive: true, force: true }),
-   };
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+         await ipcAutomation(path.join(root, options.cwd ?? options.project ?? "."));
+      } finally {
+         warnSpy.mockRestore();
+      }
+
+      const read = (name: string) => fsp.readFile(path.join(dir, ipcDataDir, name), "utf8");
+      const generated = {
+         "main.ts": await read("main.ts"),
+         "preload.ts": await read("preload.ts"),
+         "window.d.ts": await read("window.d.ts"),
+      };
+      return {
+         root,
+         dir,
+         ipcDataDir,
+         generated,
+         typecheck: () => typecheckProject(dir, ipcDataDir),
+         cleanup,
+      };
+   } catch (error) {
+      // The caller never receives the handle of a failed run, so it cannot clean up itself.
+      await cleanup();
+      throw error;
+   }
 }
 
 /** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */
