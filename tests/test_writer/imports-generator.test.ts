@@ -250,6 +250,67 @@ describe("ImportsGenerator", () => {
       });
    });
 
+   describe("qualified names and typeof queries", () => {
+      const pfsOf = (specs: Partial<t.SpecsCollection>): t.ParsedFileSpecs => ({
+         fullPath: "/project/src/autoipc/schema.ts",
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: [],
+            typeSpecArray: [],
+            ...specs,
+         },
+      });
+      const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+
+      // Regression for T54: `Kind.A` was only resolved against namespace imports.
+      it("imports a named import by the head of a qualified name", () => {
+         const pfs = pfsOf({
+            importSpecArray: [{ fromPath: "./kind", customTypes: ["Kind"], namespace: null }],
+         });
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "Kind.A")).toStrictEqual(
+            'import type { Kind } from "./kind";',
+         );
+         expect(ig.getDeclaration(pfs, "Kind.B")).toBeNull();
+         expect(ig.getDeclaration(pfs, "Kind")).toBeNull();
+      });
+
+      it("imports an aliased named import by the head of a qualified name", () => {
+         const pfs = pfsOf({
+            importSpecArray: [{ fromPath: "./kind", customTypes: ["Kind as K"], namespace: null }],
+         });
+         expect(generator().getDeclaration(pfs, "K.A.B")).toStrictEqual(
+            'import type { Kind as K } from "./kind";',
+         );
+      });
+
+      it("imports a local type by the head of a qualified name", () => {
+         const pfs = pfsOf({
+            typeSpecArray: [
+               { name: "Kind", kind: "enum" as t.TypeKind, generics: null, isExported: true },
+            ],
+         });
+         expect(generator().getDeclaration(pfs, "Kind.A")).toStrictEqual(
+            'import type { Kind } from "./schema";',
+         );
+      });
+
+      it("imports a namespace that is used without a member", () => {
+         const pfs = pfsOf({
+            importSpecArray: [{ fromPath: "./ns", customTypes: [], namespace: "NS" }],
+         });
+         expect(generator().getDeclaration(pfs, "NS")).toStrictEqual(
+            'import type * as NS from "./ns";',
+         );
+      });
+
+      it("imports nothing for a head that the schema does not declare", () => {
+         expect(generator().getDeclaration(pfsOf({}), "Missing.A")).toBeNull();
+      });
+   });
+
    describe("namespace imports", () => {
       const nsSpec: t.ImportSpec = { fromPath: "./t", customTypes: [], namespace: "NS" };
       const pfsOf = (extra: Partial<t.SpecsCollection> = {}): t.ParsedFileSpecs => ({

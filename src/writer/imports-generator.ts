@@ -40,11 +40,6 @@ export class ImportsGenerator {
       };
    }
 
-   private splitTypeNamespace(typeName: string): [string | null, string] {
-      const [value1, value2] = typeName.split(".", 2);
-      return value2 ? [value1, value2] : [null, value1];
-   }
-
    /**
     * Turns the path of a source file into an import specifier. Only script extensions are
     * replaced: with NodeNext by the extension of the compiled file, otherwise they are dropped.
@@ -84,19 +79,20 @@ export class ImportsGenerator {
    ): string | null {
       const importSpecArray = parsedFileSpecs.specs.importSpecArray;
       const typeSpecArray = parsedFileSpecs.specs.typeSpecArray;
-      const [nameSpace, customType] = this.splitTypeNamespace(parsedCustomType);
+      // A qualified name such as `Kind.A` or `typeof config.key` is imported through its head.
+      const customType = parsedCustomType.split(".")[0];
 
       // Entries are `Foo`, `Foo as Bar` or `default as Foo`. The local name is what signatures use.
       const localName = (entry: string) => entry.split(" as ").pop();
-      if (nameSpace) {
-         // `NS.Type` is covered by the import of `NS`, whatever the name of `Type` is.
-         const nsSpec = importSpecArray.find((spec) => spec.namespace === nameSpace);
-         if (!nsSpec || this.seenImports.nameSpaces.has(nameSpace)) {
+      // `NS.Type` is covered by the import of `NS`, whatever the name of `Type` is.
+      const nsSpec = importSpecArray.find((spec) => spec.namespace === customType);
+      if (nsSpec) {
+         if (this.seenImports.nameSpaces.has(customType)) {
             return null;
          }
-         this.seenImports.nameSpaces.add(nameSpace);
+         this.seenImports.nameSpaces.add(customType);
          const nsPath = this.resolveImportPath(nsSpec.fromPath, parsedFileSpecs.fullPath);
-         return `import type * as ${nameSpace} from "${nsPath}";`;
+         return `import type * as ${customType} from "${nsPath}";`;
       }
       const importSpec = importSpecArray.find((spec) => {
          return spec.customTypes.some((entry) => localName(entry) === customType);

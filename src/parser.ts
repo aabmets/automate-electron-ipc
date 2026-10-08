@@ -10,6 +10,7 @@
  */
 
 import type {
+   ClassDeclaration,
    ExportDeclaration,
    ExportDefaultDeclaration,
    ImportDeclaration,
@@ -17,8 +18,10 @@ import type {
    ModuleItem,
    Param,
    Span,
+   TsEnumDeclaration,
    TsFunctionType,
    TsInterfaceDeclaration,
+   TsModuleDeclaration,
    TsTypeAliasDeclaration,
 } from "@swc/core";
 import { parseSync } from "@swc/core";
@@ -38,6 +41,9 @@ export interface Source {
 export type TypeDefinitionNode =
    | TsInterfaceDeclaration
    | TsTypeAliasDeclaration
+   | TsEnumDeclaration
+   | TsModuleDeclaration
+   | ClassDeclaration
    | ExportDeclaration
    | ExportDefaultDeclaration;
 
@@ -135,6 +141,8 @@ const BUILTIN_TYPES = new Set([
    "Lowercase",
    "Capitalize",
    "Uncapitalize",
+   // Global namespaces, such as `Intl.DateTimeFormat`.
+   "Intl",
 ]);
 
 /**
@@ -143,6 +151,20 @@ const BUILTIN_TYPES = new Set([
  */
 export function isBuiltinType(typeName: string): boolean {
    return BUILTIN_TYPES.has(typeName);
+}
+
+/** The first name of a possibly qualified name: `Kind` for `Kind.A`. */
+function headOf(name: string): string {
+   return name.split(".")[0];
+}
+
+/** The leftmost identifier of the expression that `typeof` queries. */
+function queryHead(exprName: AstNode): string | null {
+   let current = exprName;
+   while (current.type === "TsQualifiedName") {
+      current = current.left;
+   }
+   return current.type === "Identifier" ? current.value : null;
 }
 
 /**
@@ -178,13 +200,16 @@ export function collectCustomTypes(
    const declared = declaredTypeParams(node);
    const inScope = declared.length > 0 ? new Set([...scope, ...declared]) : scope;
    if (node.type === "TsTypeReference") {
+      // A qualified name such as `Kind.A` is kept whole. Its head is resolved by the writers.
       const typeName = src.text(node.typeName);
-      if (!(isBuiltinType(typeName) || inScope.has(typeName.split(".")[0]))) {
+      const head = headOf(typeName);
+      if (!(isBuiltinType(head) || inScope.has(head))) {
          set.add(typeName);
       }
-   } else if (node.type === "KeyValuePatternProperty") {
-      if (node.value?.type === "Identifier" && !isBuiltinType(node.value.value)) {
-         set.add(node.value.value);
+   } else if (node.type === "TsTypeQuery") {
+      const head = queryHead(node.exprName);
+      if (head && !inScope.has(head)) {
+         set.add(head);
       }
    } else if (node.type === "ImportDeclaration") {
       for (const element of node.specifiers) {
@@ -665,29 +690,36 @@ export function parseTypeDefinitions(
          : item.type === "ExportDefaultDeclaration"
            ? item.decl
            : item
-   ) as TsInterfaceDeclaration | TsTypeAliasDeclaration;
-
-   const kind = new Map([
-      ["TsInterfaceDeclaration", "interface"],
-      ["TsTypeAliasDeclaration", "type"],
-   ]).get(node.type);
+   ) as AstNode;
 
    let generics: string | null = null;
    if (node.typeParams && node.typeParams.parameters.length > 0) {
-      const typeParams = node.typeParams.parameters.map((tp) => src.text(tp)).join(", ");
+      const typeParams = node.typeParams.parameters.map((tp: AstNode) => src.text(tp)).join(", ");
       generics = `<${typeParams}>`;
    }
    array.push({
-      name: node.id.value,
-      kind: kind as t.TypeKind,
+      name: (node.id ?? node.identifier).value,
+      kind: TYPE_KINDS.get(node.type) as t.TypeKind,
       generics,
       isExported,
       ...(item.type === "ExportDefaultDeclaration" ? { isDefault: true } : {}),
    });
 }
 
+const TYPE_KINDS = new Map<string, t.TypeKind>([
+   ["TsInterfaceDeclaration", "interface"],
+   ["TsTypeAliasDeclaration", "type"],
+   ["TsEnumDeclaration", "enum"],
+   ["TsModuleDeclaration", "namespace"],
+   ["ClassDeclaration", "class"],
+]);
+
 function isTypeDefinition(node: AstNode): boolean {
-   return node.type === "TsInterfaceDeclaration" || node.type === "TsTypeAliasDeclaration";
+   if (node.type === "TsModuleDeclaration") {
+      // `declare module "name"` and `declare global` declare no name.
+      return node.id.type === "Identifier" && !node.global;
+   }
+   return TYPE_KINDS.has(node.type);
 }
 
 export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {

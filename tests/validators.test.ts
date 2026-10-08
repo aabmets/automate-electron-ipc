@@ -250,6 +250,13 @@ describe("validateTypeSpecs", () => {
       );
    });
 
+   it("should throw on a non-exported type that a channel uses by a qualified name", () => {
+      const spec = { ...hiddenSpec, kind: "enum" as t.TypeKind };
+      expect(() =>
+         vld.validateTypeSpecs([spec], [channelUsing("VitestInterface.Member")]),
+      ).toThrowError("Type 'VitestInterface' is used by channel 'vitestChannel'");
+   });
+
    it("should accept exported types that a channel uses", () => {
       const spec = { ...hiddenSpec, isExported: true, isDefault: true };
       expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-qualified-names",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

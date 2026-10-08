@@ -75,6 +75,42 @@ describe("parseSpecs", () => {
       );
    });
 
+   it("should parse enums, classes and namespaces as local types", () => {
+      const { typeSpecArray } = parser.parseSpecs({
+         contents: `
+            export enum Kind { A, B }
+            export class Model<T> {}
+            export namespace Shapes { export type Circle = { r: number } }
+            declare namespace Hidden {}
+            declare module "elsewhere" {}
+            declare global { interface Window { x: number } }
+         `,
+         relativePath: "",
+         fullPath: "",
+      });
+      expect(typeSpecArray).toStrictEqual([
+         { name: "Kind", kind: "enum", generics: null, isExported: true },
+         { name: "Model", kind: "class", generics: "<T>", isExported: true },
+         { name: "Shapes", kind: "namespace", generics: null, isExported: true },
+         { name: "Hidden", kind: "namespace", generics: null, isExported: false },
+      ]);
+   });
+
+   it("should reject a non-exported enum that a channel uses by a qualified name", () => {
+      const contents = `
+         import { defineChannels, send } from "automate-electron-ipc";
+
+         enum Kind { A }
+
+         export default defineChannels({
+            setKind: send<(kind: Kind.A) => void>(),
+         });
+      `;
+      expect(() => parser.parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
+         "Type 'Kind' is used by channel 'setKind' and must be exported",
+      );
+   });
+
    it("should mark a default exported interface", () => {
       const { typeSpecArray } = parser.parseSpecs({
          contents: `

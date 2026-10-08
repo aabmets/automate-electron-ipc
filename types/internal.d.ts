@@ -36,7 +36,7 @@ export interface ImportSpec {
    namespace: string | null;
 }
 
-export type TypeKind = "type" | "interface";
+export type TypeKind = "type" | "interface" | "enum" | "class" | "namespace";
 
 export interface TypeSpec {
    name: string;

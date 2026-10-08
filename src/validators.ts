@@ -224,7 +224,9 @@ export function validateTypeSpecs(
       if (spec.isExported) {
          continue;
       }
-      const channel = channelSpecs.find((cs) => cs.signature.customTypes.includes(spec.name));
+      const channel = channelSpecs.find((cs) =>
+         cs.signature.customTypes.some((name) => name.split(".")[0] === spec.name),
+      );
       if (channel) {
          throw new Error(
             `Type '${spec.name}' is used by channel '${channel.name}' and must be exported. ` +

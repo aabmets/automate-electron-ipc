@@ -257,6 +257,30 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
    });
 });
 
+describe("ipcAutomation, qualified names, typeof queries and destructuring", () => {
+   // Regression for T54: `Kind.A` and `typeof config` produced no import. The renamed binding of
+   // a destructured param is covered by the collectCustomTypes unit tests, since TypeScript
+   // rejects such a binding in a function type.
+   it("imports the heads of qualified names and typeof queries", async () => {
+      project = await runFixture("qualified-names");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*";$/gm) ?? [];
+         expect(imports).toContain('import type { Kind } from "./types/kind";');
+         expect(imports).toContain('import type { config } from "./types/config";');
+         expect(imports).toContain('import type { Mode } from "./schema";');
+         expect(imports).toContain('import type * as Shapes from "./types/shapes";');
+         expect(imports).toContain('import type { Options } from "./schema";');
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("qualified-names");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

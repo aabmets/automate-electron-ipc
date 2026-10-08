@@ -146,11 +146,47 @@ describe("collectCustomTypes", () => {
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
-   it("should collect custom types from within destructured objects", () => {
+   // Regression for T54: `{ abc: renamed }` binds `renamed`, it is not a type annotation.
+   it("should not collect the bindings of destructured params", () => {
       const customTypes = collectCustomTypes(`
-         const x = type as ({ abc: CustomType }) => void
+         const x = type as ({ abc: renamed, def }: CustomType) => void
       `);
       expect(customTypes).toStrictEqual(new Set(["CustomType"]));
+   });
+
+   it("should collect qualified names whole", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (a: Kind.A, b: NS.Inner.Deep[]) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["Kind.A", "NS.Inner.Deep"]));
+   });
+
+   it("should not collect qualified names of global namespaces", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (a: Intl.DateTimeFormat) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set());
+   });
+
+   it("should collect the head of a typeof query", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (a: typeof config, b: typeof ns.sub.value, c: keyof typeof table) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set(["config", "ns", "table"]));
+   });
+
+   it("should not collect a typeof query of a type parameter", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as <T>(a: T, b: typeof T) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set());
+   });
+
+   it("should not collect a typeof import query", () => {
+      const customTypes = collectCustomTypes(`
+         const x = type as (a: typeof import("./mod")) => void;
+      `);
+      expect(customTypes).toStrictEqual(new Set());
    });
 
    it("should collect custom types from destructured object literal typehints", () => {

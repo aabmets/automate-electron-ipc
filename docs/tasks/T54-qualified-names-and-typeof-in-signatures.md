@@ -13,4 +13,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** resolve the head of a qualified name against namespace imports, named imports and
   local types. Collect `typeof` query heads. Stop collecting destructuring bindings.
 - **Tests:** parser and imports-generator unit tests, plus an e2e fixture that type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Writers resolve the head of a qualified name; local enums, classes and namespaces are now recorded as type specs (`TypeKind` extended) so `Kind.A` works for local declarations. The renamed-binding case is covered by unit tests only, since TypeScript rejects a renamed binding in a function type (TS2842). Follow-up: `typeof` of a value declared in the schema file itself (not imported) is not resolved, and `export default class` is not recorded.
