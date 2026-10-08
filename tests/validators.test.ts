@@ -881,3 +881,116 @@ describe("validateChannelSpecs, timeoutMs", () => {
       }
    });
 });
+
+describe("validateOptionalConfig, utilityBindingsPath", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+
+   it.each(["utility.ts", "src/worker/ipc.ts", "worker/ipc.mts", "worker/ipc.cts", undefined])(
+      "accepts %s",
+      (utilityBindingsPath) => {
+         expect(() =>
+            vld.validateOptionalConfig({ ...config, utilityBindingsPath }),
+         ).not.toThrowError();
+      },
+   );
+
+   it("rejects an absolute path", () => {
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, utilityBindingsPath: "/srv/ipc.ts" }),
+      ).toThrowError("utilityBindingsPath must be relative to the project root");
+   });
+
+   it.each(["worker/ipc", "worker/ipc.js", "worker/ipc.d.ts", ""])(
+      "rejects %j, since it is not the path of a .ts file",
+      (utilityBindingsPath) => {
+         expect(() => vld.validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
+            "utilityBindingsPath must be the path of a .ts file",
+         );
+      },
+   );
+
+   it("rejects a value which is not a string", () => {
+      const value = 5 as unknown as string;
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, utilityBindingsPath: value }),
+      ).toThrowError(/utilityBindingsPath/);
+   });
+});
+
+describe("validateChannelSpecs, utility channels", () => {
+   const generate = (direction: t.ChannelDirection, kind: t.ChannelKind, returnType = "void") =>
+      new ChannelSpecGenerator().generate(direction, kind, returnType);
+
+   it.each(["MainToUtility", "UtilityToMain"] as const)(
+      "accepts a Unicast channel %s with any return type, and a Broadcast one which returns void",
+      (direction) => {
+         for (const returnType of ["void", "number", "Promise<string>"]) {
+            expect(() =>
+               vld.validateChannelSpecs([generate(direction, "Unicast", returnType)]),
+            ).not.toThrowError();
+         }
+         for (const returnType of ["void", "Promise<void>"]) {
+            expect(() =>
+               vld.validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
+            ).not.toThrowError();
+         }
+      },
+   );
+
+   it("rejects a Broadcast channel to the utility process which returns a value", () => {
+      expect(() =>
+         vld.validateChannelSpecs([generate("MainToUtility", "Broadcast", "string")]),
+      ).toThrowError("Channel return type 'string' not allowed when channel kind is 'Broadcast'");
+   });
+
+   it.each(["Port", "Stream"] as const)("rejects a %s channel with a utility direction", (kind) => {
+      for (const direction of ["MainToUtility", "UtilityToMain"] as const) {
+         const spec = generate(direction, kind);
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `Channel kind '${kind}' is not allowed when channel direction is '${direction}'.`,
+         );
+      }
+   });
+
+   it("rejects the direction of a utility channel for the other verbs", () => {
+      for (const [direction, kind] of [
+         ["RendererToMain", "Unicast"],
+         ["MainToRenderer", "Broadcast"],
+         ["RendererToRenderer", "Broadcast"],
+      ] as const) {
+         expect(() => vld.validateChannelSpecs([generate(direction, kind)])).not.toThrowError(
+            /Utility/,
+         );
+      }
+      const wrong = { ...generate("MainToUtility", "Unicast"), direction: "ToUtility" };
+      expect(() => vld.validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
+         /direction/,
+      );
+   });
+
+   it("rejects the options of the other verbs", () => {
+      const ref = { name: "args", exported: "args", fromPath: "./v" };
+      for (const kind of ["Unicast", "Broadcast"] as const) {
+         for (const extra of [
+            { errors: { definition: "Error", customTypes: [] } },
+            { allowedOrigins: ["app://."] },
+            { validate: ref },
+            { trigger: "focus" },
+            { maxQueue: 5 },
+            { timeoutMs: 5 },
+         ]) {
+            const [key] = Object.keys(extra);
+            const spec = { ...generate("MainToUtility", kind), ...extra };
+            expect(() => vld.validateChannelSpecs([spec])).toThrowError(new RegExp(key));
+         }
+      }
+   });
+
+   it("keeps the names of the utility channels unique among all channels", () => {
+      const spec = generate("UtilityToMain", "Unicast");
+      const clash = { ...generate("RendererToMain", "Broadcast"), name: spec.name };
+      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+         `Channel name '${spec.name}' is not unique across application.`,
+      );
+   });
+});

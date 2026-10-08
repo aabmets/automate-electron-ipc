@@ -80,6 +80,7 @@ describe("getResolvedConfig", () => {
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
+         utilityBindingsFilePath: `${DEFAULT_DIR}/utility.ts`,
          ipcSchema: {
             path: `${DEFAULT_DIR}/schema.ts`,
          },
@@ -119,6 +120,36 @@ describe("getResolvedConfig", () => {
             path: `${dir}/schema`,
          },
       });
+   });
+
+   describe("path of the utility bindings", () => {
+      const resolve = async (autoipc: Record<string, unknown>) => {
+         mocks.mockFspStatsByPath({});
+         mocks.mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it("is next to the other generated files unless the config says otherwise", async () => {
+         const config = await resolve({ ipcDataDir: "src/ipc" });
+         expect(config.utilityBindingsFilePath).toBe("/home/user/project/src/ipc/utility.ts");
+      });
+
+      it("is resolved from the project root", async () => {
+         const config = await resolve({ utilityBindingsPath: "src/worker/generated/ipc.ts" });
+         expect(config.utilityBindingsFilePath).toBe(
+            "/home/user/project/src/worker/generated/ipc.ts",
+         );
+      });
+
+      it.each(["main.ts", "preload.ts"])(
+         "refuses the path of the generated file %s",
+         async (name) => {
+            const path = `src/autoipc/${name}`;
+            await expect(resolve({ utilityBindingsPath: path })).rejects.toThrowError(
+               `The config 'utilityBindingsPath' ('${path}') is the path of another generated file.`,
+            );
+         },
+      );
    });
 
    describe("choice of the schema path", () => {

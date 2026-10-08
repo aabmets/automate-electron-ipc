@@ -5,6 +5,7 @@
  *
  * @example
  * import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";
+ * // Channels to a utility process: callUtility, notifyUtility, callMain, notifyMain.
  *
  * export default defineChannels({
  *    getUser: invoke<(id: number) => Promise<User>>(),
@@ -156,6 +157,14 @@ export interface MainPortConfig<_S extends ChannelSignature = ChannelSignature> 
  * Options of `ask` channels. There are none yet.
  */
 export interface AskConfig<_S extends ChannelSignature = ChannelSignature> {
+   [option: string]: never;
+}
+
+/**
+ * Options of the channels between the main process and a utility process
+ * (`callUtility`, `notifyUtility`, `callMain` and `notifyMain`). There are none yet.
+ */
+export interface UtilityConfig<_S extends ChannelSignature = ChannelSignature> {
    [option: string]: never;
 }
 
@@ -336,4 +345,63 @@ export function port<S extends ChannelSignature = never>(
  */
 export function mainPort<S extends ChannelSignature = never>(
    config?: MainPortConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * Request and response from the main process to a utility process (`utilityProcess.fork`), such
+ * as a query to a SQLite database that the child owns. The main process calls
+ * `ipc.<name>.invoke(child, ...args)`, where `child` is the `UtilityProcess`, and gets a promise
+ * of the answer. The child registers its single handler with `ipc.<name>.handle(callback)` in the
+ * generated `utility.ts`, which returns a function that removes it. The signature may return any
+ * value, or a promise of it.
+ *
+ * The promise is rejected with an `IpcUtilityError` that carries the `name`, `message`, `code`
+ * and `data` of what the handler threw. The library itself uses the codes `IPC_UTILITY_EXITED`
+ * (the child exited, also while the call was pending), `IPC_UTILITY_NO_HANDLER`,
+ * `IPC_UTILITY_UNSENDABLE` and `IPC_UTILITY_INVALID_REPLY`.
+ *
+ * @example
+ * indexFile: callUtility<(path: string) => Promise<number>>()
+ */
+export function callUtility<S extends ChannelSignature = never>(
+   config?: UtilityConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * One-way message from the main process to a utility process. No response is returned. The
+ * signature must return `void` or `Promise<void>`. The main process calls
+ * `ipc.<name>.send(child, ...args)`, and the child listens with `ipc.<name>.on(callback)` or
+ * `once(callback)` in the generated `utility.ts`.
+ *
+ * @example
+ * setLogLevel: notifyUtility<(level: "debug" | "info") => void>()
+ */
+export function notifyUtility<S extends ChannelSignature = never>(
+   config?: UtilityConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * Request and response from a utility process to the main process. The child calls
+ * `ipc.<name>.invoke(...args)` in the generated `utility.ts` and gets a promise of the answer. The
+ * main process registers a handler per child with `ipc.<name>.handle(child, callback)`, which
+ * returns a function that removes it. The promise is rejected like that of `callUtility`, with
+ * an `IpcUtilityError`.
+ *
+ * @example
+ * getSetting: callMain<(key: string) => Promise<string | undefined>>()
+ */
+export function callMain<S extends ChannelSignature = never>(
+   config?: UtilityConfig<NoInfer<S>>,
+): ChannelResult<S>;
+
+/**
+ * One-way message from a utility process to the main process. The signature must return `void`
+ * or `Promise<void>`. The child calls `ipc.<name>.send(...args)`, and the main process listens
+ * per child with `ipc.<name>.on(child, callback)` or `once(child, callback)`.
+ *
+ * @example
+ * progress: notifyMain<(done: number, total: number) => void>()
+ */
+export function notifyMain<S extends ChannelSignature = never>(
+   config?: UtilityConfig<NoInfer<S>>,
 ): ChannelResult<S>;

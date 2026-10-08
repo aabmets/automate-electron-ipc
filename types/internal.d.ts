@@ -33,6 +33,12 @@ export interface IPCOptionalConfig {
     * `timeoutMs` option of a channel overrides it.
     */
    timeoutMs?: number;
+   /**
+    * The path of the generated file for utility processes, relative to the project root. Defaults
+    * to `utility.ts` in `ipcDataDir`. The file is written only if the schema has a channel to a
+    * utility process.
+    */
+   utilityBindingsPath?: string;
 }
 
 export interface IPCResolvedConfig {
@@ -41,6 +47,7 @@ export interface IPCResolvedConfig {
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
+   utilityBindingsFilePath: string;
    projectUsesNodeNext: boolean;
    ipcDataDir: string;
    codeIndent: number;
@@ -143,7 +150,12 @@ export interface ErrorsSpec {
 }
 
 export type ChannelKind = "Broadcast" | "Unicast" | "Port" | "Stream";
-export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
+export type ChannelDirection =
+   | "RendererToRenderer"
+   | "RendererToMain"
+   | "MainToRenderer"
+   | "MainToUtility"
+   | "UtilityToMain";
 
 /** An identifier of the schema file which is a value import, such as `userArgs` in `{ userArgs }`. */
 export interface ValidatorRef {

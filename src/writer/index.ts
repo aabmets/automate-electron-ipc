@@ -12,5 +12,11 @@
 import { MainBindingsWriter } from "./main-bindings.js";
 import { PreloadBindingsWriter } from "./preload-bindings.js";
 import { RendererTypesWriter } from "./renderer-types.js";
+import { UtilityBindingsWriter } from "./utility-bindings.js";
 
-export default { MainBindingsWriter, PreloadBindingsWriter, RendererTypesWriter };
+export default {
+   MainBindingsWriter,
+   PreloadBindingsWriter,
+   RendererTypesWriter,
+   UtilityBindingsWriter,
+};

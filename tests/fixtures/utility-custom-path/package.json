@@ -1,0 +1,10 @@
+{
+   "name": "fixture-utility-custom-path",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "utilityBindingsPath": "worker/generated/ipc.ts"
+      }
+   }
+}

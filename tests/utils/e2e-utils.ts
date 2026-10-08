@@ -40,8 +40,13 @@ export interface E2EProject {
    dir: string;
    /** Directory of the generated files, relative to `dir`. */
    ipcDataDir: string;
-   /** The generated files, keyed by file name. */
-   generated: { "main.ts": string; "preload.ts": string; "window.d.ts": string };
+   /** The generated files, keyed by file name. `utility.ts` exists only for utility channels. */
+   generated: {
+      "main.ts": string;
+      "preload.ts": string;
+      "window.d.ts": string;
+      "utility.ts"?: string;
+   };
    /**
     * Type-checks the schema files and generated files, returns the tsc diagnostics.
     * `compilerOptions` are added to the ones of the generated tsconfig.
@@ -83,10 +88,16 @@ export async function runFixture(
       }
 
       const read = (name: string) => fsp.readFile(path.join(dir, ipcDataDir, name), "utf8");
+      const utilityPath = path.join(
+         dir,
+         manifest.config.autoipc.utilityBindingsPath ?? path.join(ipcDataDir, "utility.ts"),
+      );
+      const utility = await fsp.readFile(utilityPath, "utf8").catch(() => undefined);
       const generated = {
          "main.ts": await read("main.ts"),
          "preload.ts": await read("preload.ts"),
          "window.d.ts": await read("window.d.ts"),
+         ...(utility === undefined ? {} : { "utility.ts": utility }),
       };
       return {
          root,
@@ -101,6 +112,18 @@ export async function runFixture(
       await cleanup();
       throw error;
    }
+}
+
+/** The generated file for utility processes, as a list for the files of the type-check. */
+async function utilityFiles(dir: string, ipcDataDir: string): Promise<string[]> {
+   const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
+   const utilityBindingsPath = manifest.config?.autoipc?.utilityBindingsPath;
+   const file = (utilityBindingsPath ?? `${ipcDataDir}/utility.ts`).replaceAll("\\", "/");
+   const exists = await fsp.access(path.join(dir, file)).then(
+      () => true,
+      () => false,
+   );
+   return exists ? [file] : [];
 }
 
 /** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */
@@ -142,6 +165,7 @@ async function typecheckProject(
       },
       files: [
          ...["main.ts", "preload.ts", windowCheckFile].map((name) => `${ipcDataDir}/${name}`),
+         ...(await utilityFiles(dir, ipcDataDir)),
          ...schemaFiles,
       ],
    };

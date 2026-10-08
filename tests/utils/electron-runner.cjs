@@ -20,7 +20,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, protocol, webContents } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, utilityProcess, webContents } = require("electron");
 
 const RESULT_MARK = "@@ELECTRON-RESULT@@";
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
@@ -69,6 +69,10 @@ ipcMain.handle = (channel, listener) => {
    return handle(channel, listener);
 };
 
+/** The utility processes which the scenarios forked, so that none outlives its scenario. */
+const children = new Set();
+let forkCount = 0;
+
 /** Forgets the modules of the generated bindings, so that each scenario gets fresh state. */
 function evictGeneratedModules() {
    for (const file of Object.keys(require.cache)) {
@@ -89,6 +93,10 @@ function resetProcessState() {
          contents.close();
       }
    }
+   for (const child of children) {
+      child.kill();
+   }
+   children.clear();
    ipcMain.removeAllListeners();
    for (const channel of handledChannels) {
       ipcMain.removeHandler(channel);
@@ -118,6 +126,29 @@ function createContext() {
       data: config.data,
       webPreferences,
       sleep,
+
+      /**
+       * Forks a utility process which runs `entry`: a function, turned into text, that can use
+       * `ipc` and `IpcUtilityError` of the generated `utility.ts`, and `process`. It resolves with
+       * the child once it has spawned. The child is killed when the scenario ends.
+       */
+      async fork(entry) {
+         const file = path.join(__dirname, `child-${++forkCount}.cjs`);
+         const utilityPath = path.join(ipcDir, "utility.js");
+         fs.writeFileSync(
+            file,
+            `const { ipc, IpcUtilityError } = require(${JSON.stringify(utilityPath)});\n(${entry.toString()})();\n`,
+         );
+         const child = utilityProcess.fork(file, [], { stdio: "pipe" });
+         children.add(child);
+         await new Promise((resolve, reject) => {
+            child.once("spawn", resolve);
+            child.once("exit", (code) =>
+               reject(new Error(`The utility process exited with ${code}`)),
+            );
+         });
+         return child;
+      },
 
       /** Serves `html` at `url`, such as "app://main/index.html". */
       serve(url, html) {

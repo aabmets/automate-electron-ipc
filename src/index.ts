@@ -28,3 +28,7 @@ export const ask: typeof api.ask = verb;
 export const stream: typeof api.stream = verb;
 export const port: typeof api.port = verb;
 export const mainPort: typeof api.mainPort = verb;
+export const callUtility: typeof api.callUtility = verb;
+export const notifyUtility: typeof api.notifyUtility = verb;
+export const callMain: typeof api.callMain = verb;
+export const notifyMain: typeof api.notifyMain = verb;

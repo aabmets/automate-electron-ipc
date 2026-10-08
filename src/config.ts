@@ -48,12 +48,28 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       fsp.stat(schemaFile).catch(() => null),
    ]);
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
+   const mainBindingsFilePath = path.join(ipcDataDir, "main.ts").replace(/\\/g, "/");
+   const preloadBindingsFilePath = path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/");
+   const rendererTypesFilePath = path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/");
+   const utilityBindingsFilePath = (
+      mergedConfig.utilityBindingsPath === undefined
+         ? path.join(ipcDataDir, "utility.ts")
+         : utils.resolveUserProjectPath(mergedConfig.utilityBindingsPath, cwd)
+   ).replace(/\\/g, "/");
+   const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath];
+   if (taken.includes(utilityBindingsFilePath)) {
+      throw new Error(
+         `The config 'utilityBindingsPath' ('${mergedConfig.utilityBindingsPath}') is the path of ` +
+            "another generated file. Choose a different path.",
+      );
+   }
    return {
       ...mergedConfig,
       projectRoot,
-      mainBindingsFilePath: path.join(ipcDataDir, "main.ts").replace(/\\/g, "/"),
-      preloadBindingsFilePath: path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/"),
-      rendererTypesFilePath: path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/"),
+      mainBindingsFilePath,
+      preloadBindingsFilePath,
+      rendererTypesFilePath,
+      utilityBindingsFilePath,
       ipcSchema: {
          path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,

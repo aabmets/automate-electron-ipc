@@ -36,6 +36,7 @@ describe("ipcAutomation", () => {
          mainBindingsFilePath: path.join(dir, "out/main.ts"),
          preloadBindingsFilePath: path.join(dir, "out/preload.ts"),
          rendererTypesFilePath: path.join(dir, "out/window.d.ts"),
+         utilityBindingsFilePath: path.join(dir, "out/utility.ts"),
          ...overrides,
       } as t.IPCResolvedConfig);
    };
@@ -181,6 +182,67 @@ describe("ipcAutomation", () => {
       expect(success.mock.calls[0][0].map((pfs) => pfs.relativePath)).toStrictEqual([
          "src/autoipc",
       ]);
+   });
+
+   describe("the file for utility processes", () => {
+      const generate = async (channels: string) => {
+         const schemaPath = path.join(dir, "schema.ts");
+         await fsp.writeFile(
+            schemaPath,
+            [
+               'import { defineChannels, invoke, callUtility } from "automate-electron-ipc";',
+               `export default defineChannels({ ${channels} });`,
+            ].join("\n"),
+         );
+         mockConfig({
+            ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+         } as never);
+         vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+         await ipcAutomation();
+      };
+
+      it("is written when the schema has a channel to the utility process", async () => {
+         await generate("getUser: invoke<() => Promise<string>>(), run: callUtility<() => void>()");
+
+         const utility = await fsp.readFile(path.join(dir, "out/utility.ts"), "utf8");
+         expect(utility).toContain("ANY CHANGES TO THIS FILE WILL NOT PERSIST");
+         expect(utility).toContain("   run: {");
+         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).toContain(
+            "attachUtility",
+         );
+      });
+
+      it("is written to the configured path, whose directories are created", async () => {
+         const utilityBindingsFilePath = path.join(dir, "worker/generated/ipc.ts");
+         const schemaPath = path.join(dir, "schema.ts");
+         await fsp.writeFile(
+            schemaPath,
+            [
+               'import { defineChannels, callUtility } from "automate-electron-ipc";',
+               "export default defineChannels({ run: callUtility<() => void>() });",
+            ].join("\n"),
+         );
+         mockConfig({
+            utilityBindingsFilePath,
+            ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
+         } as never);
+         vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+
+         await ipcAutomation();
+
+         expect(await fsp.readFile(utilityBindingsFilePath, "utf8")).toContain("   run: {");
+      });
+
+      it("is not written for a schema without such a channel", async () => {
+         await generate("getUser: invoke<() => Promise<string>>()");
+
+         await expect(fsp.stat(path.join(dir, "out/utility.ts"))).rejects.toMatchObject({
+            code: "ENOENT",
+         });
+         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).not.toContain(
+            "UtilityProcess",
+         );
+      });
    });
 
    it("passes the project root to the success report", async () => {

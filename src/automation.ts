@@ -81,10 +81,13 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
    logger.cloneWarnings(
       pfsArray.flatMap((pfs) => vld.getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
+   // The file for utility processes exists only for a schema that has channels to them.
+   const utilityWriter = new writer.UtilityBindingsWriter(config, pfsArray);
    await Promise.all([
       new writer.MainBindingsWriter(config, pfsArray).write(),
       new writer.PreloadBindingsWriter(config, pfsArray).write(),
       new writer.RendererTypesWriter(config, pfsArray).write(),
+      ...(utilityWriter.hasChannels() ? [utilityWriter.write()] : []),
    ]);
    if (pfsArray.length === 0) {
       logger.noChannelExpressions(config.ipcSchema.path);

@@ -14,7 +14,7 @@ import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 const IMPORT =
-   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";';
+   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain } from "automate-electron-ipc";';
 
 function parseMap(code: string, imports = IMPORT) {
    const { module, src } = parser.parseModule(`${imports}\n${code}`);
@@ -47,6 +47,10 @@ describe("parseChannelMapModule", () => {
          ["ask", "Unicast", "MainToRenderer"],
          ["port", "Port", "RendererToRenderer"],
          ["mainPort", "Port", "MainToRenderer"],
+         ["callUtility", "Unicast", "MainToUtility"],
+         ["notifyUtility", "Broadcast", "MainToUtility"],
+         ["callMain", "Unicast", "UtilityToMain"],
+         ["notifyMain", "Broadcast", "UtilityToMain"],
       ] as const;
 
       for (const [verb, kind, direction] of verbs) {
@@ -1028,5 +1032,47 @@ describe("stream channels", () => {
       expect(
          parseError(wrapStream("chan: stream<() => AsyncIterable<number>, Error, string>()")),
       ).toContain("at most two type arguments");
+   });
+});
+
+describe("utility channels", () => {
+   const verbs = ["callUtility", "notifyUtility", "callMain", "notifyMain"];
+
+   it.each(verbs)("rejects every option of %s, since it has none", (verb) => {
+      expect(
+         parseError(`export default defineChannels({ a: ${verb}<() => void>({ timeoutMs: 5 }) });`),
+      ).toBe(
+         `Schema file 'schema.ts': channel 'a': option 'timeoutMs' is not supported by '${verb}'.`,
+      );
+      expect(
+         parseError(`export default defineChannels({ a: ${verb}<() => void>({ validate: v }) });`),
+      ).toContain("option 'validate' is not supported");
+   });
+
+   it.each(verbs)("rejects the error types of %s, which has one type argument", (verb) => {
+      expect(
+         parseError(`export default defineChannels({ a: ${verb}<() => void, Error>() });`),
+      ).toBe(
+         `Schema file 'schema.ts': channel 'a': '${verb}' takes exactly one type argument, the signature.`,
+      );
+   });
+
+   it("keeps the types of the signature, to import them into the files of both sides", () => {
+      const spec = parseOne("a: callUtility<(job: Job) => Promise<Summary>>()");
+      expect(spec.signature?.customTypes).toStrictEqual(["Job", "Summary"]);
+      expect(spec.signature?.async).toBe(true);
+   });
+
+   it("keeps a channel to the utility process next to the other channels of the map", () => {
+      const { channelSpecs } = parseMap(`export default defineChannels({
+         a: invoke<() => void>(),
+         b: callUtility<() => void>(),
+         c: notifyMain<() => void>(),
+      });`);
+      expect(channelSpecs.map((spec) => spec.direction)).toStrictEqual([
+         "RendererToMain",
+         "MainToUtility",
+         "UtilityToMain",
+      ]);
    });
 });

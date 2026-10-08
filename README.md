@@ -29,6 +29,7 @@ Node library for generating IPC components for Electron apps.
 6) BrowserWindow event triggers for `emit` channels
 7) `ask` channels, with which the main process asks a renderer and awaits the answer
 8) `stream` channels, with which the main process streams results to a renderer, which can cancel
+9) Typed channels between the main process and a `utilityProcess`, in a generated `utility.ts`
 
 
 ### Installation
@@ -56,7 +57,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "codeIndent": 3,
          "rawErrors": false,
          "channelPrefix": "autoipc:",
-         "timeoutMs": 0
+         "timeoutMs": 0,
+         "utilityBindingsPath": "src/autoipc/utility.ts"
       }
    }
 }
@@ -75,6 +77,10 @@ Config explanation:
    and is not a security measure: restrict who can call a channel with `allowedOrigins`.
  - `timeoutMs` - The default time in milliseconds after which the promise of an `invoke` is rejected
    with an `IpcTimeoutError`. `0`, the default, waits for ever. See [Timeouts](#timeouts).
+ - `utilityBindingsPath` - Relative path of the generated file for utility processes, `utility.ts` in
+   `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
+   file is written only when the schema has a channel to a utility process. See
+   [Utility processes](#utility-processes).
 
 
 ### Getting Started
@@ -158,7 +164,10 @@ meaning you can use any front-end framework or library like React, Vue or Angula
 Each verb declares one kind of channel in one direction:
 
 ```typescript
-import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";
+import {
+   defineChannels, invoke, send, emit, ask, stream, port, mainPort,
+   callUtility, notifyUtility, callMain, notifyMain,
+} from "automate-electron-ipc";
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
@@ -183,6 +192,18 @@ export default defineChannels({
 
    // Sender and listener on one port between the main process and a renderer process
    logTail: mainPort<(line: string) => void>(),
+
+   // Request from the main process to a utility process with return data
+   indexFile: callUtility<(path: string) => Promise<number>>(),
+
+   // Message from the main process to a utility process without return data
+   setLogLevel: notifyUtility<(level: "debug" | "info") => void>(),
+
+   // Request from a utility process to the main process with return data
+   getSetting: callMain<(key: string) => Promise<string | undefined>>(),
+
+   // Message from a utility process to the main process without return data
+   indexed: notifyMain<(done: number, total: number) => void>(),
 });
 ```
 
@@ -195,8 +216,13 @@ export default defineChannels({
 | `stream` | RendererToMain     | `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk>` |
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
 | `mainPort` | MainToRenderer   | `void` or `Promise<void>`    |
+| `callUtility` | MainToUtility | any value or promise         |
+| `notifyUtility` | MainToUtility | `void` or `Promise<void>`  |
+| `callMain` | UtilityToMain    | any value or promise         |
+| `notifyMain` | UtilityToMain  | `void` or `Promise<void>`    |
 
-The only supported option is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
+The verbs for utility processes take no options. The only option of the others that is not described in
+its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
 The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
 With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
 It registers one listener for the event, calls `provider` each time the event fires, sends the
@@ -231,6 +257,10 @@ on the verb of the channel and on the process that uses it:
 | `stream` | `ipc.<name>.handle(callback)`, where the callback is an `async function*` | `ipc.<name>.stream(...args)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onOverflow(callback)`, `onConnection(callback)` |
 | `mainPort` | `ipc.<name>.connect(target)`      | the same as `port`                                |
+| `callUtility` | `ipc.<name>.invoke(child, ...args)` | none: the utility process has `ipc.<name>.handle(callback)` |
+| `notifyUtility` | `ipc.<name>.send(child, ...args)` | none: the utility process has `ipc.<name>.on(callback)` and `once(callback)` |
+| `callMain` | `ipc.<name>.handle(child, callback)` | none: the utility process has `ipc.<name>.invoke(...args)` |
+| `notifyMain` | `ipc.<name>.on(child, callback)`, `once(child, callback)` | none: the utility process has `ipc.<name>.send(...args)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -751,6 +781,80 @@ stopped from the renderer, and its late reply is dropped. The option takes a non
 literal and applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
 `invokeWith`. With `rawErrors`, the timeout still rejects with this object, while the errors of the
 handlers stay Electron's.
+
+#### Utility processes
+
+`utilityProcess` is where Electron wants CPU-heavy or crash-prone work (SQLite, indexing, native
+modules), and it only offers untyped `postMessage` and `process.parentPort`. Four verbs type the
+traffic between the main process and a utility process, with request and response:
+
+| Verb            | Who calls                  | Main process                    | Utility process                  |
+|-----------------|----------------------------|---------------------------------|----------------------------------|
+| `callUtility`   | main, the child answers    | `invoke(child, ...args)`        | `handle(callback)`               |
+| `notifyUtility` | main, one way              | `send(child, ...args)`          | `on(callback)`, `once(callback)` |
+| `callMain`      | the child, main answers    | `handle(child, callback)`       | `invoke(...args)`                |
+| `notifyMain`    | the child, one way         | `on(child, callback)`, `once(child, callback)` | `send(...args)`   |
+
+Besides `main.ts`, the generator writes `utility.ts` (see `utilityBindingsPath`), with the same
+`ipc` object for the code that runs in the utility process. It talks over `process.parentPort`, needs
+no import from `electron`, and, like the other generated files, no dependency on this library. It is
+written only when the schema has such a channel. Import it in the entry file of the child:
+
+```typescript
+// main process
+import { utilityProcess } from "electron";
+import { attachUtility, ipc } from "./autoipc/main";
+
+const child = utilityProcess.fork(path.join(__dirname, "indexer.js"));
+attachUtility(child); // optional, see below
+ipc.getSetting.handle(child, async (key) => settings.get(key));
+ipc.indexed.on(child, (done, total) => console.log(`${done}/${total}`));
+ipc.setLogLevel.send(child, "debug");
+const count = await ipc.indexFile.invoke(child, "/home/me/notes"); // a number
+```
+
+```typescript
+// indexer.ts, the entry of the utility process
+import { ipc } from "./autoipc/utility";
+
+ipc.indexFile.handle(async (path) => {
+   const theme = await ipc.getSetting.invoke("theme");
+   return scan(path, theme);
+});
+ipc.setLogLevel.on((level) => setLevel(level));
+```
+
+Every `child` is a `UtilityProcess`, so any number of children can run, each with its own handlers,
+listeners and pending calls. The generated code keeps its state per child.
+
+The messages are plain objects with an `__ipc` field, so other messages on the same port are left to the
+application. A call has an ID, and the answer is the same envelope as that of an `invoke` channel. A
+call is rejected with an `IpcUtilityError`, which `main.ts` and `utility.ts` both export. It is a
+real `Error`, since these ends are Node processes: `contextBridge` is not involved. It has the `name`,
+`message`, `code` and `data` of what the handler threw, and `channel`. The library uses these codes:
+
+| Code                       | Meaning                                                                       |
+|----------------------------|-------------------------------------------------------------------------------|
+| `IPC_UTILITY_EXITED`       | the utility process exited, also while the call was pending, and any later call or send |
+| `IPC_UTILITY_NO_HANDLER`   | the other side has no handler for the channel                                 |
+| `IPC_UTILITY_UNSENDABLE`   | the arguments or the result cannot be cloned (a function, for example)       |
+| `IPC_UTILITY_INVALID_REPLY`| the reply had an unknown shape                                                |
+
+A few things to know:
+ - A handler is registered per child in the main process, and replaces the previous one. Each `handle`,
+   `on` and `once` returns a function which removes that registration. A listener that throws or
+   rejects is reported to `console.error`, and the others still run.
+ - The code of the child sets up its listener on `process.parentPort` when a channel is first used, and
+   Electron queues the messages until then. A call for a channel without a handler is answered with
+   `IPC_UTILITY_NO_HANDLER`, so register the handlers when the process starts. The main process
+   starts listening to a child when a channel first uses it. A child which calls the main process
+   first would not be answered until then, so `attachUtility(child)` starts it right after `fork`.
+ - The errors of `invoke` use the envelope also with `rawErrors`, since there is no Electron behavior
+   to leave them to. There are no `allowedOrigins`, `validate` or `timeoutMs` options yet: both
+   ends are your own code. A call whose handler never answers waits until the process exits.
+ - `utility.ts` fails with a `TypeError` when a channel is used outside a utility process. Importing it
+   elsewhere is harmless.
+ - The signature is checked for what structured clone cannot send, like the others.
 
 #### Migrating from 0.2
 

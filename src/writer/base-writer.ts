@@ -84,6 +84,11 @@ export class BaseWriter {
       return [];
    }
 
+   /** Whether the file has nothing to declare, which is written as the empty file. */
+   protected isEmpty(): boolean {
+      return this.pfsArray.length === 0;
+   }
+
    protected renderEmptyFileContents(): string {
       this.throwAbstractError("renderEmptyFileContents");
       return null as unknown as string;
@@ -110,6 +115,28 @@ export class BaseWriter {
     */
    protected getTimeoutMs(spec: t.ChannelSpec): number {
       return spec.timeoutMs ?? this.config.timeoutMs ?? 0;
+   }
+
+   /** Whether the channel is between the main process and a utility process. */
+   protected isUtilitySpec(spec: t.ChannelSpec): boolean {
+      return spec.direction === "MainToUtility" || spec.direction === "UtilityToMain";
+   }
+
+   /** Whether any schema file declares a channel to or from a utility process. */
+   protected hasUtilityChannels(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some((spec) => this.isUtilitySpec(spec)),
+      );
+   }
+
+   /** The channels of a schema file that a renderer takes part in. */
+   protected getRendererSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
+      return parsedFileSpecs.specs.channelSpecArray.filter((spec) => !this.isUtilitySpec(spec));
+   }
+
+   /** Whether any schema file declares a channel that a renderer takes part in. */
+   protected hasRendererChannels(): boolean {
+      return this.pfsArray.some((pfs) => this.getRendererSpecs(pfs).length > 0);
    }
 
    protected getCodeIndents(): string[] {
@@ -261,7 +288,7 @@ export class BaseWriter {
       const fileDirectory = path.dirname(targetFilePath);
       await fsp.mkdir(fileDirectory, { recursive: true });
       let contents: string;
-      if (this.pfsArray.length === 0) {
+      if (this.isEmpty()) {
          contents = this.renderEmptyFileContents();
       } else {
          contents = this.renderFileContents();

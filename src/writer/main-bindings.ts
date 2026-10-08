@@ -12,6 +12,7 @@
 import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
+import { buildErrorEnvelope, buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
 
 interface ChannelEntry {
    name: string;
@@ -123,6 +124,17 @@ export class MainBindingsWriter extends BaseWriter {
          "Parameters",
          "setTimeout",
          "clearTimeout",
+         // The channels to a utility process.
+         ...(this.hasUtilityChannels()
+            ? [
+                 ...UTILITY_RUNTIME_NAMES,
+                 "UtilityProcess",
+                 "WeakMap",
+                 "utilityPeers",
+                 "getUtilityPeer",
+                 "attachUtility",
+              ]
+            : []),
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -140,6 +152,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesEnvelope = false;
       let usesSenders = false;
       let usesStreams = false;
+      let usesUtility = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -169,19 +182,16 @@ export class MainBindingsWriter extends BaseWriter {
                   electronTypeImportsSet.add(type);
                }
                channels.push(this.buildMainToRendererChannel(spec));
+            } else if (this.isUtilitySpec(spec)) {
+               usesUtility = true;
+               usesEnvelope = true;
+               electronTypeImportsSet.add("UtilityProcess");
+               channels.push(this.buildUtilityChannel(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
          }
-         for (const customType of customTypes) {
-            const importDeclaration = this.importsGenerator.getDeclaration(
-               parsedFileSpecs,
-               customType,
-            );
-            if (importDeclaration) {
-               importDeclarationsArray.push(importDeclaration);
-            }
-         }
+         this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
       }
       this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
       const usesAsks = this.hasChannels("Unicast");
@@ -211,6 +221,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesRendererPorts,
             usesMainPorts,
             usesStreams,
+            usesUtility,
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -222,6 +233,19 @@ export class MainBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+   /** Adds the import lines for the custom types that the channels of the file use. */
+   private importCustomTypes(
+      pfs: t.ParsedFileSpecs,
+      customTypes: Set<string>,
+      declarations: string[],
+   ): void {
+      for (const customType of customTypes) {
+         const declaration = this.importsGenerator.getDeclaration(pfs, customType);
+         if (declaration) {
+            declarations.push(declaration);
+         }
+      }
    }
    /** The import lines: the values and the types of `electron`, then the ones from the schema files. */
    private buildImports(values: string[], types: string[], declarations: string[]): string[] {
@@ -293,6 +317,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesRendererPorts: boolean;
          usesMainPorts: boolean;
          usesStreams: boolean;
+         usesUtility: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -314,6 +339,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesStreams) {
          support.push(this.buildStreamHelpers());
+      }
+      if (uses.usesUtility) {
+         support.push(this.buildUtilityHelpers());
       }
       if (uses.usesPorts) {
          support.push(this.buildPortRegistry());
@@ -368,49 +396,7 @@ export class MainBindingsWriter extends BaseWriter {
     * would otherwise fail the whole reply.
     */
    private buildErrorEnvelope(): string {
-      const [i1, i2, i3] = this.indents;
-      return [
-         "",
-         "interface IpcErrorInfo {",
-         `${i1}name: string;`,
-         `${i1}message: string;`,
-         `${i1}code?: string | number;`,
-         `${i1}data?: unknown;`,
-         "}",
-         "",
-         "type IpcEnvelope = { ok: true; value: unknown } | { ok: false; error: IpcErrorInfo };",
-         "",
-         "function toIpcError(error: unknown): IpcErrorInfo {",
-         `${i1}try {`,
-         `${i2}const source = typeof error === 'object' && error !== null ? (error as { [key: string]: unknown }) : null;`,
-         `${i2}const name = source && typeof source.name === 'string' && source.name ? source.name : 'Error';`,
-         `${i2}const message = source && typeof source.message === 'string' ? source.message : String(error);`,
-         `${i2}const info: IpcErrorInfo = { name, message };`,
-         `${i2}if (source && (typeof source.code === 'string' || typeof source.code === 'number')) {`,
-         `${i3}info.code = source.code;`,
-         `${i2}}`,
-         `${i2}if (source && source.data !== undefined) {`,
-         `${i3}try {`,
-         `${i3}${i1}info.data = structuredClone(source.data);`,
-         `${i3}} catch {`,
-         `${i3}${i1}// Data that cannot be cloned is left out.`,
-         `${i3}}`,
-         `${i2}}`,
-         `${i2}return info;`,
-         `${i1}} catch {`,
-         `${i2}return { name: 'Error', message: 'The handler failed with an unreadable error' };`,
-         `${i1}}`,
-         "}",
-         "",
-         "async function settleInvoke(run: () => unknown): Promise<IpcEnvelope> {",
-         `${i1}try {`,
-         `${i2}return { ok: true, value: await run() };`,
-         `${i1}} catch (error) {`,
-         `${i2}return { ok: false, error: toIpcError(error) };`,
-         `${i1}}`,
-         "}",
-         "",
-      ].join("\n");
+      return buildErrorEnvelope(this.indents);
    }
    /**
     * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
@@ -1648,5 +1634,98 @@ export class MainBindingsWriter extends BaseWriter {
          ` connectMainPort(${this.wireName(spec.name)}, '${spec.name}', ${this.getMaxQueue(spec)}, target),`,
       ].join("");
       return { name: spec.name, members: [connector] };
+   }
+   /**
+    * The helpers of the channels between the main process and utility processes: the protocol
+    * that `utility.ts` shares (see `buildUtilityPeer`), and one peer per `UtilityProcess`. The peer
+    * is made when a channel first uses the child, and listens for its messages. It is closed when
+    * the child exits, which rejects the pending calls with `IPC_UTILITY_EXITED`. A child which
+    * calls the main process before the main process has used the child once would not be answered,
+    * so `attachUtility(child)` makes the peer right after `utilityProcess.fork`.
+    */
+   private buildUtilityHelpers(): string {
+      const [i1] = this.indents;
+      return [
+         buildUtilityPeer(this.indents),
+         "const utilityPeers = new WeakMap<UtilityProcess, UtilityPeer>();",
+         "",
+         "function getUtilityPeer(child: UtilityProcess): UtilityPeer {",
+         `${i1}const known = utilityPeers.get(child);`,
+         `${i1}if (known) {`,
+         `${i1}${i1}return known;`,
+         `${i1}}`,
+         `${i1}const peer = createUtilityPeer((message) => child.postMessage(message));`,
+         `${i1}utilityPeers.set(child, peer);`,
+         `${i1}child.on('message', (message: unknown) => receiveUtilityMessage(peer, message));`,
+         `${i1}child.once('exit', () => closeUtilityPeer(peer, 'The utility process exited'));`,
+         `${i1}return peer;`,
+         "}",
+         "",
+         "/** Starts listening to the child, so that its calls are answered before a channel has used it. */",
+         "export function attachUtility(child: UtilityProcess): void {",
+         `${i1}getUtilityPeer(child);`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `invoke(child, ...args)` of a `callUtility` channel, `send(child, ...args)` of a
+    * `notifyUtility` channel, `handle(child, callback)` of a `callMain` channel and
+    * `on(child, callback)` and `once(child, callback)` of a `notifyMain` channel.
+    */
+   private buildUtilityChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2] = this.indents;
+      // The names of the generated parameters must not shadow a parameter of the signature.
+      const taken = this.collectIdentifiers([spec.signature.definition]);
+      const childName = this.uniqueName("child", taken);
+      const callbackName = this.uniqueName("callback", taken);
+      const wire = this.wireName(spec.name);
+      const peer = `getUtilityPeer(${childName})`;
+      const childParam = `${childName}: UtilityProcess`;
+      const typeParams = this.getTypeParams(spec.signature);
+      const params = (...generated: string[]) =>
+         [...generated, this.getOriginalParams(spec, false)].filter(Boolean).join(", ");
+      const senderParams = this.getOriginalParams(spec, true);
+      const rest = senderParams ? `[${senderParams}]` : "[]";
+      const callback = `${callbackName}: ${spec.signature.definition}`;
+      if (spec.direction === "MainToUtility") {
+         if (spec.kind === "Broadcast") {
+            return {
+               name: spec.name,
+               members: [
+                  `\n${i1}send: ${typeParams}(${params(childParam)}): void =>`,
+                  `\n${i2}sendUtilityPeer(${peer}, ${wire}, ${rest}),`,
+               ],
+            };
+         }
+         const returned = spec.signature.async
+            ? spec.signature.returnType
+            : `Promise<Awaited<${spec.signature.returnType}>>`;
+         return {
+            name: spec.name,
+            members: [
+               `\n${i1}invoke: ${typeParams}(${params(childParam)}): ${returned} =>`,
+               `\n${i2}callUtilityPeer(${peer}, ${wire}, ${rest}) as ${returned},`,
+            ],
+         };
+      }
+      if (spec.kind === "Broadcast") {
+         return {
+            name: spec.name,
+            members: [
+               `\n${i1}on: (${childParam}, ${callback}) =>`,
+               `\n${i2}addUtilityListener(${peer}, ${wire}, ${callbackName}, false),`,
+               `\n${i1}once: (${childParam}, ${callback}) =>`,
+               `\n${i2}addUtilityListener(${peer}, ${wire}, ${callbackName}, true),`,
+            ],
+         };
+      }
+      return {
+         name: spec.name,
+         members: [
+            `\n${i1}handle: (${childParam}, ${callback}) =>`,
+            `\n${i2}setUtilityHandler(${peer}, ${wire}, ${callbackName}),`,
+         ],
+      };
    }
 }

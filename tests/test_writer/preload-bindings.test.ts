@@ -589,3 +589,39 @@ describe("PreloadBindingsWriter", () => {
       });
    });
 });
+
+describe("PreloadBindingsWriter, utility channels", () => {
+   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+
+   const render = async (...channels: shared.SimpleChannel[]) => {
+      const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels));
+      await obj.write(false);
+      return (await fsp.readFile(obj.getTargetFilePath())).toString();
+   };
+   const utility: shared.SimpleChannel[] = [
+      { name: "indexFile", kind: "Unicast", direction: "MainToUtility" },
+      { name: "setLevel", kind: "Broadcast", direction: "MainToUtility" },
+      { name: "getSetting", kind: "Unicast", direction: "UtilityToMain" },
+      { name: "progress", kind: "Broadcast", direction: "UtilityToMain" },
+   ];
+
+   it("writes the empty script when only utility channels are declared", async () => {
+      const empty = await render();
+
+      expect(await render(...utility)).toStrictEqual(empty);
+      expect(empty).not.toContain("ipcRenderer");
+   });
+
+   it("leaves the utility channels out when renderer channels are declared as well", async () => {
+      const alone = await render({ name: "getUser", kind: "Unicast", direction: "RendererToMain" });
+      const mixed = await render(
+         { name: "getUser", kind: "Unicast", direction: "RendererToMain" },
+         ...utility,
+      );
+
+      expect(mixed).toStrictEqual(alone);
+      for (const { name } of utility) {
+         expect(mixed).not.toContain(name);
+      }
+   });
+});

@@ -49,6 +49,9 @@ export class RendererTypesWriter extends BaseWriter {
          "Parameters",
       ];
    }
+   protected isEmpty(): boolean {
+      return !this.hasRendererChannels();
+   }
    protected renderEmptyFileContents(): string {
       return this.renderDeclaration([]);
    }
@@ -60,6 +63,9 @@ export class RendererTypesWriter extends BaseWriter {
          let customTypes: Set<string> = new Set();
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
+            if (this.isUtilitySpec(spec)) {
+               continue;
+            }
             if (spec.kind === "Port") {
                // The page has the same API for both peers: another page, or the main process.
                channels.push(this.buildPortChannel(spec));

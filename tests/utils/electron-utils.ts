@@ -47,6 +47,13 @@ export interface ScenarioContext {
    /** `webPreferences` of a window which uses the generated preload script. */
    webPreferences: (options?: OpenOptions) => Record<string, unknown>;
    sleep: (ms: number) => Promise<void>;
+   /**
+    * Forks a utility process which runs `entry`, a function that is turned into text. It can use
+    * `ipc` and `IpcUtilityError` of the generated `utility.ts`, and `process`, and nothing from the
+    * scope of the test file. Resolves with the `UtilityProcess` once it has spawned, and the child
+    * is killed when the scenario ends.
+    */
+   fork: (entry: () => unknown) => Promise<any>;
    /** Serves `html` at `url`, such as `app://main/index.html`. */
    serve: (url: string, html: string) => void;
    /** Opens a hidden window with the generated preload script, and waits until it loaded. */

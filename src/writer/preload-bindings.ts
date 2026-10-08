@@ -23,6 +23,9 @@ export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.preloadBindingsFilePath;
    }
+   protected isEmpty(): boolean {
+      return !this.hasRendererChannels();
+   }
    protected renderEmptyFileContents(): string {
       return [
          'import { contextBridge } from "electron";\n',
@@ -36,7 +39,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       const channels: ChannelEntry[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
-         for (const spec of parsedFileSpecs.specs.channelSpecArray) {
+         for (const spec of this.getRendererSpecs(parsedFileSpecs)) {
             if (spec.kind === "Port") {
                // The page has the same API for both peers: another page, or the main process.
                portSpecs.push(spec);

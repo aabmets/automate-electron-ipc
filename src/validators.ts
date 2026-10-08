@@ -35,6 +35,16 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          return path.isAbsolute(value) ? errMsg : true;
       }),
       rawErrors: optional(boolean()),
+      utilityBindingsPath: optional(
+         refine(string(), "relative", (value) => {
+            if (path.isAbsolute(value)) {
+               return "utilityBindingsPath must be relative to the project root";
+            }
+            return /\.[cm]?ts$/.test(value) && !value.endsWith(".d.ts")
+               ? true
+               : "utilityBindingsPath must be the path of a .ts file";
+         }),
+      ),
       channelPrefix: optional(
          refine(string(), "prefix", (value) => {
             if (value.length > 64) {
@@ -115,6 +125,7 @@ function getChannelSpecStruct(
    asking = false,
    bounded = false,
    streaming = false,
+   utility = false,
 ): Struct<any, any> {
    return object({
       name: refine(string(), "identifier", (value) =>
@@ -130,7 +141,9 @@ function getChannelSpecStruct(
       }),
       direction: refine(string(), "choice", (value) => {
          const choices = [];
-         if (kind === "Broadcast") {
+         if (utility) {
+            choices.push("MainToUtility", "UtilityToMain");
+         } else if (kind === "Broadcast") {
             choices.push("RendererToMain", "MainToRenderer");
          } else if (kind === "Unicast") {
             choices.push(asking ? "MainToRenderer" : "RendererToMain");
@@ -178,7 +191,7 @@ function getChannelSpecStruct(
          ),
       }),
       errors:
-         (kind === "Unicast" && !asking) || streaming
+         (kind === "Unicast" && !asking && !utility) || streaming
             ? optional(
                  object({
                     definition: string(),
@@ -193,7 +206,7 @@ function getChannelSpecStruct(
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
-      timeoutMs: kind === "Unicast" && !asking ? optional(number()) : optional(never()),
+      timeoutMs: kind === "Unicast" && !asking && !utility ? optional(number()) : optional(never()),
    });
 }
 
@@ -205,8 +218,32 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       AskStruct: getChannelSpecStruct("Unicast", false, false, true),
       PortStruct: getChannelSpecStruct("Port", false, false, false, true),
       StreamStruct: getChannelSpecStruct("Stream", false, true, false, false, true),
+      UtilityBroadcastStruct: getChannelSpecStruct(
+         "Broadcast",
+         false,
+         false,
+         false,
+         false,
+         false,
+         true,
+      ),
+      UtilityUnicastStruct: getChannelSpecStruct(
+         "Unicast",
+         false,
+         false,
+         false,
+         false,
+         false,
+         true,
+      ),
    };
-   if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
+   const toUtility = spec?.direction === ("MainToUtility" as t.ChannelDirection);
+   const fromUtility = spec?.direction === ("UtilityToMain" as t.ChannelDirection);
+   if ((toUtility || fromUtility) && spec?.kind === ("Broadcast" as t.ChannelKind)) {
+      assert(spec, structMap.UtilityBroadcastStruct);
+   } else if ((toUtility || fromUtility) && spec?.kind === ("Unicast" as t.ChannelKind)) {
+      assert(spec, structMap.UtilityUnicastStruct);
+   } else if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
       if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
          assert(spec, structMap.TriggerableBroadcastStruct);
       } else {

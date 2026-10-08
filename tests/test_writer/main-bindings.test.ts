@@ -1621,3 +1621,165 @@ describe("MainBindingsWriter", () => {
       });
    });
 });
+
+describe("MainBindingsWriter, utility channels", () => {
+   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+
+   const callUtility = { name: "indexFile", kind: "Unicast", direction: "MainToUtility" } as const;
+   const notifyUtility = {
+      name: "setLevel",
+      kind: "Broadcast",
+      direction: "MainToUtility",
+   } as const;
+   const callMain = { name: "getSetting", kind: "Unicast", direction: "UtilityToMain" } as const;
+   const notifyMain = { name: "progress", kind: "Broadcast", direction: "UtilityToMain" } as const;
+   const renderer = { name: "getUser", kind: "Unicast", direction: "RendererToMain" } as const;
+
+   const render = async (
+      channels: shared.SimpleChannel[],
+      config: Partial<t.IPCResolvedConfig> = {},
+   ) => {
+      const writer = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels), {
+         channelPrefix: "autoipc:",
+         ...config,
+      });
+      await writer.write(false);
+      return (await fsp.readFile(writer.getTargetFilePath())).toString();
+   };
+
+   it("writes nothing of the utility protocol for a schema without such channels", async () => {
+      const output = await render([renderer]);
+
+      for (const name of ["UtilityProcess", "IpcUtilityError", "attachUtility", "WeakMap"]) {
+         expect(output).not.toContain(name);
+      }
+   });
+
+   it("imports nothing but the type of the child when only utility channels are declared", async () => {
+      const output = await render([callUtility, callMain]);
+
+      expect(output).toContain('import type { UtilityProcess } from "electron";');
+      expect(output).not.toContain("ipcMain");
+      expect(output).not.toContain("IpcForbiddenError");
+      expect(output).toContain("async function settleInvoke(");
+   });
+
+   it("writes the envelope once when renderer and utility channels share the file", async () => {
+      const output = await render([renderer, callUtility]);
+
+      expect(output.split("function toIpcError(").length).toBe(2);
+      expect(output).toContain(
+         'import type { IpcMainInvokeEvent, UtilityProcess } from "electron";',
+      );
+   });
+
+   it("writes the peer of a child, and attachUtility", async () => {
+      const output = await render([callUtility]);
+
+      expect(output).toContain("const utilityPeers = new WeakMap<UtilityProcess, UtilityPeer>();");
+      expect(output).toContain(
+         "child.on('message', (message: unknown) => receiveUtilityMessage(peer, message));",
+      );
+      expect(output).toContain(
+         "child.once('exit', () => closeUtilityPeer(peer, 'The utility process exited'));",
+      );
+      expect(output).toContain("export function attachUtility(child: UtilityProcess): void {");
+   });
+
+   it("writes invoke for calls to the child, with the child first", async () => {
+      const output = await render([
+         {
+            ...callUtility,
+            params: ["path: string", "...tags: string[]"],
+            returnType: "Promise<number>",
+         },
+         { ...callUtility, name: "plain", returnType: "number" },
+      ]);
+
+      expect(output).toContain(
+         [
+            "   indexFile: {",
+            "      invoke: (child: UtilityProcess, path: string, ...tags: string[]): Promise<number> =>",
+            "         callUtilityPeer(getUtilityPeer(child), 'autoipc:indexFile', [path, ...tags]) as Promise<number>,",
+            "   },",
+         ].join("\n"),
+      );
+      expect(output).toContain(
+         "invoke: (child: UtilityProcess): Promise<Awaited<number>> =>\n         callUtilityPeer(getUtilityPeer(child), 'autoipc:plain', []) as Promise<Awaited<number>>,",
+      );
+   });
+
+   it("writes send for notifications to the child", async () => {
+      const output = await render([{ ...notifyUtility, params: ["level: string"] }]);
+
+      expect(output).toContain(
+         [
+            "   setLevel: {",
+            "      send: (child: UtilityProcess, level: string): void =>",
+            "         sendUtilityPeer(getUtilityPeer(child), 'autoipc:setLevel', [level]),",
+            "   },",
+         ].join("\n"),
+      );
+   });
+
+   it("writes handle per child for calls of the child", async () => {
+      const output = await render([{ ...callMain, params: ["key: string"], returnType: "string" }]);
+
+      expect(output).toContain(
+         [
+            "   getSetting: {",
+            "      handle: (child: UtilityProcess, callback: (key: string) => string) =>",
+            "         setUtilityHandler(getUtilityPeer(child), 'autoipc:getSetting', callback),",
+            "   },",
+         ].join("\n"),
+      );
+   });
+
+   it("writes on and once per child for notifications of the child", async () => {
+      const output = await render([{ ...notifyMain, params: ["done: number"] }]);
+
+      expect(output).toContain(
+         [
+            "   progress: {",
+            "      on: (child: UtilityProcess, callback: (done: number) => void) =>",
+            "         addUtilityListener(getUtilityPeer(child), 'autoipc:progress', callback, false),",
+            "      once: (child: UtilityProcess, callback: (done: number) => void) =>",
+            "         addUtilityListener(getUtilityPeer(child), 'autoipc:progress', callback, true),",
+            "   },",
+         ].join("\n"),
+      );
+   });
+
+   it("does not let the generated names shadow the names of the signature", async () => {
+      const output = await render([
+         { ...callUtility, params: ["child: string"], returnType: "typeof child" },
+         { ...callMain, params: ["callback: string", "child: number"] },
+      ]);
+
+      expect(output).toContain("invoke: (_child: UtilityProcess, child: string)");
+      expect(output).toContain("getUtilityPeer(_child), 'autoipc:indexFile', [child]");
+      expect(output).toContain(
+         "handle: (_child: UtilityProcess, _callback: (callback: string, child: number)",
+      );
+   });
+
+   it("reserves the names it declares, only when the schema has utility channels", () => {
+      const reserved = (...channels: shared.SimpleChannel[]) =>
+         (
+            new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels)) as unknown as {
+               getReservedNames: () => string[];
+            }
+         ).getReservedNames();
+
+      for (const name of [
+         "IpcUtilityError",
+         "UtilityPeer",
+         "attachUtility",
+         "UtilityProcess",
+         "WeakMap",
+      ]) {
+         expect(reserved(callUtility)).toContain(name);
+         expect(reserved(renderer)).not.toContain(name);
+      }
+   });
+});

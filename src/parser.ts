@@ -315,6 +315,10 @@ const VERBS = new Map<string, VerbInfo>([
    ],
    ["port", { kind: "Port", direction: "RendererToRenderer", options: ["maxQueue"] }],
    ["mainPort", { kind: "Port", direction: "MainToRenderer", options: ["maxQueue"] }],
+   ["callUtility", { kind: "Unicast", direction: "MainToUtility", options: [] }],
+   ["notifyUtility", { kind: "Broadcast", direction: "MainToUtility", options: [] }],
+   ["callMain", { kind: "Unicast", direction: "UtilityToMain", options: [] }],
+   ["notifyMain", { kind: "Broadcast", direction: "UtilityToMain", options: [] }],
 ]);
 
 /** The options whose value is an array of string literals. The others are string literals. */
