@@ -25,5 +25,6 @@ export const invoke: typeof api.invoke = verb;
 export const send: typeof api.send = verb;
 export const emit: typeof api.emit = verb;
 export const ask: typeof api.ask = verb;
+export const stream: typeof api.stream = verb;
 export const port: typeof api.port = verb;
 export const mainPort: typeof api.mainPort = verb;

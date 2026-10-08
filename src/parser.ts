@@ -304,6 +304,15 @@ const VERBS = new Map<string, VerbInfo>([
    ],
    ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
    ["ask", { kind: "Unicast", direction: "MainToRenderer", options: [] }],
+   [
+      "stream",
+      {
+         kind: "Stream",
+         direction: "RendererToMain",
+         options: ["allowedOrigins", "validate"],
+         errors: true,
+      },
+   ],
    ["port", { kind: "Port", direction: "RendererToRenderer", options: ["maxQueue"] }],
    ["mainPort", { kind: "Port", direction: "MainToRenderer", options: ["maxQueue"] }],
 ]);
@@ -467,6 +476,28 @@ function returnsVoid(returnNode: AstNode, isAsync: boolean): boolean {
    }
    const args: AstNode[] = isAsync ? unwrapTypeParentheses(returnNode).typeParams?.params : [];
    return args?.length === 1 && isVoidType(args[0]);
+}
+
+/** The types whose first type argument is the type of the chunks of a `stream` channel. */
+const STREAM_RETURN_TYPES = new Set(["AsyncIterable", "AsyncIterableIterator", "AsyncGenerator"]);
+
+/**
+ * The node of the type of the chunks of a `stream` channel, or null when the return type is not
+ * the global `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk, ...>`.
+ * A user type with such a name, or a qualified name, is not one of them.
+ */
+function getChunkNode(returnNode: AstNode, locals: ReadonlySet<string>): AstNode | null {
+   const type = unwrapTypeParentheses(returnNode);
+   if (
+      type.type !== "TsTypeReference" ||
+      type.typeName.type !== "Identifier" ||
+      !STREAM_RETURN_TYPES.has(type.typeName.value) ||
+      locals.has(type.typeName.value)
+   ) {
+      return null;
+   }
+   const args: AstNode[] = type.typeParams?.params ?? [];
+   return args.length > 0 ? args[0] : null;
 }
 
 /** Local type declarations of the schema file by name, which a signature may refer to. */
@@ -698,6 +729,7 @@ export function parseSignature(
    src: Source,
    locals: ReadonlySet<string> = new Set(),
    declarations: TypeDeclarations = new Map(),
+   streaming = false,
 ): t.CallableSignature {
    const set = new Set<string>();
    const spanRefs: SpanRef[] = [];
@@ -730,12 +762,20 @@ export function parseSignature(
       walkCloneType(annotation, { ...walk, where: `parameter '${info.name}'` });
       return annotation ? { ...info, typeStart: offsetOf(annotation.span.start) } : info;
    });
+   // What a stream sends are its chunks, one by one, not the iterable that the handler returns.
+   const chunkNode = streaming ? getChunkNode(returnNode as AstNode, locals) : null;
    // The result of an async signature is the value that the Promise resolves to.
-   const result: AstNode[] = isAsync
-      ? (unwrapTypeParentheses(returnNode as AstNode).typeParams?.params ?? [])
-      : [returnNode as AstNode];
+   const result: AstNode[] = chunkNode
+      ? [chunkNode]
+      : isAsync
+        ? (unwrapTypeParentheses(returnNode as AstNode).typeParams?.params ?? [])
+        : [returnNode as AstNode];
    for (const node of result) {
-      walkCloneType(node, { ...walk, where: "return type", inParam: false });
+      walkCloneType(node, {
+         ...walk,
+         where: chunkNode ? "chunk type" : "return type",
+         inParam: false,
+      });
    }
    return {
       definition: src.text(fn),
@@ -748,6 +788,9 @@ export function parseSignature(
       async: isAsync,
       typeRefs,
       ...(cloneIssues.length > 0 ? { cloneIssues } : {}),
+      ...(chunkNode
+         ? { chunkType: src.text(chunkNode), chunkStart: offsetOf(chunkNode.span.start) }
+         : {}),
    };
 }
 
@@ -1143,16 +1186,24 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
    ) {
       throw fail("a 'this' parameter is not supported, since IPC does not transfer 'this'.");
    }
+   const parsed = parseSignature(
+      signature as unknown as TsFunctionType,
+      ctx.src,
+      ctx.locals,
+      ctx.declarations,
+      info.kind === "Stream",
+   );
+   if (info.kind === "Stream" && parsed.chunkType === undefined) {
+      throw fail(
+         `the signature of '${verb}' must return AsyncIterable<Chunk>, AsyncIterableIterator<Chunk> ` +
+            `or AsyncGenerator<Chunk>, found '${parsed.returnType}'.`,
+      );
+   }
    return {
       name,
       kind: info.kind,
       direction: info.direction,
-      signature: parseSignature(
-         signature as unknown as TsFunctionType,
-         ctx.src,
-         ctx.locals,
-         ctx.declarations,
-      ),
+      signature: parsed,
       ...(typeArgs.length === 2 ? { errors: parseErrors(typeArgs[1], ctx) } : {}),
       ...config,
    };

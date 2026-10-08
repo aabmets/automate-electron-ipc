@@ -28,6 +28,7 @@ Node library for generating IPC components for Electron apps.
 5) Automatic import of user-defined types for generated components
 6) BrowserWindow event triggers for `emit` channels
 7) `ask` channels, with which the main process asks a renderer and awaits the answer
+8) `stream` channels, with which the main process streams results to a renderer, which can cancel
 
 
 ### Installation
@@ -154,7 +155,7 @@ meaning you can use any front-end framework or library like React, Vue or Angula
 Each verb declares one kind of channel in one direction:
 
 ```typescript
-import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";
+import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
@@ -170,6 +171,10 @@ export default defineChannels({
    // Request from the main process to a renderer process with return data
    hasUnsavedChanges: ask<(documentId: number) => boolean>(),
 
+   // Request from a renderer process to the main process with a stream of results, which the
+   // renderer can cancel
+   exportRows: stream<(table: string) => AsyncIterable<Row>>(),
+
    // Sender and listener on same port for each of two renderer processes
    chat: port<(msg: string) => void>(),
 
@@ -184,6 +189,7 @@ export default defineChannels({
 | `send`   | RendererToMain     | `void` or `Promise<void>`    |
 | `emit`   | MainToRenderer     | `void` or `Promise<void>`    |
 | `ask`    | MainToRenderer     | any value or promise         |
+| `stream` | RendererToMain     | `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk>` |
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
 | `mainPort` | MainToRenderer   | `void` or `Promise<void>`    |
 
@@ -219,6 +225,7 @@ on the verb of the channel and on the process that uses it:
 | `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
 | `emit`   | `ipc.<name>.send(target, ...args)`, `sendToSender(event, ...args)`, `broadcast(...args)`, `broadcastTo(filter, ...args)` | `ipc.<name>.on(callback)` |
 | `ask`    | `ipc.<name>.invoke(target, ...args)`, `invokeWith(target, options, ...args)` | `ipc.<name>.handle(callback)` |
+| `stream` | `ipc.<name>.handle(callback)`, where the callback is an `async function*` | `ipc.<name>.stream(...args)` |
 | `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `on(callback)`, `onReady(callback)`, `onClose(callback)`, `onOverflow(callback)`, `onConnection(callback)` |
 | `mainPort` | `ipc.<name>.connect(target)`      | the same as `port`                                |
 
@@ -340,6 +347,90 @@ A renderer has a single responder per channel. Calling `handle` again replaces t
 and the function that `handle` returns removes only its own responder: the disposer of a replaced
 responder does nothing. The preload script listens from the start, so a question that arrives while
 no responder is registered is answered with `IPC_ASK_NO_HANDLER` at once, and not left to time out.
+
+#### Streaming results
+
+A `stream` channel sends many results for one call, and the renderer can stop it. Use it for
+downloads, exports, long jobs and token streams. The signature takes the arguments of the call and
+returns an `AsyncIterable<Chunk>` (or an `AsyncIterableIterator<Chunk>` or an `AsyncGenerator<Chunk>`),
+and the handler in the main process is an `async function*`:
+
+```typescript
+// schema.ts
+exportRows: stream<(table: string, limit?: number) => AsyncIterable<Row>, DatabaseError>(),
+
+// main process: the event comes first, as for the handler of an invoke
+ipc.exportRows.handle(async function* (event, table, limit) {
+   const cursor = await database.open(table);
+   try {
+      for await (const row of cursor) {
+         yield row;
+      }
+   } finally {
+      await cursor.close(); // also runs when the renderer cancels
+   }
+});
+
+// renderer
+for await (const row of ipc.exportRows.stream("people", 100)) {
+   table.append(row);
+}
+```
+
+Every call gets a `MessageChannelMain` of its own, so the chunks of two calls never mix, and they
+arrive in the order that the generator produced them. The page calls `ipc.<name>.stream(...args)`,
+which asks the main process through `ipcMain.handle` and returns the stream at once. The main
+process hands one port of a new channel to the frame that asked, and sends `chunk` messages over the
+other one, then `end` or `error`, and closes it. If the call cannot start, for example because the
+sender is not allowed, the arguments are invalid, no handler is registered or the handler throws
+before it returns, then the first read of the stream rejects instead.
+
+The stream is an async iterator with one more method, `cancel()`:
+
+```typescript
+const stream = ipc.exportRows.stream("people");
+const first = await stream.next();  // { done: false, value: row }
+stream.cancel();                    // or: await stream.return()
+```
+
+`cancel()`, `return()` and the `break` of a `for await` loop stop the stream: the main process calls
+`return()` on the generator, so its `finally` blocks run, no chunk is sent after that, and the
+chunks that the page has not read yet are dropped. The main process also stops the generator when
+the page closes its port, such as when it navigates away, and when its contents are destroyed. A
+generator that is waiting for something when the stop arrives is stopped when it next yields, as
+`return()` of any async generator is. The generator cannot be interrupted while it waits.
+
+**There is no `AbortSignal` option**, since `contextBridge` copies an `AbortSignal` as an empty
+object (checked in Electron 44.7.0), so the preload script cannot listen to it. A page that has a
+signal stops the stream itself:
+
+```typescript
+const stream = ipc.exportRows.stream("people");
+signal.addEventListener("abort", () => stream.cancel(), { once: true });
+```
+
+If the generator throws, the chunks that came before the error are read first. Then the read rejects
+with the error object of an `invoke` channel, `{ name, message, code?, data? }` (see Errors), and
+later reads are `done`. The second type argument documents the error types, in `window.d.ts`, as for
+`invoke`, and the `as` form cannot declare them. A chunk that cannot be cloned stops the generator
+and fails the stream with `IPC_STREAM_UNSENDABLE`. The other codes are `IPC_STREAM_NOT_ITERABLE` (the
+handler did not return an async iterable), `IPC_STREAM_INVALID_REQUEST`, `IPC_STREAM_INVALID_REPLY`,
+and `IPC_STREAM_CLOSED`, which a page gets when the port closes before the stream has ended. A stream
+always uses this error format, also with `rawErrors`. The types of the chunks are checked against the
+structured clone algorithm (see What Can Be Sent).
+
+`allowedOrigins` and `validate` work as they do for `invoke` (see Sender validation). A rejected
+call, and one with invalid arguments, fail the first read with `IPC_FORBIDDEN` and `IPC_VALIDATION`,
+before the handler runs.
+
+Things to know:
+
+- **There is no backpressure.** The generator runs ahead of a page that reads slowly, and the chunks
+  wait in the memory of the page until they are read. A page that stops reading should `cancel()`.
+- A stream starts when `stream(...)` is called, not at the first read.
+- A channel has one handler, as for `invoke`: registering `handle` again replaces the previous
+  one, and a stream that runs keeps the generator it started with. There is no `handleOnce`.
+- A stream is not cut off when a handler is replaced or removed, only when it ends or is cancelled.
 
 #### Port channels
 
@@ -667,7 +758,8 @@ against it, so a mistake is found when the bindings are generated and not when t
 - An instance of a **class declared in the schema file** is a warning: it arrives as a plain
   object without its prototype and methods. Use an interface or a type alias for the data.
 
-The result of an `invoke` channel may be a `Promise`, since that is how it is awaited. Types that
+The result of an `invoke` channel may be a `Promise`, since that is how it is awaited. The same checks
+apply to the type of the chunks of a `stream` channel, not to the iterable that the signature returns. Types that
 come from other files, `typeof` queries and the results of utility types such as `Omit` or
 `Exclude` are not followed, so they are never reported.
 

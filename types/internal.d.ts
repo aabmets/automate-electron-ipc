@@ -117,6 +117,13 @@ export interface CallableSignature {
    typeRefs?: TypeRef[];
    /** What the structured clone algorithm cannot send. Absent when there is nothing. */
    cloneIssues?: CloneIssue[];
+   /**
+    * The type of the chunks of a `stream` channel: the first type argument of the `AsyncIterable`,
+    * `AsyncIterableIterator` or `AsyncGenerator` that the signature returns. Absent for other kinds.
+    */
+   chunkType?: string;
+   /** Offset in `definition` where the text of `chunkType` starts. */
+   chunkStart?: number;
 }
 
 /** The error types that an `invoke` channel declares in its second type argument. */
@@ -128,7 +135,7 @@ export interface ErrorsSpec {
    typeRefs?: TypeRef[];
 }
 
-export type ChannelKind = "Broadcast" | "Unicast" | "Port";
+export type ChannelKind = "Broadcast" | "Unicast" | "Port" | "Stream";
 export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
 
 /** An identifier of the schema file which is a value import, such as `userArgs` in `{ userArgs }`. */
@@ -146,7 +153,7 @@ export interface ChannelSpec {
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;
-   /** The error types that a RendererToMain Unicast channel may reject with. An `ask` has none. */
+   /** The error types that a RendererToMain Unicast or Stream channel may fail with. An `ask` has none. */
    errors?: ErrorsSpec;
    trigger?: string;
    /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */

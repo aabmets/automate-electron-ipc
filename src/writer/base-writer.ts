@@ -121,7 +121,8 @@ export class BaseWriter {
          return specs;
       }
       return specs.map((spec) => {
-         const { definition, paramsStart, returnType, returnStart, params } = spec.signature;
+         const { definition, paramsStart, returnType, returnStart, params, chunkType, chunkStart } =
+            spec.signature;
          const refs = spec.signature.typeRefs ?? [];
          const rename = (text: string, offset: number | undefined) =>
             offset === undefined ? text : renameTypeReferences(text, offset, refs, renames);
@@ -144,6 +145,7 @@ export class BaseWriter {
                // Renaming changes the length of the text before the parameter list.
                paramsStart: rename(definition.slice(0, paramsStart), 0).length,
                returnType: rename(returnType, returnStart),
+               ...(chunkType === undefined ? {} : { chunkType: rename(chunkType, chunkStart) }),
                params: params.map((param) => ({
                   ...param,
                   type: rename(param.type, param.typeStart),

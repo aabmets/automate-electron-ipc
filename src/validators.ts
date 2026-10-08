@@ -107,13 +107,14 @@ function getChannelSpecStruct(
    restrictable = false,
    asking = false,
    bounded = false,
+   streaming = false,
 ): Struct<any, any> {
    return object({
       name: refine(string(), "identifier", (value) =>
          CHANNEL_NAME.test(value) ? true : `Channel name '${value}' is not a plain identifier`,
       ),
       kind: refine(string(), "choice", (value) => {
-         const choices = ["Broadcast", "Unicast", "Port"];
+         const choices = ["Broadcast", "Unicast", "Port", "Stream"];
          if (choices.includes(value)) {
             return true;
          } else {
@@ -128,6 +129,8 @@ function getChannelSpecStruct(
             choices.push(asking ? "MainToRenderer" : "RendererToMain");
          } else if (kind === "Port") {
             choices.push("RendererToRenderer", "MainToRenderer");
+         } else if (kind === "Stream") {
+            choices.push("RendererToMain");
          }
          return choices.includes(value)
             ? true
@@ -148,6 +151,8 @@ function getChannelSpecStruct(
          returnType: string(),
          returnStart: optional(number()),
          returnsVoid: optional(boolean()),
+         chunkType: streaming ? string() : optional(never()),
+         chunkStart: streaming ? optional(number()) : optional(never()),
          customTypes: array(string()),
          async: boolean(),
          typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
@@ -166,7 +171,7 @@ function getChannelSpecStruct(
          ),
       }),
       errors:
-         kind === "Unicast" && !asking
+         (kind === "Unicast" && !asking) || streaming
             ? optional(
                  object({
                     definition: string(),
@@ -191,6 +196,7 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       UnicastStruct: getChannelSpecStruct("Unicast", false, true),
       AskStruct: getChannelSpecStruct("Unicast", false, false, true),
       PortStruct: getChannelSpecStruct("Port", false, false, false, true),
+      StreamStruct: getChannelSpecStruct("Stream", false, true, false, false, true),
    };
    if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
       if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
@@ -206,6 +212,8 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
             ? structMap.AskStruct
             : structMap.UnicastStruct,
       );
+   } else if (spec?.kind === ("Stream" as t.ChannelKind)) {
+      assert(spec, structMap.StreamStruct);
    } else {
       assert(spec, structMap.PortStruct);
    }

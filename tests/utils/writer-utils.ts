@@ -104,10 +104,14 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
 }
 
 /** Parses a signature text the same way the parser does for real schema files. */
-export function parseTestSignature(definition: string, locals: string[] = []): t.CallableSignature {
+export function parseTestSignature(
+   definition: string,
+   locals: string[] = [],
+   streaming = false,
+): t.CallableSignature {
    const { module, src } = parser.parseModule(`type T = ${definition};`);
    const alias = (module.body[0] as any).typeAnnotation;
-   return parser.parseSignature(alias, src, new Set(locals));
+   return parser.parseSignature(alias, src, new Set(locals), new Map(), streaming);
 }
 
 export interface SimpleChannel {
@@ -122,7 +126,7 @@ export interface SimpleChannel {
    validate?: t.ValidatorRef;
    /** The size of the send queues of a port channel. */
    maxQueue?: number;
-   /** The error types of an invoke channel, such as `"NotFoundError | AuthError"`. */
+   /** The error types of an invoke or stream channel, such as `"NotFoundError | AuthError"`. */
    errors?: string;
 }
 
@@ -138,7 +142,13 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
       const { trigger, errors, params: _params, returnType: _returnType, ...rest } = channel;
       return {
          ...rest,
-         signature: parser.parseSignature(alias, src),
+         signature: parser.parseSignature(
+            alias,
+            src,
+            new Set(),
+            new Map(),
+            channel.kind === "Stream",
+         ),
          ...(trigger && { trigger }),
          ...(errors && { errors: { definition: errors, customTypes: [] } }),
       };

@@ -144,6 +144,17 @@
          "javascript": {
             "globals": ["ipc"]
          }
+      },
+      {
+         "includes": ["tests/fixtures/stream-channels/**", "tests/test_e2e/streams.test.ts"],
+         "linter": {
+            "rules": {
+               "suspicious": {
+                  "useAwait": "off",
+                  "noEmptyBlockStatements": "off"
+               }
+            }
+         }
       }
    ]
 }

@@ -103,12 +103,18 @@ export class MainBindingsWriter extends BaseWriter {
          "configurePorts",
          "MainPortQueue",
          "enqueueMainPort",
+         "startStream",
+         "stopIterator",
          // Globals that the generated code uses.
          "Promise",
          "Error",
          "TypeError",
          "Array",
          "Awaited",
+         "Symbol",
+         "AsyncIterable",
+         "AsyncIterator",
+         "IteratorResult",
          "structuredClone",
          "Math",
          "Infinity",
@@ -131,6 +137,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesValidation = false;
       let usesEnvelope = false;
       let usesSenders = false;
+      let usesStreams = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -145,6 +152,7 @@ export class MainBindingsWriter extends BaseWriter {
                eventTypes.add(this.getEventType(spec));
                usesHandlers ||= spec.kind !== "Broadcast";
                usesEnvelope ||= this.usesEnvelope(spec);
+               usesStreams ||= spec.kind === "Stream";
                const validator = this.importValidator(
                   parsedFileSpecs,
                   spec,
@@ -173,6 +181,7 @@ export class MainBindingsWriter extends BaseWriter {
             }
          }
       }
+      this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
       const usesAsks = this.hasChannels("Unicast");
       const usesEmits = this.hasChannels("Broadcast");
       const usesRendererPorts = this.hasPorts("RendererToRenderer");
@@ -199,6 +208,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesPorts,
             usesRendererPorts,
             usesMainPorts,
+            usesStreams,
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -218,6 +228,15 @@ export class MainBindingsWriter extends BaseWriter {
          ...(types.length > 0 ? [`import type { ${types.join(", ")} } from "electron";`] : []),
          ...declarations.sort(utils.compareStrings),
       ];
+   }
+   /** Adds the electron imports that the helpers of the `stream` channels use. */
+   private addStreamImports(used: boolean, values: Set<string>, types: Set<string>): void {
+      if (used) {
+         values.add("MessageChannelMain");
+         for (const type of ["MessagePortMain", "WebContents", "WebFrameMain"]) {
+            types.add(type);
+         }
+      }
    }
    /** Whether any schema file declares a channel of the kind from the main process to a renderer. */
    private hasChannels(kind: t.ChannelKind): boolean {
@@ -271,6 +290,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesPorts: boolean;
          usesRendererPorts: boolean;
          usesMainPorts: boolean;
+         usesStreams: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -289,6 +309,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesAsks) {
          support.push(this.buildAskHelpers());
+      }
+      if (uses.usesStreams) {
+         support.push(this.buildStreamHelpers());
       }
       if (uses.usesPorts) {
          support.push(this.buildPortRegistry());
@@ -326,9 +349,12 @@ export class MainBindingsWriter extends BaseWriter {
       }
       return imported.local;
    }
-   /** Whether the results and errors of the handler of the channel are sent as an envelope. */
+   /**
+    * Whether the results and errors of the handler of the channel are sent as an envelope. A
+    * stream always does, since the start of a stream has no error of Electron's to leave it to.
+    */
    private usesEnvelope(spec: t.ChannelSpec): boolean {
-      return spec.kind === "Unicast" && !this.config.rawErrors;
+      return spec.kind === "Stream" || (spec.kind === "Unicast" && !this.config.rawErrors);
    }
    /**
     * The envelope of `invoke` channels: `settleInvoke` runs the handler and answers with
@@ -622,7 +648,9 @@ export class MainBindingsWriter extends BaseWriter {
          spent: this.uniqueName("spent", taken),
       };
       const envelope = this.usesEnvelope(spec);
+      const isStream = spec.kind === "Stream";
       const argsName = this.uniqueName("rest", taken);
+      const idName = this.uniqueName("id", taken);
       const innerName = envelope ? this.uniqueName("handler", taken) : listenerName;
       const register = (method: string, once: boolean) => {
          const params = wrapperParams.filter(Boolean).join(", ");
@@ -639,13 +667,21 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
                  `${i2}};`,
               ];
-         const listener = envelope
+         // A stream is started by the call: the first argument is the ID that the page gave it.
+         const run = `(${innerName} as (...${argsName}: unknown[]) => unknown)(${eventName}, ...${argsName})`;
+         const listener = isStream
             ? [
                  ...inner,
-                 `${i2}const ${listenerName} = (${eventName}: ${eventType}, ...${argsName}: unknown[]) =>`,
-                 `${i3}settleInvoke(() => (${innerName} as (...${argsName}: unknown[]) => unknown)(${eventName}, ...${argsName}));`,
+                 `${i2}const ${listenerName} = (${eventName}: ${eventType}, ${idName}: unknown, ...${argsName}: unknown[]) =>`,
+                 `${i3}settleInvoke(() => startStream(${eventName}, ${channel}, ${wire}, ${idName}, () => ${run}));`,
               ]
-            : inner;
+            : envelope
+              ? [
+                   ...inner,
+                   `${i2}const ${listenerName} = (${eventName}: ${eventType}, ...${argsName}: unknown[]) =>`,
+                   `${i3}settleInvoke(() => ${run});`,
+                ]
+              : inner;
          const lines = [
             `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
             ...guard,
@@ -666,9 +702,12 @@ export class MainBindingsWriter extends BaseWriter {
          lines.push(`${i2}return ${removeName};`, `${i1}},`);
          return lines.join("\n");
       };
+      // A stream has no `handleOnce`: a call does not use up a handler that is a generator.
       const members = isBroadcast
          ? [register("on", false), register("once", true)]
-         : [register("handle", false), register("handleOnce", true)];
+         : isStream
+           ? [register("handle", false)]
+           : [register("handle", false), register("handleOnce", true)];
       return { name: spec.name, members };
    }
    /**
@@ -972,6 +1011,135 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}finish(() => reject(error));`,
          `${i2}}`,
          `${i1}});`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * `startStream`, which the listener of a `stream` channel calls with the iterable that the
+    * handler returned. It makes a `MessageChannelMain` for the call, hands one port to the frame
+    * that asked, with the ID that the page chose, and drives the iterator over the other one. The
+    * messages are `{ type: 'chunk', value }` in order, then `{ type: 'end' }` or
+    * `{ type: 'error', error }`, and then the port is closed. The page cancels with
+    * `{ type: 'cancel' }` or by closing its port, and the stream also stops when the contents are
+    * destroyed. A stop calls `return()` on the iterator once, so that the generator runs its
+    * `finally` blocks, and no chunk is sent after it. A chunk that cannot be cloned stops the
+    * iterator and fails the stream. Everything that goes wrong before the port is handed over is
+    * thrown, and reaches the page as the envelope of the call, so no port exists for it.
+    * The generator is not slowed down for a page that reads slowly: there is no backpressure.
+    */
+   private buildStreamHelpers(): string {
+      const [i1, i2, i3, i4, i5] = this.indents;
+      return [
+         "",
+         "function stopIterator(iterator: AsyncIterator<unknown>): void {",
+         `${i1}try {`,
+         `${i2}Promise.resolve(iterator.return?.()).catch((error: unknown) => console.error(error));`,
+         `${i1}} catch (error) {`,
+         `${i2}console.error(error);`,
+         `${i1}}`,
+         "}",
+         "",
+         "async function startStream(",
+         `${i1}event: IpcMainInvokeEvent,`,
+         `${i1}channel: string,`,
+         `${i1}wire: string,`,
+         `${i1}id: unknown,`,
+         `${i1}produce: () => unknown,`,
+         "): Promise<void> {",
+         `${i1}if (typeof id !== 'number') {`,
+         `${i2}throw { name: 'IpcStreamError', message: \`The call of the channel '\${channel}' has no stream ID\`, code: 'IPC_STREAM_INVALID_REQUEST' };`,
+         `${i1}}`,
+         `${i1}const source = (await produce()) as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> } | null | undefined;`,
+         `${i1}const open = source ? source[Symbol.asyncIterator] : undefined;`,
+         `${i1}if (!source || typeof open !== 'function') {`,
+         `${i2}throw { name: 'IpcStreamError', message: \`The handler of the channel '\${channel}' did not return an async iterable\`, code: 'IPC_STREAM_NOT_ITERABLE' };`,
+         `${i1}}`,
+         `${i1}const iterator = open.call(source);`,
+         `${i1}const { port1, port2 } = new MessageChannelMain();`,
+         `${i1}// The port goes to the frame that asked. A frame that is gone cannot be reached.`,
+         `${i1}let target: WebContents | WebFrameMain = event.sender;`,
+         `${i1}try {`,
+         `${i2}const frame = event.senderFrame;`,
+         `${i2}if (frame && !frame.isDestroyed?.() && !frame.detached) {`,
+         `${i3}target = frame;`,
+         `${i2}}`,
+         `${i1}} catch {`,
+         `${i2}// The sender is used instead.`,
+         `${i1}}`,
+         `${i1}try {`,
+         `${i2}target.postMessage(\`\${wire}:port\`, id, [port2]);`,
+         `${i1}} catch (error) {`,
+         `${i2}port1.close();`,
+         `${i2}stopIterator(iterator);`,
+         `${i2}throw error;`,
+         `${i1}}`,
+         `${i1}const sender = event.sender;`,
+         `${i1}let done = false;`,
+         `${i1}const finish = (): boolean => {`,
+         `${i2}if (done) {`,
+         `${i3}return false;`,
+         `${i2}}`,
+         `${i2}done = true;`,
+         `${i2}sender.removeListener('destroyed', cancel);`,
+         `${i2}port1.close();`,
+         `${i2}return true;`,
+         `${i1}};`,
+         `${i1}const cancel = (): void => {`,
+         `${i2}if (finish()) {`,
+         `${i3}stopIterator(iterator);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const fail = (error: IpcErrorInfo): void => {`,
+         `${i2}if (!done) {`,
+         `${i3}try {`,
+         `${i4}port1.postMessage({ type: 'error', error });`,
+         `${i3}} catch (cause) {`,
+         `${i4}console.error(cause);`,
+         `${i3}}`,
+         `${i3}finish();`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}port1.on('message', (message: { data: unknown }) => {`,
+         `${i2}const data = message.data as { type?: unknown } | null;`,
+         `${i2}if (data && data.type === 'cancel') {`,
+         `${i3}cancel();`,
+         `${i2}}`,
+         `${i1}});`,
+         `${i1}port1.on('close', cancel);`,
+         `${i1}sender.once('destroyed', cancel);`,
+         `${i1}port1.start();`,
+         `${i1}const pump = async (): Promise<void> => {`,
+         `${i2}while (!done) {`,
+         `${i3}let step: IteratorResult<unknown>;`,
+         `${i3}try {`,
+         `${i4}step = await iterator.next();`,
+         `${i3}} catch (error) {`,
+         `${i4}fail(toIpcError(error));`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}if (done) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}if (step.done) {`,
+         `${i4}try {`,
+         `${i5}port1.postMessage({ type: 'end' });`,
+         `${i4}} catch (cause) {`,
+         `${i5}console.error(cause);`,
+         `${i4}}`,
+         `${i4}finish();`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}try {`,
+         `${i4}port1.postMessage({ type: 'chunk', value: step.value });`,
+         `${i3}} catch (error) {`,
+         `${i4}stopIterator(iterator);`,
+         `${i4}fail({ name: 'IpcStreamError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_STREAM_UNSENDABLE' });`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}void pump();`,
          "}",
          "",
       ].join("\n");

@@ -13,7 +13,7 @@ import { typecheck } from "@testutils/tsc-utils.js";
 import { describe, expect, it } from "vitest";
 
 const IMPORT =
-   'import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";';
+   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";';
 
 describe("public types", () => {
    it("accepts the generic form and the as form", async () => {
@@ -51,6 +51,49 @@ describe("public types", () => {
          `,
       });
       expect(diagnostics).toBe("");
+   });
+
+   it("accepts the generic form and the as form of stream, with its options and error types", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import type { StandardSchemaV1 } from "automate-electron-ipc";
+            interface Row { id: number }
+            class NotFound extends Error {}
+            declare const rowArgs: StandardSchemaV1<unknown, [table: string]>;
+
+            export default defineChannels({
+               rows: stream<(table: string) => AsyncIterable<Row>>(),
+               rowsGen: stream<(table: string) => AsyncGenerator<Row, void, undefined>>({}),
+               rowsIter: stream<() => AsyncIterableIterator<Row>, NotFound>(),
+               rowsGuarded: stream<(table: string) => AsyncIterable<Row>>({
+                  allowedOrigins: ["app://."],
+                  validate: rowArgs,
+               }),
+               rowsAlt: stream({}) as (table: string) => AsyncIterable<Row>,
+            });
+         `,
+      });
+      expect(diagnostics).toBe("");
+   });
+
+   it("rejects options of other verbs and a validator for other arguments on stream", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import type { StandardSchemaV1 } from "automate-electron-ipc";
+            declare const numberArgs: StandardSchemaV1<unknown, [n: number]>;
+            export default defineChannels({
+               withTrigger: stream<() => AsyncIterable<number>>({ trigger: "focus" }),
+               withQueue: stream<() => AsyncIterable<number>>({ maxQueue: 5 }),
+               wrongValidator: stream<(table: string) => AsyncIterable<number>>({ validate: numberArgs }),
+               notStream: stream<() => Promise<number>>,
+            });
+         `,
+      });
+      expect(diagnostics).toContain("schema.ts(6,");
+      expect(diagnostics).toContain("schema.ts(7,");
+      expect(diagnostics).toContain("schema.ts(8,");
    });
 
    it("rejects options and error types on ask", async () => {

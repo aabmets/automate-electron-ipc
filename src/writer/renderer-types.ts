@@ -19,6 +19,8 @@ interface ChannelEntry {
    throws?: boolean;
    /** Whether the channel has an overflow callback, which uses the types of the overflow. */
    overflows?: boolean;
+   /** Whether the channel returns an `IpcStream`. */
+   streams?: boolean;
    /** The methods of the channel, one per line, starting with a newline. */
    methods: string[];
 }
@@ -35,7 +37,10 @@ export class RendererTypesWriter extends BaseWriter {
          "IpcError",
          "IpcPortOverflowInfo",
          "IpcPortOverflowAction",
+         "IpcStream",
          "Error",
+         "Symbol",
+         "IteratorResult",
          "Promise",
          "Awaited",
          "Parameters",
@@ -55,6 +60,8 @@ export class RendererTypesWriter extends BaseWriter {
             if (spec.kind === "Port") {
                // The page has the same API for both peers: another page, or the main process.
                channels.push(this.buildPortChannel(spec));
+            } else if (spec.kind === "Stream") {
+               channels.push(this.buildStreamChannel(spec));
             } else if (spec.direction === "RendererToMain") {
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
@@ -99,7 +106,8 @@ export class RendererTypesWriter extends BaseWriter {
          ? [
               `${i0}/**`,
               `${i0} * The object that the promise of \`ipc.<name>.invoke\` is rejected with when the handler`,
-              `${i0} * throws. It is a plain object, since contextBridge does not keep the fields of an \`Error\`.`,
+              `${i0} * throws, and that a read of \`ipc.<name>.stream\` is rejected with when the stream fails.`,
+              `${i0} * It is a plain object, since contextBridge does not keep the fields of an \`Error\`.`,
               `${i0} */`,
               `${i0}type IpcError<E extends Error = Error> = E extends unknown`,
               `${i1}? { name: E['name']; message: string } & (E extends { code: infer C extends string | number }`,
@@ -110,6 +118,20 @@ export class RendererTypesWriter extends BaseWriter {
               `${i1}: never;`,
            ].join("\n")
          : "";
+      // The stream type is declared only if a stream channel uses it.
+      const streamType = channels.some((channel) => channel.streams)
+         ? [
+              `\ninterface IpcStream<T> {`,
+              `${i0}/** The next chunk. The promise is rejected with the error of the stream, if it fails. */`,
+              `${i0}next(): Promise<IteratorResult<T, undefined>>;`,
+              `${i0}/** Stops the stream and the generator in the main process. */`,
+              `${i0}return(): Promise<IteratorResult<T, undefined>>;`,
+              `${i0}/** Stops the stream and the generator in the main process, like \`return()\` does. */`,
+              `${i0}cancel(): void;`,
+              `${i0}[Symbol.asyncIterator](): IpcStream<T>;`,
+              "}",
+           ]
+         : [];
       const globals = [`${i0}var ipc: IpcApi;`, ...(errorType ? [errorType] : [])];
       // The types of the overflow callbacks, declared only if a port channel has them.
       const overflowTypes = channels.some((channel) => channel.overflows)
@@ -125,6 +147,7 @@ export class RendererTypesWriter extends BaseWriter {
          : [];
       return [
          ...overflowTypes,
+         ...streamType,
          `\ninterface IpcApi {${body}}`,
          `\ndeclare global {\n${globals.join("\n")}\n}`,
          "\nexport {};\n",
@@ -148,6 +171,23 @@ export class RendererTypesWriter extends BaseWriter {
       const errorType = spec.errors ? `IpcError<${spec.errors.definition}>` : "IpcError";
       const doc = `/** @throws {${errorType}} */`;
       return { name: spec.name, throws: true, methods: [this.method(method, ipcSignature, doc)] };
+   }
+   /**
+    * `ipc.<name>.stream(...args)` returns an `IpcStream` of the chunks, not the iterable that the
+    * handler returns: the page cannot hand a signal over `contextBridge`, so it stops the stream
+    * with `cancel()` or `return()`, and a failure rejects the read with the error object.
+    */
+   private buildStreamChannel(spec: t.ChannelSpec): ChannelEntry {
+      const signatureHead = `${this.getTypeParams(spec.signature)}(${this.getOriginalParams(spec, false)})`;
+      const chunk = spec.signature.chunkType ?? "unknown";
+      const errorType = spec.errors ? `IpcError<${spec.errors.definition}>` : "IpcError";
+      const doc = `/** @throws {${errorType}} when the stream fails, from a read of the stream */`;
+      return {
+         name: spec.name,
+         throws: true,
+         streams: true,
+         methods: [this.method("stream", `${signatureHead} => IpcStream<${chunk}>`, doc)],
+      };
    }
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
       if (spec.kind === "Unicast") {

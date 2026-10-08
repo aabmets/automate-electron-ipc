@@ -389,4 +389,101 @@ describe("PreloadBindingsWriter", () => {
          expect(await render([ask], { rawErrors: true })).toBe(await render([ask]));
       });
    });
+   describe("stream channels", () => {
+      const rows = {
+         name: "exportRows",
+         kind: "Stream",
+         direction: "RendererToMain",
+         params: ["table: string"],
+         returnType: "AsyncIterable<Row>",
+      } as const;
+      const tokens = {
+         name: "tokens",
+         kind: "Stream",
+         direction: "RendererToMain",
+         returnType: "AsyncIterable<string>",
+      } as const;
+      const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
+      const render = async (
+         channels: Parameters<typeof shared.buildFileSpecs>,
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("exposes stream only, which opens a stream of the channel", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain(
+            "\n   exportRows: {\n      stream: (...args: any[]) => openStream('exportRows', 'exportRows', args),\n   },",
+         );
+         expect(output).not.toContain("exportRows: {\n      invoke:");
+      });
+
+      it("listens for the ports of the calls of every channel, in name order", async () => {
+         const output = await render([tokens, rows]);
+
+         expect(output).toContain("listenForStreamPorts('exportRows:port');");
+         expect(output.indexOf("listenForStreamPorts('exportRows:port')")).toBeLessThan(
+            output.indexOf("listenForStreamPorts('tokens:port')"),
+         );
+         expect(output).toBe(await render([rows, tokens]));
+         expect(output.match(/^function openStream\(/gm)).toHaveLength(1);
+         expect(output.match(/^function listenForStreamPorts\(/gm)).toHaveLength(1);
+      });
+
+      it("calls the main process with invoke, the ID in front of the arguments", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain("ipcRenderer.invoke(wire, id, ...args).then(");
+         expect(output).toContain("[Symbol.asyncIterator]: () => stream,");
+      });
+
+      it("sends the cancel message and closes the port, and fails a port which closes early", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain("port?.postMessage({ type: 'cancel' });");
+         expect(output).toContain("code: 'IPC_STREAM_CLOSED'");
+         expect(output).toContain("code: 'IPC_STREAM_INVALID_REPLY'");
+      });
+
+      it("shares the error helpers with the ask channels, which are declared once", async () => {
+         const both = await render([rows, ask]);
+
+         expect(both.match(/^function toIpcError\(/gm)).toHaveLength(1);
+         expect(both.match(/^interface IpcErrorInfo \{/gm)).toHaveLength(1);
+         expect(both).toContain("async function answerAsk(");
+         expect(both).toContain("function openStream(");
+         const streams = await render([rows]);
+         expect(streams).toContain("function toIpcError(");
+         expect(streams).not.toContain("answerAsk");
+         expect(streams).not.toContain("askHandlers");
+      });
+
+      it("generates nothing of streams for the other channels", async () => {
+         const output = await render([ask]);
+
+         expect(output).not.toContain("openStream");
+         expect(output).not.toContain("listenForStreamPorts");
+      });
+
+      it("puts the prefix in front of the request and the port channel only", async () => {
+         const output = await render([rows], { channelPrefix: "app:" });
+
+         expect(output).toContain("openStream('exportRows', 'app:exportRows', args)");
+         expect(output).toContain("listenForStreamPorts('app:exportRows:port');");
+         const bare = await render([rows], { channelPrefix: "" });
+         expect(bare).toContain("openStream('exportRows', 'exportRows', args)");
+         expect(await render([rows], {})).toBe(bare);
+      });
+
+      it("is not changed by rawErrors, since the call is always answered with an envelope", async () => {
+         expect(await render([rows], { rawErrors: true })).toBe(await render([rows]));
+      });
+   });
 });

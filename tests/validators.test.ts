@@ -130,9 +130,9 @@ describe("validateChannelSpecs", () => {
 
    it("should throw Struct error when channel kind is not a known kind", () => {
       const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
-      const invalid = { ...spec, kind: "Stream" } as unknown as t.ChannelSpec;
+      const invalid = { ...spec, kind: "Pipe" } as unknown as t.ChannelSpec;
       expect(() => vld.validateChannelSpecs([invalid])).toThrowError(
-         "Channel kind must be one of: ['Broadcast', 'Unicast', 'Port']",
+         "Channel kind must be one of: ['Broadcast', 'Unicast', 'Port', 'Stream']",
       );
    });
 
@@ -337,6 +337,87 @@ describe("validateChannelSpecs, ask channels", () => {
       const clash = { ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast") };
       expect(() => vld.validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
+      );
+   });
+});
+
+describe("validateChannelSpecs, stream channels", () => {
+   const generate = (returnType = "AsyncIterable<number>") =>
+      new ChannelSpecGenerator().generate("RendererToMain", "Stream", returnType);
+
+   it("accepts a Stream channel from a renderer to the main process", () => {
+      for (const returnType of [
+         "AsyncIterable<number>",
+         "AsyncIterableIterator<Row>",
+         "AsyncGenerator<string, void, undefined>",
+      ]) {
+         const spec = generate(returnType);
+         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+      }
+   });
+
+   it("accepts the origins, the validator and the error types of the call", () => {
+      const ref = { name: "args", exported: "args", fromPath: "./v" };
+      const spec = {
+         ...generate(),
+         allowedOrigins: ["app://."],
+         validate: ref,
+         errors: { definition: "NotFoundError", customTypes: ["NotFoundError"] },
+      };
+      expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+   });
+
+   it("rejects every other direction", () => {
+      for (const direction of ["MainToRenderer", "RendererToRenderer"] as const) {
+         const spec = new ChannelSpecGenerator().generate(
+            direction,
+            "Stream",
+            "AsyncIterable<number>",
+         );
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `Channel kind 'Stream' is not allowed when channel direction is '${direction}'.`,
+         );
+      }
+   });
+
+   it("needs the chunk type that the parser reads from the return type", () => {
+      const spec = generate();
+      const { chunkType: _chunkType, chunkStart: _chunkStart, ...signature } = spec.signature;
+      expect(() => vld.validateChannelSpecs([{ ...spec, signature }])).toThrowError(
+         /signature\.chunkType/,
+      );
+   });
+
+   it("allows the chunk type only on a Stream channel", () => {
+      const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
+      const signature = { ...spec.signature, chunkType: "number" };
+      expect(() => vld.validateChannelSpecs([{ ...spec, signature }])).toThrowError(
+         /signature\.chunkType/,
+      );
+   });
+
+   it("rejects the trigger and the queue size of other verbs", () => {
+      for (const extra of [{ trigger: "focus" }, { maxQueue: 5 }]) {
+         const [key] = Object.keys(extra);
+         expect(() => vld.validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
+            new RegExp(key),
+         );
+      }
+   });
+
+   it("does not require a void return type, and keeps the names unique among all channels", () => {
+      const spec = generate("AsyncIterable<string>");
+      const clash = { ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast") };
+      expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
+      expect(() => vld.validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
+         `Channel name '${spec.name}' is not unique across application.`,
+      );
+   });
+
+   it("reports a chunk which cannot be cloned like any other part of a signature", () => {
+      const spec = generate("AsyncIterable<() => void>");
+      expect(() => vld.validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
+         /Schema file 'ipc\/schema.ts': Channel 'vitestChannel_0': chunk type contains a function/,
       );
    });
 });

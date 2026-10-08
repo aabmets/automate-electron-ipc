@@ -32,6 +32,7 @@ export class PreloadBindingsWriter extends BaseWriter {
    protected renderFileContents(): string {
       const portSpecs: t.ChannelSpec[] = [];
       const askNames: string[] = [];
+      const streamSpecs: t.ChannelSpec[] = [];
       const channels: ChannelEntry[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -43,6 +44,9 @@ export class PreloadBindingsWriter extends BaseWriter {
                   name: spec.name,
                   property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
                });
+            } else if (spec.kind === "Stream") {
+               streamSpecs.push(spec);
+               channels.push(this.buildStreamChannel(spec));
             } else if (spec.direction === "RendererToMain") {
                channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
@@ -63,10 +67,22 @@ export class PreloadBindingsWriter extends BaseWriter {
                .map((spec) => this.getPortInitializer(spec)),
          );
       }
+      if (askNames.length > 0 || streamSpecs.length > 0) {
+         out.push(this.buildErrorComponents());
+      }
       if (askNames.length > 0) {
          out.push(
             this.buildAskComponents(),
             ...askNames.sort(utils.compareStrings).map((askName) => this.buildAskListener(askName)),
+         );
+      }
+      if (streamSpecs.length > 0) {
+         out.push(
+            this.buildStreamComponents(),
+            ...streamSpecs
+               .sort((a, b) => utils.compareStrings(a.name, b.name))
+               .map((spec) => this.buildStreamListener(spec.name)),
+            "",
          );
       }
       const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
@@ -153,17 +169,11 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
 
    /**
-    * The answering side of the `ask` channels. The responders live here, in the preload script,
-    * since contextBridge hands over a new proxy of a callback on every crossing. A question is
-    * answered with the envelope of the `invoke` channels, `{ ok: true, value }` or
-    * `{ ok: false, error }`, and with the error code `IPC_ASK_NO_HANDLER` when no responder is
-    * registered, so that the main process does not wait for nothing. A responder which throws is
-    * reduced to `{ name, message, code?, data? }`, like the handler of an `invoke`. contextBridge
-    * keeps only the message of an `Error` that the page throws, so a responder which wants its
-    * `code` and `data` to arrive throws a plain object. An answer that cannot be cloned is
-    * replaced by an error, since it would otherwise never arrive.
+    * `IpcErrorInfo`, `IpcEnvelope` and `toIpcError`, which the `ask` and `stream` channels share. An
+    * error that the page's code or the transport raised is reduced to `{ name, message, code?, data? }`
+    * like the handler of an `invoke` is, and the `data` that cannot be cloned is left out.
     */
-   private buildAskComponents(): string {
+   private buildErrorComponents(): string {
       const [i1, i2, i3, i4] = this.indents;
       return [
          "",
@@ -175,8 +185,6 @@ export class PreloadBindingsWriter extends BaseWriter {
          "}",
          "",
          "type IpcEnvelope = { ok: true; value: unknown } | { ok: false; error: IpcErrorInfo };",
-         "",
-         "const askHandlers: { [channel: string]: Function | undefined } = { __proto__: null } as any;",
          "",
          "function toIpcError(error: unknown): IpcErrorInfo {",
          `${i1}try {`,
@@ -199,6 +207,26 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}return { name: 'Error', message: 'The handler failed with an unreadable error' };`,
          `${i1}}`,
          "}",
+         "",
+      ].join("\n");
+   }
+
+   /**
+    * The answering side of the `ask` channels. The responders live here, in the preload script,
+    * since contextBridge hands over a new proxy of a callback on every crossing. A question is
+    * answered with the envelope of the `invoke` channels, `{ ok: true, value }` or
+    * `{ ok: false, error }`, and with the error code `IPC_ASK_NO_HANDLER` when no responder is
+    * registered, so that the main process does not wait for nothing. A responder which throws is
+    * reduced to `{ name, message, code?, data? }`, like the handler of an `invoke`. contextBridge
+    * keeps only the message of an `Error` that the page throws, so a responder which wants its
+    * `code` and `data` to arrive throws a plain object. An answer that cannot be cloned is
+    * replaced by an error, since it would otherwise never arrive.
+    */
+   private buildAskComponents(): string {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "",
+         "const askHandlers: { [channel: string]: Function | undefined } = { __proto__: null } as any;",
          "",
          "async function answerAsk(",
          `${i1}channel: string,`,
@@ -237,6 +265,172 @@ export class PreloadBindingsWriter extends BaseWriter {
          "});",
          "",
       ].join("\n");
+   }
+
+   /**
+    * `ipc.<name>.stream(...args)` of a `stream` channel, which returns the stream: an async
+    * iterator of the chunks, with `cancel()`. The page cannot pass an `AbortSignal`, which
+    * `contextBridge` copies as an empty object, so cancelling is `cancel()`, `return()` or the
+    * `break` of a `for await` loop.
+    */
+   private buildStreamChannel(spec: t.ChannelSpec): ChannelEntry {
+      const implementation = `(...args: any[]) => openStream('${spec.name}', ${this.wireName(spec.name)}, args)`;
+      return this.buildChannel(spec.name, "stream", implementation);
+   }
+
+   /**
+    * `openStream`, which starts a call of a `stream` channel and returns its stream. The page gets
+    * no `ipcRenderer`, only the object with `next`, `return`, `cancel` and `Symbol.asyncIterator`.
+    * The call is `ipcRenderer.invoke(wire, id, ...args)`: its envelope reports a failure to start
+    * (a rejected sender, invalid arguments, no handler, a handler that throws before it yields) and
+    * the main process hands over the port of the call, with the same `id`, on `<wire>:port`. Then:
+    * - `chunk` messages are queued until the page reads them, and a read resolves in order, also
+    *   when the page asks for several chunks at once. The stream is not slowed down for a slow
+    *   reader, so a reader that stops reading without cancelling keeps the chunks in memory;
+    * - `end` closes the stream after the queued chunks, and `error` does so by rejecting a read
+    *   with the error object, once the queued chunks have been read, as a plain object, since
+    *   contextBridge does not keep the fields of an `Error`;
+    * - `cancel` (and `return`, which a `break` calls) tells the main process, which calls `return()`
+    *   on the generator, closes the port and drops the chunks that are queued. A port that arrives
+    *   after the cancel is closed;
+    * - a port that closes before `end` fails the stream with the code `IPC_STREAM_CLOSED`.
+    */
+   private buildStreamComponents(): string {
+      const [i1, i2, i3, i4, i5] = this.indents;
+      return [
+         "type StreamResult = { done: boolean; value: unknown };",
+         "",
+         "const streamPorts: { [id: number]: ((port: MessagePort | undefined) => void) | undefined } = { __proto__: null } as any;",
+         "let lastStreamId = 0;",
+         "",
+         "function openStream(channel: string, wire: string, args: any[]) {",
+         `${i1}const id = ++lastStreamId;`,
+         `${i1}const chunks: unknown[] = [];`,
+         `${i1}const waiters: { resolve: (result: StreamResult) => void; reject: (error: unknown) => void }[] = [];`,
+         `${i1}let port: MessagePort | null = null;`,
+         `${i1}let finished = false;`,
+         `${i1}let failure: { error: unknown } | null = null;`,
+         `${i1}const drain = () => {`,
+         `${i2}while (waiters.length > 0) {`,
+         `${i3}const waiter = waiters[0];`,
+         `${i3}if (chunks.length > 0) {`,
+         `${i4}waiters.shift();`,
+         `${i4}waiter.resolve({ done: false, value: chunks.shift() });`,
+         `${i3}} else if (!finished) {`,
+         `${i4}return;`,
+         `${i3}} else if (failure) {`,
+         `${i4}const { error } = failure;`,
+         `${i4}failure = null;`,
+         `${i4}waiters.shift();`,
+         `${i4}waiter.reject(error);`,
+         `${i3}} else {`,
+         `${i4}waiters.shift();`,
+         `${i4}waiter.resolve({ done: true, value: undefined });`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const finish = (error?: { error: unknown }) => {`,
+         `${i2}if (finished) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}finished = true;`,
+         `${i2}failure = error ?? null;`,
+         `${i2}delete streamPorts[id];`,
+         `${i2}const current = port;`,
+         `${i2}port = null;`,
+         `${i2}if (current) {`,
+         `${i3}current.onmessage = null;`,
+         `${i3}current.close();`,
+         `${i2}}`,
+         `${i2}drain();`,
+         `${i1}};`,
+         `${i1}const cancel = () => {`,
+         `${i2}if (finished) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}try {`,
+         `${i3}port?.postMessage({ type: 'cancel' });`,
+         `${i2}} catch {`,
+         `${i3}// The port is gone, which stops the stream as well.`,
+         `${i2}}`,
+         `${i2}chunks.length = 0;`,
+         `${i2}finish();`,
+         `${i1}};`,
+         `${i1}streamPorts[id] = (next) => {`,
+         `${i2}if (!next) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}if (finished) {`,
+         `${i3}next.close();`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}port = next;`,
+         `${i2}next.onmessage = (event: MessageEvent) => {`,
+         `${i3}const message = event.data as { type?: unknown; value?: unknown; error?: unknown } | null;`,
+         `${i3}if (finished || !message) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}if (message.type === 'chunk') {`,
+         `${i4}chunks.push(message.value);`,
+         `${i4}drain();`,
+         `${i3}} else if (message.type === 'end') {`,
+         `${i4}finish();`,
+         `${i3}} else if (message.type === 'error') {`,
+         `${i4}finish({ error: message.error });`,
+         `${i3}}`,
+         `${i2}};`,
+         `${i2}next.addEventListener('close', () => {`,
+         `${i3}if (port === next) {`,
+         `${i4}const message = \`The stream of the channel '\${channel}' was closed before it ended\`;`,
+         `${i4}finish({ error: { name: 'IpcStreamError', message, code: 'IPC_STREAM_CLOSED' } });`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i1}};`,
+         `${i1}const unreadable = { name: 'IpcStreamError', message: \`The main process sent an unreadable reply to the channel '\${channel}'\`, code: 'IPC_STREAM_INVALID_REPLY' };`,
+         `${i1}try {`,
+         `${i2}ipcRenderer.invoke(wire, id, ...args).then(`,
+         `${i3}(result: IpcEnvelope | undefined) => {`,
+         `${i4}if (!result || !result.ok) {`,
+         `${i5}finish({ error: result && result.error ? result.error : unreadable });`,
+         `${i4}}`,
+         `${i3}},`,
+         `${i3}(error: unknown) => finish({ error: toIpcError(error) }),`,
+         `${i2});`,
+         `${i1}} catch (error) {`,
+         `${i2}finish({ error: toIpcError(error) });`,
+         `${i1}}`,
+         `${i1}const stream = {`,
+         `${i2}next: () =>`,
+         `${i3}new Promise<StreamResult>((resolve, reject) => {`,
+         `${i4}waiters.push({ resolve, reject });`,
+         `${i4}drain();`,
+         `${i3}}),`,
+         `${i2}return: () => {`,
+         `${i3}cancel();`,
+         `${i3}return Promise.resolve({ done: true, value: undefined });`,
+         `${i2}},`,
+         `${i2}cancel,`,
+         `${i2}[Symbol.asyncIterator]: () => stream,`,
+         `${i1}};`,
+         `${i1}return stream;`,
+         "}",
+         "",
+         "function listenForStreamPorts(portWire: string): void {",
+         `${i1}ipcRenderer.on(portWire, (event: { ports: MessagePort[] }, id: unknown) => {`,
+         `${i2}const attach = typeof id === 'number' ? streamPorts[id] : undefined;`,
+         `${i2}if (attach) {`,
+         `${i3}attach(event.ports[0]);`,
+         `${i2}} else {`,
+         `${i3}event.ports[0]?.close();`,
+         `${i2}}`,
+         `${i1}});`,
+         "}",
+         "",
+      ].join("\n");
+   }
+
+   private buildStreamListener(name: string): string {
+      return `listenForStreamPorts(${this.wireName(name, ":port")});`;
    }
 
    private buildChannel(name: string, method: string, implementation: string): ChannelEntry {

@@ -52,7 +52,8 @@ describe("RendererTypesWriter", () => {
             var ipc: IpcApi;
             /**
              * The object that the promise of \`ipc.<name>.invoke\` is rejected with when the handler
-             * throws. It is a plain object, since contextBridge does not keep the fields of an \`Error\`.
+             * throws, and that a read of \`ipc.<name>.stream\` is rejected with when the stream fails.
+             * It is a plain object, since contextBridge does not keep the fields of an \`Error\`.
              */
             type IpcError<E extends Error = Error> = E extends unknown
                ? { name: E['name']; message: string } & (E extends { code: infer C extends string | number }
@@ -423,6 +424,106 @@ describe("RendererTypesWriter", () => {
 
          expect(await render([ask], { rawErrors: true })).toBe(plain);
          expect(await render([ask], { channelPrefix: "app:" })).toBe(plain);
+      });
+   });
+   describe("stream channels", () => {
+      const render = async (
+         channels: Parameters<typeof shared.buildFileSpecs>,
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestRendererTypesWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const rows = {
+         name: "exportRows",
+         kind: "Stream",
+         direction: "RendererToMain",
+         params: ["table: string", "limit?: number"],
+         returnType: "AsyncIterable<Row>",
+      } as const;
+      const invoke = {
+         name: "getIt",
+         kind: "Unicast",
+         direction: "RendererToMain",
+         returnType: "Promise<string>",
+      } as const;
+
+      it("declares a stream method which returns the stream of the chunk type", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain(
+            "exportRows: {\n      /** @throws {IpcError} when the stream fails, from a read of the stream */\n      stream: (table: string, limit?: number) => IpcStream<Row>;\n   };",
+         );
+      });
+
+      it("takes the chunk type from the first type argument of any iterable return type", async () => {
+         const output = await render([
+            {
+               name: "a",
+               kind: "Stream",
+               direction: "RendererToMain",
+               returnType: "AsyncGenerator<string, void, undefined>",
+            },
+            {
+               name: "b",
+               kind: "Stream",
+               direction: "RendererToMain",
+               returnType: "AsyncIterableIterator<number[]>",
+            },
+         ]);
+
+         expect(output).toContain("stream: () => IpcStream<string>;");
+         expect(output).toContain("stream: () => IpcStream<number[]>;");
+      });
+
+      it("declares IpcStream once, with next, return, cancel and the async iterator", async () => {
+         const output = await render([rows, { ...rows, name: "other" }]);
+
+         expect(output.match(/^interface IpcStream<T> \{/gm)).toHaveLength(1);
+         expect(output).toContain("next(): Promise<IteratorResult<T, undefined>>;");
+         expect(output).toContain("return(): Promise<IteratorResult<T, undefined>>;");
+         expect(output).toContain("cancel(): void;");
+         expect(output).toContain("[Symbol.asyncIterator](): IpcStream<T>;");
+      });
+
+      it("documents the error types of the stream, and declares IpcError", async () => {
+         const output = await render([{ ...rows, errors: "NotFoundError | AuthError" }]);
+
+         expect(output).toContain(
+            "/** @throws {IpcError<NotFoundError | AuthError>} when the stream fails, from a read of the stream */",
+         );
+         expect(output).toContain("type IpcError<E extends Error = Error> =");
+         expect(output).toContain("and that a read of `ipc.<name>.stream` is rejected with");
+      });
+
+      it("keeps the signature of a generic stream, and ignores rawErrors", async () => {
+         const output = await render([
+            {
+               name: "generic",
+               kind: "Stream",
+               direction: "RendererToMain",
+               params: ["seed: T"],
+               returnType: "AsyncIterable<T>",
+            },
+         ]);
+
+         expect(output).toContain("stream: (seed: T) => IpcStream<T>;");
+         const raw = await render([rows], { rawErrors: true });
+         expect(raw).toBe(await render([rows]));
+      });
+
+      it("declares nothing of streams for the other channels", async () => {
+         const output = await render([invoke]);
+
+         expect(output).not.toContain("IpcStream");
+      });
+
+      it("is the same with a prefix", async () => {
+         expect(await render([rows], { channelPrefix: "app:" })).toBe(await render([rows]));
       });
    });
 });

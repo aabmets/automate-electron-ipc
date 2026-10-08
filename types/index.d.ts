@@ -4,13 +4,14 @@
  * Channels are declared in an exported channel map in the schema file:
  *
  * @example
- * import { defineChannels, invoke, send, emit, ask, port, mainPort } from "automate-electron-ipc";
+ * import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";
  *
  * export default defineChannels({
  *    getUser: invoke<(id: number) => Promise<User>>(),
  *    echoUserName: send<(userName: string) => void>(),
  *    progress: emit<(n: number) => void>({ trigger: "focus" }),
  *    hasUnsavedChanges: ask<() => boolean>(),
+ *    exportRows: stream<(table: string) => AsyncIterable<Row>>(),
  *    chat: port<(msg: string) => void>(),
  *    logTail: mainPort<(line: string) => void>(),
  * });
@@ -104,6 +105,18 @@ export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> {
  *    invalid arguments is dropped, and reported to the `onRejected` hook.
  */
 export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
+   allowedOrigins?: readonly string[];
+   validate?: ArgumentsSchema<S>;
+}
+
+/**
+ * Options of `stream` channels.
+ *
+ * @property allowedOrigins - The origins which may start the stream. See `InvokeConfig`.
+ * @property validate - A Standard Schema of the arguments. See `InvokeConfig`. A call with invalid
+ *    arguments fails the stream with an `IpcValidationError`, before the handler runs.
+ */
+export interface StreamConfig<S extends ChannelSignature = ChannelSignature> {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
 }
@@ -262,6 +275,34 @@ export function emit<S extends ChannelSignature = never>(
 export function ask<S extends ChannelSignature = never>(
    config?: AskConfig<NoInfer<S>>,
 ): ChannelResult<S>;
+
+/**
+ * Stream of results from the main process to a renderer process, with cancellation, for downloads,
+ * exports, long jobs and token streams. The signature takes the arguments of the call and returns
+ * an `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk>`, and the
+ * handler in the main process is an `async function*`. Each call gets a message channel of its own,
+ * which carries the chunks in order, then the end or the error of the stream.
+ *
+ * The page calls `ipc.<name>.stream(...args)`, which returns an async iterator with `cancel()`:
+ * `for await (const chunk of ipc.<name>.stream(...))` reads the chunks, and `break`, `return()`
+ * and `cancel()` stop the stream and call `return()` on the generator in the main process. An
+ * `AbortSignal` cannot cross `contextBridge`, so a page that has one calls
+ * `signal.addEventListener("abort", () => stream.cancel())`. A failure of the stream, such as an
+ * error of the generator, rejects the read of the page with the plain object
+ * `{ name, message, code?, data? }` of an `invoke` error. The optional second type argument lists
+ * the error types, like that of `invoke`.
+ *
+ * There is no backpressure: the generator runs ahead of a page that reads slowly.
+ *
+ * @example
+ * exportRows: stream<(table: string) => AsyncIterable<Row>, DatabaseError>()
+ * // Alternative form, which does not check the config against the signature, and
+ * // cannot declare error types:
+ * exportRows: stream() as (table: string) => AsyncIterable<Row>
+ */
+export function stream<S extends ChannelSignature = never, E extends Error = never>(
+   config?: StreamConfig<NoInfer<S>>,
+): ChannelResult<S, E>;
 
 /**
  * Two-way channel between two renderer processes over a single message port.

@@ -28,7 +28,7 @@ export class ChannelSpecGenerator {
          name: `vitestChannel_${this.index}`,
          kind,
          direction,
-         signature: parseTestSignature(`() => ${returnType}`),
+         signature: parseTestSignature(`() => ${returnType}`, [], kind === "Stream"),
       };
       ++this.index;
       return spec;

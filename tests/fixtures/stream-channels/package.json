@@ -1,0 +1,9 @@
+{
+   "name": "fixture-stream-channels",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 52 delivered, 21 remaining, 1 dropped.
+**Progress:** 53 delivered, 21 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -79,7 +79,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T25: One-to-many port topologies](./tasks/T25-one-to-many-port-topologies.md) · depends on: T24
 - [x] [T26: Main ↔ renderer port channels](./tasks/T26-main-renderer-port-channels.md) · depends on: T24
 - [x] [T73: Bounded send queues of port channels](./tasks/T73-bounded-port-queues.md) · depends on: T26
-- [ ] [T27: Streaming results with cancellation](./tasks/T27-streaming-results-with-cancellation.md) · depends on: T18, T24
+- [x] [T27: Streaming results with cancellation](./tasks/T27-streaming-results-with-cancellation.md) · depends on: T18, T24
 - [ ] [T28: Invoke timeouts](./tasks/T28-invoke-timeouts.md) · depends on: T18
 - [ ] [T29: utilityProcess channels](./tasks/T29-utilityprocess-channels.md) · depends on: T18
 - [ ] [T30: Renderer ↔ utility process via a brokered port](./tasks/T30-renderer-utility-process-via.md) · depends on: T26, T29
@@ -90,6 +90,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T35: `getPathForFile` helper](./tasks/T35-getpathforfile-helper.md) · depends on: T32
 - [ ] [T36: Service worker IPC (Electron ≥ 35, experimental)](./tasks/T36-service-worker-ipc.md) · depends on: T15, T16
 - [ ] [T37: Custom serializers](./tasks/T37-custom-serializers.md) · depends on: T18
+- [ ] [T74: Backpressure for streams](./tasks/T74-stream-backpressure.md) · depends on: T27
 
 ## Phase 4: Developer experience
 

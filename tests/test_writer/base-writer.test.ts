@@ -251,6 +251,21 @@ describe("BaseWriter", () => {
          );
       });
 
+      it("should rename the references in the chunk type of a stream signature", () => {
+         const second = pfsOf("/project/b.ts", "() => AsyncIterable<User>");
+         const spec = second.specs.channelSpecArray[0];
+         spec.signature = shared.parseTestSignature("() => AsyncIterable<User>", [], true);
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         obj.getChannelSpecs(first);
+         const { signature } = obj.getChannelSpecs(second)[0];
+
+         expect(signature.definition).toBe("() => AsyncIterable<User_2>");
+         expect(signature.returnType).toBe("AsyncIterable<User_2>");
+         expect(signature.chunkType).toBe("User_2");
+         // The parsed spec is not modified.
+         expect(spec.signature.chunkType).toBe("User");
+      });
+
       // Regression for T69: the `${...}` part of a template literal type was skipped as a string.
       it("should rename a reference inside a template literal type", () => {
          const signature = renamed("(key: `k-${User}`, u: User) => `${User}-v`");

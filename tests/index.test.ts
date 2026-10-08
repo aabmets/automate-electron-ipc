@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { ask, defineChannels, emit, invoke, mainPort, port, send } from "@src/index.js";
+import { ask, defineChannels, emit, invoke, mainPort, port, send, stream } from "@src/index.js";
 import logger from "@src/logger.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,9 +25,9 @@ describe("runtime stubs", () => {
 
    it("makes every verb a no-op that warns", () => {
       const spy = vi.spyOn(logger, "cannotExecuteChannels").mockImplementation(() => undefined);
-      for (const verb of [invoke, send, emit, ask, port, mainPort]) {
+      for (const verb of [invoke, send, emit, ask, stream, port, mainPort]) {
          expect(verb()).toBeUndefined();
       }
-      expect(spy).toHaveBeenCalledTimes(6);
+      expect(spy).toHaveBeenCalledTimes(7);
    });
 });
