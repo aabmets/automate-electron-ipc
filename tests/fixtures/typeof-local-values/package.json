@@ -1,0 +1,9 @@
+{
+   "name": "fixture-typeof-local-values",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

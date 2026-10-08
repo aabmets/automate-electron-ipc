@@ -36,7 +36,8 @@ export interface ImportSpec {
    namespace: string | null;
 }
 
-export type TypeKind = "type" | "interface" | "enum" | "class" | "namespace";
+/** "value" is a variable or function, which a signature can only refer to through `typeof`. */
+export type TypeKind = "type" | "interface" | "enum" | "class" | "namespace" | "value";
 
 export interface TypeSpec {
    name: string;

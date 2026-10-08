@@ -335,6 +335,48 @@ describe("ImportsGenerator", () => {
       it("imports nothing for a head that the schema does not declare", () => {
          expect(generator().getDeclaration(pfsOf({}), "Missing.A")).toBeNull();
       });
+
+      // Regression for T62: `typeof config` of a value declared in the schema file got no import.
+      it("imports a value of the schema file that a typeof query refers to", () => {
+         const pfs = pfsOf({
+            typeSpecArray: [
+               { name: "config", kind: "value" as t.TypeKind, generics: null, isExported: true },
+            ],
+         });
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "config")).toStrictEqual(
+            'import type { config } from "./schema";',
+         );
+         expect(ig.getDeclaration(pfs, "config")).toBeNull();
+      });
+
+      it("imports a renamed and a default exported value of the schema file", () => {
+         const pfs = pfsOf({
+            typeSpecArray: [
+               {
+                  name: "config",
+                  kind: "value" as t.TypeKind,
+                  generics: null,
+                  isExported: true,
+                  exportedAs: "settings",
+               },
+               {
+                  name: "main",
+                  kind: "value" as t.TypeKind,
+                  generics: null,
+                  isExported: true,
+                  isDefault: true,
+               },
+            ],
+         });
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "config.key")).toStrictEqual(
+            'import type { settings as config } from "./schema";',
+         );
+         expect(ig.getDeclaration(pfs, "main")).toStrictEqual(
+            'import type { default as main } from "./schema";',
+         );
+      });
    });
 
    describe("names that collide across schema files", () => {

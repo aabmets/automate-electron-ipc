@@ -305,6 +305,30 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
    });
 });
 
+describe("ipcAutomation, typeof of values declared in the schema file", () => {
+   // Regression for T62: `typeof config` of a value in the schema file got no import (TS2304).
+   it("imports the exported values under the names that the schema exports", async () => {
+      project = await runFixture("typeof-local-values");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*schema";$/gm);
+         expect(imports).toStrictEqual([
+            'import type { Defaults as defaults } from "./schema";',
+            'import type { config } from "./schema";',
+            'import type { createUser } from "./schema";',
+            'import type { default as main } from "./schema";',
+         ]);
+         expect(generated[file]).not.toContain("secret");
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("typeof-local-values");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, type names that collide across schema files", () => {
    // Regression for T53: imports were deduped by local name only, so two `User` types were
    // either declared twice (TS2300) or the second one was dropped and its channels used the first.

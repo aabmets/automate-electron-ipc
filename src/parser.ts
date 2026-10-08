@@ -757,6 +757,74 @@ export function parseImportDeclarations(
    }
 }
 
+/** The declaration of a module item, unwrapping `export` and `export default`. */
+function declarationOf(item: AstNode): AstNode {
+   return item.type === "ExportDeclaration"
+      ? item.declaration
+      : item.type === "ExportDefaultDeclaration"
+        ? item.decl
+        : item;
+}
+
+/** The names that a binding pattern declares: `a`, `b` and `c` for `{ a, b: [c] }`. */
+function patternNames(pattern: AstNode | null): string[] {
+   switch (pattern?.type) {
+      case "Identifier":
+         return [pattern.value];
+      case "ArrayPattern":
+         return (pattern.elements as (AstNode | null)[]).flatMap(patternNames);
+      case "ObjectPattern":
+         return (pattern.properties as AstNode[]).flatMap((prop) => {
+            if (prop.type === "KeyValuePatternProperty") {
+               return patternNames(prop.value);
+            }
+            return prop.type === "AssignmentPatternProperty"
+               ? [prop.key.value]
+               : patternNames(prop);
+         });
+      case "AssignmentPattern":
+         return patternNames(pattern.left);
+      case "RestElement":
+         return patternNames(pattern.argument);
+      default:
+         return [];
+   }
+}
+
+/** The names that a variable or function declaration declares, for `typeof` queries. */
+function valueNames(node: AstNode): string[] {
+   if (node.type === "VariableDeclaration") {
+      return (node.declarations as AstNode[]).flatMap((decl) => patternNames(decl.id));
+   }
+   // `export default function () {}` declares no name.
+   return node.identifier ? [node.identifier.value] : [];
+}
+
+const VALUE_DECLARATIONS = new Set(["VariableDeclaration", "FunctionDeclaration"]);
+
+function isValueDefinition(node: AstNode): boolean {
+   // swc parses `export default function f() {}` as a function expression.
+   return VALUE_DECLARATIONS.has(node.type) || node.type === "FunctionExpression";
+}
+
+/**
+ * Records the variables and functions that the schema file declares as specs of kind "value".
+ * A signature may query them with `typeof`, which makes the generated files import them,
+ * so they must be exported like types. Classes, enums and namespaces are recorded as types.
+ */
+export function parseValueDefinitions(item: AstNode, array: t.TypeSpec[]): void {
+   const isExported = item.type === "ExportDeclaration" || item.type === "ExportDefaultDeclaration";
+   for (const name of valueNames(declarationOf(item))) {
+      array.push({
+         name,
+         kind: "value",
+         generics: null,
+         isExported,
+         ...(item.type === "ExportDefaultDeclaration" ? { isDefault: true } : {}),
+      });
+   }
+}
+
 export function parseTypeDefinitions(
    item: TypeDefinitionNode,
    src: Source,
@@ -807,9 +875,9 @@ function isTypeDefinition(node: AstNode): boolean {
 }
 
 /**
- * Marks the local types that the module exports through `export { X }`, `export { X as Y }`,
- * `export { X as default }` or `export default X`. Re-exports from another module declare no
- * local type, and neither do specifiers of values, so they match no spec and are ignored.
+ * Marks the local types and values that the module exports through `export { X }`,
+ * `export { X as Y }`, `export { X as default }` or `export default X`. Re-exports from another
+ * module declare nothing local, and neither do imports, so they match no spec and are ignored.
  * When a type is exported several times, the export under its own name wins, then the first.
  */
 export function applyExportSpecifiers(body: AstNode[], typeSpecs: t.TypeSpec[]): void {
@@ -867,6 +935,8 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
          parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
       } else if (item.type === "ExportDefaultDeclaration" && isTypeDefinition(item.decl)) {
          parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
+      } else if (isValueDefinition(declarationOf(item))) {
+         parseValueDefinitions(item, typeSpecArray);
       }
    });
 
@@ -895,6 +965,7 @@ export default {
    parseChannelMapModule,
    parseImportDeclarations,
    parseTypeDefinitions,
+   parseValueDefinitions,
    applyExportSpecifiers,
    parseSpecs,
 };
