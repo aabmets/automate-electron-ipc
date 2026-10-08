@@ -72,28 +72,29 @@ describe("validateChannelSpecs", () => {
       }
    });
 
-   it("should throw Struct error when channel name is invalid", () => {
-      const collection = [
-         {
-            spec: { name: "xy", kind: "Broadcast" },
-            err: "Channel name must be at least 3 characters in length",
-         },
-         {
-            spec: { name: "onVitestChannel", kind: "Broadcast" },
-            err: "Channel name must not begin with 'on'",
-         },
-         {
-            spec: { name: "VitestChannel", kind: "Broadcast" },
-            err: "Channel name must start with a lowercase letter",
-         },
-      ];
-      for (const { spec, err } of collection) {
-         expect(() => vld.validateChannelSpecs([spec as t.ChannelSpec])).toThrowError(err);
+   it("should throw Struct error when channel name is not a plain identifier", () => {
+      for (const name of ["", "get-user", "get user", "1st", "a.b", "a'b"]) {
+         const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `Channel name '${name}' is not a plain identifier`,
+         );
       }
    });
 
-   it("should accept camelCase channel names, including ones that start with 'on'", () => {
-      for (const name of ["getUser", "echo_name", "online", "once"]) {
+   // T72: the 3 character, 'on' and lowercase rules came from the listener names, which are gone.
+   it("should accept short, 'on'-prefixed and capitalized channel names", () => {
+      const names = [
+         "ok",
+         "on",
+         "a",
+         "onReady",
+         "onVitestChannel",
+         "VitestChannel",
+         "_x",
+         "$x",
+         "getÜser",
+      ];
+      for (const name of names) {
          const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
          expect(vld.validateChannelSpecs([{ ...spec, name }])).toStrictEqual([{ ...spec, name }]);
       }

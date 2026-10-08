@@ -355,7 +355,7 @@ describe("parseSpecs", () => {
             relativePath: "",
             fullPath: "",
          });
-      expect(() => parse("UpperCase: invoke<() => void>()")).toThrow(/lowercase letter/);
+      expect(() => parse("UpperCase: invoke<() => void>()")).not.toThrow();
       expect(() => parse("sendChan: send<() => string>()")).toThrow(/not allowed/);
       expect(() => parse("same: invoke<() => void>(), same: send<() => void>()")).toThrow(
          /not unique/,

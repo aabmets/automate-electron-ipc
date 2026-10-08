@@ -790,3 +790,25 @@ describe("ipcAutomation, locale-independent output order", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+// T72: channel names are free of the rules that came from the old listener names.
+describe("ipcAutomation, channel names", () => {
+   it("accepts short, 'on'-prefixed, capitalized and symbol-led channel names", async () => {
+      project = await runFixture("short-names");
+      const { "main.ts": main, "preload.ts": preload, "window.d.ts": dts } = project.generated;
+
+      for (const name of ["ok", "on", "onReady", "Capital", "_hidden", "$dollar", "p"]) {
+         const member = new RegExp(`^ {3}${name.replace("$", "\\$")}: `, "m");
+         expect(main).toMatch(member);
+         expect(preload).toMatch(member);
+         expect(dts).toMatch(member);
+      }
+      expect(main).toContain("'autoipc:ok'");
+      expect(main).toContain("'autoipc:onReady'");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("short-names");
+      expect(await project.typecheck()).toBe("");
+   });
+});

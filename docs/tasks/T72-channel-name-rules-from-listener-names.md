@@ -15,4 +15,13 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   later naming tasks (T20) need it.
 - **Tests:** validator tests for the names that are now accepted; the e2e type-check of a schema
   that uses them.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Notes:
+  - All three rules are gone: the 3 character minimum, the `on` + capital ban and the lowercase-first
+    rule. Nothing needs them: the writers emit the name as an object key and in string literals, the
+    wire name is made unique by `channelPrefix` (T20), and T13 already rejects the members that every
+    object has.
+  - The validator now checks that the name is an ECMAScript identifier name (Unicode-aware, so
+    `getÜser` stays valid), since the name is emitted as a bare object key. The parser already
+    accepts only plain identifier keys.
+  - `ok`, `on`, `onReady`, `Capital`, `_hidden` and `$dollar` generate and type-check (`short-names`
+    fixture). The README no longer states the 3 character rule.

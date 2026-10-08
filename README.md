@@ -106,7 +106,7 @@ concern themselves with IPC internals._
 Rules of the schema file:
  - Export the map with `export default defineChannels({...})` or `export const channels = defineChannels({...})`.
  - Use only one `defineChannels` call per file. In a `schema` directory, each file may have its own map.
- - Channel names are plain identifier keys in camelCase, at least 3 characters long. Spreads, computed keys and nested objects are not supported.
+ - Channel names are plain identifier keys of any length and case, such as `ok`, `on` or `onReady`. Spreads, computed keys and nested objects are not supported.
  - Each channel becomes an object named after its key, such as `ipc.echoUserName`. Names that every object has, such as `constructor` or `toString`, are rejected.
  - Aliased imports work, such as `import { invoke as call } from "automate-electron-ipc"`.
 

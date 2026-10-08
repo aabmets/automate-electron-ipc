@@ -86,6 +86,8 @@ const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
 });
 
 const IDENTIFIER_NAME = /^[A-Za-z_$][\w$]*$/;
+/** A channel name is emitted as an object key, so any ECMAScript identifier name is valid. */
+const CHANNEL_NAME = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*$/u;
 
 const ValidatorRefStruct = object({
    name: refine(string(), "identifier", (value) =>
@@ -105,17 +107,9 @@ function getChannelSpecStruct(
    restrictable = false,
 ): Struct<any, any> {
    return object({
-      name: refine(string(), "camelcase", (value) => {
-         if (value.length < 3) {
-            return "Channel name must be at least 3 characters in length";
-         } else if (/^on[A-Z]/.test(value)) {
-            return "Channel name must not begin with 'on'";
-         } else if (/^(?![a-z])/.test(value)) {
-            return "Channel name must start with a lowercase letter";
-         } else {
-            return true;
-         }
-      }),
+      name: refine(string(), "identifier", (value) =>
+         CHANNEL_NAME.test(value) ? true : `Channel name '${value}' is not a plain identifier`,
+      ),
       kind: refine(string(), "choice", (value) => {
          const choices = ["Broadcast", "Unicast", "Port"];
          if (choices.includes(value)) {
