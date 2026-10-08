@@ -9,8 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { styleText } from "node:util";
 import type * as t from "@types";
-import chalk from "chalk";
+
+function paint(color: "yellow" | "green", text: string): string {
+   return styleText(color, text, { stream: process.stderr });
+}
 
 function formatOutput(messages: string[], icon: string): string {
    const leadingIcon = `${icon.length === 1 ? " " : ""}${icon} – `;
@@ -24,11 +28,11 @@ function formatOutput(messages: string[], icon: string): string {
 }
 
 function warn(messages: string[]): void {
-   console.warn(chalk.yellow(formatOutput(messages, "⚠️")));
+   console.warn(paint("yellow", formatOutput(messages, "⚠️")));
 }
 
 function success(messages: string[]): void {
-   console.warn(chalk.green(formatOutput(messages, "✔")));
+   console.warn(paint("green", formatOutput(messages, "✔")));
 }
 
 export function nonExistentSchemaPath(path: string): void {
