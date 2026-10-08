@@ -1,14 +1,12 @@
 {
-   "$schema": "https://biomejs.dev/schemas/1.9.3/schema.json",
+   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
    "vcs": {
       "enabled": true,
       "clientKind": "git",
       "useIgnoreFile": true,
       "defaultBranch": "main"
    },
-   "organizeImports": {
-      "enabled": true
-   },
+   "assist": { "actions": { "source": { "organizeImports": "on" } } },
    "formatter": {
       "enabled": true,
       "indentStyle": "space",
@@ -19,7 +17,7 @@
    "linter": {
       "enabled": true,
       "rules": {
-         "recommended": true,
+         "preset": "recommended",
          "complexity": {
             "noExcessiveCognitiveComplexity": {
                "level": "error",
@@ -44,13 +42,13 @@
             "noUnusedImports": "warn",
             "noUnusedPrivateClassMembers": "warn",
             "noUnusedVariables": "warn",
-            "useArrayLiterals": "error",
             "useHookAtTopLevel": "error",
             "useImportExtensions": "off"
          },
          "performance": {
             "noBarrelFile": "error",
-            "noReExportAll": "error"
+            "noReExportAll": "error",
+            "noNamespaceImport": "off"
          },
          "style": {
             "noUselessElse": "off",
@@ -58,7 +56,6 @@
             "noDoneCallback": "error",
             "noImplicitBoolean": "error",
             "noNamespace": "error",
-            "noNamespaceImport": "off",
             "noNegationElse": "error",
             "noParameterProperties": "error",
             "noShoutyConstants": "error",
@@ -83,11 +80,11 @@
             "useNodeAssertStrict": "error",
             "useShorthandAssign": "error",
             "useThrowNewError": "error",
-            "useThrowOnlyError": "error"
+            "useThrowOnlyError": "error",
+            "useArrayLiterals": "error"
          },
          "suspicious": {
             "noConsole": "off",
-            "noConsoleLog": "error",
             "noEmptyBlockStatements": "error",
             "noEvolvingTypes": "off",
             "noExplicitAny": "off",

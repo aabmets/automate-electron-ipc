@@ -13,8 +13,8 @@ import path from "node:path";
 import type * as t from "@types";
 import type { Struct } from "superstruct";
 import {
-   assert,
    array,
+   assert,
    boolean,
    never,
    nullable,

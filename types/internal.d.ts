@@ -12,7 +12,8 @@
 import type { Stats } from "node:fs";
 
 import { BroadcastConfig, Channels, IpcAutomationPlugin, UnicastConfig } from "./index";
-export type { BroadcastConfig, IpcAutomationPlugin, UnicastConfig, Channels };
+
+export type { BroadcastConfig, Channels, IpcAutomationPlugin, UnicastConfig };
 
 export interface IPCOptionalConfig {
    projectUsesNodeNext?: boolean;

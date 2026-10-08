@@ -46,7 +46,9 @@ export function collectCustomTypes(node: ts.Node, src: ts.SourceFile, set: Set<s
          }
       });
    } else if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
-      node.types.forEach((subType) => collectCustomTypes(subType, src, set));
+      for (const subType of node.types) {
+         collectCustomTypes(subType, src, set);
+      }
    } else if (ts.isBindingElement(node)) {
       const children = node.getChildren();
       if (children.length === 3 && ts.isIdentifier(children[2])) {

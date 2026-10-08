@@ -8,6 +8,8 @@
       "moduleDetection": "force",
       "outDir": "./dist",
       "baseUrl": ".",
+      "ignoreDeprecations": "6.0",
+      "types": ["node", "bun"],
       "paths": {
          "@types": ["./types/internal.d.ts"],
          "@testutils/*": ["./vitest/utils/*"],

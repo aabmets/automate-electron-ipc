@@ -21,7 +21,12 @@
       "url": "https://github.com/aabmets/automate-electron-ipc.git"
    },
    "author": "Mattias Aabmets <mattias.aabmets@gmail.com>",
-   "files": ["dist", "types", "README.md", "LICENSE"],
+   "files": [
+      "dist",
+      "types",
+      "README.md",
+      "LICENSE"
+   ],
    "types": "./types/index.d.ts",
    "module": "./dist/index.js",
    "exports": {
@@ -37,12 +42,17 @@
       "pubnow": "biome check --error-on-warnings && tsc -p tsconfig.json && bun publish"
    },
    "devDependencies": {
-      "@biomejs/biome": "^1.9.4",
-      "@types/bun": "^1.1.14",
-      "@types/node": "^22.10.1",
-      "@vitest/coverage-v8": "^2.1.8",
-      "lefthook": "^1.9.0",
-      "vitest": "^2.1.8"
+      "@biomejs/biome": "2.5.15",
+      "@types/bun": "1.4.2",
+      "@types/node": "22.20.5",
+      "@vitest/coverage-v8": "5.0.3",
+      "chalk": "6.0.1",
+      "commander": "15.0.0",
+      "electron": "44.7.0",
+      "lefthook": "2.2.0",
+      "superstruct": "2.0.2",
+      "typescript": "6.0.3",
+      "vitest": "5.0.3"
    },
    "peerDependencies": {
       "chalk": ">=4.0.0",

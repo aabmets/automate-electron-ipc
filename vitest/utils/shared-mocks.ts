@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import utils from "@src/utils.js";
 import { BaseWriter } from "@src/writer/base-writer.js";
-import { MockInstance, afterAll, afterEach, beforeEach, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, MockInstance, vi } from "vitest";
 
 export function mockFspReadFile(data: any): void {
    const spy = vi.spyOn(fsp, "readFile");
