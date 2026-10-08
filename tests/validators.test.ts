@@ -81,6 +81,26 @@ describe("validateChannelSpecs", () => {
       expect(() => vld.validateChannelSpecs(specs)).toThrowError("'onGetUser'");
    });
 
+   it("should throw Struct error when a listener name is malformed", () => {
+      const csg = new ChannelSpecGenerator();
+      const collection = [
+         { listener: "onA", err: "Channel listener names must be at least 5 characters in length" },
+         { listener: "handleThing", err: "Channel listener names must begin with lowercase 'on'" },
+      ];
+      for (const { listener, err } of collection) {
+         const spec = csg.generate("RendererToMain", "Broadcast", "void", [listener]);
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(err);
+      }
+   });
+
+   it("should throw Struct error when channel kind is not a known kind", () => {
+      const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
+      const invalid = { ...spec, kind: "Stream" } as unknown as t.ChannelSpec;
+      expect(() => vld.validateChannelSpecs([invalid])).toThrowError(
+         "Channel kind must be one of: ['Broadcast', 'Unicast', 'Port']",
+      );
+   });
+
    it("should throw Struct error when channel kind does not match direction", () => {
       const csg = new ChannelSpecGenerator();
       const invalidChannelSpecsArray = [

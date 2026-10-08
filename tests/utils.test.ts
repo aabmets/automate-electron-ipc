@@ -55,6 +55,32 @@ describe("searchUpwards", () => {
    });
 });
 
+describe("searchUpwards with a filesystem path", () => {
+   it("should accept a plain directory path as the starting point", () => {
+      const startFrom = path.resolve("/mock5/directory/start.js");
+      const expectedPath = path.resolve("/mock5/directory", "plain.txt");
+      const spy = vi.spyOn(fs, "existsSync").mockImplementation((p) => p === expectedPath);
+      try {
+         expect(utils.searchUpwards("plain.txt", startFrom)).toBe(expectedPath);
+      } finally {
+         spy.mockRestore();
+      }
+   });
+});
+
+describe("resolveUserProjectPath", () => {
+   it("should fall back to node_modules when no .git directory is found", () => {
+      const nodeModules = path.resolve(import.meta.dirname, "../node_modules");
+      const spy = vi.spyOn(fs, "existsSync").mockImplementation((p) => p === nodeModules);
+      try {
+         const result = utils.resolveUserProjectPath("sub/dir");
+         expect(result).toBe(path.resolve(nodeModules, "../sub/dir").replaceAll("\\", "/"));
+      } finally {
+         spy.mockRestore();
+      }
+   });
+});
+
 describe("concatRegex", () => {
    it("should concatenate multiple regex patterns into a single pattern", () => {
       const pattern = utils.concatRegex([

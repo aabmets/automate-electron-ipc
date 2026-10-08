@@ -25,6 +25,27 @@ describe("BaseWriter", () => {
       }).toThrowError("Cannot instantiate abstract base class");
    });
 
+   it("should throw when a subclass does not implement the abstract methods", () => {
+      class IncompleteWriter extends BaseWriter {}
+      const config = { codeIndent: 3 } as t.IPCResolvedConfig;
+      expect(() => new IncompleteWriter(config, [])).toThrowError(
+         "Must implement method 'getTargetFilePath' in 'IncompleteWriter' class",
+      );
+
+      class PathOnlyWriter extends IncompleteWriter {
+         protected getTargetFilePath(): string {
+            return "";
+         }
+      }
+      const writer = new PathOnlyWriter(config, []) as any;
+      expect(() => writer.renderEmptyFileContents()).toThrowError(
+         "Must implement method 'renderEmptyFileContents'",
+      );
+      expect(() => writer.renderFileContents()).toThrowError(
+         "Must implement method 'generateFileContents'",
+      );
+   });
+
    it("should not throw an error on subclass instantiation", () => {
       new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
    });

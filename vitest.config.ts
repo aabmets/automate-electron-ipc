@@ -21,6 +21,13 @@ export default defineConfig({
          include: ["src/**/*.ts"],
          reporter: ["text", "lcov", "html"],
          reportsDirectory: "coverage",
+         thresholds: {
+            perFile: true,
+            statements: 90,
+            branches: 90,
+            functions: 90,
+            lines: 90,
+         },
       },
       server: {
          deps: {
