@@ -11,8 +11,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - The generated `main.ts` value-imports it and validates before invoking the handler. On failure:
     Unicast rejects with `IpcValidationError` (with issues), Broadcast drops and reports to the hook.
   - In the generic form, `validate` is typed against `Parameters<Sig>` (set up in T00).
-  - Optional: derive the TS signature from the schema's inferred input type when no signature is
-    given.
+  - Out of scope: deriving the signature from the schema. A signature stays required on every
+    channel.
   - Do not add a runtime dependency; use the spec only.
 - **Tests:**
   - Parser tests for value-import detection.

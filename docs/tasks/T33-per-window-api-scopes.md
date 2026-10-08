@@ -8,7 +8,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:**
   - Per-channel `scopes: ["settings", "editor"]`. Unscoped channels are in a default scope.
   - Generate one preload plus one `.d.ts` per scope.
-  - The main side can optionally reject calls from windows outside the scope, via a registry of
-    `webContents` id → scope.
+  - The main side rejects calls to a scoped channel from windows outside its scope, via a registry
+    of `webContents` id → scope that windows using a scope must be registered in. Unscoped channels
+    stay open to all windows.
 - **Tests:** writer tests per scope, plus runtime rejection tests.
 - **Delivered:**

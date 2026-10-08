@@ -9,7 +9,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:**
   - Return disposers (`ipcMain.off` / `ipcMain.removeHandler`).
   - Add `ipc.<name>.once` / `ipc.<name>.handleOnce`.
-  - Re-registering a Unicast handler either replaces the old one safely or throws a descriptive
-    error. Choose one and document it.
+  - Re-registering a handler for the same channel replaces the old one (`removeHandler`, then
+    `handle`), so window re-creation and dev hot-restart work. Document this in the README.
 - **Tests:** runtime tests of generated `main.ts` with a mocked `electron` module.
 - **Delivered:**

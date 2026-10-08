@@ -8,7 +8,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:**
   - `ipc.<name>.connect(a, b)` returns a connection handle. A window may hold multiple connections
     per channel.
-  - The renderer API exposes connections (e.g. `onConnection(cb)`), each with
-    `sendMessage`/`onMessage`/`close`.
+  - The renderer API gets `ipc.<name>.onConnection(cb)`. Each new peer arrives as its own
+    connection object with `send`, `on` and `close` (T13's names), and `onConnection` returns a
+    disposer.
 - **Tests:** runtime tests with 1 hub and 3 peers, closing one peer.
 - **Delivered:**
