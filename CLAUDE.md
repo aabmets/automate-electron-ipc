@@ -28,17 +28,21 @@ get an overview; the roadmap is enough. Every session follows this protocol:
    If the user names a specific task, do that one instead.
    Then read that task's file. Read other task files only when the task refers to them.
 2. If the task is marked **Decision needed**, ask the user that question before writing code.
-3. Implement **only that task**. Do not start, or partially start, any other task.
+3. **Plan before editing.** Read the code the task touches, then write a short plan in your reply:
+   files to change, approach, test cases, and anything in the task file that no longer matches the
+   code. Then continue without waiting for approval, unless the plan has to go beyond or against
+   the task's scope; in that case, stop and ask the user.
+4. Implement **only that task**. Do not start, or partially start, any other task.
    - Every behavior change needs unit tests. Every bug fix also needs a regression test that fails
      without the fix.
    - Tests that cover generated code must assert on the generated text. Once T01 exists, they must
      also type-check the output via the e2e harness.
    - Keep the generated runtime code sandbox-safe (it runs in a sandboxed preload or the main process)
      and free of any dependency on this library at runtime.
-4. Before committing, all of these must pass: `bun run check` and `bunx vitest run`.
+5. Before committing, all of these must pass: `bun run check` and `bunx vitest run`.
    Once T11 lands, the Node e2e job must pass too. Check that `git diff --cached` includes
    `docs/roadmap.md`; a task commit without a roadmap change is incomplete.
-5. **Update `docs/roadmap.md`** in the same commit. A task is not done until the roadmap says so:
+6. **Update `docs/roadmap.md`** in the same commit. A task is not done until the roadmap says so:
    - flip the task's marker from `[ ]` to `[x]`;
    - update the **Progress** line counts to match the markers;
    - if the task was dropped instead, mark it `[-]` and say why in its task file;
@@ -49,9 +53,9 @@ get an overview; the roadmap is enough. Every session follows this protocol:
      (deviations, follow-ups);
    - if new follow-up work was discovered, add it as a new task with the next free ID: a new task
      file, plus a roadmap entry at the end of the matching phase, with its `depends on` list.
-6. Make exactly **one commit** for the task, with message `T<NN>: <short summary>` followed by a body.
+7. Make exactly **one commit** for the task, with message `T<NN>: <short summary>` followed by a body.
    Push it to the session's designated branch.
-7. **Stop.** Report what was delivered and which task is next, as read from the updated roadmap.
+8. **Stop.** Report what was delivered and which task is next, as read from the updated roadmap.
    Do not continue to the next task. The user clears the session between tasks.
 
 If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so

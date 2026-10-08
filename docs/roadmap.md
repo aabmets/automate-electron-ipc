@@ -10,7 +10,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - One task = one commit = one session.
 - Status: `[ ]` todo, `[x]` delivered, `[-]` dropped (kept so task IDs stay stable).
 - Status and dependencies are kept only in this roadmap. Update it in the same commit that
-  delivers, drops, splits or adds a task (see `CLAUDE.md`, step 5).
+  delivers, drops, splits or adds a task (see `CLAUDE.md`, step 6).
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
