@@ -1,0 +1,9 @@
+{
+   "name": "fixture-argument-validation",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -118,6 +118,47 @@ describe("public types", () => {
       }
    });
 
+   it("types validate against the argument tuple of the signature", async () => {
+      const diagnostics = await typecheck({
+         "validators.ts": `
+            import type { StandardSchemaV1 } from "automate-electron-ipc";
+            declare function schema<T>(): StandardSchemaV1<unknown, T>;
+            export const idArgs = schema<[id: number]>();
+            export const idInput = schema<[id: unknown]>();
+            export const wide = schema<[id: number | string]>();
+            export const two = schema<[id: number, extra: string]>();
+            export const none = schema<[]>();
+            export const rest = schema<[text: string, ...rest: number[]]>();
+            export const notSchema = { validate: () => true };
+         `,
+         "schema.ts": `
+            ${IMPORT}
+            import { idArgs, wide, two, none, rest, notSchema } from "./validators";
+            export default defineChannels({
+               a: invoke<(id: number) => void>({ validate: idArgs }),
+               b: send<(text: string, ...rest: number[]) => void>({ validate: rest }),
+               c: send<() => void>({ validate: none }),
+               d: invoke({ validate: idArgs }) as (id: number) => void,
+               e: invoke<(id: number) => void>({ validate: wide }),
+               f: invoke<(id: number) => void>({ validate: two }),
+               g: invoke<(id: string) => void>({ validate: idArgs }),
+               h: invoke<(id: number) => void>({ validate: notSchema }),
+               i: emit<(id: number) => void>({ validate: idArgs }),
+               j: port<(id: number) => void>({ validate: idArgs }),
+            });
+         `,
+      });
+      for (const line of [5, 6, 7, 8]) {
+         expect(diagnostics).not.toContain(`schema.ts(${line},`);
+      }
+      // A schema whose output does not fit the signature, one that is not a schema, and the
+      // verbs that take no validator. The `as` form does not check the signature.
+      for (const line of [9, 10, 11, 12, 13, 14]) {
+         expect(diagnostics).toContain(`schema.ts(${line},`);
+      }
+      expect(diagnostics).not.toContain("validators.ts(");
+   });
+
    it("rejects a trigger which is not a BrowserWindow event", async () => {
       const diagnostics = await typecheck({
          "schema.ts": `

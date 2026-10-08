@@ -224,7 +224,10 @@ describe("generated main process bindings", () => {
    }
 
    /** Backs the fake ipcMain with a real emitter, so that registrations are observable. */
-   async function loadMainWithEmitter(fixture = "all-kinds") {
+   async function loadMainWithEmitter(
+      fixture = "all-kinds",
+      modules: Record<string, unknown> = {},
+   ) {
       const { EventEmitter } = await import("node:events");
       const emitter = new EventEmitter();
       const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -250,7 +253,7 @@ describe("generated main process bindings", () => {
          },
       });
       project = await runFixture(fixture);
-      const generated = loadGenerated(project.generated["main.ts"], { electron });
+      const generated = loadGenerated(project.generated["main.ts"], { electron, ...modules });
       return { emitter, handlers, ipc: generated.ipc, generated };
    }
 
@@ -731,6 +734,327 @@ describe("generated main process bindings", () => {
 
       it("generates files that type-check", async () => {
          project = await runFixture("sender-validation");
+         expect(await project.typecheck()).toBe("");
+      });
+   });
+
+   describe("argument validation", () => {
+      type Validate = (value: unknown) => unknown;
+      /** A hand-written Standard Schema, which records what it was asked to validate. */
+      const schema = (validate: Validate) => {
+         const wrapped = vi.fn(validate);
+         return {
+            "~standard": { version: 1, vendor: "test", validate: wrapped },
+            validate: wrapped,
+         };
+      };
+      const ok = (value: unknown) => ({ value });
+      const fail = (message: string) => ({ issues: [{ message }] });
+      const isNumber = (value: unknown) =>
+         Array.isArray(value) && value.length === 1 && typeof value[0] === "number"
+            ? ok(value)
+            : fail("expected one number");
+
+      async function load(overrides: { id?: Validate; line?: Validate; none?: Validate } = {}) {
+         const id = schema(overrides.id ?? isNumber);
+         const line = schema(overrides.line ?? ok);
+         const none = schema(overrides.none ?? ok);
+         const loaded = await loadMainWithEmitter("argument-validation", {
+            "./validators": { __esModule: true, default: none, idArgs: id, lineArgs: line },
+         });
+         return { ...loaded, id, line, none };
+      }
+      const inApp = { senderFrame: { origin: "app://." } };
+      const call = (handlers: Map<string, (...args: unknown[]) => unknown>, ...args: unknown[]) =>
+         handlers.get("getCount")?.({}, ...args);
+
+      it("exports IpcValidationError only when a channel has a validator", async () => {
+         const { generated } = await load();
+         const error = new generated.IpcValidationError("getCount", [{ message: "bad" }]);
+         expect(error).toBeInstanceOf(Error);
+         expect(error.name).toBe("IpcValidationError");
+         expect(error.channel).toBe("getCount");
+         expect(error.issues).toStrictEqual([{ message: "bad" }]);
+         expect(error.message).toBe("The arguments of the channel 'getCount' are invalid: bad");
+         await project?.cleanup();
+
+         project = await runFixture("sender-validation");
+         expect(project.generated["main.ts"]).not.toContain("IpcValidationError");
+      });
+
+      it("runs the handler with the validated arguments when the schema accepts", async () => {
+         const { handlers, ipc, id } = await load();
+         const callback = vi.fn((_event: unknown, value: number) => value + 1);
+         ipc.getCount.handle(callback);
+
+         expect(call(handlers, 4)).toBe(5);
+         expect(id.validate).toHaveBeenCalledWith([4]);
+         expect(callback).toHaveBeenCalledWith({}, 4);
+      });
+
+      it("passes the arguments exactly as they arrived, so a schema sees extra ones", async () => {
+         const { handlers, ipc, id } = await load();
+         ipc.getCount.handle(vi.fn());
+
+         expect(() => call(handlers, 4, "extra")).toThrowError(/expected one number/);
+         expect(() => call(handlers)).toThrowError(/expected one number/);
+         expect(id.validate.mock.calls).toStrictEqual([[[4, "extra"]], [[]]]);
+      });
+
+      it("gives the handler the output of the schema, not the input", async () => {
+         const { handlers, ipc } = await load({
+            id: (value) => ok([Number((value as unknown[])[0]) * 2]),
+         });
+         const callback = vi.fn();
+         ipc.getCount.handle(callback);
+
+         call(handlers, "21");
+
+         expect(callback).toHaveBeenCalledWith({}, 42);
+      });
+
+      it("rejects an invoke with an IpcValidationError that carries the issues", async () => {
+         const { generated, handlers, ipc } = await load({
+            id: () => ({ issues: [{ message: "bad id", path: ["0"] }, { message: "again" }] }),
+         });
+         const callback = vi.fn();
+         ipc.getCount.handle(callback);
+
+         const error = (() => {
+            try {
+               call(handlers, "x");
+            } catch (thrown) {
+               return thrown as InstanceType<typeof generated.IpcValidationError>;
+            }
+         })();
+
+         expect(error).toBeInstanceOf(generated.IpcValidationError);
+         expect(error?.channel).toBe("getCount");
+         expect(error?.issues).toStrictEqual([
+            { message: "bad id", path: ["0"] },
+            { message: "again" },
+         ]);
+         expect(error?.message).toContain("bad id; again");
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("drops an invalid send, and delivers a valid one with its rest arguments", async () => {
+         const { emitter, ipc, line } = await load({
+            line: (value) =>
+               typeof (value as unknown[])[0] === "string" ? ok(value) : fail("text"),
+         });
+         const callback = vi.fn();
+         ipc.logLine.on(callback);
+
+         expect(() => emitter.emit("logLine", {}, 5)).not.toThrow();
+         emitter.emit("logLine", {}, "ok", 1, 2);
+
+         expect(callback).toHaveBeenCalledOnce();
+         expect(callback).toHaveBeenCalledWith({}, "ok", 1, 2);
+         expect(line.validate).toHaveBeenCalledWith(["ok", 1, 2]);
+      });
+
+      it("accepts a default import as the validator", async () => {
+         const { emitter, ipc, none } = await load({
+            none: (value) => ((value as unknown[]).length === 0 ? ok(value) : fail("none")),
+         });
+         const callback = vi.fn();
+         ipc.ping.on(callback);
+
+         emitter.emit("ping", {}, "extra");
+         emitter.emit("ping", {});
+
+         expect(none.validate).toHaveBeenCalledTimes(2);
+         expect(callback).toHaveBeenCalledOnce();
+      });
+
+      it("awaits an asynchronous schema before it runs the handler", async () => {
+         const { handlers, ipc } = await load({ id: async (value) => isNumber(value) });
+         const callback = vi.fn(async (_event: unknown, value: number) => value * 3);
+         ipc.getCount.handle(callback);
+
+         const answer = call(handlers, 2) as Promise<number>;
+         expect(callback).not.toHaveBeenCalled();
+         await expect(answer).resolves.toBe(6);
+         await expect(call(handlers, "2")).rejects.toThrowError(/expected one number/);
+         expect(callback).toHaveBeenCalledOnce();
+      });
+
+      it("drops an invalid send of an asynchronous schema without an unhandled rejection", async () => {
+         const { emitter, ipc } = await load({ line: async () => fail("late") });
+         const callback = vi.fn();
+         const unhandled = vi.fn();
+         process.on("unhandledRejection", unhandled);
+         try {
+            ipc.logLine.on(callback);
+            emitter.emit("logLine", {}, "x");
+            await new Promise((resolve) => setTimeout(resolve, 5));
+         } finally {
+            process.off("unhandledRejection", unhandled);
+         }
+         expect(callback).not.toHaveBeenCalled();
+         expect(unhandled).not.toHaveBeenCalled();
+      });
+
+      it.each([
+         [
+            "throws",
+            () => {
+               throw new Error("secret internals");
+            },
+         ],
+         ["rejects", () => Promise.reject(new Error("secret internals"))],
+      ])("rejects when the schema %s, without passing on its message", async (_name, validate) => {
+         const { generated, handlers, ipc } = await load({ id: validate });
+         const callback = vi.fn();
+         ipc.getCount.handle(callback);
+
+         const result = await Promise.resolve()
+            .then(() => call(handlers, 1))
+            .catch((error: unknown) => error);
+
+         expect(result).toBeInstanceOf(generated.IpcValidationError);
+         expect(String((result as Error).message)).not.toContain("secret");
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it.each([
+         ["a result without an array", () => ok("not an array")],
+         ["no result", () => undefined],
+         ["a null result", () => null],
+      ])("rejects when the schema answers with %s", async (_name, validate) => {
+         const { handlers, ipc } = await load({ id: validate });
+         const callback = vi.fn();
+         ipc.getCount.handle(callback);
+
+         expect(() => call(handlers, 1)).toThrowError(/invalid/);
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("checks the sender before the schema sees the arguments", async () => {
+         const { generated, handlers, ipc, id } = await load();
+         ipc.getSecret.handle(vi.fn());
+
+         const forbidden = () =>
+            handlers.get("getSecret")?.({ senderFrame: { origin: "https://evil" } }, 1);
+         expect(forbidden).toThrowError(generated.IpcForbiddenError);
+         expect(id.validate).not.toHaveBeenCalled();
+         expect(() => handlers.get("getSecret")?.(inApp, "bad")).toThrowError(
+            generated.IpcValidationError,
+         );
+      });
+
+      it("reports each rejection to onRejected, with the reason, and never an accepted call", async () => {
+         const { generated, handlers, emitter, ipc } = await load({
+            line: () => fail("no good"),
+         });
+         const onRejected = vi.fn();
+         generated.configureIpc({ onRejected });
+         ipc.getCount.handle(vi.fn());
+         ipc.logLine.on(vi.fn());
+
+         call(handlers, 1);
+         expect(onRejected).not.toHaveBeenCalled();
+         expect(() => call(handlers, "bad")).toThrowError();
+         emitter.emit("logLine", { id: "evt" }, "x");
+
+         expect(onRejected).toHaveBeenCalledTimes(2);
+         const [event, channel, error] = onRejected.mock.calls[1];
+         expect(event).toStrictEqual({ id: "evt" });
+         expect(channel).toBe("logLine");
+         expect(error).toBeInstanceOf(generated.IpcValidationError);
+         expect(error.issues).toStrictEqual([{ message: "no good" }]);
+         expect(onRejected.mock.calls[0][2]).toBeInstanceOf(generated.IpcValidationError);
+      });
+
+      it("passes an IpcForbiddenError to onRejected when the sender is refused", async () => {
+         const { generated, handlers, ipc } = await load();
+         const onRejected = vi.fn();
+         generated.configureIpc({ onRejected });
+         ipc.getSecret.handle(vi.fn());
+
+         expect(() => handlers.get("getSecret")?.({ senderFrame: null }, 1)).toThrowError();
+
+         expect(onRejected.mock.calls[0][2]).toBeInstanceOf(generated.IpcForbiddenError);
+      });
+
+      it("rejects as usual when onRejected throws", async () => {
+         const { generated, handlers, emitter, ipc } = await load({ line: () => fail("x") });
+         generated.configureIpc({
+            onRejected: () => {
+               throw new Error("hook failed");
+            },
+         });
+         const callback = vi.fn();
+         ipc.getCount.handle(callback);
+         ipc.logLine.on(callback);
+
+         expect(() => call(handlers, "bad")).toThrowError(generated.IpcValidationError);
+         expect(() => emitter.emit("logLine", {}, "x")).not.toThrow();
+         expect(callback).not.toHaveBeenCalled();
+      });
+
+      it("does not validate channels without a validator", async () => {
+         const { handlers, ipc, id, line, none } = await load();
+         ipc.getPublic.handle(async () => 7);
+
+         await expect(handlers.get("getPublic")?.({}, "anything")).resolves.toBe(7);
+         for (const validator of [id, line, none]) {
+            expect(validator.validate).not.toHaveBeenCalled();
+         }
+      });
+
+      it("does not use up once or handleOnce with an invalid message", async () => {
+         const { emitter, handlers, ipc } = await load({
+            id: isNumber,
+            line: (value) => (typeof (value as unknown[])[0] === "string" ? ok(value) : fail("x")),
+         });
+         const answer = vi.fn(() => "done");
+         const heard = vi.fn();
+         ipc.getCount.handleOnce(answer);
+         ipc.logLine.once(heard);
+
+         expect(() => call(handlers, "bad")).toThrowError(/invalid/);
+         emitter.emit("logLine", {}, 5);
+         expect(handlers.has("getCount")).toBe(true);
+         expect(emitter.listenerCount("logLine")).toBe(1);
+
+         expect(call(handlers, 1)).toBe("done");
+         emitter.emit("logLine", {}, "y");
+         emitter.emit("logLine", {}, "z");
+
+         expect(answer).toHaveBeenCalledOnce();
+         expect(handlers.has("getCount")).toBe(false);
+         expect(heard).toHaveBeenCalledOnce();
+         expect(emitter.listenerCount("logLine")).toBe(0);
+      });
+
+      it("gives once and handleOnce to one message only, even with an asynchronous schema", async () => {
+         const { emitter, handlers, ipc } = await load({
+            id: async (value) => isNumber(value),
+            line: async (value) => ok(value),
+         });
+         const answer = vi.fn(() => "done");
+         const heard = vi.fn();
+         ipc.getCount.handleOnce(answer);
+         ipc.logLine.once(heard);
+
+         // Both messages are in flight before either one is accepted.
+         const first = call(handlers, 1) as Promise<string>;
+         const second = call(handlers, 2) as Promise<string>;
+         emitter.emit("logLine", {}, "a");
+         emitter.emit("logLine", {}, "b");
+
+         await expect(first).resolves.toBe("done");
+         await expect(second).rejects.toThrowError("No handler registered for 'getCount'");
+         await new Promise((resolve) => setTimeout(resolve, 5));
+         expect(answer).toHaveBeenCalledOnce();
+         expect(heard).toHaveBeenCalledOnce();
+         expect(heard).toHaveBeenCalledWith({}, "a");
+      });
+
+      it("generates files that type-check", async () => {
+         project = await runFixture("argument-validation");
          expect(await project.typecheck()).toBe("");
       });
    });

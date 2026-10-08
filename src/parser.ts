@@ -287,8 +287,14 @@ interface VerbInfo {
 }
 
 const VERBS = new Map<string, VerbInfo>([
-   ["invoke", { kind: "Unicast", direction: "RendererToMain", options: ["allowedOrigins"] }],
-   ["send", { kind: "Broadcast", direction: "RendererToMain", options: ["allowedOrigins"] }],
+   [
+      "invoke",
+      { kind: "Unicast", direction: "RendererToMain", options: ["allowedOrigins", "validate"] },
+   ],
+   [
+      "send",
+      { kind: "Broadcast", direction: "RendererToMain", options: ["allowedOrigins", "validate"] },
+   ],
    ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
    ["port", { kind: "Port", direction: "RendererToRenderer", options: [] }],
 ]);
@@ -639,12 +645,80 @@ class SchemaSyntaxError extends Error {
    }
 }
 
+/** What an import declaration of the schema file binds to a local name. */
+interface ImportBinding {
+   /** The exported name, `"default"` for a default import, or `"*"` for a namespace import. */
+   exported: string;
+   fromPath: string;
+   typeOnly: boolean;
+}
+
+/** The imports of a module by local name. */
+function collectImportBindings(module: Module): Map<string, ImportBinding> {
+   const bindings = new Map<string, ImportBinding>();
+   for (const item of module.body as AstNode[]) {
+      if (item.type !== "ImportDeclaration") {
+         continue;
+      }
+      for (const element of item.specifiers as AstNode[]) {
+         const exported =
+            element.type === "ImportDefaultSpecifier"
+               ? "default"
+               : element.type === "ImportNamespaceSpecifier"
+                 ? "*"
+                 : (element.imported?.value ?? element.local.value);
+         bindings.set(element.local.value, {
+            exported,
+            fromPath: item.source.value,
+            typeOnly: !!item.typeOnly || !!element.isTypeOnly,
+         });
+      }
+   }
+   return bindings;
+}
+
 interface ParseContext {
    file: string;
    src: Source;
    imports: LibraryImports;
+   /** The imports of the schema file by local name, which `validate` refers to. */
+   importBindings: ReadonlyMap<string, ImportBinding>;
    /** The names that the schema file binds at module level, see `collectModuleBindings`. */
    locals: ReadonlySet<string>;
+}
+
+/**
+ * Resolves the `validate` option to the import that it names. The generated main bindings
+ * import the validator as a value, so it must be a named or default value import of the schema
+ * file: a type-only import has no runtime value, a namespace import is not a schema, and a
+ * local declaration cannot be imported from a schema file, since it also declares the channels.
+ */
+function parseValidatorRef(
+   value: AstNode,
+   fail: (message: string) => Error,
+   ctx: ParseContext,
+): t.ValidatorRef {
+   if (value.type !== "Identifier") {
+      throw fail("option 'validate' must be an identifier which the schema file imports.");
+   }
+   const binding = ctx.importBindings.get(value.value);
+   if (!binding) {
+      throw fail(
+         `option 'validate' refers to '${value.value}', which is not imported in the schema file. ` +
+            "Import the schema from another module.",
+      );
+   } else if (binding.typeOnly) {
+      throw fail(
+         `option 'validate' refers to '${value.value}', which is a type-only import. ` +
+            "Import it as a value.",
+      );
+   } else if (binding.exported === "*") {
+      throw fail(
+         `option 'validate' refers to '${value.value}', a namespace import. ` +
+            "Import the schema itself, such as `import { schema } from '...'`.",
+      );
+   }
+   return { name: value.value, exported: binding.exported, fromPath: binding.fromPath };
 }
 
 function parseChannelConfig(
@@ -673,6 +747,10 @@ function parseChannelConfig(
          throw fail(`option '${key.value}' is not supported by '${verb}'.`);
       }
       const value = unwrapParentheses(prop.value);
+      if (key.value === "validate") {
+         result.validate = parseValidatorRef(value, fail, ctx);
+         continue;
+      }
       if (ARRAY_OPTIONS.has(key.value)) {
          const elements: (AstNode | undefined)[] =
             value.type === "ArrayExpression" ? value.elements : [];
@@ -880,7 +958,13 @@ export function parseChannelMapModule(
       );
    }
    const locals = collectModuleBindings(module);
-   const channelSpecs = parseChannelMap(found.call, { file, src, imports, locals });
+   const channelSpecs = parseChannelMap(found.call, {
+      file,
+      src,
+      imports,
+      importBindings: collectImportBindings(module),
+      locals,
+   });
    return { channelSpecs, channelMapExport: found.exported };
 }
 

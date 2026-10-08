@@ -88,6 +88,16 @@ export interface CallableSignature {
 export type ChannelKind = "Broadcast" | "Unicast" | "Port";
 export type ChannelDirection = "RendererToRenderer" | "RendererToMain" | "MainToRenderer";
 
+/** An identifier of the schema file which is a value import, such as `userArgs` in `{ userArgs }`. */
+export interface ValidatorRef {
+   /** The name that the schema file binds, which the signature of no channel uses. */
+   name: string;
+   /** The name that the module exports it under: `"default"` for a default import. */
+   exported: string;
+   /** The module specifier as written in the schema file. */
+   fromPath: string;
+}
+
 export interface ChannelSpec {
    name: string;
    kind: ChannelKind;
@@ -96,6 +106,8 @@ export interface ChannelSpec {
    trigger?: string;
    /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */
    allowedOrigins?: string[];
+   /** A Standard Schema for the arguments of a RendererToMain channel, run before the handler. */
+   validate?: ValidatorRef;
 }
 
 export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };

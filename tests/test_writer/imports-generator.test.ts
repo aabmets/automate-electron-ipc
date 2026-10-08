@@ -663,4 +663,105 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(pfsOf(specs), "NS.B")).toBeNull();
       });
    });
+
+   describe("getValueImport", () => {
+      const pfs = (fullPath = "/project/src/autoipc/schema.ts"): t.ParsedFileSpecs => ({
+         fullPath,
+         relativePath: "",
+         specs: { channelSpecArray: [], importSpecArray: [], typeSpecArray: [] },
+      });
+      const ref = (overrides: Partial<t.ValidatorRef> = {}): t.ValidatorRef => ({
+         name: "idArgs",
+         exported: "idArgs",
+         fromPath: "./validators",
+         ...overrides,
+      });
+
+      it("imports a named export as a value, relative to the generated file", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         expect(ig.getValueImport(pfs(), ref())).toStrictEqual({
+            local: "idArgs",
+            declaration: 'import { idArgs } from "./validators";',
+         });
+      });
+
+      it("resolves the path from the schema file to the generated file", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         const nested = pfs("/project/src/autoipc/schema/user/schema.ts");
+         expect(ig.getValueImport(nested, ref({ fromPath: "../validators.ts" })).declaration).toBe(
+            'import { idArgs } from "./schema/validators";',
+         );
+      });
+
+      it("adds the extension of the compiled file for NodeNext", () => {
+         const ig = new ImportsGenerator(true, "/project/src/autoipc/main.ts");
+         expect(ig.getValueImport(pfs(), ref({ fromPath: "./validators.ts" })).declaration).toBe(
+            'import { idArgs } from "./validators.js";',
+         );
+      });
+
+      it("keeps a package specifier as written", () => {
+         const ig = new ImportsGenerator(true, "/project/src/autoipc/main.ts");
+         const imported = ig.getValueImport(pfs(), ref({ fromPath: "@scope/validators" }));
+         expect(imported.declaration).toBe('import { idArgs } from "@scope/validators";');
+      });
+
+      it("imports a default export and an aliased export", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         expect(
+            ig.getValueImport(pfs(), ref({ name: "noArgs", exported: "default" })).declaration,
+         ).toBe('import noArgs from "./validators";');
+         expect(ig.getValueImport(pfs(), ref({ name: "ids" })).declaration).toBe(
+            'import { idArgs as ids } from "./validators";',
+         );
+      });
+
+      it("returns the import line once, for the same export of the same module", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         const first = ig.getValueImport(pfs(), ref());
+         const second = ig.getValueImport(pfs(), ref({ fromPath: "./validators.ts" }));
+         expect(first.declaration).not.toBeNull();
+         expect(second).toStrictEqual({ local: "idArgs", declaration: null });
+      });
+
+      it("imports two different exports under the same name under distinct names", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         const first = ig.getValueImport(pfs(), ref());
+         const second = ig.getValueImport(pfs(), ref({ fromPath: "./other" }));
+         expect(first.local).toBe("idArgs");
+         expect(second).toStrictEqual({
+            local: "idArgs_2",
+            declaration: 'import { idArgs as idArgs_2 } from "./other";',
+         });
+      });
+
+      it("does not take a reserved name, or the name of an imported type", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts", ["ipc"]);
+         expect(ig.getValueImport(pfs(), ref({ name: "ipc", exported: "ipc" })).local).toBe(
+            "ipc_2",
+         );
+         const file = pfs();
+         file.specs.importSpecArray.push({
+            fromPath: "./types",
+            customTypes: ["idArgs"],
+            namespace: null,
+         });
+         ig.getDeclaration(file, "idArgs");
+         expect(ig.getValueImport(pfs(), ref()).local).toBe("idArgs_2");
+      });
+
+      it("does not mix a value import with a type import of the same export", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         const file = pfs();
+         file.specs.importSpecArray.push({
+            fromPath: "./validators",
+            customTypes: ["idArgs"],
+            namespace: null,
+         });
+         const type = ig.getDeclaration(file, "idArgs");
+         const value = ig.getValueImport(file, ref());
+         expect(type).toBe('import type { idArgs } from "./validators";');
+         expect(value.declaration).toBe('import { idArgs as idArgs_2 } from "./validators";');
+      });
+   });
 });

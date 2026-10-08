@@ -234,6 +234,113 @@ describe("parseChannelMapModule", () => {
          }
       });
 
+      describe("validate", () => {
+         const imports = (extra: string) => `${IMPORT}\n${extra}`;
+         const specOf = (entry: string, extra: string) => {
+            const { channelSpecs } = parseMap(
+               `export default defineChannels({ ${entry} });`,
+               imports(extra),
+            );
+            return channelSpecs[0];
+         };
+
+         it("resolves a named import, in both forms", () => {
+            const extra = 'import { idArgs } from "./validators";';
+            const generic = specOf(
+               "chan: invoke<(id: number) => void>({ validate: idArgs })",
+               extra,
+            );
+            const alternative = specOf(
+               "chan: send({ validate: idArgs }) as (id: number) => void",
+               extra,
+            );
+            const expected = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
+            expect(generic.validate).toStrictEqual(expected);
+            expect(alternative.validate).toStrictEqual(expected);
+         });
+
+         it("resolves an aliased and a default import to the exported name", () => {
+            const extra = 'import fallback, { idArgs as ids } from "../shared/validators.js";';
+            const aliased = specOf("chan: invoke<(id: number) => void>({ validate: ids })", extra);
+            const fallback = specOf("chan: invoke<() => void>({ validate: (fallback) })", extra);
+            expect(aliased.validate).toStrictEqual({
+               name: "ids",
+               exported: "idArgs",
+               fromPath: "../shared/validators.js",
+            });
+            expect(fallback.validate).toStrictEqual({
+               name: "fallback",
+               exported: "default",
+               fromPath: "../shared/validators.js",
+            });
+         });
+
+         it("resolves a package import", () => {
+            const extra = 'import { schema } from "@scope/validators";';
+            const spec = specOf("chan: invoke<() => void>({ validate: schema })", extra);
+            expect(spec.validate?.fromPath).toBe("@scope/validators");
+         });
+
+         it("does not set validate when none is given", () => {
+            expect(parseOne("chan: invoke<() => void>()")).not.toHaveProperty("validate");
+         });
+
+         it("combines validate with allowedOrigins", () => {
+            const extra = 'import { idArgs } from "./v";';
+            const spec = specOf(
+               'chan: invoke<(id: number) => void>({ allowedOrigins: ["app://."], validate: idArgs })',
+               extra,
+            );
+            expect(spec.allowedOrigins).toStrictEqual(["app://."]);
+            expect(spec.validate?.name).toBe("idArgs");
+         });
+
+         const failing = (value: string, extra: string) =>
+            parseError(
+               `export default defineChannels({ chan: invoke<() => void>({ validate: ${value} }) });`,
+               imports(extra),
+            );
+
+         it("rejects what is not an identifier", () => {
+            const extra = 'import { schemas } from "./v";';
+            for (const value of ["schemas.idArgs", "schemas()", "[schemas]", '"schemas"', "null"]) {
+               const msg = failing(value, extra);
+               expect(msg).toContain("channel 'chan'");
+               expect(msg).toContain("must be an identifier which the schema file imports");
+            }
+         });
+
+         it("rejects a name which the schema file declares itself or does not know", () => {
+            const local = failing("local", "const local = { '~standard': {} };");
+            expect(local).toContain("'local', which is not imported in the schema file");
+            expect(failing("missing", "")).toContain("'missing', which is not imported");
+         });
+
+         it("rejects type-only imports, since they have no value at runtime", () => {
+            for (const extra of [
+               'import type { idArgs } from "./v";',
+               'import { type idArgs } from "./v";',
+               'import type idArgs from "./v";',
+            ]) {
+               expect(failing("idArgs", extra)).toContain("which is a type-only import");
+            }
+         });
+
+         it("rejects a namespace import", () => {
+            expect(failing("v", 'import * as v from "./v";')).toContain("a namespace import");
+         });
+
+         it("rejects validate on emit and port", () => {
+            for (const verb of ["emit", "port"]) {
+               const msg = parseError(
+                  `export default defineChannels({ chan: ${verb}<() => void>({ validate: idArgs }) });`,
+                  imports('import { idArgs } from "./v";'),
+               );
+               expect(msg).toContain(`option 'validate' is not supported by '${verb}'`);
+            }
+         });
+      });
+
       it("rejects allowedOrigins on emit and port", () => {
          for (const verb of ["emit", "port"]) {
             const msg = parseError(

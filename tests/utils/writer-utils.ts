@@ -119,6 +119,7 @@ export interface SimpleChannel {
    returnType?: string;
    trigger?: string;
    allowedOrigins?: string[];
+   validate?: t.ValidatorRef;
 }
 
 /**
@@ -135,6 +136,8 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
    });
    return [
       {
+         fullPath: "/project/ipc/schema.ts",
+         relativePath: "schema.ts",
          specs: { typeSpecArray: [], importSpecArray: [], channelSpecArray },
       } as unknown as t.ParsedFileSpecs,
    ];

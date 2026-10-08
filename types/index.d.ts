@@ -38,24 +38,69 @@ export type ChannelResult<S extends ChannelSignature> = [S] extends [never]
    : ChannelDef<S>;
 
 /**
+ * The Standard Schema interface (https://standardschema.dev), which zod, valibot, arktype and
+ * other libraries implement. It is copied here so that this package needs no dependency.
+ */
+export interface StandardSchemaV1<Input = unknown, Output = Input> {
+   readonly "~standard": StandardSchemaV1Props<Input, Output>;
+}
+
+export interface StandardSchemaV1Props<Input = unknown, Output = Input> {
+   readonly version: 1;
+   readonly vendor: string;
+   readonly validate: (
+      value: unknown,
+   ) => StandardSchemaV1Result<Output> | Promise<StandardSchemaV1Result<Output>>;
+   readonly types?: { readonly input: Input; readonly output: Output } | undefined;
+}
+
+export type StandardSchemaV1Result<Output> =
+   | { readonly value: Output; readonly issues?: undefined }
+   | { readonly issues: readonly StandardSchemaV1Issue[] };
+
+export interface StandardSchemaV1Issue {
+   readonly message: string;
+   readonly path?: readonly (PropertyKey | { readonly key: PropertyKey })[] | undefined;
+}
+
+/**
+ * The schema of the arguments of a channel, as a Standard Schema of the tuple `Parameters<S>`.
+ * Input is not constrained, since the arguments come from an untrusted renderer. In the
+ * `verb(config) as Signature` form, which does not check the config against the signature,
+ * any Standard Schema is accepted.
+ */
+export type ArgumentsSchema<S extends ChannelSignature> = [S] extends [never]
+   ? StandardSchemaV1
+   : StandardSchemaV1<unknown, Parameters<S>>;
+
+/**
  * Options of `invoke` channels.
  *
  * @property allowedOrigins - The origins which may call the channel, such as
  *    `["app://.", "http://localhost:5173"]`. The generated main bindings compare each one for
  *    equality with `event.senderFrame.origin`, and reject calls from any other origin. An origin
  *    is a scheme, a host and an optional port, in lower case, without a path or a wildcard.
+ * @property validate - A Standard Schema (zod, valibot, arktype, ...) of the argument tuple of
+ *    the signature. It must be an identifier which the schema file imports as a value, such as
+ *    `import { getUserArgs } from "./validators"`. The generated main bindings validate the
+ *    arguments that the renderer sent before they call the handler, and reject the call with an
+ *    `IpcValidationError` when they are invalid. The handler receives the validated output.
  */
-export interface InvokeConfig<_S extends ChannelSignature = ChannelSignature> {
+export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> {
    allowedOrigins?: readonly string[];
+   validate?: ArgumentsSchema<S>;
 }
 
 /**
  * Options of `send` channels.
  *
  * @property allowedOrigins - The origins which may send to the channel. See `InvokeConfig`.
+ * @property validate - A Standard Schema of the arguments. See `InvokeConfig`. A message with
+ *    invalid arguments is dropped, and reported to the `onRejected` hook.
  */
-export interface SendConfig<_S extends ChannelSignature = ChannelSignature> {
+export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
    allowedOrigins?: readonly string[];
+   validate?: ArgumentsSchema<S>;
 }
 
 /**

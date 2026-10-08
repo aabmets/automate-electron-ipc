@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 40 delivered, 32 remaining, 1 dropped.
+**Progress:** 41 delivered, 31 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -64,7 +64,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T14: Renderer listener disposers and `once`](./tasks/T14-renderer-listener-disposers-and-once.md) · depends on: T13
 - [x] [T15: Main-process listener and handler disposers and `handleOnce`](./tasks/T15-main-process-listener-and-handler.md) · depends on: T13
 - [x] [T16: Sender validation (Electron security checklist #17)](./tasks/T16-sender-validation.md) · depends on: T15
-- [ ] [T17: Runtime argument validation (Standard Schema)](./tasks/T17-runtime-argument-validation.md) · depends on: T16
+- [x] [T17: Runtime argument validation (Standard Schema)](./tasks/T17-runtime-argument-validation.md) · depends on: T16
 - [ ] [T18: Typed error envelope for Unicast](./tasks/T18-typed-error-envelope-for-unicast.md) · depends on: T15
 - [ ] [T19: Structured-clone awareness in signatures](./tasks/T19-structured-clone-awareness-in-signatures.md) · depends on: T08
 - [ ] [T20: Channel name prefix / namespacing](./tasks/T20-channel-name-prefix-namespacing.md) · depends on: T13

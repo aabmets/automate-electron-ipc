@@ -201,6 +201,34 @@ export class ImportsGenerator {
    }
 
    /**
+    * Binds the validator of a channel to a value import of the generated file, which is shared
+    * by every channel that uses the same export of the same module. Returns the local name,
+    * and the import line unless an earlier call returned it. The name is distinct from every
+    * type and every reserved name of the file.
+    */
+   public getValueImport(
+      pfs: t.ParsedFileSpecs,
+      ref: t.ValidatorRef,
+   ): { local: string; declaration: string | null } {
+      const key = `${this.moduleId(ref.fromPath, pfs.fullPath)}#value:${ref.exported}`;
+      let binding = this.bindings.get(key);
+      if (!binding) {
+         const local = this.uniqueName(ref.name);
+         this.usedNames.add(local);
+         const fromPath = this.resolveImportPath(ref.fromPath, pfs.fullPath);
+         const render = (name: string) =>
+            ref.exported === "default"
+               ? `import ${name} from "${fromPath}";`
+               : `import { ${ref.exported === name ? name : `${ref.exported} as ${name}`} } from "${fromPath}";`;
+         binding = { local, render, emitted: false };
+         this.bindings.set(key, binding);
+      }
+      const declaration = binding.emitted ? null : binding.render(binding.local);
+      binding.emitted = true;
+      return { local: binding.local, declaration };
+   }
+
+   /**
     * The names that the signatures of a schema file must use instead of the names they are
     * written with, because another declaration of the generated file has the same name.
     * Maps the written name to the name that the import declares.

@@ -74,6 +74,20 @@ const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
    return true;
 });
 
+const IDENTIFIER_NAME = /^[A-Za-z_$][\w$]*$/;
+
+const ValidatorRefStruct = object({
+   name: refine(string(), "identifier", (value) =>
+      IDENTIFIER_NAME.test(value) ? true : `'${value}' is not an identifier`,
+   ),
+   exported: refine(string(), "identifier", (value) =>
+      IDENTIFIER_NAME.test(value) ? true : `'${value}' is not an exported name`,
+   ),
+   fromPath: refine(string(), "module", (value) =>
+      value.length > 0 ? true : "the module specifier of the validator is empty",
+   ),
+});
+
 function getChannelSpecStruct(
    kind: t.ChannelKind,
    triggerable = false,
@@ -133,6 +147,7 @@ function getChannelSpecStruct(
       }),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
+      validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
    });
 }
 

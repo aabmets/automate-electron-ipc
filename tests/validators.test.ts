@@ -269,6 +269,60 @@ describe("validateChannelSpecs, allowedOrigins", () => {
    });
 });
 
+describe("validateChannelSpecs, validate", () => {
+   const ref = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      validate: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      return [{ ...spec, validate } as Partial<t.ChannelSpec>];
+   };
+
+   it("accepts a validator on Unicast and Broadcast channels from a renderer", () => {
+      for (const kind of ["Unicast", "Broadcast"] as const) {
+         expect(() =>
+            vld.validateChannelSpecs(make("RendererToMain", kind, ref)),
+         ).not.toThrowError();
+      }
+   });
+
+   it("accepts the default export of a package", () => {
+      const specs = make("RendererToMain", "Unicast", {
+         name: "schema",
+         exported: "default",
+         fromPath: "@scope/validators",
+      });
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
+
+   it("rejects validate on MainToRenderer and Port channels", () => {
+      for (const [direction, kind] of [
+         ["MainToRenderer", "Broadcast"],
+         ["RendererToRenderer", "Port"],
+      ] as const) {
+         expect(() => vld.validateChannelSpecs(make(direction, kind, ref))).toThrowError(
+            /validate/,
+         );
+      }
+   });
+
+   it.each([
+      { ...ref, name: "not valid" },
+      { ...ref, name: "" },
+      { ...ref, exported: "a-b" },
+      { ...ref, fromPath: "" },
+      { name: "x" },
+      "idArgs",
+      null,
+   ])("rejects the malformed reference %j", (value) => {
+      expect(() =>
+         vld.validateChannelSpecs(make("RendererToMain", "Unicast", value)),
+      ).toThrowError();
+   });
+});
+
 describe("validateGlobalChannelSpecs", () => {
    const file = (relativePath: string, specs: t.ChannelSpec[]): t.ParsedFileSpecs => ({
       fullPath: `/project/ipc/schema/${relativePath}`,

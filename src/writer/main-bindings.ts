@@ -19,6 +19,24 @@ interface ChannelEntry {
    members: string[];
 }
 
+/** The names that a generated listener uses, which differ from the names of its signature. */
+interface ListenerNames {
+   event: string;
+   callback: string;
+   listener: string;
+   remove: string;
+   eventType: string;
+   /** The channel name as a quoted literal. */
+   channel: string;
+   isBroadcast: boolean;
+   /** The local name of the imported validator. */
+   validator: string;
+   received: string;
+   args: string;
+   call: string;
+   spent: string;
+}
+
 export class MainBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.mainBindingsFilePath;
@@ -38,9 +56,15 @@ export class MainBindingsWriter extends BaseWriter {
          "ipcConfig",
          "configureIpc",
          "isSenderAllowed",
+         "IpcValidationError",
+         "IpcValidationIssue",
+         "IpcArgumentsSchema",
+         "IpcSchemaResult",
+         "validateArguments",
          // Globals that the generated code uses.
          "Promise",
          "Error",
+         "Array",
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -54,6 +78,7 @@ export class MainBindingsWriter extends BaseWriter {
       const importDeclarationsArray: string[] = [];
       const channels: ChannelEntry[] = [];
       let usesHandlers = false;
+      let usesValidation = false;
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -65,7 +90,13 @@ export class MainBindingsWriter extends BaseWriter {
                electronTypeImportsSet.add(this.getEventType(spec));
                eventTypes.add(this.getEventType(spec));
                usesHandlers ||= spec.kind !== "Broadcast";
-               channels.push(this.buildRendererToMainChannel(spec));
+               const validator = this.importValidator(
+                  parsedFileSpecs,
+                  spec,
+                  importDeclarationsArray,
+               );
+               usesValidation ||= validator !== null;
+               channels.push(this.buildRendererToMainChannel(spec, validator));
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
                channels.push(this.buildMainToRendererChannel(spec));
@@ -104,7 +135,12 @@ export class MainBindingsWriter extends BaseWriter {
       const bindingsExpression = [];
       if (usesIpcMain) {
          bindingsExpression.push(
-            this.buildSenderValidation([...eventTypes].sort(utils.compareStrings)),
+            this.buildSenderValidation([...eventTypes].sort(utils.compareStrings), usesValidation),
+         );
+      }
+      if (usesValidation) {
+         bindingsExpression.push(
+            this.buildArgumentValidation([...eventTypes].sort(utils.compareStrings)),
          );
       }
       if (usesHandlers) {
@@ -124,6 +160,24 @@ export class MainBindingsWriter extends BaseWriter {
       return out.join("\n");
    }
    /**
+    * Imports the validator of the channel, if it has one, and returns its local name. The import
+    * line goes to `declarations` once, however many channels use the same validator.
+    */
+   private importValidator(
+      pfs: t.ParsedFileSpecs,
+      spec: t.ChannelSpec,
+      declarations: string[],
+   ): string | null {
+      if (!spec.validate) {
+         return null;
+      }
+      const imported = this.importsGenerator.getValueImport(pfs, spec.validate);
+      if (imported.declaration) {
+         declarations.push(imported.declaration);
+      }
+      return imported.local;
+   }
+   /**
     * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
     * to `on` listeners.
     */
@@ -141,9 +195,12 @@ export class MainBindingsWriter extends BaseWriter {
     * would pass. A validator which throws counts as a rejection. Nothing is checked, as before,
     * until a validator or an `allowedOrigins` list applies to the channel.
     */
-   private buildSenderValidation(eventTypes: string[]): string {
+   private buildSenderValidation(eventTypes: string[], usesValidation: boolean): string {
       const [i1, i2, i3] = this.indents;
       const event = eventTypes.join(" | ");
+      // With validators, the hook also learns why the call was rejected.
+      const reason = usesValidation ? ", error: IpcForbiddenError | IpcValidationError" : "";
+      const reasonArg = usesValidation ? ", new IpcForbiddenError(channel)" : "";
       return [
          "",
          "export class IpcForbiddenError extends Error {",
@@ -157,7 +214,7 @@ export class MainBindingsWriter extends BaseWriter {
          "",
          "export interface IpcConfig {",
          `${i1}validateSender?: (event: ${event}, channel: string) => boolean;`,
-         `${i1}onRejected?: (event: ${event}, channel: string) => void;`,
+         `${i1}onRejected?: (event: ${event}, channel: string${reason}) => void;`,
          "}",
          "",
          "let ipcConfig: IpcConfig = {};",
@@ -184,12 +241,98 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}}`,
          `${i1}if (!allowed && ipcConfig.onRejected) {`,
          `${i2}try {`,
-         `${i3}ipcConfig.onRejected(event, channel);`,
+         `${i3}ipcConfig.onRejected(event, channel${reasonArg});`,
          `${i2}} catch {`,
          `${i3}// A failing hook must not decide whether the call is rejected.`,
          `${i2}}`,
          `${i1}}`,
          `${i1}return allowed;`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * The argument validation of the main process, for channels with a `validate` option:
+    * `IpcValidationError`, which carries the issues of the schema, and `validateArguments`,
+    * which every validated listener calls after the sender check. It uses the Standard Schema
+    * interface through a structural type, so the generated file has no dependency on a library.
+    *
+    * It validates the arguments exactly as they arrived, as one array, and passes the output of
+    * the schema on, so what the handler gets is what the schema vouches for. A schema which
+    * throws, rejects or answers with anything but a result, counts as a failure, so it never
+    * lets an argument through. A synchronous schema keeps the call synchronous. An invalid call
+    * is reported to `onRejected`, then an invoke throws the error and a send is dropped.
+    */
+   private buildArgumentValidation(eventTypes: string[]): string {
+      const [i1, i2, i3] = this.indents;
+      const event = eventTypes.join(" | ");
+      return [
+         "",
+         "export interface IpcValidationIssue {",
+         `${i1}readonly message: string;`,
+         `${i1}readonly path?: readonly (string | number | symbol | { readonly key: string | number | symbol })[];`,
+         "}",
+         "",
+         "type IpcSchemaResult =",
+         `${i1}| { readonly value: unknown; readonly issues?: undefined }`,
+         `${i1}| { readonly issues: readonly IpcValidationIssue[] };`,
+         "",
+         "interface IpcArgumentsSchema {",
+         `${i1}readonly '~standard': {`,
+         `${i2}readonly validate: (value: unknown) => IpcSchemaResult | Promise<IpcSchemaResult>;`,
+         `${i1}};`,
+         "}",
+         "",
+         "export class IpcValidationError extends Error {",
+         `${i1}readonly channel: string;`,
+         `${i1}readonly issues: readonly IpcValidationIssue[];`,
+         `${i1}constructor(channel: string, issues: readonly IpcValidationIssue[]) {`,
+         `${i2}super(\`The arguments of the channel '\${channel}' are invalid: \${issues.map((issue) => issue.message).join('; ')}\`);`,
+         `${i2}this.name = 'IpcValidationError';`,
+         `${i2}this.channel = channel;`,
+         `${i2}this.issues = issues;`,
+         `${i1}}`,
+         "}",
+         "",
+         "function validateArguments<R>(",
+         `${i1}event: ${event},`,
+         `${i1}channel: string,`,
+         `${i1}schema: IpcArgumentsSchema,`,
+         `${i1}received: unknown[],`,
+         `${i1}drop: boolean,`,
+         `${i1}run: (args: unknown[]) => R,`,
+         "): R | Promise<R | undefined> | undefined {",
+         `${i1}const reject = (issues: readonly IpcValidationIssue[]): undefined => {`,
+         `${i2}const error = new IpcValidationError(channel, issues);`,
+         `${i2}try {`,
+         `${i3}ipcConfig.onRejected?.(event, channel, error);`,
+         `${i2}} catch {`,
+         `${i3}// A failing hook must not decide whether the call is rejected.`,
+         `${i2}}`,
+         `${i2}if (!drop) {`,
+         `${i3}throw error;`,
+         `${i2}}`,
+         `${i2}return undefined;`,
+         `${i1}};`,
+         `${i1}const failed = (): undefined => reject([{ message: 'The arguments could not be validated' }]);`,
+         `${i1}const accept = (result: IpcSchemaResult): R | undefined => {`,
+         `${i2}if (!result || result.issues) {`,
+         `${i3}return result ? reject(result.issues) : failed();`,
+         `${i2}}`,
+         `${i2}return Array.isArray(result.value)`,
+         `${i3}? run(result.value)`,
+         `${i3}: reject([{ message: 'The validated arguments are not an array' }]);`,
+         `${i1}};`,
+         `${i1}let outcome: IpcSchemaResult | Promise<IpcSchemaResult>;`,
+         `${i1}try {`,
+         `${i2}outcome = schema['~standard'].validate(received);`,
+         `${i1}} catch {`,
+         `${i2}return failed();`,
+         `${i1}}`,
+         `${i1}if (outcome && typeof (outcome as Promise<IpcSchemaResult>).then === 'function') {`,
+         `${i2}return (outcome as Promise<IpcSchemaResult>).then(accept, failed);`,
+         `${i1}}`,
+         `${i1}return accept(outcome as IpcSchemaResult);`,
          "}",
          "",
       ].join("\n");
@@ -205,11 +348,12 @@ export class MainBindingsWriter extends BaseWriter {
     * `once` and `handleOnce` register a normal listener which removes itself after the first
     * allowed message, since `ipcMain.once` would be used up by a message from a rejected sender.
     */
-   private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
+   private buildRendererToMainChannel(spec: t.ChannelSpec, validator: string | null): ChannelEntry {
       const [, i1, i2, i3, i4] = this.indents;
       const eventType = this.getEventType(spec);
-      // The names of the generated parameters must not shadow the ones of the signature.
-      const taken = this.collectIdentifiers([spec.signature.definition]);
+      // The names of the generated parameters must not shadow the ones of the signature, nor
+      // the validator, which the listener refers to.
+      const taken = this.collectIdentifiers([spec.signature.definition, validator ?? ""]);
       const eventName = this.uniqueName("event", taken);
       const callbackName = this.uniqueName("callback", taken);
       const listenerName = this.uniqueName("listener", taken);
@@ -244,22 +388,41 @@ export class MainBindingsWriter extends BaseWriter {
               `${i4}electronIpcMain.removeHandler(${channel});`,
               `${i3}}`,
            ];
+      const names: ListenerNames = {
+         event: eventName,
+         callback: callbackName,
+         listener: listenerName,
+         remove: removeName,
+         eventType,
+         channel,
+         isBroadcast,
+         validator: validator ?? "",
+         received: this.uniqueName("received", taken),
+         args: this.uniqueName("args", taken),
+         call: this.uniqueName("call", taken),
+         spent: this.uniqueName("spent", taken),
+      };
       const register = (method: string, once: boolean) => {
          const params = wrapperParams.filter(Boolean).join(", ");
          const check = isBroadcast
             ? [`${i3}if (!${guardName}(${eventName})) {`, `${i4}return;`, `${i3}}`]
             : [`${i3}${guardName}(${eventName});`];
+         const listener = validator
+            ? this.buildValidatedListener(names, check, once)
+            : [
+                 `${i2}const ${listenerName} = ${typeParams}(${params}) => {`,
+                 ...check,
+                 ...(once ? [`${i3}${removeName}();`] : []),
+                 `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
+                 `${i2}};`,
+              ];
          const lines = [
             `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
             ...guard,
             `${i2}const ${removeName} = () => {`,
             ...unregister,
             `${i2}};`,
-            `${i2}const ${listenerName} = ${typeParams}(${params}) => {`,
-            ...check,
-            ...(once ? [`${i3}${removeName}();`] : []),
-            `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
-            `${i2}};`,
+            ...listener,
          ];
          if (isBroadcast) {
             lines.push(`${i2}electronIpcMain.on(${channel}, ${listenerName});`);
@@ -277,6 +440,38 @@ export class MainBindingsWriter extends BaseWriter {
          ? [register("on", false), register("once", true)]
          : [register("handle", false), register("handleOnce", true)];
       return { name: spec.name, members };
+   }
+   /**
+    * The listener of a channel with a validator. It takes the arguments as they arrived, so the
+    * schema sees all of them, and the callback gets the output of the schema, so the listener
+    * does not declare the parameters of the signature. `check` is the sender check.
+    * A `once` listener is used up by the first valid call only. A second call may pass an
+    * asynchronous schema before the first is accepted, and only one of them gets the callback.
+    */
+   private buildValidatedListener(n: ListenerNames, check: string[], once: boolean): string[] {
+      const [, , i2, i3, i4, i5] = this.indents;
+      const spentBranch = n.isBroadcast
+         ? `${i5}return;`
+         : `${i5}throw new Error("No handler registered for ${n.channel}");`;
+      return [
+         `${i2}const ${n.call} = ${n.callback} as (${n.event}: ${n.eventType}, ...${n.args}: unknown[]) => unknown;`,
+         ...(once ? [`${i2}let ${n.spent} = false;`] : []),
+         `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ...${n.received}: unknown[]) => {`,
+         ...check,
+         `${i3}return validateArguments(${n.event}, ${n.channel}, ${n.validator}, ${n.received}, ${n.isBroadcast}, (${n.args}) => {`,
+         ...(once
+            ? [
+                 `${i4}if (${n.spent}) {`,
+                 spentBranch,
+                 `${i4}}`,
+                 `${i4}${n.spent} = true;`,
+                 `${i4}${n.remove}();`,
+              ]
+            : []),
+         `${i4}return ${n.call}(${n.event}, ...${n.args});`,
+         `${i3}});`,
+         `${i2}};`,
+      ];
    }
    /** `ipc.<name>.send(window, ...args)`, and `ipc.<name>.bind(window, provider)` with a trigger. */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
