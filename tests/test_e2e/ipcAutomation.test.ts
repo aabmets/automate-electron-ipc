@@ -161,3 +161,22 @@ describe("ipcAutomation, schema without channels", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, schema with only port channels", () => {
+   // Regression for T52: the empty callables line left a lone comma in main.ts and preload.ts.
+   it("generates bindings without a dangling comma", async () => {
+      project = await runFixture("port-only");
+      const { generated } = project;
+
+      expect(generated["main.ts"]).toContain("export const ipcMain = {\n   ports: {");
+      expect(generated["preload.ts"]).toContain("exposeInMainWorld('ipc', {\n   ports: {");
+      expect(generated["window.d.ts"]).toContain("ipc: {\n         ports: {");
+      expect(generated["main.ts"]).not.toMatch(/\{\s*,/);
+      expect(generated["preload.ts"]).not.toMatch(/\{\s*,/);
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("port-only");
+      expect(await project.typecheck()).toBe("");
+   });
+});

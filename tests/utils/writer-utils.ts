@@ -145,5 +145,15 @@ export default {
          sigReturnType: "Promise<CustomType>",
          sigCustomTypes: ["CustomType"],
       }),
+      Port_RendererToRenderer: getParsedFileSpecsArray({
+         channelKind: "Port",
+         channelDirection: "RendererToRenderer",
+         channelListeners: [],
+         paramType: "string",
+         paramRest: false,
+         paramOptional: false,
+         sigReturnType: "void",
+         sigCustomTypes: [],
+      }),
    },
 };

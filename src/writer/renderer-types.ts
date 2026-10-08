@@ -50,14 +50,17 @@ export class RendererTypesWriter extends BaseWriter {
             }
          }
       }
-      const sortedCallablesArray = this.sortCallablesArray(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`\n${this.indents[2]}`);
       const windowDeclaration = [
          "\ndeclare global {",
          `\n${this.indents[0]}interface Window {`,
          `\n${this.indents[1]}ipc: {`,
-         `\n${this.indents[2]}${sortedCallables}`,
       ];
+      if (callablesArray.length > 0) {
+         const sortedCallables = this.sortCallablesArray(callablesArray);
+         windowDeclaration.push(
+            `\n${this.indents[2]}${sortedCallables.join(`\n${this.indents[2]}`)}`,
+         );
+      }
       if (portsArray.length > 0) {
          windowDeclaration.push(
             ...[`\n${this.indents[2]}ports: {`, ...portsArray, `\n${this.indents[2]}};`],

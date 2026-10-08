@@ -78,4 +78,14 @@ describe("MainBindingsWriter", () => {
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
+
+   it("should write only ports into ipcMain object when there are no callables", async () => {
+      // Regression for T52: the empty callables line left a lone comma in the object.
+      const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      expect(buffer.toString()).toContain("export const ipcMain = {\n   ports: {");
+      expect(buffer.toString()).not.toMatch(/\{\s*,/);
+   });
 });

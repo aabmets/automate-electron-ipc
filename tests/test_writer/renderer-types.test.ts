@@ -80,4 +80,27 @@ describe("PreloadBindingsWriter", () => {
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
+
+   it("should write only ports into Window declaration when there are no callables", async () => {
+      const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
+      const obj = new shared.VitestRendererTypesWriter(pfsArray);
+      await obj.write(false);
+      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const expectedOutput = utils.dedent(`
+         declare global {
+            interface Window {
+               ipc: {
+                  ports: {
+                     vitestChannel: {
+                        sendMessage: (arg1: string, arg2: string) => void;
+                        onMessage: (callback: (arg1: string, arg2: string) => void) => void;
+                     };
+                  };
+               };
+            }
+         }\n
+         export default Window;
+      `);
+      expect(buffer.toString()).toStrictEqual(expectedOutput);
+   });
 });

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-port-only",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

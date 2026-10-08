@@ -9,4 +9,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** omit the callables line when there are no callables, in every writer.
 - **Tests:** writer unit tests on the text, plus an e2e fixture with only port channels that
   type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. The callables line is skipped when empty in all three writers (`window.d.ts` had left a blank line); new `port-only` fixture type-checks, and a `Port_RendererToRenderer` writer test spec was added.

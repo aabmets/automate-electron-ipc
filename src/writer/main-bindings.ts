@@ -59,12 +59,13 @@ export class MainBindingsWriter extends BaseWriter {
          `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
          ...importDeclarationsArray,
       ];
-      const sortedCallablesArray = this.sortCallablesArray(callablesArray);
-      const sortedCallables = sortedCallablesArray.join(`,\n${this.indents[0]}`);
-      const bindingsExpression = [
-         "\nexport const ipcMain = {",
-         `\n${this.indents[0]}${sortedCallables},`,
-      ];
+      const bindingsExpression = ["\nexport const ipcMain = {"];
+      if (callablesArray.length > 0) {
+         const sortedCallables = this.sortCallablesArray(callablesArray);
+         bindingsExpression.push(
+            `\n${this.indents[0]}${sortedCallables.join(`,\n${this.indents[0]}`)},`,
+         );
+      }
       if (portsArray.length > 0) {
          bindingsExpression.push(
             ...[`\n${this.indents[0]}ports: {`, ...portsArray, `\n${this.indents[0]}},`],
