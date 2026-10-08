@@ -17,6 +17,16 @@ export class MainBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.mainBindingsFilePath;
    }
+   protected getReservedNames(): string[] {
+      return [
+         "ipcMain",
+         "electronIpcMain",
+         "MessageChannelMain",
+         "BrowserWindow",
+         "IpcMainEvent",
+         "IpcMainInvokeEvent",
+      ];
+   }
    protected renderEmptyFileContents(): string {
       return "\nexport const ipcMain = {};";
    }

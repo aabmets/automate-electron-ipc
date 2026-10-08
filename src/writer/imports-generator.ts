@@ -46,13 +46,22 @@ export class ImportsGenerator {
    private readonly projectUsesNodeNext: boolean;
    private readonly targetFilePath: string;
    private readonly bindings = new Map<string, Binding>();
-   private readonly usedNames = new Set<string>();
+   private readonly usedNames: Set<string>;
    private readonly resolved = new Map<string, Binding | null>();
    private readonly renames = new Map<string, Map<string, string>>();
 
-   public constructor(projectUsesNodeNext: boolean, targetFilePath: string) {
+   /**
+    * `reservedNames` are the names that the generated file declares or imports itself, such as
+    * `BrowserWindow`. A schema type of the same name is imported under an alias instead.
+    */
+   public constructor(
+      projectUsesNodeNext: boolean,
+      targetFilePath: string,
+      reservedNames: Iterable<string> = [],
+   ) {
       this.projectUsesNodeNext = projectUsesNodeNext;
       this.targetFilePath = targetFilePath;
+      this.usedNames = new Set(reservedNames);
    }
 
    /**

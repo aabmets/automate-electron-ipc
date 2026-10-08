@@ -17,6 +17,9 @@ export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.rendererTypesFilePath;
    }
+   protected getReservedNames(): string[] {
+      return ["Window"];
+   }
    protected renderEmptyFileContents(): string {
       // `declare global` is only valid inside a module, hence the empty export.
       return `\nexport {};\n\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;

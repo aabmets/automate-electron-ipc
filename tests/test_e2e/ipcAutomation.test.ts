@@ -391,6 +391,52 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 });
 
+describe("ipcAutomation, schema types named like generated names", () => {
+   // Regression for T59: a schema type called `BrowserWindow`, `Window` or `IpcMainEvent` was
+   // imported under that name and clashed with the declaration of the generated file (TS2300).
+   const importLine = (text: string, exported: string, from: string): string | undefined =>
+      new RegExp(`^import type \\{ ${exported}(?: as \\w+)? \\} from "${from}";$`, "m").exec(
+         text,
+      )?.[0];
+
+   it("imports the schema types under aliases in main.ts", async () => {
+      project = await runFixture("reserved-names");
+      const main = project.generated["main.ts"];
+
+      expect(main).toContain(
+         'import type { IpcMainInvokeEvent, IpcMainEvent, BrowserWindow } from "electron";',
+      );
+      expect(importLine(main, "BrowserWindow", "./schema")).toBe(
+         'import type { BrowserWindow as BrowserWindow_2 } from "./schema";',
+      );
+      expect(importLine(main, "Window", "./schema")).toBe(
+         'import type { Window } from "./schema";',
+      );
+      expect(importLine(main, "IpcMainEvent", "./types/events")).toBe(
+         'import type { IpcMainEvent as IpcMainEvent_2 } from "./types/events";',
+      );
+      // The schema type is used in the signatures, the Electron type in the generated wrapper.
+      expect(main).toContain("(callback: (event: IpcMainEvent, options: BrowserWindow_2) => void)");
+      expect(main).toContain("(browserWindow: BrowserWindow, event: IpcMainEvent_2)");
+   });
+
+   it("imports the schema types under aliases in window.d.ts", async () => {
+      project = await runFixture("reserved-names");
+      const types = project.generated["window.d.ts"];
+
+      expect(importLine(types, "Window", "./schema")).toBe(
+         'import type { Window as Window_2 } from "./schema";',
+      );
+      expect(types).toContain("Promise<Window_2>");
+      expect(types).toContain("export default Window;");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("reserved-names");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

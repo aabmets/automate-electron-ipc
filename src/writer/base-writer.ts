@@ -56,6 +56,7 @@ export class BaseWriter {
       this.importsGenerator = new ImportsGenerator(
          config.projectUsesNodeNext,
          this.getTargetFilePath(),
+         this.getReservedNames(),
       );
       this.indents = this.getCodeIndents();
    }
@@ -67,6 +68,11 @@ export class BaseWriter {
    protected getTargetFilePath(): string {
       this.throwAbstractError("getTargetFilePath");
       return null as unknown as string;
+   }
+
+   /** The names that the generated file declares or imports, which schema types must not take. */
+   protected getReservedNames(): string[] {
+      return [];
    }
 
    protected renderEmptyFileContents(): string {

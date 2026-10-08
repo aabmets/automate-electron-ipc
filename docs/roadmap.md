@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 23 delivered, 42 remaining, 1 dropped.
+**Progress:** 24 delivered, 41 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -44,7 +44,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T56: Async return type detection is a prefix match](./tasks/T56-async-return-type-detection.md) · depends on: T05
 - [x] [T57: Parameter names clash with generated names; event injection](./tasks/T57-generated-wrapper-parameter-handling.md) · depends on: T04, T05
 - [x] [T58: Config and export-form robustness](./tasks/T58-config-and-export-form-robustness.md) · depends on: T01
-- [ ] [T59: Schema type names that clash with generated names](./tasks/T59-schema-types-clashing-with-generated-names.md) · depends on: T53
+- [x] [T59: Schema type names that clash with generated names](./tasks/T59-schema-types-clashing-with-generated-names.md) · depends on: T53
 - [ ] [T60: Schema types that shadow built-in globals](./tasks/T60-schema-types-shadowing-globals.md) · depends on: T09
 - [ ] [T61: Types exported by `export { X }` or `export default class`](./tasks/T61-export-specifiers-and-default-classes.md) · depends on: T09
 - [ ] [T62: `typeof` of a value declared in the schema file](./tasks/T62-typeof-schema-local-values.md) · depends on: T54

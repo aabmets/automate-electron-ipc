@@ -476,6 +476,66 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(c, "User")).toContain("{ User as User_3 }");
       });
 
+      // Regression for T59: a schema type named like a declaration of the generated file clashed.
+      it("imports a type that is named like a reserved name under an alias", () => {
+         const a = fileOf(
+            `${dir}/a.ts`,
+            { typeSpecArray: [ownType("BrowserWindow")] },
+            "BrowserWindow",
+         );
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts", ["BrowserWindow"]);
+
+         expect(ig.getRenames(a).get("BrowserWindow")).toBe("BrowserWindow_2");
+         expect(ig.getDeclaration(a, "BrowserWindow")).toBe(
+            'import type { BrowserWindow as BrowserWindow_2 } from "./schema/a";',
+         );
+      });
+
+      it("renames an imported type that is named like a reserved name", () => {
+         const a = fileOf(
+            `${dir}/a.ts`,
+            { importSpecArray: [importOf("../types/m", "Window", "Other as IpcMainEvent")] },
+            "Window",
+            "IpcMainEvent",
+         );
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/window.d.ts", [
+            "Window",
+            "IpcMainEvent",
+         ]);
+
+         expect(ig.getDeclaration(a, "Window")).toBe(
+            'import type { Window as Window_2 } from "./types/m";',
+         );
+         expect(ig.getDeclaration(a, "IpcMainEvent")).toBe(
+            'import type { Other as IpcMainEvent_2 } from "./types/m";',
+         );
+         expect(Object.fromEntries(ig.getRenames(a))).toStrictEqual({
+            Window: "Window_2",
+            IpcMainEvent: "IpcMainEvent_2",
+         });
+      });
+
+      it("renames a namespace import that is named like a reserved name", () => {
+         const a = fileOf(
+            `${dir}/a.ts`,
+            { importSpecArray: [{ fromPath: "../types/m", customTypes: [], namespace: "Window" }] },
+            "Window.Item",
+         );
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/window.d.ts", ["Window"]);
+
+         expect(ig.getDeclaration(a, "Window.Item")).toBe(
+            'import type * as Window_2 from "./types/m";',
+         );
+      });
+
+      it("keeps the names that are not reserved", () => {
+         const a = fileOf(`${dir}/a.ts`, { typeSpecArray: [ownType("User")] }, "User");
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts", ["BrowserWindow"]);
+
+         expect(ig.getRenames(a).size).toBe(0);
+         expect(ig.getDeclaration(a, "User")).toBe('import type { User } from "./schema/a";');
+      });
+
       it("has no renames for a file whose types do not collide", () => {
          const a = fileOf(`${dir}/a.ts`, { typeSpecArray: [ownType("User")] }, "User", "Unknown");
          expect(generator().getRenames(a).size).toBe(0);
