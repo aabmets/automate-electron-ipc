@@ -147,6 +147,64 @@ const scenarios: Record<string, Scenario> = {
       };
    },
 
+   // A window that was destroyed before `connect` (T78): Electron's own error, and no leftovers.
+   chatDestroyedBeforeConnect: async (ctx) => {
+      ctx.serve("app://main/chat.html", ctx.data.chatPage);
+      const a = await ctx.open({ url: "app://main/chat.html" });
+      const gone = await ctx.open({ url: "app://main/chat.html" });
+      const c = await ctx.open({ url: "app://main/chat.html" });
+      gone.destroy();
+      const errors: string[] = [];
+      for (const [first, second] of [
+         [a, gone],
+         [gone, a],
+         [gone, gone],
+      ]) {
+         try {
+            ctx.ipc.chat.connect(first, second);
+         } catch (error: any) {
+            errors.push(`${error.name}: ${error.message}`);
+         }
+      }
+      await ctx.sleep(300);
+      const before = await ctx.evaluate(a, () => (window as any).events);
+      // The live window still connects to another one, and is not told that anything closed.
+      ctx.ipc.chat.connect(a, c);
+      await ctx.until(a, () => (window as any).events.some((e: string[]) => e[0] === "ready"));
+      await ctx.until(c, () => (window as any).events.some((e: string[]) => e[0] === "ready"));
+      await ctx.evaluate(a, () => ipc.chat.send("still works"));
+      const heard = await ctx.until(
+         c,
+         () =>
+            (window as any).events.some((e: string[]) => e[0] === "message") &&
+            (window as any).events,
+      );
+      return { errors, before, a: await ctx.evaluate(a, () => (window as any).events), c: heard };
+   },
+
+   mainPortDestroyedBeforeConnect: async (ctx) => {
+      ctx.serve("app://main/log.html", ctx.data.logPage);
+      const gone = await ctx.open({ url: "app://main/log.html" });
+      const live = await ctx.open({ url: "app://main/log.html" });
+      gone.destroy();
+      let error = "";
+      try {
+         ctx.ipc.logTail.connect(gone);
+      } catch (caught: any) {
+         error = `${caught.name}: ${caught.message}`;
+      }
+      const connection = ctx.ipc.logTail.connect(live);
+      await ctx.until(live, () => (window as any).events.some((e: string[]) => e[0] === "ready"));
+      connection.send("hello");
+      const events = await ctx.until(
+         live,
+         () =>
+            (window as any).events.some((e: string[]) => e[0] === "message") &&
+            (window as any).events,
+      );
+      return { error, events };
+   },
+
    mainPortRoundTrip: async (ctx) => {
       ctx.serve("app://main/log.html", ctx.data.logPage);
       const win = await ctx.open({ url: "app://main/log.html" });
@@ -264,6 +322,14 @@ function body(group: ElectronGroup) {
          expect(b).toStrictEqual([["ready"]]);
       });
 
+      it("throws Electron's own error for a window that was destroyed, and connects the others", () => {
+         const { errors, before, a, c } = group.value("chatDestroyedBeforeConnect");
+         expect(errors).toStrictEqual(new Array(3).fill("TypeError: Object has been destroyed"));
+         expect(before).toStrictEqual([]);
+         expect(a).toStrictEqual([["ready"]]);
+         expect(c).toStrictEqual([["ready"], ["message", "still works"]]);
+      });
+
       it("pairs a window again when its page was reloaded", () => {
          const { a, b } = group.value("chatReload");
          // The page of a hears its peer go away with the old document, and come back with the new one.
@@ -287,6 +353,12 @@ function body(group: ElectronGroup) {
             ["message", "from main", 1],
             ["message", "without level"],
          ]);
+      });
+
+      it("throws Electron's own error for a window that was destroyed, and connects the others", () => {
+         const { error, events } = group.value("mainPortDestroyedBeforeConnect");
+         expect(error).toBe("TypeError: Object has been destroyed");
+         expect(events).toStrictEqual([["ready"], ["message", "hello"]]);
       });
 
       it("pairs a window which was connected before it loaded, and flushes the queue", () => {

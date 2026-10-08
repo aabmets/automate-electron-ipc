@@ -867,11 +867,12 @@ describe("MainBindingsWriter", () => {
 
          function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {
             const id = ++lastPortConnectionId;
+            // Both windows are resolved before anything is registered: the getter of a destroyed window throws.
             const ends = [
-               { key: \`\${id}:a\`, win: winA },
-               { key: \`\${id}:b\`, win: winB },
+               { key: \`\${id}:a\`, win: winA, contents: winA.webContents },
+               { key: \`\${id}:b\`, win: winB, contents: winB.webContents },
             ];
-            const windows = winA === winB ? [winA] : [winA, winB];
+            const watched = winA === winB ? [ends[0]] : ends;
             let closed = false;
             const watches = new Map<BrowserWindow, PageLoadWatch>();
             const isReady = (win: BrowserWindow) => !win.isDestroyed() && !!watches.get(win)?.isLoaded();
@@ -880,37 +881,43 @@ describe("MainBindingsWriter", () => {
                   return;
                }
                const { port1, port2 } = new MessageChannelMain();
-               winA.webContents.postMessage(channel, ends[0].key, [port1]);
-               winB.webContents.postMessage(channel, ends[1].key, [port2]);
+               ends[0].contents.postMessage(channel, ends[0].key, [port1]);
+               ends[1].contents.postMessage(channel, ends[1].key, [port2]);
             };
             const close = () => {
                if (closed) {
                   return;
                }
                closed = true;
-               for (const win of windows) {
+               for (const end of watched) {
                   // A destroyed window has dropped its listeners, and cannot be reached.
-                  if (!win.isDestroyed()) {
-                     win.off('closed', close);
+                  if (!end.win.isDestroyed()) {
+                     end.win.off('closed', close);
                   }
-                  watches.get(win)?.dispose();
+                  watches.get(end.win)?.dispose();
                }
                for (const end of ends) {
                   portEnds.delete(end.key);
                   if (!end.win.isDestroyed()) {
-                     end.win.webContents.send(\`\${channel}:close\`, end.key);
+                     end.contents.send(\`\${channel}:close\`, end.key);
                   }
                }
             };
-            for (const end of ends) {
-               portEnds.set(end.key, { contents: end.win.webContents, close });
+            // A failure from here on undoes what was registered, since the caller never gets the handle.
+            try {
+               for (const end of ends) {
+                  portEnds.set(end.key, { contents: end.contents, close });
+               }
+               listenForPortDisconnects(channel);
+               for (const end of watched) {
+                  end.win.on('closed', close);
+                  watches.set(end.win, watchPageLoad(end.contents, pair));
+               }
+               pair();
+            } catch (error) {
+               close();
+               throw error;
             }
-            listenForPortDisconnects(channel);
-            for (const win of windows) {
-               win.on('closed', close);
-               watches.set(win, watchPageLoad(win.webContents, pair));
-            }
-            pair();
             return { close };
          }
 
@@ -1281,8 +1288,8 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain("electronIpcMain.off('app:sendIt', listener);");
          expect(output).toContain("webContents.send('app:pushIt', ");
          expect(output).toContain("connectPorts('app:chatIt', winA, winB)");
-         expect(output).toContain("webContents.postMessage(channel, ends[0].key, [port1]);");
-         expect(output).toContain("webContents.send(`${channel}:close`, end.key);");
+         expect(output).toContain("ends[0].contents.postMessage(channel, ends[0].key, [port1]);");
+         expect(output).toContain("end.contents.send(`${channel}:close`, end.key);");
          expect(output).toContain("electronIpcMain.on(`${channel}:disconnect`, ");
       });
 

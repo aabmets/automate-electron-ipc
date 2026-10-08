@@ -57,6 +57,35 @@ function createWindow(state: { loading?: boolean; url?: string; destroyed?: bool
 }
 type FakeWindow = ReturnType<typeof createWindow>;
 
+/** A window like the one of Electron: once it is destroyed, its `webContents` getter throws. */
+function createStrictWindow(state: Parameters<typeof createWindow>[0] = {}) {
+   const win = createWindow(state);
+   const contents = win.webContents;
+   Object.defineProperty(win, "webContents", {
+      get() {
+         if (win.destroyed) {
+            throw new TypeError("Object has been destroyed");
+         }
+         return contents;
+      },
+   });
+   return win;
+}
+
+/** The events that `connect` listens to on a window and on its contents. */
+const loadEvents = ["did-start-navigation", "did-fail-load", "did-finish-load", "did-stop-loading"];
+
+/** How many listeners `connect` has left on a window and on its contents. */
+function listenersOn(win: FakeWindow) {
+   return {
+      closed: win.listenerCount("closed"),
+      ...Object.fromEntries(
+         loadEvents.map((event) => [event, win.webContents.listenerCount(event)]),
+      ),
+   };
+}
+const noListeners = listenersOn(createWindow());
+
 /** Destroys a window the way Electron does: it emits `closed` once it can no longer be used. */
 function destroy(win: FakeWindow) {
    win.destroyed = true;
@@ -71,7 +100,7 @@ async function loadMain() {
 }
 
 /** Loads the generated main process, and returns the fake `electron` it was given as well. */
-async function loadMainWithElectron() {
+async function loadMainWithElectron(channelClass?: unknown) {
    project = await runFixture("port-only");
    let created = 0;
    class FakeChannel {
@@ -79,7 +108,7 @@ async function loadMainWithElectron() {
       port1 = { name: `port1 of ${this.id}` };
       port2 = { name: `port2 of ${this.id}` };
    }
-   const electron = { ...createFakeElectron(), MessageChannelMain: FakeChannel };
+   const electron = { ...createFakeElectron(), MessageChannelMain: channelClass ?? FakeChannel };
    return { electron, ipc: loadGenerated(project.generated["main.ts"], { electron }).ipc };
 }
 
@@ -502,6 +531,102 @@ describe("ipc.<name>.connect", () => {
 
          expect(hub.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "2:a"]]);
          expect(first.webContents.send).not.toHaveBeenCalled();
+      });
+   });
+
+   // Regression for T78: the first end was registered before the `webContents` of the second
+   // window was read, and that getter throws for a destroyed window.
+   describe("a window that was destroyed before connect", () => {
+      /** Makes a connection, which registers the listener for the pages, and returns what a test needs. */
+      async function setup() {
+         const { ipc, electron } = await loadMainWithElectron();
+         ipc.chat.connect(createWindow(), createWindow());
+         return { ipc, disconnect: disconnectListener(electron) };
+      }
+
+      /** Destroys a window the way Electron does: its getter throws from then on. */
+      const gone = () => createStrictWindow({ destroyed: true });
+
+      const leftOn = (win: FakeWindow) => listenersOn(win);
+
+      it("throws Electron's own error and leaves nothing behind when the second window is destroyed", async () => {
+         const { ipc, disconnect } = await setup();
+         const live = createStrictWindow();
+
+         expect(() => ipc.chat.connect(live, gone())).toThrow(
+            new TypeError("Object has been destroyed"),
+         );
+
+         // The key of the first end would be 2:a, and the page of that window must not reach it.
+         disconnect({ sender: live.webContents }, "2:a");
+         expect(live.webContents.send).not.toHaveBeenCalled();
+         expect(leftOn(live)).toStrictEqual(noListeners);
+      });
+
+      it("leaves nothing behind when the first window is destroyed", async () => {
+         const { ipc, disconnect } = await setup();
+         const live = createStrictWindow();
+
+         expect(() => ipc.chat.connect(gone(), live)).toThrow(TypeError);
+
+         disconnect({ sender: live.webContents }, "2:b");
+         expect(live.webContents.send).not.toHaveBeenCalled();
+         expect(leftOn(live)).toStrictEqual(noListeners);
+      });
+
+      it("leaves nothing behind when the same destroyed window is given twice", async () => {
+         const { ipc } = await setup();
+         const twice = gone();
+
+         expect(() => ipc.chat.connect(twice, twice)).toThrow(TypeError);
+
+         expect(twice.listenerCount("closed")).toBe(0);
+      });
+
+      it("posts nothing to the live window", async () => {
+         const { ipc } = await setup();
+         const live = createStrictWindow();
+
+         expect(() => ipc.chat.connect(live, gone())).toThrow(TypeError);
+         live.webContents.emit("did-finish-load");
+
+         expect(posted(live)).toHaveLength(0);
+      });
+
+      it("still connects two live windows afterwards, with a key that was not used", async () => {
+         const { ipc } = await setup();
+         expect(() => ipc.chat.connect(createStrictWindow(), gone())).toThrow(TypeError);
+         const one = createStrictWindow();
+         const two = createStrictWindow();
+
+         ipc.chat.connect(one, two);
+
+         expect(posted(one)).toStrictEqual([[wire("chat"), "3:a", [{ name: "port1 of 2" }]]]);
+         expect(posted(two)).toStrictEqual([[wire("chat"), "3:b", [{ name: "port2 of 2" }]]]);
+      });
+   });
+
+   describe("a connection which fails while it is set up", () => {
+      class FailingChannel {
+         constructor() {
+            throw new Error("no more ports");
+         }
+      }
+
+      it("throws the error, and removes the listeners and the entries it registered", async () => {
+         const { ipc } = await loadMainWithElectron(FailingChannel);
+         const one = createWindow();
+         const two = createWindow();
+
+         expect(() => ipc.chat.connect(one, two)).toThrow("no more ports");
+
+         expect([listenersOn(one), listenersOn(two)]).toStrictEqual([noListeners, noListeners]);
+         // The windows are told that the connection is over, in case one of them got a port.
+         expect(one.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:a"]]);
+         expect(two.webContents.send.mock.calls).toStrictEqual([[closeWire("chat"), "1:b"]]);
+         // No later load pairs them.
+         one.webContents.emit("did-finish-load");
+         expect(posted(one)).toHaveLength(0);
       });
    });
 

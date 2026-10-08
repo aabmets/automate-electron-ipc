@@ -525,7 +525,7 @@ The renderer has the API of a `port` channel (see above), with the main process 
 them from `onConnection`. A channel is either a `port` channel or a `mainPort` channel, not both.
 
 `connect` of both port verbs is given a window or view that must still exist: for one that is
-already destroyed, it throws Electron's own `TypeError: Object has been destroyed`. A target that is destroyed later ends the connection, as described above.
+already destroyed, it throws Electron's own `TypeError: Object has been destroyed`, before it registers anything: a failed `connect` leaves no listener, entry or watch behind, so the other window of a `port` channel is not affected. A target that is destroyed later ends the connection, as described above.
 
 #### Bounded send queues
 

@@ -629,6 +629,84 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
       });
    });
 
+   // Regression for T78, which found that `connect` of a `port` channel leaves entries behind when
+   // its second window is destroyed. A `mainPort` channel takes one target, and resolves it first.
+   describe("a target that was destroyed before connect", () => {
+      const eventsOf = [
+         "did-start-navigation",
+         "did-fail-load",
+         "did-finish-load",
+         "did-stop-loading",
+      ];
+
+      /** A window like the one of Electron: once it is destroyed, its `webContents` getter throws. */
+      const destroyedWindow = () => ({
+         get webContents(): never {
+            throw new TypeError("Object has been destroyed");
+         },
+      });
+
+      const leftOn = (contents: FakeContents) =>
+         Object.fromEntries(eventsOf.map((event) => [event, contents.listenerCount(event)]));
+      const noListeners = leftOn(createContents());
+
+      it("throws Electron's own error for a destroyed window, and registers nothing", async () => {
+         const ipc = await loadMain();
+         ipc.logTail.connect(createContents());
+
+         expect(() => ipc.logTail.connect(destroyedWindow())).toThrow(
+            new TypeError("Object has been destroyed"),
+         );
+
+         // The window failed before it was given a key, so the next connection gets the next key.
+         const live = createContents();
+         ipc.logTail.connect(live);
+         expect(live.postMessage.mock.calls[0].slice(0, 2)).toStrictEqual([
+            wire("logTail"),
+            "2:main",
+         ]);
+      });
+
+      it("throws for contents that are destroyed, and registers nothing", async () => {
+         const { ipc, electron } = await loadMainWithElectron();
+         ipc.logTail.connect(createContents());
+         const contents = createContents();
+         contents.destroyed = true;
+
+         expect(() => ipc.logTail.connect(contents)).toThrow(
+            new TypeError("Object has been destroyed"),
+         );
+         expect(leftOn(contents)).toStrictEqual(noListeners);
+
+         // The key that it would have had does nothing, and the live connection is untouched.
+         disconnectListener(electron)({ sender: contents }, "2:main");
+         expect(contents.send).not.toHaveBeenCalled();
+         const live = createContents();
+         ipc.logTail.connect(live);
+         expect(live.postMessage.mock.calls[0].slice(0, 2)).toStrictEqual([
+            wire("logTail"),
+            "2:main",
+         ]);
+      });
+
+      it("removes what it registered when the setup fails", async () => {
+         class FailingChannel {
+            constructor() {
+               throw new Error("no more ports");
+            }
+         }
+         const { ipc } = await loadMainWithElectron(FailingChannel);
+         const contents = createContents();
+
+         expect(() => ipc.logTail.connect(contents)).toThrow("no more ports");
+
+         expect(leftOn(contents)).toStrictEqual(noListeners);
+         expect(contents.send).toHaveBeenCalledExactlyOnceWith(closeWire("logTail"), "1:main");
+         contents.emit("did-finish-load");
+         expect(contents.postMessage).not.toHaveBeenCalled();
+      });
+   });
+
    describe("a page which ends its connection", () => {
       it("listens for it once for the channel, however many connections there are", async () => {
          const { ipc, electron } = await loadMainWithElectron();

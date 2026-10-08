@@ -34,4 +34,16 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - A later `connect` with two live windows still works, and gets a fresh key.
   - A `mainPort` connect to a destroyed contents leaves nothing behind either.
   - A scenario in the real-Electron `ports` suite: a window that was destroyed before `connect`.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `connectPorts` reads `webContents` of both windows while it builds the
+  ends, before anything is registered, so a destroyed window throws Electron's own `TypeError` and
+  leaves nothing behind (the id is still taken, so a key is never reused). The setup (registry,
+  disconnect listener, `closed` listeners, watches, first pairing) runs in a `try`; a failure calls
+  `close()`, which removes the entries, listeners and watches and tells the windows, then rethrows.
+  Deviation: `connectMainPort` gets the same rollback, and a guard that throws
+  `TypeError('Object has been destroyed')` for *bare* contents that are already destroyed. Those
+  did not throw before and left an entry in `portEnds` for good (a destroyed `WebContents` never
+  emits `destroyed` again); a destroyed window or view already threw from its getter. The README
+  already promised the error for a destroyed target. The `port` verb has no such guard, since a real
+  destroyed window always throws from its getter. Tests: `ports.test.ts` and `mainPorts.test.ts` of
+  the e2e suite (fake windows whose getter throws, listener counts, a failing `MessageChannelMain`),
+  the golden text of the writer test, and two scenarios in the real-Electron `ports` suite.
