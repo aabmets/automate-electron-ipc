@@ -1,0 +1,9 @@
+{
+   "name": "fixture-value-imports",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

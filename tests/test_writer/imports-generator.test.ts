@@ -83,4 +83,53 @@ describe("ImportsGenerator", () => {
          expect(dec).toStrictEqual(`import type * as Space from "./schema/types/ipc${ext}";`);
       }
    });
+
+   describe("imports recorded from the schema file", () => {
+      const pfsOf = (...importSpecArray: t.ImportSpec[]): t.ParsedFileSpecs => ({
+         fullPath: "/project/src/autoipc/schema/index.ts",
+         relativePath: "",
+         specs: { channelSpecArray: [], importSpecArray, typeSpecArray: [] },
+      });
+      const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+
+      it("imports an aliased name from its exported name", () => {
+         const pfs = pfsOf({ fromPath: "./a", customTypes: ["Foo as Bar"], namespace: null });
+         expect(generator().getDeclaration(pfs, "Bar")).toStrictEqual(
+            'import type { Foo as Bar } from "./schema/a";',
+         );
+      });
+
+      it("does not match an alias by its exported name", () => {
+         const pfs = pfsOf({ fromPath: "./a", customTypes: ["Foo as Bar"], namespace: null });
+         expect(generator().getDeclaration(pfs, "Foo")).toBeNull();
+      });
+
+      it("imports a default import as the default export", () => {
+         const pfs = pfsOf({ fromPath: "./a", customTypes: ["default as Foo"], namespace: null });
+         expect(generator().getDeclaration(pfs, "Foo")).toStrictEqual(
+            'import type { default as Foo } from "./schema/a";',
+         );
+      });
+
+      it("keeps package specifiers as they are", () => {
+         for (const nodeNext of [false, true]) {
+            const pfs = pfsOf({
+               fromPath: "electron",
+               customTypes: ["Rectangle"],
+               namespace: null,
+            });
+            const ig = new ImportsGenerator(nodeNext, "/project/src/autoipc/main.ts");
+            expect(ig.getDeclaration(pfs, "Rectangle")).toStrictEqual(
+               'import type { Rectangle } from "electron";',
+            );
+         }
+      });
+
+      it("imports a name only once", () => {
+         const pfs = pfsOf({ fromPath: "./a", customTypes: ["Foo"], namespace: null });
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "Foo")).not.toBeNull();
+         expect(ig.getDeclaration(pfs, "Foo")).toBeNull();
+      });
+   });
 });

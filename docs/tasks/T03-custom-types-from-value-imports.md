@@ -9,4 +9,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   type positions, and emit it as `import type` in the generated files. Also handle default imports
   (`import Foo from`) correctly.
 - **Tests:** parser unit tests, plus an e2e test where the output type-checks.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `ImportSpec.customTypes` now holds every named and default import
+  (`Foo`, `Foo as Bar`, `default as Foo`), also next to a namespace import; the writers emit the
+  ones a signature uses as `import type`. Deviation: package specifiers (`electron`, `zod`) are now
+  kept as written instead of being rewritten as relative paths. Follow-up found: T49.

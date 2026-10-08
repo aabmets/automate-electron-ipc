@@ -458,6 +458,12 @@ export function parseChannelMapModule(
    return { channelSpecs, channelMapExport: found.exported };
 }
 
+/**
+ * Records the names that an import declaration binds, as the entries of `customTypes`:
+ * `Foo` for `{ Foo }`, `Foo as Bar` for `{ Foo as Bar }` and `default as Foo` for `Foo`.
+ * Value imports are recorded too, since a signature may use a class or an enum as a type.
+ * The writers emit only the ones that a channel signature references, as `import type`.
+ */
 export function parseImportDeclarations(
    node: ImportDeclaration,
    _src: Source,
@@ -469,24 +475,27 @@ export function parseImportDeclarations(
       customTypes: [],
       namespace: null,
    };
-   const namespace = node.specifiers.find((spec) => spec.type === "ImportNamespaceSpecifier");
-   if (namespace) {
-      importSpec.namespace = namespace.local.value;
-      array.push(importSpec);
-      return;
-   }
-   const named = node.specifiers.filter((spec) => spec.type === "ImportSpecifier");
-   if (named.length > 0) {
-      for (const element of named) {
-         const isTypeOnlyImport = node.typeOnly || element.isTypeOnly;
-         const localName = element.local.value;
+   for (const element of node.specifiers) {
+      const localName = element.local.value;
+      if (element.type === "ImportNamespaceSpecifier") {
+         importSpec.namespace = localName;
+      } else if (element.type === "ImportDefaultSpecifier") {
+         if (!isBuiltinType(localName)) {
+            customTypes.add(`default as ${localName}`);
+         }
+      } else {
          const exportedName = element.imported ? element.imported.value : null;
-         if (isTypeOnlyImport && !isBuiltinType(exportedName || localName)) {
-            const typeName = exportedName ? `${exportedName} as ${localName}` : localName;
-            customTypes.add(typeName);
+         if (!isBuiltinType(exportedName || localName)) {
+            customTypes.add(
+               exportedName && exportedName !== localName
+                  ? `${exportedName} as ${localName}`
+                  : localName,
+            );
          }
       }
-      importSpec.customTypes = Array.from(customTypes);
+   }
+   importSpec.customTypes = Array.from(customTypes);
+   if (node.specifiers.length > 0) {
       array.push(importSpec);
    }
 }

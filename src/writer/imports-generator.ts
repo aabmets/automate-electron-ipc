@@ -39,6 +39,14 @@ export class ImportsGenerator {
       return this.projectUsesNodeNext ? `${baseName}.js` : baseName;
    }
 
+   private resolveImportPath(fromPath: string, sourceFilePath: string): string {
+      if (!fromPath.startsWith(".")) {
+         // Packages and aliases do not depend on where the generated file is.
+         return fromPath;
+      }
+      return this.adjustImportPath(this.getImportPath(fromPath), sourceFilePath);
+   }
+
    private adjustImportPath(importPath: string, sourceFilePath: string): string {
       const sourceDir = path.dirname(sourceFilePath);
       const targetDir = path.dirname(this.targetFilePath);
@@ -59,9 +67,11 @@ export class ImportsGenerator {
       const typeSpecArray = parsedFileSpecs.specs.typeSpecArray;
       const [nameSpace, customType] = this.splitTypeNamespace(parsedCustomType);
 
+      // Entries are `Foo`, `Foo as Bar` or `default as Foo`. The local name is what signatures use.
+      const localName = (entry: string) => entry.split(" as ").pop();
       const importSpec = importSpecArray.find((spec) => {
          const hasNameSpace = nameSpace && spec.namespace === nameSpace;
-         const hasCustomType = spec.customTypes.includes(customType);
+         const hasCustomType = spec.customTypes.some((entry) => localName(entry) === customType);
          return hasNameSpace || hasCustomType;
       });
       const typeSpec = typeSpecArray.find((spec) => {
@@ -76,8 +86,8 @@ export class ImportsGenerator {
             return `import type { ${customType} } from "${adjustedImportPath}";`;
          }
       } else if (importSpec) {
-         const adjustedImportPath = this.adjustImportPath(
-            this.getImportPath(importSpec.fromPath),
+         const adjustedImportPath = this.resolveImportPath(
+            importSpec.fromPath,
             parsedFileSpecs.fullPath,
          );
          if (nameSpace && !this.seenImports.nameSpaces.has(nameSpace)) {
@@ -85,7 +95,8 @@ export class ImportsGenerator {
             return `import type * as ${nameSpace} from "${adjustedImportPath}";`;
          } else if (customType && !this.seenImports.customTypes.has(customType)) {
             this.seenImports.customTypes.add(customType);
-            return `import type { ${customType} } from "${adjustedImportPath}";`;
+            const entry = importSpec.customTypes.find((e) => localName(e) === customType);
+            return `import type { ${entry ?? customType} } from "${adjustedImportPath}";`;
          }
       }
       return null;

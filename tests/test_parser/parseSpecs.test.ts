@@ -58,7 +58,7 @@ describe("parseSpecs", () => {
       });
       expect(importSpecArray[1]).toMatchObject({
          fromPath: "module-name2",
-         customTypes: ["CustomType2"],
+         customTypes: ["namedExport2", "CustomType2"],
          namespace: null,
       });
       expect(importSpecArray[2]).toMatchObject({

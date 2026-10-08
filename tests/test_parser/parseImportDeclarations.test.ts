@@ -72,13 +72,13 @@ describe("parseImportDeclarations", () => {
    });
 
    describe("Named Imports", () => {
-      it("should correctly parse named imports without type-only", () => {
+      it("should record value imports, which may be used as types", () => {
          const code = `import { readFile, writeFile } from 'fs';`;
          const result = parseImportDeclarations(code);
          expect(result).toEqual([
             {
                fromPath: "fs",
-               customTypes: [],
+               customTypes: ["readFile", "writeFile"],
                namespace: null,
             },
          ]);
@@ -102,7 +102,7 @@ describe("parseImportDeclarations", () => {
          expect(result).toEqual([
             {
                fromPath: "module",
-               customTypes: ["SomeType"],
+               customTypes: ["SomeType", "someFunction"],
                namespace: null,
             },
          ]);
@@ -126,7 +126,7 @@ describe("parseImportDeclarations", () => {
          expect(result).toEqual([
             {
                fromPath: "fs",
-               customTypes: [],
+               customTypes: ["readFile as rf", "writeFile as wf"],
                namespace: null,
             },
          ]);
@@ -171,17 +171,17 @@ describe("parseImportDeclarations", () => {
          expect(result).toEqual([
             {
                fromPath: "path0",
-               customTypes: [],
+               customTypes: ["asdfg0"],
                namespace: null,
             },
             {
                fromPath: "path1",
-               customTypes: [],
+               customTypes: ["asdfg1"],
                namespace: null,
             },
             {
                fromPath: "path2",
-               customTypes: [],
+               customTypes: ["asdfg2"],
                namespace: null,
             },
          ]);
@@ -189,34 +189,51 @@ describe("parseImportDeclarations", () => {
    });
 
    describe("Default Imports", () => {
-      it("should ignore default imports", () => {
-         const code = `import asdfg from 'some-module';`;
-         const result = parseImportDeclarations(code);
-         expect(result).toEqual([]);
-      });
-
-      it("should ignore default and named imports together", () => {
-         const code = `import asdfg, { qwerty } from 'some-module';`;
+      it("should record a default import as the default export under its local name", () => {
+         const code = `import Settings from './settings';`;
          const result = parseImportDeclarations(code);
          expect(result).toEqual([
             {
-               fromPath: "some-module",
-               customTypes: [],
+               fromPath: "./settings",
+               customTypes: ["default as Settings"],
                namespace: null,
             },
          ]);
       });
 
-      it("should ignore default and namespace imports together", () => {
+      it("should record a type-only default import", () => {
+         const code = `import type Settings from './settings';`;
+         const result = parseImportDeclarations(code);
+         expect(result[0]?.customTypes).toEqual(["default as Settings"]);
+      });
+
+      it("should record default and named imports together", () => {
+         const code = `import asdfg, { qwerty, zxcv as ZXCV } from 'some-module';`;
+         const result = parseImportDeclarations(code);
+         expect(result).toEqual([
+            {
+               fromPath: "some-module",
+               customTypes: ["default as asdfg", "qwerty", "zxcv as ZXCV"],
+               namespace: null,
+            },
+         ]);
+      });
+
+      it("should record default and namespace imports together", () => {
          const code = `import asdfg, * as qwerty from 'some-module';`;
          const result = parseImportDeclarations(code);
          expect(result).toEqual([
             {
                fromPath: "some-module",
-               customTypes: [],
+               customTypes: ["default as asdfg"],
                namespace: "qwerty",
             },
          ]);
+      });
+
+      it("should exclude default imports named like built-in types", () => {
+         const result = parseImportDeclarations(`import string from 'some-module';`);
+         expect(result).toEqual([{ fromPath: "some-module", customTypes: [], namespace: null }]);
       });
    });
 

@@ -81,3 +81,29 @@ describe("ipcAutomation, duplicate channels across files", () => {
       );
    });
 });
+
+describe("ipcAutomation, value imports used as types", () => {
+   // Regression for B3: only `import type` names were recorded, so a class, enum, default or
+   // aliased import that a signature referenced was missing from the generated files.
+   it("imports every named, aliased, default and package import that a signature uses", async () => {
+      project = await runFixture("value-imports");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(generated[file]).toContain('import type { Settings } from "./types/settings";');
+         expect(generated[file]).toContain('import type { Mode } from "./types/settings";');
+         expect(generated[file]).toContain(
+            'import type { default as Profile } from "./types/profile";',
+         );
+         expect(generated[file]).toContain(
+            'import type { Avatar as Picture } from "./types/profile";',
+         );
+         expect(generated[file]).toContain('import type { Rectangle } from "electron";');
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("value-imports");
+      expect(await project.typecheck()).toBe("");
+   });
+});

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 3 delivered, 45 remaining, 1 dropped.
+**Progress:** 4 delivered, 45 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -24,7 +24,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 ## Phase 1: Bug fixes
 
 - [x] [T02: Global duplicate channel and listener validation (B2)](./tasks/T02-global-duplicate-channel-and-listener.md) · depends on: T01
-- [ ] [T03: Custom types from value imports are dropped (B3)](./tasks/T03-custom-types-from-value-imports.md) · depends on: T01
+- [x] [T03: Custom types from value imports are dropped (B3)](./tasks/T03-custom-types-from-value-imports.md) · depends on: T01
 - [ ] [T04: Rest parameters lose their spread in generated call sites (B4)](./tasks/T04-rest-parameters-lose-their-spread.md) · depends on: T01
 - [ ] [T05: Wrong generated types (B6, B7)](./tasks/T05-wrong-generated-types.md) · depends on: T01
 - [ ] [T06: Deterministic output ordering (B8)](./tasks/T06-deterministic-output-ordering.md) · depends on: T01
@@ -34,6 +34,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T10: Stale metadata and packaging dependencies (B10)](./tasks/T10-stale-metadata-and-packaging-dependencies.md) · depends on: none
 - [ ] [T11: CI on Node, plus e2e type-check job](./tasks/T11-ci-on-node-plus-e2e.md) · depends on: T01
 - [ ] [T12: Redesign `trigger` (B5)](./tasks/T12-redesign-trigger.md) · depends on: T04
+- [ ] [T49: Repeated use of a namespace import generates a bogus import](./tasks/T49-repeated-namespace-type-imports.md) · depends on: T03
 
 ## Phase 2: Core API, listener lifecycle and security
 
