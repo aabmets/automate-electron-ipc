@@ -14,7 +14,9 @@ import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
    createFakeElectron,
    createFakePreloadElectron,
+   finishLoading,
    loadGenerated,
+   startLoading,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -134,11 +136,107 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
       expect(channelsMade).toHaveLength(0);
       expect(contents.postMessage).not.toHaveBeenCalled();
 
-      contents.loading = false;
-      contents.emit("did-finish-load");
+      finishLoading(contents);
 
       expect(contents.postMessage).toHaveBeenCalledOnce();
       expect(channelsMade).toHaveLength(1);
+   });
+
+   // Electron keeps `isLoading()` true while `did-finish-load` fires, and after `loadURL` resolved.
+   describe("while Electron still reports that the contents are loading", () => {
+      it("pairs on did-finish-load, and flushes the queue", async () => {
+         const ipc = await loadMain();
+         const contents = createContents({ url: "" });
+         const connection = ipc.logTail.connect(contents);
+         connection.send("queued");
+
+         contents.url = "app://.";
+         startLoading(contents);
+         contents.emit("did-finish-load");
+
+         expect(contents.isLoading()).toBe(true);
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+         expect(lastPort().postMessage.mock.calls).toStrictEqual([[["queued"]]]);
+      });
+
+      it("pairs once per load, not again at the did-stop-loading that follows did-finish-load", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         ipc.logTail.connect(contents);
+
+         startLoading(contents);
+         finishLoading(contents);
+
+         expect(channelsMade).toHaveLength(2);
+         expect(contents.postMessage).toHaveBeenCalledTimes(2);
+      });
+
+      it("waits for did-stop-loading when connected right after did-finish-load, then pairs once", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         startLoading(contents);
+         contents.emit("did-finish-load");
+
+         const connection = ipc.logTail.connect(contents);
+         connection.send("queued");
+         expect(contents.postMessage).not.toHaveBeenCalled();
+
+         contents.loading = false;
+         contents.emit("did-stop-loading");
+         contents.emit("did-stop-loading");
+
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+         expect(lastPort().postMessage.mock.calls).toStrictEqual([[["queued"]]]);
+      });
+
+      it("pairs a page that reloaded, and does not pair on the stop of a failed load", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         onReady.mockClear();
+
+         startLoading(contents);
+         finishLoading(contents);
+         expect(onReady).toHaveBeenCalledOnce();
+
+         startLoading(contents);
+         contents.emit("did-fail-load", {}, -105, "ERR_NAME_NOT_RESOLVED", "app://x", true);
+         contents.loading = false;
+         contents.emit("did-stop-loading");
+         expect(onReady).toHaveBeenCalledOnce();
+      });
+
+      it("does not pair again when only a subframe, or only the document, navigates", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         ipc.logTail.connect(contents);
+
+         contents.loading = true;
+         contents.emit("did-start-navigation", { isMainFrame: false, isSameDocument: false });
+         contents.loading = false;
+         contents.emit("did-stop-loading");
+         contents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+         contents.emit("did-stop-loading");
+
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+      });
+
+      it("stops listening to the contents when the connection is closed", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         ipc.logTail.connect(contents).close();
+
+         for (const event of [
+            "did-start-navigation",
+            "did-fail-load",
+            "did-finish-load",
+            "did-stop-loading",
+         ]) {
+            expect(contents.listenerCount(event)).toBe(0);
+         }
+      });
    });
 
    it("treats contents without a page as not loaded", async () => {
@@ -232,8 +330,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
 
          connection.send("one");
          connection.send("two", 2);
-         contents.loading = false;
-         contents.emit("did-finish-load");
+         finishLoading(contents);
          connection.send("three");
 
          expect(lastPort().postMessage.mock.calls).toStrictEqual([
@@ -250,8 +347,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          connection.onReady(() => connection.send("from onReady"));
          connection.send("queued");
 
-         contents.loading = false;
-         contents.emit("did-finish-load");
+         finishLoading(contents);
 
          expect(lastPort().postMessage.mock.calls).toStrictEqual([
             [["queued"]],
@@ -264,9 +360,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          const contents = createContents({ loading: true });
          const connection = ipc.logTail.connect(contents);
          connection.send("once");
-         contents.loading = false;
-
-         contents.emit("did-finish-load");
+         finishLoading(contents);
          contents.emit("did-finish-load");
 
          expect(channelsMade[0].port1.postMessage).toHaveBeenCalledOnce();
@@ -307,8 +401,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          connection.send("bad");
          connection.send("fine");
 
-         contents.loading = false;
-         contents.emit("did-finish-load");
+         finishLoading(contents);
 
          expect(error).toHaveBeenCalledOnce();
          expect(lastPort().postMessage.mock.calls).toStrictEqual([[["bad"]], [["fine"]]]);
@@ -498,8 +591,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          connection.send("never sent");
 
          connection.close();
-         contents.loading = false;
-         contents.emit("did-finish-load");
+         finishLoading(contents);
 
          expect(onClose).not.toHaveBeenCalled();
          expect(channelsMade).toHaveLength(0);
@@ -712,8 +804,7 @@ describe("a main process and a page over a real message channel", () => {
 
       connection.send("queued by main", 1);
       page.send("queued by page");
-      contents.loading = false;
-      contents.emit("did-finish-load");
+      finishLoading(contents);
       connection.send("live from main");
       page.send("live from page", 2);
       await settle();

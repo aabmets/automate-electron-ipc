@@ -14,7 +14,9 @@ import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
    createFakeElectron,
    createFakePreloadElectron,
+   finishLoading,
    loadGenerated,
+   startLoading,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -127,8 +129,7 @@ describe("ipc.<name>.connect", () => {
       one.webContents.emit("did-finish-load");
       expect(posted(one)).toHaveLength(0);
 
-      late.webContents.loading = false;
-      late.webContents.emit("did-finish-load");
+      finishLoading(late.webContents);
       expect(posted(one)).toStrictEqual([[wire("chat"), "1:a", [{ name: "port1 of 1" }]]]);
       expect(posted(late)).toStrictEqual([[wire("chat"), "1:b", [{ name: "port2 of 1" }]]]);
    });
@@ -174,11 +175,167 @@ describe("ipc.<name>.connect", () => {
       const two = createWindow();
       ipc.chat.connect(one, two);
 
-      two.webContents.loading = true;
-      one.webContents.emit("did-finish-load");
+      startLoading(two.webContents);
+      finishLoading(one.webContents);
 
       expect(posted(one)).toHaveLength(1);
       expect(posted(two)).toHaveLength(1);
+
+      finishLoading(two.webContents);
+
+      expect(posted(one)).toHaveLength(2);
+      expect(posted(two)).toHaveLength(2);
+   });
+
+   // Electron keeps `isLoading()` true while `did-finish-load` fires, and after `loadURL` resolved.
+   describe("while Electron still reports that the contents are loading", () => {
+      /** A window whose page has called `did-finish-load`, but not `did-stop-loading` yet. */
+      const finishing = () => {
+         const win = createWindow();
+         startLoading(win.webContents);
+         win.webContents.emit("did-finish-load");
+         return win;
+      };
+
+      it("pairs on did-finish-load, when both windows were connected before they loaded", async () => {
+         const ipc = await loadMain();
+         const one = createWindow({ url: "" });
+         const two = createWindow({ url: "" });
+         ipc.chat.connect(one, two);
+
+         for (const win of [one, two]) {
+            win.webContents.url = "app://.";
+            startLoading(win.webContents);
+            win.webContents.emit("did-finish-load");
+            expect(win.webContents.isLoading()).toBe(true);
+         }
+
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
+      });
+
+      it("pairs once per load, not again at the did-stop-loading that follows did-finish-load", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         ipc.chat.connect(one, two);
+         startLoading(one.webContents);
+         startLoading(two.webContents);
+
+         finishLoading(one.webContents);
+         expect(posted(one)).toHaveLength(1);
+
+         finishLoading(two.webContents);
+         expect(posted(one)).toHaveLength(2);
+         expect(posted(two)).toHaveLength(2);
+      });
+
+      it("waits for did-stop-loading when connected right after did-finish-load, then pairs once", async () => {
+         const ipc = await loadMain();
+         const one = finishing();
+         const two = finishing();
+
+         ipc.chat.connect(one, two);
+         expect(posted(one)).toHaveLength(0);
+
+         one.webContents.loading = false;
+         one.webContents.emit("did-stop-loading");
+         expect(posted(one)).toHaveLength(0);
+
+         two.webContents.loading = false;
+         two.webContents.emit("did-stop-loading");
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
+
+         two.webContents.emit("did-stop-loading");
+         expect(posted(one)).toHaveLength(1);
+      });
+
+      it("does not pair on the stop of a main-frame load that failed", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const failing = createWindow();
+         startLoading(failing.webContents);
+         ipc.chat.connect(one, failing);
+
+         failing.webContents.emit(
+            "did-fail-load",
+            {},
+            -105,
+            "ERR_NAME_NOT_RESOLVED",
+            "app://x",
+            true,
+         );
+         failing.webContents.loading = false;
+         failing.webContents.emit("did-stop-loading");
+
+         expect(posted(one)).toHaveLength(0);
+         expect(posted(failing)).toHaveLength(0);
+      });
+
+      it("pairs on the stop of a load after a subframe failed to load", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         startLoading(two.webContents);
+         ipc.chat.connect(one, two);
+
+         two.webContents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "app://frame", false);
+         two.webContents.loading = false;
+         two.webContents.emit("did-stop-loading");
+
+         expect(posted(two)).toHaveLength(1);
+      });
+
+      it("does not pair again when only a subframe navigates", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         ipc.chat.connect(one, two);
+
+         two.webContents.loading = true;
+         two.webContents.emit("did-start-loading");
+         two.webContents.emit("did-start-navigation", {
+            isMainFrame: false,
+            isSameDocument: false,
+         });
+         two.webContents.loading = false;
+         two.webContents.emit("did-stop-loading");
+
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
+      });
+
+      it("does not pair again for a navigation inside the same document", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         ipc.chat.connect(one, two);
+
+         two.webContents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+         two.webContents.emit("did-stop-loading");
+
+         expect(posted(two)).toHaveLength(1);
+      });
+
+      it("stops listening to the contents when the connection is closed", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         const connection = ipc.chat.connect(one, two);
+
+         connection.close();
+
+         for (const event of [
+            "did-start-navigation",
+            "did-fail-load",
+            "did-finish-load",
+            "did-stop-loading",
+         ]) {
+            expect(one.webContents.listenerCount(event)).toBe(0);
+            expect(two.webContents.listenerCount(event)).toBe(0);
+         }
+      });
    });
 
    it("does not post to a window that was destroyed before it loaded", async () => {
@@ -232,8 +389,7 @@ describe("ipc.<name>.connect", () => {
       const connection = ipc.chat.connect(one, late);
 
       connection.close();
-      late.webContents.loading = false;
-      late.webContents.emit("did-finish-load");
+      finishLoading(late.webContents);
 
       expect(posted(one)).toHaveLength(0);
       expect(posted(late)).toHaveLength(0);

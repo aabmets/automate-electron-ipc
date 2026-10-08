@@ -493,6 +493,7 @@ describe("generated main process bindings", () => {
                on: vi.fn(),
                off: vi.fn(),
                isLoading: () => false,
+               isDestroyed: () => false,
                getURL: () => "app://.",
             },
          });

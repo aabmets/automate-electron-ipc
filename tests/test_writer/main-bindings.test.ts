@@ -815,6 +815,56 @@ describe("MainBindingsWriter", () => {
             });
          }
 
+         interface PageLoadWatch {
+            isLoaded: () => boolean;
+            dispose: () => void;
+         }
+
+         function watchPageLoad(contents: WebContents, onLoad: () => void): PageLoadWatch {
+            let loaded = !contents.isDestroyed() && !contents.isLoading() && contents.getURL() !== '';
+            // Whether the load that is going on has been reported already.
+            let settled = !contents.isDestroyed() && !contents.isLoading();
+            let failed = false;
+            const start = (details?: { isMainFrame?: boolean; isSameDocument?: boolean }) => {
+               if (details?.isMainFrame && !details.isSameDocument) {
+                  loaded = false;
+                  settled = false;
+                  failed = false;
+               }
+            };
+            const fail = (_event: unknown, _code: number, _description: string, _url: string, isMainFrame: boolean) => {
+               if (isMainFrame) {
+                  failed = true;
+               }
+            };
+            const finish = () => {
+               loaded = true;
+               settled = true;
+               onLoad();
+            };
+            const stop = () => {
+               if (!settled && !failed) {
+                  finish();
+               }
+            };
+            contents.on('did-start-navigation', start);
+            contents.on('did-fail-load', fail);
+            contents.on('did-finish-load', finish);
+            contents.on('did-stop-loading', stop);
+            return {
+               isLoaded: () => loaded,
+               dispose: () => {
+                  // Destroyed contents have dropped their listeners, and cannot be reached.
+                  if (!contents.isDestroyed()) {
+                     contents.off('did-start-navigation', start);
+                     contents.off('did-fail-load', fail);
+                     contents.off('did-finish-load', finish);
+                     contents.off('did-stop-loading', stop);
+                  }
+               },
+            };
+         }
+
          function connectPorts(channel: string, winA: BrowserWindow, winB: BrowserWindow): { close: () => void } {
             const id = ++lastPortConnectionId;
             const ends = [
@@ -823,8 +873,8 @@ describe("MainBindingsWriter", () => {
             ];
             const windows = winA === winB ? [winA] : [winA, winB];
             let closed = false;
-            const isReady = (win: BrowserWindow) =>
-               !win.isDestroyed() && !win.webContents.isLoading() && win.webContents.getURL() !== '';
+            const watches = new Map<BrowserWindow, PageLoadWatch>();
+            const isReady = (win: BrowserWindow) => !win.isDestroyed() && !!watches.get(win)?.isLoaded();
             const pair = () => {
                if (closed || !isReady(winA) || !isReady(winB)) {
                   return;
@@ -842,8 +892,8 @@ describe("MainBindingsWriter", () => {
                   // A destroyed window has dropped its listeners, and cannot be reached.
                   if (!win.isDestroyed()) {
                      win.off('closed', close);
-                     win.webContents.off('did-finish-load', pair);
                   }
+                  watches.get(win)?.dispose();
                }
                for (const end of ends) {
                   portEnds.delete(end.key);
@@ -858,7 +908,7 @@ describe("MainBindingsWriter", () => {
             listenForPortDisconnects(channel);
             for (const win of windows) {
                win.on('closed', close);
-               win.webContents.on('did-finish-load', pair);
+               watches.set(win, watchPageLoad(win.webContents, pair));
             }
             pair();
             return { close };
@@ -917,7 +967,15 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain("next.on('close', () => {");
          expect(output).toContain("next.start();");
          expect(output).toContain("next.postMessage(args);");
-         expect(output).toContain("contents.on('did-finish-load', pair);");
+         expect(output).toContain("const watch = watchPageLoad(contents, () => pair());");
+         expect(output).toContain(
+            "const isReady = () => !contents.isDestroyed() && watch.isLoaded();",
+         );
+         expect(output).toContain("watch.dispose();");
+         // The page counts as loaded from the event, since `isLoading()` is still true then.
+         expect(output.slice(output.indexOf("function connectMainPort"))).not.toContain(
+            "isLoading",
+         );
          expect(output).toContain("contents.send(`${channel}:close`, key);");
       });
 

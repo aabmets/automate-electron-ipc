@@ -49,6 +49,26 @@ export function createFakeWindow() {
    return win;
 }
 
+/** Contents stand-in of the helpers below: an emitter that has a `loading` flag behind `isLoading()`. */
+type LoadingContents = EventEmitter & { loading: boolean };
+
+/** A main-frame navigation begins, which Electron announces before the page loads. */
+export function startLoading(contents: LoadingContents) {
+   contents.loading = true;
+   contents.emit("did-start-loading");
+   contents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+}
+
+/**
+ * The page finishes loading the way Electron reports it: `isLoading()` is still true while
+ * `did-finish-load` fires, and turns false only at `did-stop-loading`.
+ */
+export function finishLoading(contents: LoadingContents) {
+   contents.emit("did-finish-load");
+   contents.loading = false;
+   contents.emit("did-stop-loading");
+}
+
 /** A fake `electron` module for the generated main process bindings. */
 export function createFakeElectron() {
    return {

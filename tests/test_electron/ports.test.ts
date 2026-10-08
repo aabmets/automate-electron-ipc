@@ -250,23 +250,29 @@ function body(group: ElectronGroup) {
          expect(group.value("chatCloseFromPage")).toStrictEqual({ peers: 1 });
       });
 
-      // Found by this suite: the connection waits for `isLoading()` to be false, which it is not
-      // while `did-finish-load` fires, so it never pairs the windows. Fixed by T76.
-      it.fails("pairs windows which were connected before they loaded", () => {
+      // `isLoading()` is still true while `did-finish-load` fires, and after `loadURL` resolved,
+      // so these three cover the moments at which a connection has to wait for the page.
+      it("pairs windows which were connected before they loaded", () => {
          const { a, b } = group.value("chatConnectBeforeLoad");
          expect(a).toStrictEqual([["ready"]]);
          expect(b).toStrictEqual([["ready"]]);
       });
 
-      it.fails("pairs windows which are connected right after loadURL resolved", () => {
+      it("pairs windows which are connected right after loadURL resolved", () => {
          const { a, b } = group.value("chatConnectRightAfterLoad");
          expect(a).toStrictEqual([["ready"]]);
          expect(b).toStrictEqual([["ready"]]);
       });
 
-      it.fails("pairs a window again when its page was reloaded", () => {
+      it("pairs a window again when its page was reloaded", () => {
          const { a, b } = group.value("chatReload");
-         expect(a).toStrictEqual([["ready"], ["ready"], ["message", "from the new page"]]);
+         // The page of a hears its peer go away with the old document, and come back with the new one.
+         expect(a).toStrictEqual([
+            ["ready"],
+            ["close"],
+            ["ready"],
+            ["message", "from the new page"],
+         ]);
          expect(b).toStrictEqual([["ready"], ["message", "to the new page"]]);
       });
    });
@@ -283,14 +289,14 @@ function body(group: ElectronGroup) {
          ]);
       });
 
-      it.fails("pairs a window which was connected before it loaded, and flushes the queue", () => {
+      it("pairs a window which was connected before it loaded, and flushes the queue", () => {
          expect(group.value("mainPortConnectBeforeLoad").events).toStrictEqual([
             ["ready"],
             ["message", "queued"],
          ]);
       });
 
-      it.fails("is ready again, and delivers, after the page was reloaded", () => {
+      it("is ready again, and delivers, after the page was reloaded", () => {
          const { ready, events } = group.value("mainPortReload");
          expect(ready).toBe(2);
          // The events are those of the page after the reload.
@@ -304,7 +310,7 @@ function body(group: ElectronGroup) {
          expect(warnings[0]).toContain("maxQueue 3");
       });
 
-      it.fails("flushes the newest messages of a full queue once the window is paired", () => {
+      it("flushes the newest messages of a full queue once the window is paired", () => {
          expect(group.value("mainPortBounded").events).toStrictEqual([3, 4, 5]);
       });
    });

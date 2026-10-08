@@ -14,6 +14,7 @@ import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
    createFakeElectron,
    createFakePreloadElectron,
+   finishLoading,
    loadGenerated,
 } from "@testutils/runtime-utils.js";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -576,8 +577,6 @@ function createContents(loading = false) {
    });
    return contents;
 }
-type FakeContents = ReturnType<typeof createContents>;
-
 class FakePortMain extends EventEmitter {
    readonly postMessage = vi.fn();
    readonly start = vi.fn();
@@ -599,12 +598,6 @@ function loadMain() {
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: FakeChannelMain };
    return loadGenerated(project.generated["main.ts"], { electron });
-}
-
-/** Lets the page finish loading, so that the connection gets its port. */
-function finishLoading(contents: FakeContents) {
-   contents.loading = false;
-   contents.emit("did-finish-load");
 }
 
 const lastPort = () => channelsMade[channelsMade.length - 1].port1;

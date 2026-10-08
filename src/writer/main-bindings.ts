@@ -91,6 +91,8 @@ export class MainBindingsWriter extends BaseWriter {
          "portEnds",
          "portDisconnectChannels",
          "listenForPortDisconnects",
+         "PageLoadWatch",
+         "watchPageLoad",
          "MessagePortMain",
          "MainPortConnection",
          "MainPortListener",
@@ -1216,9 +1218,18 @@ export class MainBindingsWriter extends BaseWriter {
     * which is honoured only from the contents that hold that end. The main process no longer holds
     * the ports that it has transferred, so it tells the pages through `<channel>:close` when a
     * connection ends.
+    *
+    * `watchPageLoad` tells when the page of some contents has loaded, which a port has to wait for,
+    * since one that is posted earlier arrives before the preload script listens for it. It cannot
+    * ask `isLoading()`: Electron keeps it `true` while `did-finish-load` fires, and after
+    * `loadURL` has resolved, until `did-stop-loading`. So the page counts as loaded from every
+    * `did-finish-load`, and from the `did-stop-loading` of a load that `did-finish-load` has not
+    * reported, such as one that finished before the watch began. A failed main-frame load does not
+    * count. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
+    * page and are not loading.
     */
    private buildPortRegistry(): string {
-      const [i1, i2, i3] = this.indents;
+      const [i1, i2, i3, i4] = this.indents;
       return [
          "",
          "let lastPortConnectionId = 0;",
@@ -1238,13 +1249,63 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}});`,
          "}",
          "",
+         "interface PageLoadWatch {",
+         `${i1}isLoaded: () => boolean;`,
+         `${i1}dispose: () => void;`,
+         "}",
+         "",
+         "function watchPageLoad(contents: WebContents, onLoad: () => void): PageLoadWatch {",
+         `${i1}let loaded = !contents.isDestroyed() && !contents.isLoading() && contents.getURL() !== '';`,
+         `${i1}// Whether the load that is going on has been reported already.`,
+         `${i1}let settled = !contents.isDestroyed() && !contents.isLoading();`,
+         `${i1}let failed = false;`,
+         `${i1}const start = (details?: { isMainFrame?: boolean; isSameDocument?: boolean }) => {`,
+         `${i2}if (details?.isMainFrame && !details.isSameDocument) {`,
+         `${i3}loaded = false;`,
+         `${i3}settled = false;`,
+         `${i3}failed = false;`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const fail = (_event: unknown, _code: number, _description: string, _url: string, isMainFrame: boolean) => {`,
+         `${i2}if (isMainFrame) {`,
+         `${i3}failed = true;`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const finish = () => {`,
+         `${i2}loaded = true;`,
+         `${i2}settled = true;`,
+         `${i2}onLoad();`,
+         `${i1}};`,
+         `${i1}const stop = () => {`,
+         `${i2}if (!settled && !failed) {`,
+         `${i3}finish();`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}contents.on('did-start-navigation', start);`,
+         `${i1}contents.on('did-fail-load', fail);`,
+         `${i1}contents.on('did-finish-load', finish);`,
+         `${i1}contents.on('did-stop-loading', stop);`,
+         `${i1}return {`,
+         `${i2}isLoaded: () => loaded,`,
+         `${i2}dispose: () => {`,
+         `${i3}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i3}if (!contents.isDestroyed()) {`,
+         `${i4}contents.off('did-start-navigation', start);`,
+         `${i4}contents.off('did-fail-load', fail);`,
+         `${i4}contents.off('did-finish-load', finish);`,
+         `${i4}contents.off('did-stop-loading', stop);`,
+         `${i3}}`,
+         `${i2}},`,
+         `${i1}};`,
+         "}",
+         "",
       ].join("\n");
    }
    /**
     * `connectPorts`, which `ipc.<name>.connect` calls. A pair of ports is made only when both
-    * windows have loaded their page, since a port that is posted earlier arrives before the preload
-    * script listens for it. It is made right away if both have, and again on every
-    * `did-finish-load`, so a window that is shown late and a page that reloads get a fresh port, and
+    * windows have loaded their page (see `watchPageLoad`), since a port that is posted earlier
+    * arrives before the preload script listens for it. It is made right away if both have, and
+    * again whenever a page loads, so a window that is shown late and a page that reloads get a fresh port, and
     * the other window replaces its end. The connection ends when it is closed and when either
     * window is destroyed.
     */
@@ -1260,8 +1321,8 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}];`,
          `${i1}const windows = winA === winB ? [winA] : [winA, winB];`,
          `${i1}let closed = false;`,
-         `${i1}const isReady = (win: BrowserWindow) =>`,
-         `${i2}!win.isDestroyed() && !win.webContents.isLoading() && win.webContents.getURL() !== '';`,
+         `${i1}const watches = new Map<BrowserWindow, PageLoadWatch>();`,
+         `${i1}const isReady = (win: BrowserWindow) => !win.isDestroyed() && !!watches.get(win)?.isLoaded();`,
          `${i1}const pair = () => {`,
          `${i2}if (closed || !isReady(winA) || !isReady(winB)) {`,
          `${i3}return;`,
@@ -1279,8 +1340,8 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}// A destroyed window has dropped its listeners, and cannot be reached.`,
          `${i3}if (!win.isDestroyed()) {`,
          `${i4}win.off('closed', close);`,
-         `${i4}win.webContents.off('did-finish-load', pair);`,
          `${i3}}`,
+         `${i3}watches.get(win)?.dispose();`,
          `${i2}}`,
          `${i2}for (const end of ends) {`,
          `${i3}portEnds.delete(end.key);`,
@@ -1295,7 +1356,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}listenForPortDisconnects(channel);`,
          `${i1}for (const win of windows) {`,
          `${i2}win.on('closed', close);`,
-         `${i2}win.webContents.on('did-finish-load', pair);`,
+         `${i2}watches.set(win, watchPageLoad(win.webContents, pair));`,
          `${i1}}`,
          `${i1}pair();`,
          `${i1}return { close };`,
@@ -1316,8 +1377,8 @@ export class MainBindingsWriter extends BaseWriter {
     * `connectMainPort`, which `ipc.<name>.connect` of a `mainPort` channel calls, and
     * `configurePorts`, which sets the overflow callback that the send queues use by default. The main process
     * keeps one end of a `MessageChannelMain` and transfers the other to the page, with the key of
-    * the connection. It pairs once the page has loaded, since a port that is posted earlier arrives
-    * before the preload script listens for it, and again on every `did-finish-load`, so a page that
+    * the connection. It pairs once the page has loaded (see `watchPageLoad`), since a port that is
+    * posted earlier arrives before the preload script listens for it, and again whenever a page loads, so a page that
     * reloads gets a fresh port, and the old port is dropped without ending the connection. The
     * connection has the shape of the one that a page gets from `onConnection`:
     * - `send` queues the messages until a port is there, and flushes them in order. The queue holds
@@ -1440,8 +1501,8 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}let ownOverflow: Function | undefined;`,
          `${i1}let port: MessagePortMain | null = null;`,
          `${i1}let closed = false;`,
-         `${i1}const isReady = () =>`,
-         `${i2}!contents.isDestroyed() && !contents.isLoading() && contents.getURL() !== '';`,
+         `${i1}const watch = watchPageLoad(contents, () => pair());`,
+         `${i1}const isReady = () => !contents.isDestroyed() && watch.isLoaded();`,
          `${i1}// Drops the port without ending the connection, which is what a new port replaces.`,
          `${i1}const release = () => {`,
          `${i2}const current = port;`,
@@ -1488,9 +1549,9 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}closed = true;`,
          `${i2}pending.items.length = 0;`,
          `${i2}portEnds.delete(key);`,
+         `${i2}watch.dispose();`,
          `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
          `${i2}if (!contents.isDestroyed()) {`,
-         `${i3}contents.off('did-finish-load', pair);`,
          `${i3}contents.off('destroyed', close);`,
          `${i3}contents.send(\`\${channel}:close\`, key);`,
          `${i2}}`,
@@ -1500,7 +1561,6 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}};`,
          `${i1}portEnds.set(key, { contents, close });`,
          `${i1}listenForPortDisconnects(channel);`,
-         `${i1}contents.on('did-finish-load', pair);`,
          `${i1}contents.on('destroyed', close);`,
          `${i1}pair();`,
          `${i1}return {`,

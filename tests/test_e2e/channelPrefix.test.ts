@@ -116,6 +116,7 @@ describe.each([
                on: vi.fn(),
                off: vi.fn(),
                isLoading: () => false,
+               isDestroyed: () => false,
                getURL: () => "app://.",
             },
          });
