@@ -50,6 +50,7 @@ export class RendererTypesWriter extends BaseWriter {
             }
          }
       }
+      out.sort(utils.compareStrings);
       const windowDeclaration = [
          "\ndeclare global {",
          `\n${this.indents[0]}interface Window {`,

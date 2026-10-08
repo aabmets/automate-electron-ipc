@@ -42,21 +42,24 @@ export async function ipcAutomation(): Promise<void> {
       }
    } else if (config.ipcSchema.stats.isDirectory()) {
       const files = await fsp.readdir(config.ipcSchema.path, { recursive: true });
-      const rawFileContents: t.RawFileContents[] = [];
-      await Promise.all(
-         files.filter(utils.isSchemaSourceFile).map(async (file) => {
-            const fullPath = path.join(config.ipcSchema.path, file);
-            const stat = await fsp.stat(fullPath);
-            if (stat.isFile()) {
+      // The order of `readdir` results and of read completions varies between runs, so files are
+      // sorted by relative path and the results are collected in that order.
+      const schemaFiles = files
+         .filter(utils.isSchemaSourceFile)
+         .sort((a, b) => utils.compareStrings(a.replaceAll("\\", "/"), b.replaceAll("\\", "/")));
+      const rawFileContents = (
+         await Promise.all(
+            schemaFiles.map(async (file): Promise<t.RawFileContents | null> => {
+               const fullPath = path.join(config.ipcSchema.path, file);
+               const stat = await fsp.stat(fullPath);
+               if (!stat.isFile()) {
+                  return null;
+               }
                const contents = await fsp.readFile(fullPath);
-               rawFileContents.push({
-                  fullPath,
-                  relativePath: file,
-                  contents: contents.toString(),
-               });
-            }
-         }),
-      );
+               return { fullPath, relativePath: file, contents: contents.toString() };
+            }),
+         )
+      ).filter((item) => item !== null);
       for (const item of rawFileContents) {
          const specs = parser.parseSpecs(item);
          if (specs.channelSpecArray.length > 0) {

@@ -9,4 +9,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   declarations.
 - **Tests:** running the generator twice (with shuffled `readdir` results via a mock) gives
   byte-identical output.
-- **Delivered:**
+- **Delivered:** 2026-10-08. Schema files are sorted by relative path (code-unit order via the new `utils.compareStrings`, not `localeCompare`), and `main.ts` and `window.d.ts` sort their import lines. Duplicate import lines across schema files are still not merged (import-resolution work).

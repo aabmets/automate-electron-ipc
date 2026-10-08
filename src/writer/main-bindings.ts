@@ -57,7 +57,7 @@ export class MainBindingsWriter extends BaseWriter {
       const out: string[] = [
          `import { ${Array.from(electronImportsSet).join(", ")} } from "electron";`,
          `import type { ${Array.from(electronTypeImportsSet).join(", ")} } from "electron";`,
-         ...importDeclarationsArray,
+         ...importDeclarationsArray.sort(utils.compareStrings),
       ];
       const bindingsExpression = ["\nexport const ipcMain = {"];
       if (callablesArray.length > 0) {

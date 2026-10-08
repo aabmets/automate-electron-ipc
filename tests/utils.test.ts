@@ -81,6 +81,16 @@ describe("resolveUserProjectPath", () => {
    });
 });
 
+describe("compareStrings", () => {
+   it("orders strings by code unit, independently of the locale", () => {
+      expect(utils.compareStrings("a", "b")).toBeLessThan(0);
+      expect(utils.compareStrings("b", "a")).toBeGreaterThan(0);
+      expect(utils.compareStrings("a", "a")).toBe(0);
+      expect(utils.compareStrings("Z", "a")).toBeLessThan(0);
+      expect(["b", "B", "a", "A"].sort(utils.compareStrings)).toStrictEqual(["A", "B", "a", "b"]);
+   });
+});
+
 describe("isSchemaSourceFile", () => {
    it("accepts .ts, .mts and .cts files", () => {
       expect(utils.isSchemaSourceFile("schema.ts")).toBe(true);

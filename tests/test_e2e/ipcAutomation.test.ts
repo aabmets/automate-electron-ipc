@@ -154,6 +154,28 @@ describe("ipcAutomation, namespace imports", () => {
    });
 });
 
+describe("ipcAutomation, import order", () => {
+   // Regression for T06: import lines followed the order of the schema files, so it depended
+   // on the order that the files were read in.
+   it("sorts the type imports of main.ts and window.d.ts", async () => {
+      project = await runFixture("import-order");
+      const { generated } = project;
+
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = generated[file].match(/^import type .*"\.\/types\/.*";$/gm);
+         expect(imports).toStrictEqual([
+            'import type { Alpha } from "./types/alpha";',
+            'import type { Zeta } from "./types/zeta";',
+         ]);
+      }
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("import-order");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.

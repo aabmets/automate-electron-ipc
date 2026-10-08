@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 11 delivered, 47 remaining, 1 dropped.
+**Progress:** 12 delivered, 46 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -27,7 +27,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T03: Custom types from value imports are dropped (B3)](./tasks/T03-custom-types-from-value-imports.md) · depends on: T01
 - [ ] [T04: Rest parameters lose their spread in generated call sites (B4)](./tasks/T04-rest-parameters-lose-their-spread.md) · depends on: T01
 - [ ] [T05: Wrong generated types (B6, B7)](./tasks/T05-wrong-generated-types.md) · depends on: T01
-- [ ] [T06: Deterministic output ordering (B8)](./tasks/T06-deterministic-output-ordering.md) · depends on: T01
+- [x] [T06: Deterministic output ordering (B8)](./tasks/T06-deterministic-output-ordering.md) · depends on: T01
 - [ ] [T07: Correct project root resolution (monorepos)](./tasks/T07-correct-project-root-resolution.md) · depends on: T01
 - [x] [T08: Schema file filtering, and surfacing parse errors](./tasks/T08-schema-file-filtering-and-surfacing.md) · depends on: T01
 - [ ] [T09: Type-definition edge cases](./tasks/T09-type-definition-edge-cases.md) · depends on: T01

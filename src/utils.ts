@@ -61,6 +61,22 @@ export function resolveUserProjectPath(subPath = ""): string {
 }
 
 /**
+ * Compares two strings by UTF-16 code units, so that the order is the same on every machine,
+ * unlike `localeCompare`, which depends on the locale of the process.
+ * Use it as the comparator of `Array.prototype.sort`.
+ *
+ * @param a - The first string.
+ * @param b - The second string.
+ * @returns A negative number, zero or a positive number.
+ */
+export function compareStrings(a: string, b: string): number {
+   if (a === b) {
+      return 0;
+   }
+   return a < b ? -1 : 1;
+}
+
+/**
  * Tells whether a file name in a schema directory is a schema source file:
  * a `.ts`, `.mts` or `.cts` file that is not a declaration file (`.d.ts`, `.d.mts`, `.d.cts`).
  *
@@ -148,6 +164,7 @@ export function findDuplicates<T>(array: T[]): T[] {
 export default {
    searchUpwards,
    resolveUserProjectPath,
+   compareStrings,
    isSchemaSourceFile,
    concatRegex,
    isPathInside,

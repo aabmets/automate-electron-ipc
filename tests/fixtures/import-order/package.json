@@ -1,0 +1,9 @@
+{
+   "name": "fixture-import-order",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

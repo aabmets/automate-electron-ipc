@@ -68,6 +68,85 @@ describe("ipcAutomation", () => {
       );
    });
 
+   it("generates identical output however readdir orders files and reads complete", async () => {
+      // Regression for T06: files were pushed in read completion order, so the order of the
+      // generated imports and members changed between runs.
+      const schemaDir = path.join(dir, "schema");
+      await fsp.mkdir(path.join(schemaDir, "nested"), { recursive: true });
+      const files: Record<string, string> = {
+         "z.ts": "zulu",
+         "m.mts": "mike",
+         "a.ts": "alpha",
+         "nested/b.ts": "bravo",
+         "nested/a.ts": "atlas",
+      };
+      const names = Object.keys(files);
+      await Promise.all(
+         Object.entries(files).map(([name, prefix]) =>
+            fsp.writeFile(
+               path.join(schemaDir, name),
+               [
+                  'import { defineChannels, send, port } from "automate-electron-ipc";',
+                  "export default defineChannels({",
+                  `   ${prefix}Ping: send<() => void>(),`,
+                  `   ${prefix}Link: port<(msg: string) => void>(),`,
+                  "});",
+               ].join("\n"),
+            ),
+         ),
+      );
+      mockConfig({ ipcSchema: { path: schemaDir, stats: await fsp.stat(schemaDir) } } as never);
+      const success = vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
+
+      const realReaddir = fsp.readdir.bind(fsp);
+      const realReadFile = fsp.readFile.bind(fsp);
+      let permutation = 0;
+      vi.spyOn(fsp, "readdir").mockImplementation((async (
+         ...args: Parameters<typeof realReaddir>
+      ) => {
+         const files = (await realReaddir(...args)) as string[];
+         const offset = permutation % files.length;
+         const rotated = [...files.slice(offset), ...files.slice(0, offset)];
+         return permutation % 2 === 0 ? rotated : rotated.reverse();
+      }) as never);
+      vi.spyOn(fsp, "readFile").mockImplementation((async (
+         ...args: Parameters<typeof realReadFile>
+      ) => {
+         // Files that are listed first complete last.
+         const delay = 5 * (names.length - names.findIndex((n) => String(args[0]).endsWith(n)));
+         await new Promise((resolve) => setTimeout(resolve, delay * (permutation % 2 ? 1 : 3)));
+         return realReadFile(...args);
+      }) as never);
+
+      const outputs: string[] = [];
+      const reportedOrders: string[][] = [];
+      for (permutation = 0; permutation < 5; permutation++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the runs must be sequential
+         await ipcAutomation();
+         reportedOrders.push(success.mock.lastCall?.[0].map((pfs) => pfs.relativePath) ?? []);
+         const contents = await Promise.all(
+            ["main.ts", "preload.ts", "window.d.ts"].map((name) =>
+               fsp.readFile(path.join(dir, "out", name), "utf8"),
+            ),
+         );
+         outputs.push(contents.join("\n=====\n"));
+      }
+
+      const expectedOrder = [
+         "a.ts",
+         "m.mts",
+         path.join("nested", "a.ts"),
+         path.join("nested", "b.ts"),
+         "z.ts",
+      ];
+      for (const order of reportedOrders) {
+         expect(order).toStrictEqual(expectedOrder);
+      }
+      for (const output of outputs) {
+         expect(output).toStrictEqual(outputs[0]);
+      }
+   });
+
    it("reads only .ts, .mts and .cts files, ignoring declaration files", async () => {
       // Regression for T08: every file under schema/ was read and parsed.
       const schemaDir = path.join(dir, "schema");
