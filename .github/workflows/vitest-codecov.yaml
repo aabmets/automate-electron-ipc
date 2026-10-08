@@ -1,13 +1,58 @@
-name: Run Vitest and Upload Code Coverage
+name: Run Checks, Vitest and Upload Code Coverage
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
   workflow_call:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: vitest-codecov
+  check:
+    name: check (tsc + biome)
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check and lint
+        run: bun run check
+
+  test:
+    name: vitest-codecov (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Node is what users run the generator with, so it is the primary target.
+          - runtime: node 22
+            node-version: 22
+            command: npx vitest run
+          - runtime: node 24
+            node-version: 24
+            command: npx vitest run
+            upload-coverage: true
+          # The package manager and dev runtime of the repo. `--bun` forces the Bun runtime,
+          # whereas a plain `bunx vitest run` hands over to Node because of vitest's shebang.
+          - runtime: bun
+            node-version: 24
+            command: bun --bun vitest run
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,7 +62,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: latest
+          node-version: ${{ matrix.node-version }}
 
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
@@ -25,10 +70,45 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Print runtime versions
+        run: |
+          node --version
+          bun --version
+
+      # The whole suite, including the e2e tests that type-check the generated output.
       - name: Run Vitest
-        run: bunx vitest run
+        run: ${{ matrix.command }}
 
       - name: Upload coverage to Codecov
+        if: ${{ matrix.upload-coverage }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  e2e:
+    name: e2e type-check (node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Runs the schema fixtures through the generator under Node, then type-checks
+      # the schema files together with the generated main.ts, preload.ts and window.d.ts.
+      # Coverage is off, because the thresholds apply to the whole suite, not to this subset.
+      - name: Run e2e tests
+        run: npx vitest run tests/test_e2e --coverage.enabled=false
