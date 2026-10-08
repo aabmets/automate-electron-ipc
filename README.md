@@ -178,6 +178,13 @@ const dispose = ipcMain.bindProgress(browserWindow, () => [currentProgress()]);
 dispose();
 ```
 
+If `provider` throws or rejects, that send is skipped and later events still send. The error goes to
+the optional third argument, `(error: unknown) => void`, or to `console.error` without it:
+
+```typescript
+ipcMain.bindProgress(browserWindow, () => [currentProgress()], (error) => log.warn(error));
+```
+
 
 ### The `as` Form
 

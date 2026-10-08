@@ -12,4 +12,6 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** runtime tests of the generated `main.ts` (`tests/utils/runtime-utils.ts`): a throwing
   and a rejecting provider cause no unhandled rejection, call `onError`, and later events still
   send.
-- **Delivered:**
+- **Delivered:** 2026-10-08. The listener wraps the provider call and the send in one `try/catch`, so an
+  error of `webContents.send` (such as a non-cloneable argument) is reported the same way.
+  `onError` itself is not guarded: if it throws, that is an unhandled rejection.

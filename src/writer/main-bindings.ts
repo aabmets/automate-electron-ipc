@@ -135,19 +135,26 @@ export class MainBindingsWriter extends BaseWriter {
    /**
     * Builds `bind<Name>(browserWindow, provider)`, which registers one listener for the trigger
     * event, evaluates the provider each time the event fires and returns a disposer.
+    * An error of the provider or of the send skips that send and goes to `onError`,
+    * or to `console.error` without it, so that it is never an unhandled rejection.
     */
    private buildTriggerBinder(spec: t.ChannelSpec): string {
-      const [i0, i1, i2, i3] = this.indents;
+      const [i0, i1, i2, i3, i4] = this.indents;
       const args = `[${this.getOriginalParams(spec, false)}]`;
       const provider = `provider: () => ${args} | Promise<${args}>`;
+      const onError = "onError?: (error: unknown) => void";
       const event = JSON.stringify(spec.trigger);
       const typeParams = this.getTypeParams(spec.signature);
       return [
-         `bind${utils.capitalize(spec.name)}: ${typeParams}(browserWindow: BrowserWindow, ${provider}) => {`,
+         `bind${utils.capitalize(spec.name)}: ${typeParams}(browserWindow: BrowserWindow, ${provider}, ${onError}) => {`,
          `${i1}const listener = async () => {`,
-         `${i2}const args = await provider();`,
-         `${i2}if (!browserWindow.isDestroyed()) {`,
-         `${i3}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i2}try {`,
+         `${i3}const args = await provider();`,
+         `${i3}if (!browserWindow.isDestroyed()) {`,
+         `${i4}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i3}}`,
+         `${i2}} catch (error) {`,
+         `${i3}(onError ?? console.error)(error);`,
          `${i2}}`,
          `${i1}};`,
          `${i1}browserWindow.on(${event}, listener);`,

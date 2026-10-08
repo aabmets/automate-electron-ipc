@@ -11,7 +11,7 @@
 
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { createFakeElectron, createFakeWindow, loadGenerated } from "@testutils/runtime-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let project: E2EProject | undefined;
 
@@ -134,6 +134,93 @@ describe("ipcAutomation, triggers", () => {
          await flush();
 
          expect(win.webContents.send).not.toHaveBeenCalled();
+      });
+
+      describe("errors of the provider", () => {
+         const unhandled = vi.fn();
+         const failures: [string, () => unknown][] = [
+            [
+               "throws",
+               () => {
+                  throw new Error("boom");
+               },
+            ],
+            ["rejects", () => Promise.reject(new Error("boom"))],
+         ];
+
+         beforeEach(() => {
+            unhandled.mockClear();
+            process.on("unhandledRejection", unhandled);
+         });
+         afterEach(() => {
+            process.off("unhandledRejection", unhandled);
+            vi.restoreAllMocks();
+         });
+
+         it.each(failures)(
+            "reports a provider which %s to onError and skips the send",
+            async (_, fail) => {
+               const ipcMain = await load();
+               const win = createFakeWindow();
+               const onError = vi.fn();
+               let failing = true;
+
+               ipcMain.bindWindowFocused(win, () => (failing ? fail() : [true]), onError);
+               win.emit("focus");
+               await flush();
+
+               expect(onError).toHaveBeenCalledTimes(1);
+               expect(onError.mock.calls[0][0]).toMatchObject({ message: "boom" });
+               expect(win.webContents.send).not.toHaveBeenCalled();
+
+               // Regression for T63: later events must still send.
+               failing = false;
+               win.emit("focus");
+               await flush();
+
+               expect(onError).toHaveBeenCalledTimes(1);
+               expect(win.webContents.send).toHaveBeenCalledTimes(1);
+               expect(win.webContents.send).toHaveBeenCalledWith("windowFocused", true);
+               expect(unhandled).not.toHaveBeenCalled();
+            },
+         );
+
+         it.each(failures)(
+            "falls back to console.error for a provider which %s",
+            async (_, fail) => {
+               const ipcMain = await load();
+               const win = createFakeWindow();
+               const consoleError = vi.spyOn(console, "error").mockReturnValue(undefined);
+
+               ipcMain.bindWindowFocused(win, fail);
+               win.emit("focus");
+               await flush();
+
+               expect(consoleError).toHaveBeenCalledTimes(1);
+               expect(consoleError.mock.calls[0][0]).toMatchObject({ message: "boom" });
+               expect(win.webContents.send).not.toHaveBeenCalled();
+               expect(unhandled).not.toHaveBeenCalled();
+            },
+         );
+
+         it("reports an error of the send itself to onError", async () => {
+            const ipcMain = await load();
+            const win = createFakeWindow();
+            const onError = vi.fn();
+            win.webContents.send.mockImplementationOnce(() => {
+               throw new Error("An object could not be cloned.");
+            });
+
+            ipcMain.bindWindowFocused(win, () => [true], onError);
+            win.emit("focus");
+            await flush();
+            win.emit("focus");
+            await flush();
+
+            expect(onError).toHaveBeenCalledTimes(1);
+            expect(win.webContents.send).toHaveBeenCalledTimes(2);
+            expect(unhandled).not.toHaveBeenCalled();
+         });
       });
    });
 });

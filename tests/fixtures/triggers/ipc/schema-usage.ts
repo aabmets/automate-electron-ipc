@@ -8,6 +8,11 @@ declare const win: BrowserWindow;
 export const dispose: () => void = ipcMain.bindWindowFocused(win, () => [true]);
 export const disposeAsync: () => void = ipcMain.bindWindowFocused(win, async () => [false]);
 export const disposeRest: () => void = ipcMain.bindTitleChanged(win, () => ["title", "a", "b"]);
+export const disposeWithOnError: () => void = ipcMain.bindWindowFocused(
+   win,
+   () => [true],
+   (error: unknown) => console.error(error),
+);
 
 // @ts-expect-error the provider must return the tuple of arguments
 ipcMain.bindWindowFocused(win, () => true);

@@ -159,11 +159,15 @@ describe("MainBindingsWriter", () => {
          export const ipcMain = {
             sendFocused: (browserWindow: BrowserWindow, state: boolean, ...tags: string[]) =>
                browserWindow.webContents.send('focused', state, ...tags),
-            bindFocused: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>) => {
+            bindFocused: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>, onError?: (error: unknown) => void) => {
                const listener = async () => {
-                  const args = await provider();
-                  if (!browserWindow.isDestroyed()) {
-                     browserWindow.webContents.send('focused', ...args);
+                  try {
+                     const args = await provider();
+                     if (!browserWindow.isDestroyed()) {
+                        browserWindow.webContents.send('focused', ...args);
+                     }
+                  } catch (error) {
+                     (onError ?? console.error)(error);
                   }
                };
                browserWindow.on("focus", listener);
