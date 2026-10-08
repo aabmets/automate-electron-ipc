@@ -1,7 +1,7 @@
 # T01: E2E harness, and fix schema-dir crash on Node (B1)
 
 Phase 0: Declaration syntax and test infrastructure.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `src/automation.ts` calls `fsp.exists`, which exists only in Bun. Under Node the
   documented `schema/` directory mode throws `TypeError: fsp.exists is not a function`.

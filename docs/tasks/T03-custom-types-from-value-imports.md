@@ -1,7 +1,7 @@
 # T03: Custom types from value imports are dropped (B3)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** only `import type` / `import { type X }` are recorded. `import { Settings } from "..."`
   used in a signature makes the generated files reference `Settings` without importing it.

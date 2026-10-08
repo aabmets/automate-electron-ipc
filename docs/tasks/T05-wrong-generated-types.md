@@ -1,7 +1,7 @@
 # T05: Wrong generated types (B6, B7)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Unicast handlers in `main.ts` type the event as `IpcMainEvent`; Electron passes

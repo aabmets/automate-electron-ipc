@@ -1,7 +1,7 @@
 # T36: Service worker IPC (Electron ≥ 35, experimental)
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `ServiceWorkerMain.ipc` and `session.registerPreloadScript({ type: 'service-worker' })`
   are unsupported.

@@ -1,7 +1,7 @@
 # T33: Per-window API scopes (least privilege)
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** every window gets every channel. Apps with a privileged settings window and a sandboxed
   content/plugin window need different surfaces.

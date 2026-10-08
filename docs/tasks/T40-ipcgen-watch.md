@@ -1,7 +1,7 @@
 # T40: `ipcgen --watch`
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Scope:**
   - Watch the schema file/dir (recursive) and the referenced type files.

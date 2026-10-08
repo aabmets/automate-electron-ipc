@@ -1,7 +1,7 @@
 # T13: Naming of generated API members
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Decision needed:** confirm the naming scheme with the user before starting. This is a breaking
   change to generated code; bump to 0.3.0.

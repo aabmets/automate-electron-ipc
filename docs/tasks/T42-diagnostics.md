@@ -1,7 +1,7 @@
 # T42: Diagnostics
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Raw superstruct `StructError`s surface to users without file or position.

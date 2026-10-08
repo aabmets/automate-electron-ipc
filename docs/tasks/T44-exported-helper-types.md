@@ -1,7 +1,7 @@
 # T44: Exported helper types
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** users cannot type wrappers or hooks generically.
 - **Scope:** generated `window.d.ts` (or a `types.ts`) exports `IpcApi`, `ChannelName`,

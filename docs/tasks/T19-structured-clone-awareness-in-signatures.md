@@ -1,7 +1,7 @@
 # T19: Structured-clone awareness in signatures
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Electron throws when sending Functions, Promises (other than invoke results), Symbols, WeakMaps

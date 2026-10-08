@@ -1,7 +1,7 @@
 # T11: CI on Node, plus e2e type-check job
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** CI runs vitest under Bun only, which is how B1 shipped.
 - **Scope:**

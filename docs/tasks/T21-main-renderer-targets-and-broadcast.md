@@ -1,7 +1,7 @@
 # T21: Main → renderer targets and broadcast-to-all
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - `send<X>` only accepts a `BrowserWindow`. `WebContentsView` (which replaced `BrowserView`) and

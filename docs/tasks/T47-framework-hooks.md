@@ -1,7 +1,7 @@
 # T47: Framework hooks (optional output)
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Scope:**
   - Config `hooks: "react" | "vue" | false` generates `useIpcEvent(name, cb)`, which subscribes and

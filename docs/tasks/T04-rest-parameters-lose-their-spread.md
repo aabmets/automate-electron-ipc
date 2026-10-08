@@ -1,7 +1,7 @@
 # T04: Rest parameters lose their spread in generated call sites (B4)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `getOriginalParams(spec, true)` drops `...`. `(...values: number[])` generates
   `webContents.send('X', values)`, so the renderer receives a single array argument.

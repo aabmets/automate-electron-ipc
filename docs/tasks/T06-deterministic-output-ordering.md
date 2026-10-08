@@ -1,7 +1,7 @@
 # T06: Deterministic output ordering (B8)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** schema files are read with `Promise.all` and pushed in completion order. The order of
   generated imports and members churns between runs.

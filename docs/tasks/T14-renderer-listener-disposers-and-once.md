@@ -1,7 +1,7 @@
 # T14: Renderer listener disposers and `once`
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Preload `on<X>` returns the `ipcRenderer` object and cannot be unsubscribed.

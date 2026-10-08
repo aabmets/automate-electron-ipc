@@ -1,7 +1,7 @@
 # T38: Config file and CLI flags
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Config can only live in `package.json`, and there are no CLI flags.

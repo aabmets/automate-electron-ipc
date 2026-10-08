@@ -1,7 +1,7 @@
 # T07: Correct project root resolution (monorepos)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `resolveUserProjectPath` walks upward from the *library's install location* to the
   first `.git`. In monorepos and workspaces that is the repo root, not the Electron app package, so

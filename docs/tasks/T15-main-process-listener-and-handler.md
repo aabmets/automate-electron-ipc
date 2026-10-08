@@ -1,7 +1,7 @@
 # T15: Main-process listener and handler disposers and `handleOnce`
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Main `on<X>` and Unicast registration return nothing removable.

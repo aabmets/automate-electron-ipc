@@ -1,7 +1,7 @@
 # T26: Main ↔ renderer port channels
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** high-frequency data such as log tailing, audio meters or progress pays per-message
   `ipcMain` overhead. Electron recommends `MessagePortMain` for this, but no main-side port endpoint

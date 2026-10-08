@@ -1,7 +1,7 @@
 # T41: Programmatic API and Vite / electron-vite plugin
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** no programmatic entry; `index.ts` exports only the schema DSL.
 - **Scope:**

@@ -1,7 +1,7 @@
 # T43: Generated file hygiene
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Scope:**
   - The notice header names `ipcgen` and the schema path.

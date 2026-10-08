@@ -1,7 +1,7 @@
 # T30: Renderer ↔ utility process via a brokered port
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** the renderer cannot talk directly to a utility process, so every DB query hops through
   main.

@@ -1,7 +1,7 @@
 # T23: `ask` channels (main asks a renderer and awaits the answer)
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** Electron has no invoke from main to a renderer. A real need is "unsaved changes?" on
   `close`/`before-quit`, or fetching editor state before save.

@@ -1,7 +1,7 @@
 # T12: Redesign `trigger` (B5)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** with `trigger`, `send<X>(win, ...args)` registers a new `win.on(trigger)` listener on
   *every* call, never removes it, never sends immediately, and replays the arguments from the first

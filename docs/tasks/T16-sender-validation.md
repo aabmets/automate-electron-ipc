@@ -1,7 +1,7 @@
 # T16: Sender validation (Electron security checklist #17)
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** no generated handler checks `event.senderFrame`. Any frame, including iframes and
   child windows, can call every channel.

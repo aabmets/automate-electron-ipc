@@ -1,7 +1,7 @@
 # T32: Composable preload output
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** the generated `preload.ts` calls `exposeInMainWorld` as a side effect, so it cannot be
   combined with app-specific preload code or exposed under several keys.

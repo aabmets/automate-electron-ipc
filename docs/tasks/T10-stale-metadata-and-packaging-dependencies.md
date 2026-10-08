@@ -1,7 +1,7 @@
 # T10: Stale metadata and packaging dependencies (B10)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - `types/internal.d.ts` imports a non-existent `IpcAutomationPlugin`.

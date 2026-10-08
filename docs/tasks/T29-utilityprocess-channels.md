@@ -1,7 +1,7 @@
 # T29: utilityProcess channels
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `utilityProcess` is Electron's recommended home for CPU-heavy or crash-prone work
   (SQLite, indexing, native modules). It only has untyped `postMessage`/`parentPort`, with no

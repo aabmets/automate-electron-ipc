@@ -1,7 +1,7 @@
 # T02: Global duplicate channel and listener validation (B2)
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `validateChannelSpecs` runs per file, so duplicate channel names and listener names
   across files go undetected. The result is duplicate object keys in the output (TS error), and

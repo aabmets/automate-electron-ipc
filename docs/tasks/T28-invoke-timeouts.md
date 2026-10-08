@@ -1,7 +1,7 @@
 # T28: Invoke timeouts
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** a hung main handler leaves the renderer's promise pending forever.
 - **Scope:**

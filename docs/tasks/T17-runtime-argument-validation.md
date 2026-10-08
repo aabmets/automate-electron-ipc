@@ -1,7 +1,7 @@
 # T17: Runtime argument validation (Standard Schema)
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** renderer input is untrusted and TS types are erased at runtime.
 - **Scope:**

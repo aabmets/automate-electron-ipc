@@ -1,7 +1,7 @@
 # T35: `getPathForFile` helper
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `File.path` was removed in Electron 32. Drag-and-drop apps must call
   `webUtils.getPathForFile` in the preload.

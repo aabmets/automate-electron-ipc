@@ -1,7 +1,7 @@
 # T18: Typed error envelope for Unicast
 
 Phase 2: Core API, listener lifecycle and security.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** errors thrown in `handle` reach the renderer only as
   `Error invoking remote method 'X': Error: msg`. Class, `code`, custom fields and cause are lost.

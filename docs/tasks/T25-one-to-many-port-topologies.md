@@ -1,7 +1,7 @@
 # T25: One-to-many port topologies
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** one port channel name supports exactly one pair of windows. A hub window with N child
   windows, or a "worker window" serving several UI windows, is impossible.

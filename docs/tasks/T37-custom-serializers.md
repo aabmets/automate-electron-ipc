@@ -1,7 +1,7 @@
 # T37: Custom serializers
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** `Date`, `Map` and class instances lose fidelity or prototype across IPC.
 - **Scope:**

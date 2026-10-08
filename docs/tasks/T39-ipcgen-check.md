@@ -1,7 +1,7 @@
 # T39: `ipcgen --check`
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** CI cannot detect stale generated files.
 - **Scope:**

@@ -1,7 +1,7 @@
 # T00: New channel declaration syntax: a `defineChannels` map with verb helpers
 
 Phase 0: Declaration syntax and test infrastructure.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Goal:** replace `Channel("X").<Direction>.<Kind>({ signature: type as Sig, ...rest })` with an
   exported channel map. The key is the channel name, a verb helper picks the pattern, and the

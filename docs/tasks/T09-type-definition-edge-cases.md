@@ -1,7 +1,7 @@
 # T09: Type-definition edge cases
 
 Phase 1: Bug fixes.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - Any non-exported type in a schema file throws, even if no channel uses it.

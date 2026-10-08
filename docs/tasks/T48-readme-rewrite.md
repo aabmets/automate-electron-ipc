@@ -1,7 +1,7 @@
 # T48: README rewrite
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Scope:**
   - Full docs of every channel kind with its generated output.

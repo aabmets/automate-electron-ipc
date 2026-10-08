@@ -1,7 +1,7 @@
 # T22: Frame-targeted sends
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** there is no way to reply to the specific iframe that sent a request
   (`webFrameMain.send` / `webContents.sendToFrame`).

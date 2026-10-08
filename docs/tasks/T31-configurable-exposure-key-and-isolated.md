@@ -1,7 +1,7 @@
 # T31: Configurable exposure key and isolated worlds
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** the API is hard-coded as `window.ipc`, and `contextBridge.exposeInIsolatedWorld` is
   unsupported.

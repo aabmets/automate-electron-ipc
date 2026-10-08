@@ -1,7 +1,7 @@
 # T24: Robust port lifecycle (B9)
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:**
   - `propagate` posts ports only on `once('ready-to-show')`, so ports are lost if the window is

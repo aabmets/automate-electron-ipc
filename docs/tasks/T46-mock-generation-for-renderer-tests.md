@@ -1,7 +1,7 @@
 # T46: Mock generation for renderer tests
 
 Phase 4: Developer experience.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** renderer unit tests, Storybook and running the UI in a plain browser need a fake
   `window.ipc`.

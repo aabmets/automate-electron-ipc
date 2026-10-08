@@ -1,7 +1,7 @@
 # T27: Streaming results with cancellation
 
 Phase 3: Missing Electron features.
-Status and dependencies are in the [index](./README.md).
+Status and dependencies are in the [roadmap](../roadmap.md).
 
 - **Problem:** downloads, exports, ffmpeg jobs and LLM token streams need progress and cancellation.
   There is no streaming kind.
