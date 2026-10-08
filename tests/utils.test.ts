@@ -228,3 +228,50 @@ describe("capitalize", () => {
       expect(utils.capitalize("")).toBe("");
    });
 });
+
+describe("compareStrings", () => {
+   it("returns zero for equal strings and a sign for different ones", () => {
+      expect(utils.compareStrings("a", "a")).toBe(0);
+      expect(utils.compareStrings("a", "b")).toBeLessThan(0);
+      expect(utils.compareStrings("b", "a")).toBeGreaterThan(0);
+   });
+
+   it("compares by code units: upper case, underscore, lower case, then non-ASCII", () => {
+      const sorted = ["ä", "b", "_", "B", "a", "A", "2", "10"].sort(utils.compareStrings);
+      expect(sorted).toStrictEqual(["10", "2", "A", "B", "_", "a", "b", "ä"]);
+   });
+
+   it("does not use the locale of the process", () => {
+      const spy = vi.spyOn(String.prototype, "localeCompare");
+      try {
+         ["ä", "z", "a"].sort(utils.compareStrings);
+         expect(spy).not.toHaveBeenCalled();
+      } finally {
+         spy.mockRestore();
+      }
+   });
+});
+
+describe("isSchemaSourceFile", () => {
+   it.each(["schema.ts", "a/b/schema.mts", "x.cts", "dir.v2/user.model.ts", "a.d.tsx.ts"])(
+      "accepts %s",
+      (name) => {
+         expect(utils.isSchemaSourceFile(name)).toBe(true);
+      },
+   );
+
+   it.each([
+      "legacy.d.ts",
+      "legacy.d.mts",
+      "legacy.d.cts",
+      "dir/types.d.ts",
+      "README.md",
+      "data.json",
+      "script.js",
+      "component.tsx",
+      "ts",
+      "schema.ts.bak",
+   ])("rejects %s", (name) => {
+      expect(utils.isSchemaSourceFile(name)).toBe(false);
+   });
+});

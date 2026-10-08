@@ -202,6 +202,19 @@ describe("validateGlobalChannelSpecs", () => {
       );
    });
 
+   // Regression for T67: the files were compared with `localeCompare`, and `\\` was not
+   // normalized like in ipcAutomation, so the file named first was not the first one processed.
+   it("should name the files in code unit order of their normalized paths", () => {
+      const files = [file("a.ts", [spec("getUser")]), file("B.ts", [spec("getUser")])];
+      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
+         "Channel name 'getUser' is declared in both 'B.ts' and 'a.ts'",
+      );
+      const nested = [file("dir\\z.ts", [spec("getUser")]), file("dir-a/x.ts", [spec("getUser")])];
+      expect(() => vld.validateGlobalChannelSpecs(nested)).toThrowError(
+         "Channel name 'getUser' is declared in both 'dir-a/x.ts' and 'dir\\z.ts'",
+      );
+   });
+
    it("should throw an error naming both files when listener names clash", () => {
       const files = [
          file("a.ts", [spec("getUser")]),

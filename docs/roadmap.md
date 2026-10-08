@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 31 delivered, 40 remaining, 1 dropped.
+**Progress:** 32 delivered, 39 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -52,7 +52,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T64: E2E fixtures leave temp dirs behind on failure](./tasks/T64-e2e-temp-dir-cleanup-on-failure.md) · depends on: T50
 - [x] [T65: Leading blank line and unused imports in generated files](./tasks/T65-leading-blank-line-and-unused-imports.md) · depends on: T52
 - [x] [T66: swc spans are UTF-8 byte offsets, so non-ASCII source corrupts the output](./tasks/T66-swc-spans-are-utf8-byte-offsets.md) · depends on: T01
-- [ ] [T67: Locale-dependent sorting remains in the writers and the global validation](./tasks/T67-locale-dependent-sorting-remains.md) · depends on: T06
+- [x] [T67: Locale-dependent sorting remains in the writers and the global validation](./tasks/T67-locale-dependent-sorting-remains.md) · depends on: T06
 - [ ] [T68: The suite fails under Bun; order-dependent and under-restored tests](./tasks/T68-suite-fails-under-bun-and-order-dependent-tests.md) · depends on: T07, T11
 - [ ] [T69: Signature edge cases that produce wrong or confusing generated code](./tasks/T69-signature-edge-cases-in-generated-code.md) · depends on: T53, T57
 - [ ] [T70: Test harness and fixture gaps](./tasks/T70-test-harness-gaps.md) · depends on: T50

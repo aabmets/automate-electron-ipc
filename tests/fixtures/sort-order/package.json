@@ -1,0 +1,9 @@
+{
+   "name": "fixture-sort-order",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

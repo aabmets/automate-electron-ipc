@@ -200,23 +200,30 @@ export class BaseWriter {
       return name;
    }
 
+   /**
+    * Sorts the callables by prefix (`on`, `send`, then the rest, such as `bind`) and then by
+    * member name, in code unit order, so that the output does not depend on the locale.
+    * A callable is the text of a member, `name: ...`, and only the name takes part in the order:
+    * `sendFoo` comes before `sendFoo2` although `:` sorts after `2`.
+    */
    protected sortCallablesArray(callablesArray: string[]): string[] {
+      const prefixOrder = ["on", "send"];
+      const nameOf = (callable: string) => {
+         const colon = callable.indexOf(":");
+         return colon === -1 ? callable : callable.slice(0, colon).trim();
+      };
+      const getPrefixRank = (name: string) => {
+         const rank = prefixOrder.findIndex((prefix) => name.startsWith(prefix));
+         return rank === -1 ? prefixOrder.length : rank;
+      };
       return callablesArray.sort((a, b) => {
-         const prefixOrder = ["on", "send"];
-         const getPrefixRank = (value: string) => {
-            for (let i = 0; i < prefixOrder.length; i++) {
-               if (value.startsWith(prefixOrder[i])) {
-                  return i;
-               }
-            }
-            return prefixOrder.length;
-         };
-         const prefixRankA = getPrefixRank(a);
-         const prefixRankB = getPrefixRank(b);
-         if (prefixRankA === prefixRankB) {
-            return a.localeCompare(b);
-         }
-         return prefixRankA - prefixRankB;
+         const nameA = nameOf(a);
+         const nameB = nameOf(b);
+         return (
+            getPrefixRank(nameA) - getPrefixRank(nameB) ||
+            utils.compareStrings(nameA, nameB) ||
+            utils.compareStrings(a, b)
+         );
       });
    }
 

@@ -14,7 +14,7 @@ import { BaseWriter } from "@src/writer/base-writer.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
 import type * as t from "@types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("BaseWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestBaseWriter);
@@ -174,6 +174,47 @@ describe("BaseWriter", () => {
          "sendEvent2",
          "sendEvent3",
       ]);
+   });
+
+   describe("sortCallablesArray, order by member name in code unit order", () => {
+      const sort = (callables: string[]) =>
+         shared.VitestBaseWriter.prototype.sortCallablesArray([...callables]);
+
+      // Regression for T67: whole callables were compared with `localeCompare`.
+      it("compares member names, so a name comes before the same name with a suffix", () => {
+         expect(sort(["sendFoo2: (a) => 1", "sendFoo: (a) => 1"])).toStrictEqual([
+            "sendFoo: (a) => 1",
+            "sendFoo2: (a) => 1",
+         ]);
+      });
+
+      it("orders upper case before lower case, digits before letters and underscores in between", () => {
+         expect(
+            sort(["sendb: 1", "sendB: 1", "send_a: 1", "senda: 1", "sendA: 1", "send1: 1"]),
+         ).toStrictEqual(["send1: 1", "sendA: 1", "sendB: 1", "send_a: 1", "senda: 1", "sendb: 1"]);
+      });
+
+      it("orders non-ASCII letters after ASCII ones, as the code units do", () => {
+         expect(
+            sort(["sendÄrlig: 1", "sendZeta: 1", "sendÅland: 1", "sendApple: 1"]),
+         ).toStrictEqual(["sendApple: 1", "sendZeta: 1", "sendÄrlig: 1", "sendÅland: 1"]);
+      });
+
+      it("orders the prefixes on, send, then other members such as bind", () => {
+         expect(
+            sort(["bindFoo: 1", "sendA: 1", "onZ: 1", "bindA: 1", "onA: 1", "sendZ: 1"]),
+         ).toStrictEqual(["onA: 1", "onZ: 1", "sendA: 1", "sendZ: 1", "bindA: 1", "bindFoo: 1"]);
+      });
+
+      it("does not use the locale of the process", () => {
+         const spy = vi.spyOn(String.prototype, "localeCompare");
+         try {
+            expect(sort(["sendÄ: 1", "sendZ: 1"])).toStrictEqual(["sendZ: 1", "sendÄ: 1"]);
+            expect(spy).not.toHaveBeenCalled();
+         } finally {
+            spy.mockRestore();
+         }
+      });
    });
 
    describe("channel specs of colliding type names", () => {

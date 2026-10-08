@@ -182,7 +182,9 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
  * object keys in the generated code and a second handler registration at runtime.
  */
 export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
-   const sorted = [...files].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+   // The order of ipcAutomation, so that the file named in an error is the first one processed.
+   const normalize = (file: t.ParsedFileSpecs) => file.relativePath.replaceAll("\\", "/");
+   const sorted = [...files].sort((a, b) => utils.compareStrings(normalize(a), normalize(b)));
    const channelOwners = new Map<string, string>();
    const listenerOwners = new Map<string, { file: string; channel: string }>();
 

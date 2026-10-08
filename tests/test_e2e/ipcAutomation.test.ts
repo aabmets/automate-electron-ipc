@@ -12,7 +12,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 let project: E2EProject | undefined;
 
@@ -672,6 +672,59 @@ describe("ipcAutomation, non-ASCII schema source", () => {
 
    it("generates files that type-check", async () => {
       project = await runFixture("non-ascii");
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
+describe("ipcAutomation, locale-independent output order", () => {
+   // Regression for T67: members were ordered with `localeCompare`, which depends on the locale
+   // of the process and compared the whole callable, so `sendItem` and `sendItem2` swapped places.
+   const members = (text: string): string[] =>
+      Array.from(text.matchAll(/^\s*((?:on|send)[^\s:]+): /gmu), (match) => match[1]);
+
+   // Order of the code units: `L` < `l`, `2` < `X` < `_`, and `ö` after all ASCII letters.
+   const rendererToMain = ["ALpha", "Alpha", "Alzz", "Item", "Item2", "ItemX", "Item_x", "Zöld"];
+   const mainToRenderer = ["BRavo", "Bravo"];
+   const expected = {
+      "window.d.ts": [
+         ...mainToRenderer.map((name) => `on${name}`),
+         ...rendererToMain.map((name) => `send${name}`),
+      ],
+      "preload.ts": [
+         ...mainToRenderer.map((name) => `on${name}`),
+         ...rendererToMain.map((name) => `send${name}`),
+      ],
+      "main.ts": [
+         ...rendererToMain.map((name) => `on${name}`),
+         ...mainToRenderer.map((name) => `send${name}`),
+      ],
+   };
+
+   it.each(["sv", "en", "de-u-co-phonebk", "reversed en"])(
+      "orders the members the same when the locale compares as %s",
+      async (locale) => {
+         const reversed = locale.startsWith("reversed");
+         const collator = new Intl.Collator(reversed ? "en" : locale);
+         const spy = vi.spyOn(String.prototype, "localeCompare").mockImplementation(function (
+            this: string,
+            that: string,
+         ) {
+            const result = collator.compare(this, that);
+            return reversed ? -result : result;
+         });
+         try {
+            project = await runFixture("sort-order");
+         } finally {
+            spy.mockRestore();
+         }
+         for (const [file, names] of Object.entries(expected)) {
+            expect(members(project.generated[file as keyof typeof expected])).toStrictEqual(names);
+         }
+      },
+   );
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("sort-order");
       expect(await project.typecheck()).toBe("");
    });
 });
