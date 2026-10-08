@@ -81,6 +81,11 @@ describe("package.json", () => {
       expect(manifest.peerDependenciesMeta?.electron?.optional).toBe(true);
    });
 
+   it("requires a Node version whose styleText supports the stream option", () => {
+      // `styleText(..., { stream })` keeps colors off for non-TTY stderr since Node 22.13.
+      expect(manifest.engines?.node).toBe(">=22.13.0");
+   });
+
    it("does not import electron or chalk at runtime", () => {
       expect(runtimeImports.has("electron")).toBe(false);
       expect(runtimeImports.has("chalk")).toBe(false);
