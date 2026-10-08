@@ -11,7 +11,7 @@
       "types": ["node", "bun"],
       "paths": {
          "@types": ["./types/internal.d.ts"],
-         "@testutils/*": ["./vitest/utils/*"],
+         "@testutils/*": ["./tests/utils/*"],
          "@src/*": ["./src/*"]
       },
       "allowJs": true,
