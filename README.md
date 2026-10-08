@@ -328,7 +328,11 @@ If the responder throws, the promise rejects with an `IpcAskError` which has the
 renderer should throw a plain object, `{ name, message, code, data }`, if it wants more than the
 message to arrive: `contextBridge` copies an `Error` thrown by the page with its message only. The
 `rawErrors` option does not apply to `ask`, since the answers do not travel through Electron's own
-`invoke`. A destroyed target and a failing send both reject the promise, and never throw.
+`invoke`. A destroyed target and a failing send both reject the promise, and never throw. That includes
+a `BrowserWindow` that was destroyed before the question, whose `webContents` getter throws in
+Electron: it rejects with `IPC_ASK_DESTROYED` too. Only `ask` promises this; the verbs that return
+nothing (`send` of an `emit` channel, and `connect` of the port verbs) throw Electron's own error
+for such a window, since the caller handed over a target that is gone.
 
 There is no timeout unless one is given. To bound the wait, use
 `invokeWith(target, { timeoutMs }, ...args)`:
@@ -519,6 +523,9 @@ destroyed, and when the page calls `close()` on its connection.
 The renderer has the API of a `port` channel (see above), with the main process as the peer. Several
 `connect` calls make several connections, for one or for different contents, and a page gets each of
 them from `onConnection`. A channel is either a `port` channel or a `mainPort` channel, not both.
+
+`connect` of both port verbs is given a window or view that must still exist: for one that is
+already destroyed, it throws Electron's own `TypeError: Object has been destroyed`. A target that is destroyed later ends the connection, as described above.
 
 #### Bounded send queues
 

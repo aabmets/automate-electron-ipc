@@ -350,6 +350,42 @@ describe("ask, main process, a target that is gone", () => {
       expect(contents.send).not.toHaveBeenCalled();
    });
 
+   it("rejects at once for a BrowserWindow whose webContents throws after destroy()", async () => {
+      const { ipc, electron } = await loadMain();
+      const contents = createContents(1);
+      const win = {
+         destroyed: false,
+         isDestroyed: () => win.destroyed,
+         get webContents() {
+            if (win.destroyed) {
+               throw new TypeError("Object has been destroyed");
+            }
+            return contents;
+         },
+      };
+      win.destroyed = true;
+
+      await expect(ipc.hasUnsavedChanges.invoke(win, 7)).rejects.toMatchObject(
+         gone("hasUnsavedChanges"),
+      );
+      expect(contents.send).not.toHaveBeenCalled();
+      expect(electron.ipcMain.on).not.toHaveBeenCalled();
+   });
+
+   it("rejects at once when the webContents getter throws and isDestroyed() is not true", async () => {
+      const { ipc } = await loadMain();
+      const win = {
+         isDestroyed: () => false,
+         get webContents(): never {
+            throw new TypeError("Object has been destroyed");
+         },
+      };
+
+      await expect(ipc.hasUnsavedChanges.invoke(win, 7)).rejects.toMatchObject(
+         gone("hasUnsavedChanges"),
+      );
+   });
+
    it.each(["destroyed", "render-process-gone"])(
       "rejects the question that waits when the contents emit '%s'",
       async (event) => {

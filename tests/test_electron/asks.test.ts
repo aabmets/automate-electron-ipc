@@ -200,10 +200,9 @@ describeElectron("ask channels in Electron", "electron-asks", scenarios, (group)
       });
    });
 
-   // Found by this suite: the generated code reads `window.webContents` of a destroyed
-   // BrowserWindow, which throws a TypeError in Electron and not in the fakes of the unit tests.
-   // Fixed by T77.
-   it.fails("rejects with IPC_ASK_DESTROYED when the window was destroyed before it is asked", () => {
+   // The webContents of a destroyed BrowserWindow throws a TypeError in Electron, and not in the
+   // fakes of the unit tests (T77).
+   it("rejects with IPC_ASK_DESTROYED when the window was destroyed before it is asked", () => {
       expect(group.value("destroyed").afterwards).toMatchObject({
          rejected: true,
          name: "IpcAskError",

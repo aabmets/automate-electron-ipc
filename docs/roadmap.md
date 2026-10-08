@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 55 delivered, 22 remaining, 1 dropped.
+**Progress:** 56 delivered, 21 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -58,7 +58,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T70: Test harness and fixture gaps](./tasks/T70-test-harness-gaps.md) · depends on: T50
 - [x] [T71: Syntax error positions and the success report path](./tasks/T71-diagnostics-positions-and-paths.md) · depends on: T08
 - [x] [T76: Port channels never pair while `isLoading()` is true](./tasks/T76-port-pairing-waits-on-isloading.md) · depends on: T75
-- [ ] [T77: `ask` on a destroyed `BrowserWindow` throws a TypeError](./tasks/T77-ask-on-destroyed-browser-window.md) · depends on: T75
+- [x] [T77: `ask` on a destroyed `BrowserWindow` throws a TypeError](./tasks/T77-ask-on-destroyed-browser-window.md) · depends on: T75
 
 ## Phase 2: Core API, listener lifecycle and security
 

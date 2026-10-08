@@ -19,4 +19,13 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   fine for the verbs that return nothing, if it is written down.
 - **Tests:** flip the `it.fails` of `tests/test_electron/asks.test.ts` to `it`. A unit test with a fake
   window whose `webContents` getter throws after `destroy()`.
-- **Delivered:**
+- **Delivered:** 2026-10-08. `askRenderer` now resolves the target inside the `try` that produces `IPC_ASK_DESTROYED`:
+  a target whose own `isDestroyed()` is true (a `BrowserWindow`), or whose `webContents` getter,
+  `fromFrame` or `isDestroyed` throws, rejects with the `IpcAskError`. The `it.fails` of
+  `tests/test_electron/asks.test.ts` is an `it` (checked in Electron), and the unit tests have a fake
+  window whose getter throws after `destroy()`, and one whose getter throws while `isDestroyed()` is
+  false. Other verbs: `emit`'s `send` and `connect` of the port verbs throw Electron's own
+  `TypeError` for a destroyed window, which the README now says. Note: `connectPorts` registers the
+  first window in `portEnds` before it reads the second one's `webContents`, so a destroyed second
+  window leaves that entry behind when `connect` throws; not worth a task, since the caller
+  hands over a dead window.
