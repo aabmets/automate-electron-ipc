@@ -93,7 +93,6 @@ export interface ChannelSpec {
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;
-   listeners?: string[];
    trigger?: string;
 }
 

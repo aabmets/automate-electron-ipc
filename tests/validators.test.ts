@@ -99,24 +99,30 @@ describe("validateChannelSpecs", () => {
       }
    });
 
-   it("should detect a custom listener that clashes with the capitalized channel listener", () => {
-      const csg = new ChannelSpecGenerator();
-      const specs = [
-         { ...csg.generate("RendererToMain", "Broadcast"), name: "getUser" },
-         csg.generate("RendererToMain", "Broadcast", "void", ["onGetUser"]),
-      ];
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError("'onGetUser'");
+   it("should reject channel names that are members of every object", () => {
+      const names = ["constructor", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf"];
+      for (const name of [...names, "__proto__", "toLocaleString", "propertyIsEnumerable"]) {
+         const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `Channel name '${name}' is reserved`,
+         );
+      }
    });
 
-   it("should throw Struct error when a listener name is malformed", () => {
-      const csg = new ChannelSpecGenerator();
-      const collection = [
-         { listener: "onA", err: "Channel listener names must be at least 5 characters in length" },
-         { listener: "handleThing", err: "Channel listener names must begin with lowercase 'on'" },
-      ];
-      for (const { listener, err } of collection) {
-         const spec = csg.generate("RendererToMain", "Broadcast", "void", [listener]);
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(err);
+   it("should name the file and the channel when a channel name is reserved", () => {
+      const spec = {
+         ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"),
+         name: "constructor",
+      };
+      expect(() => vld.validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
+         "Schema file 'ipc/schema.ts': Channel name 'constructor' is reserved",
+      );
+   });
+
+   it("should accept channel names that merely contain or extend a reserved name", () => {
+      for (const name of ["constructors", "toStringify", "valueOfIt", "hasOwn"]) {
+         const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
+         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
@@ -186,31 +192,6 @@ describe("validateChannelSpecs", () => {
       );
       expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
    });
-
-   it("should throw Struct error for Unicast or Port kind channels", () => {
-      const csg = new ChannelSpecGenerator();
-      const invalidChannelSpecsArray = [
-         csg.generate("RendererToMain", "Unicast", "string", ["onChannel"]),
-         csg.generate("RendererToRenderer", "Port", "void", ["onChannel"]),
-      ];
-      for (const spec of invalidChannelSpecsArray) {
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
-            "At path: listeners -- Expected a value of type `never`, but received: `onChannel`",
-         );
-      }
-   });
-
-   it("should allow listeners array for Broadcast kind channels", () => {
-      const csg = new ChannelSpecGenerator();
-      const invalidChannelSpecsArray = [
-         csg.generate("RendererToMain", "Broadcast", "void", ["onChannel"]),
-         csg.generate("MainToRenderer", "Broadcast", "void", ["onChannel"]),
-      ];
-      for (const spec of invalidChannelSpecsArray) {
-         const retVal = vld.validateChannelSpecs([spec]);
-         expect(retVal).toMatchObject([spec]);
-      }
-   });
 });
 
 describe("validateGlobalChannelSpecs", () => {
@@ -224,10 +205,9 @@ describe("validateGlobalChannelSpecs", () => {
          typeSpecArray: [],
       },
    });
-   const spec = (name: string, listeners?: string[]): t.ChannelSpec => ({
+   const spec = (name: string): t.ChannelSpec => ({
       ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast"),
       name,
-      ...(listeners ? { listeners } : {}),
    });
 
    it("should accept unique channels across files", () => {
@@ -252,16 +232,6 @@ describe("validateGlobalChannelSpecs", () => {
       const nested = [file("dir\\z.ts", [spec("getUser")]), file("dir-a/x.ts", [spec("getUser")])];
       expect(() => vld.validateGlobalChannelSpecs(nested)).toThrowError(
          "Channel name 'getUser' is declared in both 'dir-a/x.ts' and 'dir\\z.ts'",
-      );
-   });
-
-   it("should throw an error naming both files when listener names clash", () => {
-      const files = [
-         file("a.ts", [spec("getUser")]),
-         file("b.ts", [spec("getPost", ["onGetUser"])]),
-      ];
-      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
-         /'onGetUser' of channel 'getPost' in 'b\.ts' clashes .* 'getUser' in 'a\.ts'/,
       );
    });
 });

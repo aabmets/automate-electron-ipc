@@ -28,14 +28,14 @@ describe("ipcAutomation, triggers", () => {
       project = await runFixture("triggers");
       const main = project.generated["main.ts"];
 
-      expect(main).toContain("bindWindowFocused: (browserWindow: BrowserWindow, provider: ");
+      expect(main).toContain("bind: (browserWindow: BrowserWindow, provider: ");
       expect(main).toContain("provider: () => [focused: boolean] | Promise<[focused: boolean]>");
       expect(main).toContain("provider: () => [title: string, ...tags: string[]] | Promise<");
       expect(main).toContain('browserWindow.on("focus", listener);');
       expect(main).toContain('browserWindow.off("focus", listener);');
       expect(main).toContain('browserWindow.on("page-title-updated", listener);');
-      expect(main).not.toContain("bindPlain");
-      expect(main).toContain("sendPlain: (browserWindow: BrowserWindow, n: number) =>");
+      expect(main.match(/\bbind:/g)).toHaveLength(2);
+      expect(main).toContain("plain: {\n      send: (browserWindow: BrowserWindow, n: number) =>");
    });
 
    it("generates files that type-check", async () => {
@@ -46,18 +46,17 @@ describe("ipcAutomation, triggers", () => {
    describe("generated main process bindings", () => {
       const load = async () => {
          project = await runFixture("triggers");
-         return loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() })
-            .ipcMain;
+         return loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() }).ipc;
       };
 
       // Regression for B5: every call registered a window listener, and nothing was sent.
       it("sends immediately and registers no listener when the sender is called", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
 
-         ipcMain.sendWindowFocused(win, true);
-         ipcMain.sendWindowFocused(win, false);
-         ipcMain.sendWindowFocused(win, true);
+         ipc.windowFocused.send(win, true);
+         ipc.windowFocused.send(win, false);
+         ipc.windowFocused.send(win, true);
 
          expect(win.webContents.send).toHaveBeenCalledTimes(3);
          expect(win.webContents.send).toHaveBeenNthCalledWith(1, "windowFocused", true);
@@ -66,21 +65,21 @@ describe("ipcAutomation, triggers", () => {
       });
 
       it("forwards rest arguments with their spread", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
 
-         ipcMain.sendTitleChanged(win, "title", "a", "b");
+         ipc.titleChanged.send(win, "title", "a", "b");
 
          expect(win.webContents.send).toHaveBeenCalledWith("titleChanged", "title", "a", "b");
       });
 
       it("registers a single listener and evaluates the provider for each event", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
          let focused = true;
          const provider = vi.fn(() => [focused]);
 
-         ipcMain.bindWindowFocused(win, provider);
+         ipc.windowFocused.bind(win, provider);
          expect(win.listenerCount("focus")).toBe(1);
          expect(provider).not.toHaveBeenCalled();
          expect(win.webContents.send).not.toHaveBeenCalled();
@@ -97,10 +96,10 @@ describe("ipcAutomation, triggers", () => {
       });
 
       it("awaits asynchronous providers and spreads rest arguments", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
 
-         ipcMain.bindTitleChanged(win, async () => ["title", "a", "b"]);
+         ipc.titleChanged.bind(win, async () => ["title", "a", "b"]);
          win.emit("page-title-updated");
          await flush();
 
@@ -108,11 +107,11 @@ describe("ipcAutomation, triggers", () => {
       });
 
       it("removes the listener when the disposer is called", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
          const provider = vi.fn(() => [true]);
 
-         const dispose = ipcMain.bindWindowFocused(win, provider);
+         const dispose = ipc.windowFocused.bind(win, provider);
          dispose();
 
          expect(win.listenerCount("focus")).toBe(0);
@@ -123,10 +122,10 @@ describe("ipcAutomation, triggers", () => {
       });
 
       it("does not send to a window which was destroyed while the provider ran", async () => {
-         const ipcMain = await load();
+         const ipc = await load();
          const win = createFakeWindow();
 
-         ipcMain.bindWindowFocused(win, () => {
+         ipc.windowFocused.bind(win, () => {
             win.destroyed = true;
             return Promise.resolve([true]);
          });
@@ -160,12 +159,12 @@ describe("ipcAutomation, triggers", () => {
          it.each(failures)(
             "reports a provider which %s to onError and skips the send",
             async (_, fail) => {
-               const ipcMain = await load();
+               const ipc = await load();
                const win = createFakeWindow();
                const onError = vi.fn();
                let failing = true;
 
-               ipcMain.bindWindowFocused(win, () => (failing ? fail() : [true]), onError);
+               ipc.windowFocused.bind(win, () => (failing ? fail() : [true]), onError);
                win.emit("focus");
                await flush();
 
@@ -188,11 +187,11 @@ describe("ipcAutomation, triggers", () => {
          it.each(failures)(
             "falls back to console.error for a provider which %s",
             async (_, fail) => {
-               const ipcMain = await load();
+               const ipc = await load();
                const win = createFakeWindow();
                const consoleError = vi.spyOn(console, "error").mockReturnValue(undefined);
 
-               ipcMain.bindWindowFocused(win, fail);
+               ipc.windowFocused.bind(win, fail);
                win.emit("focus");
                await flush();
 
@@ -204,14 +203,14 @@ describe("ipcAutomation, triggers", () => {
          );
 
          it("reports an error of the send itself to onError", async () => {
-            const ipcMain = await load();
+            const ipc = await load();
             const win = createFakeWindow();
             const onError = vi.fn();
             win.webContents.send.mockImplementationOnce(() => {
                throw new Error("An object could not be cloned.");
             });
 
-            ipcMain.bindWindowFocused(win, () => [true], onError);
+            ipc.windowFocused.bind(win, () => [true], onError);
             win.emit("focus");
             await flush();
             win.emit("focus");
@@ -233,7 +232,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         "sendWindowClash: (_browserWindow: BrowserWindow, browserWindow: number, event: string, callback: boolean) =>",
+         "send: (_browserWindow: BrowserWindow, browserWindow: number, event: string, callback: boolean) =>",
       );
       expect(main).toContain(
          "_browserWindow.webContents.send('windowClash', browserWindow, event, callback)",
@@ -241,7 +240,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       expect(main).toContain(
          "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => _callback(_event, event, callback, args)",
       );
-      expect(main).toContain("onNoParams: (callback: (event: IpcMainEvent) => void)");
+      expect(main).toContain("on: (callback: (event: IpcMainEvent) => void)");
    });
 
    it("inserts the event parameter after the type parameters of generic signatures", async () => {
@@ -255,10 +254,10 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
          "<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => callback(event, cb)",
       );
       expect(main).toContain(
-         "sendGenericEmit: <T extends (x: number) => void>(browserWindow: BrowserWindow, cb: T) =>",
+         "send: <T extends (x: number) => void>(browserWindow: BrowserWindow, cb: T) =>",
       );
       expect(project.generated["window.d.ts"]).toContain(
-         "sendGenericInvoke: <T>(value: T) => Promise<Awaited<T>>;",
+         "invoke: <T>(value: T) => Promise<Awaited<T>>;",
       );
    });
 
@@ -270,14 +269,14 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
    it("forwards the arguments to the right parameters at runtime", async () => {
       project = await runFixture("param-clashes");
       const electron = createFakeElectron();
-      const { ipcMain } = loadGenerated(project.generated["main.ts"], { electron });
+      const { ipc } = loadGenerated(project.generated["main.ts"], { electron });
       const win = createFakeWindow();
 
-      ipcMain.sendWindowClash(win, 1, "two", true);
+      ipc.windowClash.send(win, 1, "two", true);
       expect(win.webContents.send).toHaveBeenCalledWith("windowClash", 1, "two", true);
 
       const callback = vi.fn();
-      ipcMain.onHandlerClash(callback);
+      ipc.handlerClash.on(callback);
       const [channel, listener] = electron.ipcMain.on.mock.calls[0];
       expect(channel).toBe("handlerClash");
       listener("the-event", "a", 2, false);
@@ -292,12 +291,14 @@ describe("ipcAutomation, async return types", () => {
       project = await runFixture("async-types");
       const windowTypes = project.generated["window.d.ts"];
 
-      expect(windowTypes).toContain("sendPlain: () => Promise<Awaited<number>>;");
-      expect(windowTypes).toContain("sendUserType: () => Promise<Awaited<PromiseResult>>;");
-      expect(windowTypes).toContain(
-         "sendPromiseLike: () => Promise<Awaited<PromiseLike<string>>>;",
-      );
-      expect(windowTypes).toContain("sendReal: (id: number) => Promise<string>;");
+      const invokeOf = (channel: string) => {
+         const lines = windowTypes.split("\n");
+         return lines[lines.indexOf(`   ${channel}: {`) + 1].trim();
+      };
+      expect(invokeOf("plain")).toBe("invoke: () => Promise<Awaited<number>>;");
+      expect(invokeOf("userType")).toBe("invoke: () => Promise<Awaited<PromiseResult>>;");
+      expect(invokeOf("promiseLike")).toBe("invoke: () => Promise<Awaited<PromiseLike<string>>>;");
+      expect(invokeOf("real")).toBe("invoke: (id: number) => Promise<string>;");
    });
 
    it("generates files that type-check", async () => {

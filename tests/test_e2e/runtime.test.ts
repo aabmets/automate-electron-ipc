@@ -44,7 +44,7 @@ describe("fixture all-kinds", () => {
 
 describe("generated preload script", () => {
    it.each(["all-kinds", "triggers", "param-shapes", "port-only", "handler-types"])(
-      "exposes exactly the members that Window.ipc declares (%s)",
+      "exposes exactly the members that the generated IpcApi declares (%s)",
       async (fixture) => {
          const { exposed, project } = await loadPreload(fixture);
          expect(Object.keys(exposed)).toStrictEqual(["ipc"]);
@@ -53,6 +53,20 @@ describe("generated preload script", () => {
          expect(callablePaths(exposed.ipc)).toStrictEqual(declared);
       },
    );
+
+   it("exposes one object per channel, with only the methods of its verb", async () => {
+      const { exposed } = await loadPreload("all-kinds");
+
+      expect(callablePaths(exposed.ipc)).toStrictEqual([
+         "chat.on",
+         "chat.send",
+         "getTime.invoke",
+         "getUser.invoke",
+         "logLine.send",
+         "progress.on",
+         "titleChanged.on",
+      ]);
+   });
 
    it("exposes nothing but an empty api, and declares nothing, when there are no channels", async () => {
       const { exposed, project } = await loadPreload("no-channels");
@@ -64,16 +78,16 @@ describe("generated preload script", () => {
       const { exposed, electron } = await loadPreload("all-kinds");
       electron.ipcRenderer.invoke.mockResolvedValue("Ann");
 
-      await expect(exposed.ipc.sendGetUser(7)).resolves.toBe("Ann");
+      await expect(exposed.ipc.getUser.invoke(7)).resolves.toBe("Ann");
       expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith("getUser", 7);
-      await exposed.ipc.sendGetTime();
+      await exposed.ipc.getTime.invoke();
       expect(electron.ipcRenderer.invoke).toHaveBeenLastCalledWith("getTime");
    });
 
    it("forwards send channels to ipcRenderer.send, spreading rest arguments", async () => {
       const { exposed, electron } = await loadPreload("all-kinds");
 
-      exposed.ipc.sendLogLine("line", 1, 2);
+      exposed.ipc.logLine.send("line", 1, 2);
 
       expect(electron.ipcRenderer.send).toHaveBeenCalledWith("logLine", "line", 1, 2);
    });
@@ -82,7 +96,7 @@ describe("generated preload script", () => {
       const { exposed, electron } = await loadPreload("all-kinds");
       const callback = vi.fn();
 
-      exposed.ipc.onProgress(callback);
+      exposed.ipc.progress.on(callback);
 
       const [channel, listener] = electron.ipcRenderer.on.mock.calls.find(
          ([name]: [string]) => name === "progress",
@@ -101,17 +115,34 @@ describe("generated preload script", () => {
       ) as [string, (event: unknown) => void];
 
       onPort({ ports: [port] });
-      exposed.ipc.ports.chat.sendMessage("hi", 1);
+      exposed.ipc.chat.send("hi", 1);
       expect(port.postMessage).toHaveBeenCalledWith(["hi", 1]);
 
       const callback = vi.fn();
-      exposed.ipc.ports.chat.onMessage(callback);
+      exposed.ipc.chat.on(callback);
       port.onmessage?.({ data: ["there", 2] });
       expect(callback).toHaveBeenCalledWith("there", 2);
    });
 });
 
 describe("generated main process bindings", () => {
+   it("exports one object per channel, with only the methods of its verb", async () => {
+      project = await runFixture("all-kinds");
+      const { ipc } = loadGenerated(project.generated["main.ts"], {
+         electron: createFakeElectron(),
+      });
+
+      expect(callablePaths(ipc)).toStrictEqual([
+         "chat.connect",
+         "getTime.handle",
+         "getUser.handle",
+         "logLine.on",
+         "progress.send",
+         "titleChanged.bind",
+         "titleChanged.send",
+      ]);
+   });
+
    async function loadMain() {
       project = await runFixture("all-kinds");
       class FakeChannel {
@@ -121,15 +152,15 @@ describe("generated main process bindings", () => {
       const electron = { ...createFakeElectron(), MessageChannelMain: FakeChannel };
       return {
          electron,
-         ipcMain: loadGenerated(project.generated["main.ts"], { electron }).ipcMain,
+         ipc: loadGenerated(project.generated["main.ts"], { electron }).ipc,
       };
    }
 
    it("registers a handle wrapper which passes the event and arguments to the callback", async () => {
-      const { electron, ipcMain } = await loadMain();
+      const { electron, ipc } = await loadMain();
       const callback = vi.fn(async (_event: unknown, id: number) => `user ${id}`);
 
-      ipcMain.onGetUser(callback);
+      ipc.getUser.handle(callback);
 
       expect(electron.ipcMain.handle).toHaveBeenCalledOnce();
       const [channel, wrapper] = electron.ipcMain.handle.mock.calls[0];
@@ -141,18 +172,18 @@ describe("generated main process bindings", () => {
    });
 
    it("returns the rejection of the callback to the renderer through handle", async () => {
-      const { electron, ipcMain } = await loadMain();
-      ipcMain.onGetTime(() => Promise.reject(new Error("no clock")));
+      const { electron, ipc } = await loadMain();
+      ipc.getTime.handle(() => Promise.reject(new Error("no clock")));
 
       const [, wrapper] = electron.ipcMain.handle.mock.calls[0];
       await expect(wrapper({})).rejects.toThrowError("no clock");
    });
 
    it("registers an on wrapper which spreads rest arguments", async () => {
-      const { electron, ipcMain } = await loadMain();
+      const { electron, ipc } = await loadMain();
       const callback = vi.fn();
 
-      ipcMain.onLogLine(callback);
+      ipc.logLine.on(callback);
 
       const [channel, wrapper] = electron.ipcMain.on.mock.calls[0];
       expect(channel).toBe("logLine");
@@ -161,11 +192,11 @@ describe("generated main process bindings", () => {
    });
 
    it("posts the two ends of a port channel to the two windows once they are ready", async () => {
-      const { ipcMain } = await loadMain();
+      const { ipc } = await loadMain();
       const one = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
       const two = Object.assign(createFakeWindow(), { webContents: { postMessage: vi.fn() } });
 
-      ipcMain.ports.chat.propagate(one, two);
+      ipc.chat.connect(one, two);
       expect(one.webContents.postMessage).not.toHaveBeenCalled();
       one.emit("ready-to-show");
       two.emit("ready-to-show");

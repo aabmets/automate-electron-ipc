@@ -38,7 +38,9 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            sendVitestChannel: (...args: any[]) => ipcRenderer.invoke('vitestChannel', ...args),
+            vitestChannel: {
+               invoke: (...args: any[]) => ipcRenderer.invoke('vitestChannel', ...args),
+            },
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -53,7 +55,9 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            sendVitestChannel: (...args: any[]) => ipcRenderer.send('vitestChannel', ...args),
+            vitestChannel: {
+               send: (...args: any[]) => ipcRenderer.send('vitestChannel', ...args),
+            },
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -68,32 +72,49 @@ describe("PreloadBindingsWriter", () => {
          import { contextBridge, ipcRenderer } from "electron";
          
          contextBridge.exposeInMainWorld('ipc', {
-            onVitestChannel: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            vitestChannel: {
+               on: (callback: Function) => ipcRenderer.on('vitestChannel', (_event: any, ...args: any[]) => callback(...args)),
+            },
          });
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write one callable per listener name when a channel has listeners", async () => {
-      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_MainToRenderer, [
-         "onCustomListener1",
-         "onCustomListener2",
-      ]);
-      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain("onCustomListener1: (callback: Function) =>");
-      expect(output).toContain("onCustomListener2: (callback: Function) =>");
-      expect(output).not.toContain("onVitestChannel");
-   });
-
-   it("should write only ports into ipc object when there are no callables", async () => {
-      // Regression for T52: the empty callables line left a lone comma in the object.
+   it("should write a port object per Port channel, with its initializer", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toContain("exposeInMainWorld('ipc', {\n   ports: {");
-      expect(buffer.toString()).not.toMatch(/\{\s*,/);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).toContain("type PortObject = { send: Function, on: Function };");
+      expect(output).toContain("send: (...args: any[]) => ports[portName].postMessage(args),");
+      expect(output).toContain("on: (callback: Function) => {");
+      expect(output).toContain("ports.vitestChannel = event.ports[0];");
+      expect(output).toContain(
+         "contextBridge.exposeInMainWorld('ipc', {\n   vitestChannel: getPortObject('vitestChannel'),\n});",
+      );
+      expect(output).not.toMatch(/sendMessage|onMessage|\bports: \{$/m);
+   });
+
+   it("should write one object per channel, sorted by name, next to the port objects", async () => {
+      const pfsArray = shared.buildFileSpecs(
+         { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "alpha", kind: "Port", direction: "RendererToRenderer" },
+         { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
+         { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
+      );
+      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      const exposed = output.slice(output.indexOf("exposeInMainWorld"));
+      expect([...exposed.matchAll(/^ {3}(\w+): /gm)].map((match) => match[1])).toStrictEqual([
+         "Beta",
+         "alpha",
+         "gamma",
+         "zeta",
+      ]);
+      expect(exposed).toContain("Beta: {\n      invoke: (...args: any[]) =>");
+      expect(exposed).toContain("gamma: {\n      send: (...args: any[]) =>");
+      expect(exposed).toContain("zeta: {\n      on: (callback: Function) =>");
    });
 });

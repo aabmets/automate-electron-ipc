@@ -18,15 +18,15 @@ import { describe, expect, it } from "vitest";
 describe("MainBindingsWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
 
-   it("should write empty ipcMain object when pfsArray is empty", async () => {
+   it("should write empty ipc object when pfsArray is empty", async () => {
       const obj = new shared.VitestMainBindingsWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "export const ipcMain = {};";
+      const expectedOutput = "export const ipc = {};";
       expect(buffer.toString()).toStrictEqual(expectedOutput);
    });
 
-   it("should write Unicast RendererToMain callables into ipcMain object", async () => {
+   it("should write Unicast RendererToMain callables into ipc object", async () => {
       const pfsArray = shared.vitestChannelSpecs.Unicast_RendererToMain;
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
@@ -35,15 +35,17 @@ describe("MainBindingsWriter", () => {
          import { ipcMain as electronIpcMain } from "electron";
          import type { IpcMainInvokeEvent } from "electron";
          
-         export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => 
-               electronIpcMain.handle('vitestChannel', (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2)),
+         export const ipc = {
+            vitestChannel: {
+               handle: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) =>
+                  electronIpcMain.handle('vitestChannel', (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => callback(event, arg1, arg2)),
+            },
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write Broadcast RendererToMain callables into ipcMain object", async () => {
+   it("should write Broadcast RendererToMain callables into ipc object", async () => {
       const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
@@ -52,32 +54,17 @@ describe("MainBindingsWriter", () => {
          import { ipcMain as electronIpcMain } from "electron";
          import type { IpcMainEvent } from "electron";
 
-         export const ipcMain = {
-            onVitestChannel: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => 
-               electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
+         export const ipc = {
+            vitestChannel: {
+               on: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>
+                  electronIpcMain.on('vitestChannel', (event: IpcMainEvent, arg1: string, arg2: string) => callback(event, arg1, arg2)),
+            },
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write one callable per listener name when a channel has listeners", async () => {
-      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_RendererToMain, [
-         "onCustomListener1",
-         "onCustomListener2",
-      ]);
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain(
-         "onCustomListener1: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>",
-      );
-      expect(output).toContain(
-         "onCustomListener2: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) =>",
-      );
-      expect(output).not.toContain("onVitestChannel");
-   });
-
-   it("should write Broadcast MainToRenderer callables into ipcMain object", async () => {
+   it("should write Broadcast MainToRenderer callables into ipc object", async () => {
       const pfsArray = shared.vitestChannelSpecs.Broadcast_MainToRenderer;
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
@@ -85,9 +72,11 @@ describe("MainBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import type { BrowserWindow } from "electron";
          
-         export const ipcMain = {
-            sendVitestChannel: (browserWindow: BrowserWindow, arg1: number, ...arg2: number[]) => 
-               browserWindow.webContents.send('vitestChannel', arg1, ...arg2),
+         export const ipc = {
+            vitestChannel: {
+               send: (browserWindow: BrowserWindow, arg1: number, ...arg2: number[]) =>
+                  browserWindow.webContents.send('vitestChannel', arg1, ...arg2),
+            },
          }
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
@@ -147,7 +136,7 @@ describe("MainBindingsWriter", () => {
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
       expect(output).toContain(
-         "onClashIt: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void)",
+         "on: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void)",
       );
       expect(output).toContain(
          "(_event: IpcMainEvent, callback: string, event: number) => _callback(_event, callback, event)",
@@ -169,42 +158,73 @@ describe("MainBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import type { BrowserWindow } from "electron";
 
-         export const ipcMain = {
-            sendFocused: (browserWindow: BrowserWindow, state: boolean, ...tags: string[]) =>
-               browserWindow.webContents.send('focused', state, ...tags),
-            bindFocused: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>, onError?: (error: unknown) => void) => {
-               const listener = async () => {
-                  try {
-                     const args = await provider();
-                     if (!browserWindow.isDestroyed()) {
-                        browserWindow.webContents.send('focused', ...args);
+         export const ipc = {
+            focused: {
+               send: (browserWindow: BrowserWindow, state: boolean, ...tags: string[]) =>
+                  browserWindow.webContents.send('focused', state, ...tags),
+               bind: (browserWindow: BrowserWindow, provider: () => [state: boolean, ...tags: string[]] | Promise<[state: boolean, ...tags: string[]]>, onError?: (error: unknown) => void) => {
+                  const listener = async () => {
+                     try {
+                        const args = await provider();
+                        if (!browserWindow.isDestroyed()) {
+                           browserWindow.webContents.send('focused', ...args);
+                        }
+                     } catch (error) {
+                        (onError ?? console.error)(error);
                      }
-                  } catch (error) {
-                     (onError ?? console.error)(error);
-                  }
-               };
-               browserWindow.on("focus", listener);
-               return () => {
-                  browserWindow.off("focus", listener);
-               };
+                  };
+                  browserWindow.on("focus", listener);
+                  return () => {
+                     browserWindow.off("focus", listener);
+                  };
+               },
             },
          }
       `);
-      // The sender arrow is followed by a newline and a trailing space in the generated code.
-      const expected = expectedOutput
-         .trimStart()
-         .replace("...tags: string[]) =>\n", "...tags: string[]) => \n");
-      expect(buffer.toString()).toStrictEqual(expected);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write only ports into ipcMain object when there are no callables", async () => {
-      // Regression for T52: the empty callables line left a lone comma in the object.
+   it("should write a connect method for Port channels", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toContain("export const ipcMain = {\n   ports: {");
-      expect(buffer.toString()).not.toMatch(/\{\s*,/);
+      const expectedOutput = utils.dedent(`
+         import { MessageChannelMain } from "electron";
+         import type { BrowserWindow } from "electron";
+
+         export const ipc = {
+            vitestChannel: {
+               connect: (winA: BrowserWindow, winB: BrowserWindow) => {
+                  const { port1, port2 } = new MessageChannelMain();
+                  winA.once('ready-to-show', () => {
+                     winA.webContents.postMessage('vitestChannel', null, [port1]);
+                  });
+                  winB.once('ready-to-show', () => {
+                     winB.webContents.postMessage('vitestChannel', null, [port2]);
+                  });
+               },
+            },
+         }
+      `);
+      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+   });
+
+   it("should write one object per channel, sorted by name, with no top-level helpers", async () => {
+      const pfsArray = shared.buildFileSpecs(
+         { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "alpha", kind: "Port", direction: "RendererToRenderer" },
+         { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
+         { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
+      );
+      const obj = new shared.VitestMainBindingsWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      const keys = [...output.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
+      expect(keys).toStrictEqual(["Beta", "alpha", "gamma", "zeta"]);
+      expect(output).not.toMatch(/^ {3}ports: \{/m);
+      expect(output).not.toMatch(/\b(propagate|onBeta|sendZeta)\b/);
    });
 
    it("should import ipcMain from electron only for RendererToMain channels", async () => {

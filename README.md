@@ -22,9 +22,9 @@ Node library for generating IPC components for Electron apps.
 ### Features
 
 1) Declarative IPC schema using a typed channel map
-2) Generation of sender and listener callables for the main process
+2) Generation of one typed object per channel for the main process, `ipc.<name>`
 3) Generation of preload bindings for renderer processes
-4) Generation of typehints for the renderer Window object
+4) Generation of typehints for the `ipc` object of the renderer, also reachable as `window.ipc`
 5) Automatic import of user-defined types for generated components
 6) BrowserWindow event triggers for `emit` channels
 
@@ -98,7 +98,7 @@ Rules of the schema file:
  - Export the map with `export default defineChannels({...})` or `export const channels = defineChannels({...})`.
  - Use only one `defineChannels` call per file. In a `schema` directory, each file may have its own map.
  - Channel names are plain identifier keys in camelCase, at least 3 characters long. Spreads, computed keys and nested objects are not supported.
- - Generated member names capitalize the channel name, so `echoUserName` becomes `sendEchoUserName` and `onEchoUserName`.
+ - Each channel becomes an object named after its key, such as `ipc.echoUserName`. Names that every object has, such as `constructor` or `toString`, are rejected.
  - Aliased imports work, such as `import { invoke as call } from "automate-electron-ipc"`.
 
 
@@ -119,17 +119,21 @@ _Note: For brevity sake, other important code related to BrowserWindow has been 
 In main process source code file `src/main/index.ts`:
 ```typescript
 import { app } from "electron";
-import { ipcMain } from "../autoipc/main";
+import { ipc } from "../autoipc/main";
 
 app.whenReady().then(() => {
-   ipcMain.onEchoUserName((event, userName) => console.log(`Greetings, ${userName}!`));
+   ipc.echoUserName.on((event, userName) => console.log(`Greetings, ${userName}!`));
 });
 ```
 
 Anywhere in renderer process source code:
 ```html
-<button onClick={() => window.ipc.sendEchoUserName("Anonymous")}>
+<button onClick={() => ipc.echoUserName.send("Anonymous")}>
 ```
+
+In the renderer, `ipc` is a global variable, so `window.ipc.echoUserName.send("Anonymous")` and
+`globalThis.ipc` are the same typed object. The main process imports its own `ipc` from the generated
+`main.ts`; it is a different object with the methods of the main process.
 
 The example code provides only basic HTML, because this library is front-end-tech agnostic,
 meaning you can use any front-end framework or library like React, Vue or Angular.
@@ -166,14 +170,14 @@ export default defineChannels({
 | `port`   | RendererToRenderer | `void` or `Promise<void>`    |
 
 The only supported option is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
-The sender of an `emit` channel, `ipcMain.sendProgress(browserWindow, n)`, always sends immediately.
-With a `trigger`, the main bindings also contain `ipcMain.bindProgress(browserWindow, provider)`.
+The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
+With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
 It registers one listener for the event, calls `provider` each time the event fires, sends the
 argument list that `provider` returns (or resolves to), and returns a function which removes the
 listener:
 
 ```typescript
-const dispose = ipcMain.bindProgress(browserWindow, () => [currentProgress()]);
+const dispose = ipc.progress.bind(browserWindow, () => [currentProgress()]);
 // Later, to stop sending on focus:
 dispose();
 ```
@@ -182,8 +186,46 @@ If `provider` throws or rejects, that send is skipped and later events still sen
 the optional third argument, `(error: unknown) => void`, or to `console.error` without it:
 
 ```typescript
-ipcMain.bindProgress(browserWindow, () => [currentProgress()], (error) => log.warn(error));
+ipc.progress.bind(browserWindow, () => [currentProgress()], (error) => log.warn(error));
 ```
+
+
+### The Generated API
+
+Every channel is an object named after its key in the channel map. The methods of the object depend
+on the verb of the channel and on the process that uses it:
+
+| Verb     | Main process (`ipc` from `main.ts`) | Renderer (global `ipc`, also `window.ipc`)        |
+|----------|-------------------------------------|---------------------------------------------------|
+| `invoke` | `ipc.<name>.handle(callback)`       | `ipc.<name>.invoke(...args)`                      |
+| `send`   | `ipc.<name>.on(callback)`           | `ipc.<name>.send(...args)`                        |
+| `emit`   | `ipc.<name>.send(window, ...args)`  | `ipc.<name>.on(callback)`                         |
+| `port`   | `ipc.<name>.connect(winA, winB)`    | `ipc.<name>.send(...args)`, `ipc.<name>.on(callback)` |
+
+A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
+The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
+
+#### Migrating from 0.2
+
+The generated names changed in 1.0.0. The `listeners` option is gone as well: to have several
+subscribers, call `.on()` more than once.
+
+| 0.2                                       | 1.0                                  |
+|-------------------------------------------|--------------------------------------|
+| `import { ipcMain } from "./main"`        | `import { ipc } from "./main"`       |
+| `ipcMain.onGetUser(cb)` (`invoke`)        | `ipc.getUser.handle(cb)`             |
+| `ipcMain.onEchoUserName(cb)` (`send`)     | `ipc.echoUserName.on(cb)`            |
+| `ipcMain.sendProgress(win, n)`            | `ipc.progress.send(win, n)`          |
+| `ipcMain.bindProgress(win, provider)`     | `ipc.progress.bind(win, provider)`   |
+| `ipcMain.ports.chat.propagate(winA, winB)`| `ipc.chat.connect(winA, winB)`       |
+| `window.ipc.sendGetUser(id)` (`invoke`)   | `ipc.getUser.invoke(id)`             |
+| `window.ipc.sendEchoUserName(name)` (`send`) | `ipc.echoUserName.send(name)`     |
+| `window.ipc.onProgress(cb)`               | `ipc.progress.on(cb)`                |
+| `window.ipc.ports.chat.sendMessage(...)`  | `ipc.chat.send(...)`                 |
+| `window.ipc.ports.chat.onMessage(cb)`     | `ipc.chat.on(cb)`                    |
+| `interface Window { ipc: {...} }` and `export default Window` in `window.d.ts` | `declare global { var ipc: IpcApi }` |
+
+`window.ipc` keeps working, since `ipc` is a global variable.
 
 
 ### The `as` Form

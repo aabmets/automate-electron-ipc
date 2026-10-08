@@ -92,7 +92,7 @@ export class BaseWriter {
    }
 
    protected getCodeIndents(): string[] {
-      return [1, 2, 3, 4, 5].map((value) => {
+      return [1, 2, 3, 4, 5, 6].map((value) => {
          return " ".repeat(this.config.codeIndent).repeat(value);
       });
    }
@@ -210,30 +210,11 @@ export class BaseWriter {
    }
 
    /**
-    * Sorts the callables by prefix (`on`, `send`, then the rest, such as `bind`) and then by
-    * member name, in code unit order, so that the output does not depend on the locale.
-    * A callable is the text of a member, `name: ...`, and only the name takes part in the order:
-    * `sendFoo` comes before `sendFoo2` although `:` sorts after `2`.
+    * Sorts the channels by name, in code unit order, so that the output does not depend on
+    * the locale: `getFoo` comes before `getFoo2`, and upper case before lower case.
     */
-   protected sortCallablesArray(callablesArray: string[]): string[] {
-      const prefixOrder = ["on", "send"];
-      const nameOf = (callable: string) => {
-         const colon = callable.indexOf(":");
-         return colon === -1 ? callable : callable.slice(0, colon).trim();
-      };
-      const getPrefixRank = (name: string) => {
-         const rank = prefixOrder.findIndex((prefix) => name.startsWith(prefix));
-         return rank === -1 ? prefixOrder.length : rank;
-      };
-      return callablesArray.sort((a, b) => {
-         const nameA = nameOf(a);
-         const nameB = nameOf(b);
-         return (
-            getPrefixRank(nameA) - getPrefixRank(nameB) ||
-            utils.compareStrings(nameA, nameB) ||
-            utils.compareStrings(a, b)
-         );
-      });
+   protected sortChannels<T extends { name: string }>(channels: T[]): T[] {
+      return channels.sort((a, b) => utils.compareStrings(a.name, b.name));
    }
 
    public async write(withNotice = true) {

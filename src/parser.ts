@@ -1094,7 +1094,7 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
 
    applyExportSpecifiers(module.body as AstNode[], typeSpecArray);
 
-   const channelSpecArray = vld.validateChannelSpecs(channelSpecs);
+   const channelSpecArray = vld.validateChannelSpecs(channelSpecs, file);
    return {
       typeSpecArray: vld.validateTypeSpecs(typeSpecArray, channelSpecArray),
       channelSpecArray,

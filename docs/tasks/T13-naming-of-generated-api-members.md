@@ -43,4 +43,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - An e2e test that the generated files type-check, that `ipc.<name>` exposes only the methods its
     verb allows, and that both `ipc` and `window.ipc` are typed in renderer code.
   - A validator test for the reserved-name check.
-- **Delivered:**
+- **Delivered:** 2026-10-08. All three writers emit one object per channel, sorted by name in code unit order; the main export is `ipc`, and `window.d.ts` declares `interface IpcApi` and `declare global { var ipc: IpcApi }` (the old `interface Window` and `export default Window` are gone, and `IpcApi` replaces `Window` in the reserved names of that file). Reserved channel names are the own property names of `Object.prototype`, checked in `validateChannelSpecs`, which the parser now calls with the file so the error names file and channel. Beyond the scope: the generated code no longer has the trailing space after `=>`; `utils.capitalize` and `utils.findDuplicates` were removed because nothing used them any more; biome got an `ipc` global for `tests/fixtures`; `getCodeIndents` returns six levels. Follow-up: T72.

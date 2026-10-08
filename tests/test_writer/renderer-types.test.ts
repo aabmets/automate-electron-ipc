@@ -19,83 +19,83 @@ import { describe, expect, it } from "vitest";
 describe("RendererTypesWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
 
-   it("should write empty Window declaration as a module when pfsArray is empty", async () => {
+   it("should write an empty ipc declaration as a module when pfsArray is empty", async () => {
       const obj = new shared.VitestRendererTypesWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = "export {};\n\ndeclare global {\n   interface Window {}\n}";
-      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+      const expectedOutput = utils.dedent(`
+         interface IpcApi {}
+
+         declare global {
+            var ipc: IpcApi;
+         }
+
+         export {};
+      `);
+      expect(buffer.toString()).toStrictEqual(`${expectedOutput.trim()}\n`);
    });
 
-   it("should write Unicast RendererToMain callables into Window declaration", async () => {
+   it("should write Unicast RendererToMain callables into the ipc declaration", async () => {
       const pfsArray = shared.vitestChannelSpecs.Unicast_RendererToMain;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
+         interface IpcApi {
+            vitestChannel: {
+               invoke: (arg1: CustomType, arg2?: CustomType) => Promise<string>;
+            };
+         }
+
          declare global {
-            interface Window {
-               ipc: {
-                  sendVitestChannel: (arg1: CustomType, arg2?: CustomType) => Promise<string>;
-               };
-            }
-         }\n
-         export default Window;
+            var ipc: IpcApi;
+         }
+
+         export {};
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write Broadcast RendererToMain callables into Window declaration", async () => {
+   it("should write Broadcast RendererToMain callables into the ipc declaration", async () => {
       const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
+         interface IpcApi {
+            vitestChannel: {
+               send: (arg1: string, arg2: string) => void;
+            };
+         }
+
          declare global {
-            interface Window {
-               ipc: {
-                  sendVitestChannel: (arg1: string, arg2: string) => void;
-               };
-            }
-         }\n
-         export default Window;
+            var ipc: IpcApi;
+         }
+
+         export {};
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
 
-   it("should write Broadcast MainToRenderer callables into Window declaration", async () => {
+   it("should write Broadcast MainToRenderer callables into the ipc declaration", async () => {
       const pfsArray = shared.vitestChannelSpecs.Broadcast_MainToRenderer;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
+         interface IpcApi {
+            vitestChannel: {
+               on: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;
+            };
+         }
+
          declare global {
-            interface Window {
-               ipc: {
-                  onVitestChannel: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;
-               };
-            }
-         }\n
-         export default Window;
+            var ipc: IpcApi;
+         }
+
+         export {};
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
-   });
-
-   it("should write one callable per listener name when a channel has listeners", async () => {
-      const pfsArray = shared.withListeners(shared.vitestChannelSpecs.Broadcast_MainToRenderer, [
-         "onCustomListener1",
-         "onCustomListener2",
-      ]);
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
-      expect(output).toContain(
-         "onCustomListener1: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;",
-      );
-      expect(output).toContain(
-         "onCustomListener2: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => void;",
-      );
-      expect(output).not.toContain("onVitestChannel");
    });
 
    it("should type senders by channel kind, not by the declared return type", async () => {
@@ -128,34 +128,82 @@ describe("RendererTypesWriter", () => {
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
-      expect(output).toContain("sendAsyncIt: (id: number) => Promise<string>;");
-      expect(output).toContain("sendSendIt: (text: string) => void;");
-      expect(output).toContain("sendSyncIt: () => Promise<Awaited<number>>;");
+      expect(output).toContain("asyncIt: {\n      invoke: (id: number) => Promise<string>;");
+      expect(output).toContain("sendIt: {\n      send: (text: string) => void;");
+      expect(output).toContain("syncIt: {\n      invoke: () => Promise<Awaited<number>>;");
       // Regression for T56: a user type whose name starts with "Promise" is not a promise.
-      expect(output).toContain("sendLookalikeIt: () => Promise<Awaited<PromiseResult>>;");
+      expect(output).toContain(
+         "lookalikeIt: {\n      invoke: () => Promise<Awaited<PromiseResult>>;",
+      );
    });
 
-   it("should write only ports into Window declaration when there are no callables", async () => {
+   it("should write send and on methods for Port channels", async () => {
       const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
+         interface IpcApi {
+            vitestChannel: {
+               send: (arg1: string, arg2: string) => void;
+               on: (callback: (arg1: string, arg2: string) => void) => void;
+            };
+         }
+
          declare global {
-            interface Window {
-               ipc: {
-                  ports: {
-                     vitestChannel: {
-                        sendMessage: (arg1: string, arg2: string) => void;
-                        onMessage: (callback: (arg1: string, arg2: string) => void) => void;
-                     };
-                  };
-               };
-            }
-         }\n
-         export default Window;
+            var ipc: IpcApi;
+         }
+
+         export {};
       `);
-      expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
+      expect(buffer.toString()).toStrictEqual(`${expectedOutput.trim()}\n`);
+   });
+
+   it("should write one object per channel, sorted by name, with no ports object", async () => {
+      const pfsArray = shared.buildFileSpecs(
+         { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "alpha", kind: "Port", direction: "RendererToRenderer" },
+         { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
+         { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
+      );
+      const obj = new shared.VitestRendererTypesWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      const keys = [...output.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
+      expect(keys).toStrictEqual(["Beta", "alpha", "gamma", "zeta"]);
+      expect(output).not.toMatch(/\bports\b|Window|sendMessage|onMessage/);
+   });
+
+   it("should not take the name of the generated interface for a schema type", async () => {
+      const pfsArray = [
+         {
+            fullPath: "/project/ipc/schema.ts",
+            relativePath: "schema.ts",
+            specs: {
+               channelMapExport: { kind: "default" },
+               importSpecArray: [],
+               typeSpecArray: [
+                  { name: "IpcApi", kind: "interface", generics: null, isExported: true },
+               ],
+               channelSpecArray: [
+                  {
+                     name: "getApi",
+                     kind: "Unicast",
+                     direction: "RendererToMain",
+                     signature: shared.parseTestSignature("() => Promise<IpcApi>"),
+                  },
+               ],
+            },
+         },
+      ] as t.ParsedFileSpecs[];
+      const obj = new shared.VitestRendererTypesWriter(pfsArray);
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+
+      expect(output).toMatch(/^import type \{ IpcApi as IpcApi_2 \} from ".*\/schema";$/m);
+      expect(output).toContain("invoke: () => Promise<IpcApi_2>;");
+      expect(output).toContain("interface IpcApi {");
    });
 
    it("should import colliding type names under distinct names and use them in signatures", async () => {
@@ -184,7 +232,7 @@ describe("RendererTypesWriter", () => {
 
       expect(output).toMatch(/^import type \{ User \} from ".*\/a";$/m);
       expect(output).toMatch(/^import type \{ User as User_2 \} from ".*\/b";$/m);
-      expect(output).toContain("sendGetA: () => Promise<User>;");
-      expect(output).toContain("sendGetB: () => Promise<User_2>;");
+      expect(output).toContain("invoke: () => Promise<User>;");
+      expect(output).toContain("invoke: () => Promise<User_2>;");
    });
 });

@@ -149,31 +149,6 @@ export function dedent(text: string): string {
    return lines.map((line) => line.slice(indent)).join("\n");
 }
 
-/**
- * Uppercases the first character of a string, such as `getUser` to `GetUser`.
- *
- * @param text - The string to capitalize.
- * @returns The string with its first character in uppercase.
- */
-export function capitalize(text: string): string {
-   return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/**
- * Finds and returns duplicates from an array.
- *
- * @param array - Collection of objects in an array.
- * @returns Found duplicates array.
- */
-export function findDuplicates<T>(array: T[]): T[] {
-   return array.reduce((acc, item, index, originalArray) => {
-      if (originalArray.indexOf(item) !== index && !acc.includes(item)) {
-         acc.push(item);
-      }
-      return acc;
-   }, [] as T[]);
-}
-
 export default {
    searchUpwards,
    resolveUserProjectPath,
@@ -182,6 +157,4 @@ export default {
    concatRegex,
    isPathInside,
    dedent,
-   capitalize,
-   findDuplicates,
 };

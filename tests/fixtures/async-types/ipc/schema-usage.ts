@@ -2,7 +2,7 @@
 // so that the type-check fails when an invoke sender is not typed as a promise.
 import type { PromiseResult } from "./schema";
 
-export const plain: Promise<number> = window.ipc.sendPlain();
-export const userType: Promise<PromiseResult> = window.ipc.sendUserType();
-export const promiseLike: Promise<string> = window.ipc.sendPromiseLike();
-export const real: Promise<string> = window.ipc.sendReal(1);
+export const plain: Promise<number> = window.ipc.plain.invoke();
+export const userType: Promise<PromiseResult> = ipc.userType.invoke();
+export const promiseLike: Promise<string> = window.ipc.promiseLike.invoke();
+export const real: Promise<string> = ipc.real.invoke(1);

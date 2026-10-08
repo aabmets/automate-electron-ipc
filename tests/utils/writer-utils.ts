@@ -40,8 +40,8 @@ export class VitestBaseWriter extends BaseWriter {
    public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
       return super.getOriginalParams(spec, withTypes);
    }
-   public sortCallablesArray(callablesArray: string[]): string[] {
-      return super.sortCallablesArray(callablesArray);
+   public sortChannels<T extends { name: string }>(channels: T[]): T[] {
+      return super.sortChannels(channels);
    }
    public getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
       return super.getChannelSpecs(parsedFileSpecs);
@@ -103,23 +103,6 @@ function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] 
    ];
 }
 
-/**
- * Gives every channel of the file specs the listener names. The parser never sets `listeners`,
- * but the writers support them, so their tests set them explicitly.
- */
-export function withListeners(
-   pfsArray: t.ParsedFileSpecs[],
-   listeners: string[],
-): t.ParsedFileSpecs[] {
-   return pfsArray.map((pfs) => ({
-      ...pfs,
-      specs: {
-         ...pfs.specs,
-         channelSpecArray: pfs.specs.channelSpecArray.map((spec) => ({ ...spec, listeners })),
-      },
-   }));
-}
-
 /** Parses a signature text the same way the parser does for real schema files. */
 export function parseTestSignature(definition: string, locals: string[] = []): t.CallableSignature {
    const { module, src } = parser.parseModule(`type T = ${definition};`);
@@ -159,7 +142,6 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
 export default {
    buildFileSpecs,
    parseTestSignature,
-   withListeners,
    VitestBaseWriter,
    VitestMainBindingsWriter,
    VitestPreloadBindingsWriter,

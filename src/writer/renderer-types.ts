@@ -13,33 +13,38 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
+interface ChannelEntry {
+   name: string;
+   /** The methods of the channel, one per line, starting with a newline. */
+   methods: string[];
+}
+
 export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.rendererTypesFilePath;
    }
    protected getReservedNames(): string[] {
-      // `Promise` and `Awaited` are globals that the generated code uses.
-      return ["Window", "Promise", "Awaited"];
+      // `IpcApi` is declared by the generated file. `Promise` and `Awaited` are globals
+      // that the generated code uses.
+      return ["IpcApi", "Promise", "Awaited"];
    }
    protected renderEmptyFileContents(): string {
-      // `declare global` is only valid inside a module, hence the empty export.
-      return `export {};\n\ndeclare global {\n${this.indents[0]}interface Window {}\n}`;
+      return this.renderDeclaration([]);
    }
    protected renderFileContents(): string {
       const out: string[] = [];
-      const portsArray: string[] = [];
-      const callablesArray: string[] = [];
+      const channels: ChannelEntry[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
             if (spec.direction === "RendererToMain") {
-               this.addRendererToMainCallables(spec, callablesArray);
+               channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
-               this.addMainToRendererCallables(spec, callablesArray);
+               channels.push(this.buildMainToRendererChannel(spec));
             } else if (spec.direction === "RendererToRenderer") {
-               portsArray.push(this.buildRendererToRendererPort(spec));
+               channels.push(this.buildPortChannel(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -55,35 +60,29 @@ export class RendererTypesWriter extends BaseWriter {
          }
       }
       out.sort(utils.compareStrings);
-      const windowDeclaration = [
-         "\ndeclare global {",
-         `\n${this.indents[0]}interface Window {`,
-         `\n${this.indents[1]}ipc: {`,
-      ];
-      if (callablesArray.length > 0) {
-         const sortedCallables = this.sortCallablesArray(callablesArray);
-         windowDeclaration.push(
-            `\n${this.indents[2]}${sortedCallables.join(`\n${this.indents[2]}`)}`,
-         );
-      }
-      if (portsArray.length > 0) {
-         windowDeclaration.push(
-            ...[`\n${this.indents[2]}ports: {`, ...portsArray, `\n${this.indents[2]}};`],
-         );
-      }
-      windowDeclaration.push(
-         ...[
-            `\n${this.indents[1]}};`,
-            `\n${this.indents[0]}}`,
-            "\n}\n\n",
-            "export default Window;\n",
-         ],
-      );
-
-      out.push(windowDeclaration.join(""));
+      out.push(this.renderDeclaration(channels));
       return out.join("\n");
    }
-   private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+   /**
+    * `ipc` is declared as a global variable, which types the bare `ipc`, `window.ipc` and
+    * `globalThis.ipc` alike. The empty export makes the file a module, which `declare global`
+    * requires.
+    */
+   private renderDeclaration(channels: ChannelEntry[]): string {
+      const i0 = this.indents[0];
+      const members = this.sortChannels(channels).flatMap((channel) => [
+         `\n${i0}${channel.name}: {`,
+         ...channel.methods,
+         `\n${i0}};`,
+      ]);
+      const body = members.length > 0 ? `${members.join("")}\n` : "";
+      return [
+         `\ninterface IpcApi {${body}}`,
+         `\ndeclare global {\n${i0}var ipc: IpcApi;\n}`,
+         "\nexport {};\n",
+      ].join("\n");
+   }
+   private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       let ipcSignature = spec.signature.definition;
       const typeParams = this.getTypeParams(spec.signature);
       const signatureHead = `${typeParams}(${this.getOriginalParams(spec, false)})`;
@@ -94,20 +93,24 @@ export class RendererTypesWriter extends BaseWriter {
          // `ipcRenderer.invoke` always returns a promise, which resolves the thenables inside.
          ipcSignature = `${signatureHead} => Promise<Awaited<${spec.signature.returnType}>>`;
       }
-      callablesArray.push(`send${utils.capitalize(spec.name)}: ${ipcSignature};`);
+      const method = spec.kind === "Broadcast" ? "send" : "invoke";
+      return { name: spec.name, methods: [this.method(method, ipcSignature)] };
    }
-   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
-      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
-      callableNames.forEach((name) => {
-         callablesArray.push(`${name}: (callback: ${spec.signature.definition}) => void;`);
-      });
+   private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
+      const on = this.method("on", `(callback: ${spec.signature.definition}) => void`);
+      return { name: spec.name, methods: [on] };
    }
-   private buildRendererToRendererPort(spec: t.ChannelSpec): string {
-      return [
-         `\n${this.indents[3]}${spec.name}: {`,
-         `\n${this.indents[4]}sendMessage: ${spec.signature.definition};`,
-         `\n${this.indents[4]}onMessage: (callback: ${spec.signature.definition}) => void;`,
-         `\n${this.indents[3]}};`,
-      ].join("");
+   private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
+      const definition = spec.signature.definition;
+      return {
+         name: spec.name,
+         methods: [
+            this.method("send", definition),
+            this.method("on", `(callback: ${definition}) => void`),
+         ],
+      };
+   }
+   private method(name: string, type: string): string {
+      return `\n${this.indents[1]}${name}: ${type};`;
    }
 }

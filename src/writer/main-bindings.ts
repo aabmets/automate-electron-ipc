@@ -13,13 +13,19 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
+interface ChannelEntry {
+   name: string;
+   /** The members of the channel object, one per line, indented for the object body. */
+   members: string[];
+}
+
 export class MainBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.mainBindingsFilePath;
    }
    protected getReservedNames(): string[] {
       return [
-         "ipcMain",
+         "ipc",
          "electronIpcMain",
          "MessageChannelMain",
          "BrowserWindow",
@@ -30,7 +36,7 @@ export class MainBindingsWriter extends BaseWriter {
       ];
    }
    protected renderEmptyFileContents(): string {
-      return "export const ipcMain = {};";
+      return "export const ipc = {};";
    }
    protected renderFileContents(): string {
       // Only the imports that the generated code uses.
@@ -38,8 +44,7 @@ export class MainBindingsWriter extends BaseWriter {
       const electronImportsSet = new Set<string>();
       const electronTypeImportsSet = new Set<string>();
       const importDeclarationsArray: string[] = [];
-      const callablesArray: string[] = [];
-      const portsArray: string[] = [];
+      const channels: ChannelEntry[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
@@ -48,14 +53,14 @@ export class MainBindingsWriter extends BaseWriter {
             if (spec.direction === "RendererToMain") {
                usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
-               this.addRendererToMainCallables(spec, callablesArray);
+               channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
                electronTypeImportsSet.add("BrowserWindow");
-               this.addMainToRendererCallables(spec, callablesArray);
+               channels.push(this.buildMainToRendererChannel(spec));
             } else if (spec.direction === "RendererToRenderer") {
                electronImportsSet.add("MessageChannelMain");
                electronTypeImportsSet.add("BrowserWindow");
-               portsArray.push(this.buildRendererToRendererPort(spec));
+               channels.push(this.buildPortChannel(spec));
             }
             const specCustomTypes = new Set(spec.signature.customTypes);
             customTypes = customTypes.union(specCustomTypes);
@@ -83,17 +88,10 @@ export class MainBindingsWriter extends BaseWriter {
             : []),
          ...importDeclarationsArray.sort(utils.compareStrings),
       ];
-      const bindingsExpression = ["\nexport const ipcMain = {"];
-      if (callablesArray.length > 0) {
-         const sortedCallables = this.sortCallablesArray(callablesArray);
-         bindingsExpression.push(
-            `\n${this.indents[0]}${sortedCallables.join(`,\n${this.indents[0]}`)},`,
-         );
-      }
-      if (portsArray.length > 0) {
-         bindingsExpression.push(
-            ...[`\n${this.indents[0]}ports: {`, ...portsArray, `\n${this.indents[0]}},`],
-         );
+      const [i0] = this.indents;
+      const bindingsExpression = ["\nexport const ipc = {"];
+      for (const channel of this.sortChannels(channels)) {
+         bindingsExpression.push(`\n${i0}${channel.name}: {`, ...channel.members, `\n${i0}},`);
       }
       bindingsExpression.push("\n}\n");
 
@@ -107,7 +105,9 @@ export class MainBindingsWriter extends BaseWriter {
    private getEventType(spec: t.ChannelSpec): string {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
    }
-   private addRendererToMainCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+   /** `ipc.<name>.handle(callback)` for `invoke` channels and `ipc.<name>.on(callback)` for `send`. */
+   private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2] = this.indents;
       const method = spec.kind === "Broadcast" ? "on" : "handle";
       const eventType = this.getEventType(spec);
       // The names of the generated parameters must not shadow the ones of the signature.
@@ -119,15 +119,18 @@ export class MainBindingsWriter extends BaseWriter {
       const listener =
          `${this.getTypeParams(spec.signature)}(${wrapperParams.filter(Boolean).join(", ")}) => ` +
          `${callbackName}(${forwarded.filter(Boolean).join(", ")})`;
-      const ipcMain = `\n${this.indents[1]}electronIpcMain.${method}('${spec.name}', ${listener})`;
       const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
-      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
-      callableNames.forEach((name) => {
-         callablesArray.push(`${name}: (${callbackName}: ${modSigDef}) => ${ipcMain}`);
-      });
+      return {
+         name: spec.name,
+         members: [
+            `\n${i1}${method}: (${callbackName}: ${modSigDef}) =>`,
+            `\n${i2}electronIpcMain.${method}('${spec.name}', ${listener}),`,
+         ],
+      };
    }
-   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
-      const capitalized = utils.capitalize(spec.name);
+   /** `ipc.<name>.send(window, ...args)`, and `ipc.<name>.bind(window, provider)` with a trigger. */
+   private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2] = this.indents;
       // The name of the window parameter must not shadow a parameter of the signature.
       const taken = this.collectIdentifiers([spec.signature.definition]);
       const windowName = this.uniqueName("browserWindow", taken);
@@ -136,60 +139,58 @@ export class MainBindingsWriter extends BaseWriter {
       const ipcParams = this.getOriginalParams(spec, false);
       const typeParams = this.getTypeParams(spec.signature);
       const ipcSignature = `${typeParams}(${windowName}: BrowserWindow, ${ipcParams})`;
-      callablesArray.push(`send${capitalized}: ${ipcSignature} => \n${this.indents[1]}${sender}`);
+      const members = [`\n${i1}send: ${ipcSignature} =>`, `\n${i2}${sender},`];
       if (spec.trigger) {
-         callablesArray.push(this.buildTriggerBinder(spec));
+         members.push(`\n${this.buildTriggerBinder(spec)}`);
       }
+      return { name: spec.name, members };
    }
    /**
-    * Builds `bind<Name>(browserWindow, provider)`, which registers one listener for the trigger
+    * Builds `bind(browserWindow, provider)`, which registers one listener for the trigger
     * event, evaluates the provider each time the event fires and returns a disposer.
     * An error of the provider or of the send skips that send and goes to `onError`,
     * or to `console.error` without it, so that it is never an unhandled rejection.
     */
    private buildTriggerBinder(spec: t.ChannelSpec): string {
-      const [i0, i1, i2, i3, i4] = this.indents;
+      const [, i1, i2, i3, i4, i5] = this.indents;
       const args = `[${this.getOriginalParams(spec, false)}]`;
       const provider = `provider: () => ${args} | Promise<${args}>`;
       const onError = "onError?: (error: unknown) => void";
       const event = JSON.stringify(spec.trigger);
       const typeParams = this.getTypeParams(spec.signature);
       return [
-         `bind${utils.capitalize(spec.name)}: ${typeParams}(browserWindow: BrowserWindow, ${provider}, ${onError}) => {`,
-         `${i1}const listener = async () => {`,
-         `${i2}try {`,
-         `${i3}const args = await provider();`,
-         `${i3}if (!browserWindow.isDestroyed()) {`,
-         `${i4}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i1}bind: ${typeParams}(browserWindow: BrowserWindow, ${provider}, ${onError}) => {`,
+         `${i2}const listener = async () => {`,
+         `${i3}try {`,
+         `${i4}const args = await provider();`,
+         `${i4}if (!browserWindow.isDestroyed()) {`,
+         `${i5}browserWindow.webContents.send('${spec.name}', ...args);`,
+         `${i4}}`,
+         `${i3}} catch (error) {`,
+         `${i4}(onError ?? console.error)(error);`,
          `${i3}}`,
-         `${i2}} catch (error) {`,
-         `${i3}(onError ?? console.error)(error);`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}browserWindow.on(${event}, listener);`,
-         `${i1}return () => {`,
-         `${i2}browserWindow.off(${event}, listener);`,
-         `${i1}};`,
-         `${i0}}`,
+         `${i2}};`,
+         `${i2}browserWindow.on(${event}, listener);`,
+         `${i2}return () => {`,
+         `${i3}browserWindow.off(${event}, listener);`,
+         `${i2}};`,
+         `${i1}},`,
       ].join("\n");
    }
-   private buildRendererToRendererPort(spec: t.ChannelSpec): string {
-      const ipcSig = "(bwOne: BrowserWindow, bwTwo: BrowserWindow)";
-      const propagator = [
-         "{",
-         `${this.indents[3]}const { port1, port2 } = new MessageChannelMain();`,
-         `${this.indents[3]}bwOne.once('ready-to-show', () => {`,
-         `${this.indents[4]}bwOne.webContents.postMessage('${spec.name}', null, [port1]);`,
-         `${this.indents[3]}});`,
-         `${this.indents[3]}bwTwo.once('ready-to-show', () => {`,
-         `${this.indents[4]}bwTwo.webContents.postMessage('${spec.name}', null, [port2]);`,
-         `${this.indents[3]}});`,
-         `${this.indents[2]}},`,
+   /** `ipc.<name>.connect(winA, winB)`, which hands one end of a new port to each window. */
+   private buildPortChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2, i3] = this.indents;
+      const connector = [
+         `\n${i1}connect: (winA: BrowserWindow, winB: BrowserWindow) => {`,
+         `${i2}const { port1, port2 } = new MessageChannelMain();`,
+         `${i2}winA.once('ready-to-show', () => {`,
+         `${i3}winA.webContents.postMessage('${spec.name}', null, [port1]);`,
+         `${i2}});`,
+         `${i2}winB.once('ready-to-show', () => {`,
+         `${i3}winB.webContents.postMessage('${spec.name}', null, [port2]);`,
+         `${i2}});`,
+         `${i1}},`,
       ].join("\n");
-      return [
-         `\n${this.indents[1]}${spec.name}: {`,
-         `\n${this.indents[2]}propagate: ${ipcSig} => ${propagator}`,
-         `\n${this.indents[1]}},`,
-      ].join("");
+      return { name: spec.name, members: [connector] };
    }
 }

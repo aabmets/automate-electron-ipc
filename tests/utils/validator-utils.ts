@@ -23,17 +23,13 @@ export class ChannelSpecGenerator {
       direction: t.ChannelDirection,
       kind: t.ChannelKind,
       returnType = "void",
-      listeners: string[] | null = null,
    ): t.ChannelSpec {
-      const spec = {
+      const spec: t.ChannelSpec = {
          name: `vitestChannel_${this.index}`,
          kind,
          direction,
          signature: parseTestSignature(`() => ${returnType}`),
       };
-      if (listeners) {
-         Object.assign(spec, { listeners });
-      }
       ++this.index;
       return spec;
    }

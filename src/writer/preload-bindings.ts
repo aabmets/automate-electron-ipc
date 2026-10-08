@@ -13,6 +13,12 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
+interface ChannelEntry {
+   name: string;
+   /** The property of the exposed object, starting with a newline. */
+   property: string;
+}
+
 export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.preloadBindingsFilePath;
@@ -25,40 +31,34 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
    protected renderFileContents(): string {
       const portNamesArray: string[] = [];
-      const callablesArray: string[] = [];
+      const channels: ChannelEntry[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
             if (spec.direction === "RendererToMain") {
-               callablesArray.push(this.buildRendererToMainCallable(spec));
+               channels.push(this.buildRendererToMainChannel(spec));
             } else if (spec.direction === "MainToRenderer") {
-               this.addMainToRendererCallables(spec, callablesArray);
+               channels.push(this.buildMainToRendererChannel(spec));
             } else if (spec.direction === "RendererToRenderer") {
                portNamesArray.push(spec.name);
+               channels.push({
+                  name: spec.name,
+                  property: `\n${this.indents[0]}${spec.name}: getPortObject('${spec.name}'),`,
+               });
             }
          }
       }
       const out: string[] = ['import { contextBridge, ipcRenderer } from "electron";'];
-      const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
-      if (callablesArray.length > 0) {
-         const sortedCallables = this.sortCallablesArray(callablesArray);
-         bindingsExpression.push(
-            `\n${this.indents[0]}${sortedCallables.join(`,\n${this.indents[0]}`)},`,
-         );
-      }
       if (portNamesArray.length > 0) {
-         const portComponents = [
+         out.push(
             'import type { IpcRendererEvent } from "electron";',
             this.getPortComponents(),
             ...portNamesArray.map((portName) => this.getPortInitializer(portName).trim()),
-         ];
-         out.push(...portComponents);
-         const portBindings = [
-            `\n${this.indents[0]}ports: {`,
-            ...portNamesArray.map((portName) => this.getPortProperty(portName)),
-            `\n${this.indents[0]}},`,
-         ];
-         bindingsExpression.push(...portBindings);
+         );
+      }
+      const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
+      for (const channel of this.sortChannels(channels)) {
+         bindingsExpression.push(channel.property);
       }
       bindingsExpression.push("\n});\n");
 
@@ -66,29 +66,33 @@ export class PreloadBindingsWriter extends BaseWriter {
       return out.join("\n");
    }
 
-   private buildRendererToMainCallable(spec: t.ChannelSpec): string {
+   /** `ipc.<name>.invoke(...args)` for `invoke` channels and `ipc.<name>.send(...args)` for `send`. */
+   private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
       const ipcRenderer = `ipcRenderer.${method}('${spec.name}', ...args)`;
-      return `send${utils.capitalize(spec.name)}: (...args: any[]) => ${ipcRenderer}`;
+      return this.buildChannel(spec.name, method, `(...args: any[]) => ${ipcRenderer}`);
    }
 
-   private addMainToRendererCallables(spec: t.ChannelSpec, callablesArray: string[]): void {
+   /** `ipc.<name>.on(callback)`. */
+   private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
       const callback = "(_event: any, ...args: any[]) => callback(...args)";
       const ipcRenderer = `ipcRenderer.on('${spec.name}', ${callback})`;
-      const callableNames = spec.listeners ? spec.listeners : [`on${utils.capitalize(spec.name)}`];
-      callableNames.forEach((name) => {
-         callablesArray.push(`${name}: (callback: Function) => ${ipcRenderer}`);
-      });
+      return this.buildChannel(spec.name, "on", `(callback: Function) => ${ipcRenderer}`);
+   }
+
+   private buildChannel(name: string, method: string, implementation: string): ChannelEntry {
+      const [i0, i1] = this.indents;
+      return { name, property: `\n${i0}${name}: {\n${i1}${method}: ${implementation},\n${i0}},` };
    }
 
    private getPortComponents() {
       return utils.dedent(`
          const ports: { [key: string]: MessagePort } = {};\n
-         type PortObject = { sendMessage: Function, onMessage: Function };\n
+         type PortObject = { send: Function, on: Function };\n
          function getPortObject(portName: string): PortObject {
             return {
-               sendMessage: (...args: any[]) => ports[portName].postMessage(args),
-               onMessage: (callback: Function) => {
+               send: (...args: any[]) => ports[portName].postMessage(args),
+               on: (callback: Function) => {
                   ports[portName].onmessage = (event: MessageEvent) => callback(...event.data);
                },
             }
@@ -102,9 +106,5 @@ export class PreloadBindingsWriter extends BaseWriter {
             ports.${portName} = event.ports[0];
          });
       `);
-   }
-
-   private getPortProperty(portName: string) {
-      return `\n${this.indents[1]}${portName}: getPortObject('${portName}'),`;
    }
 }

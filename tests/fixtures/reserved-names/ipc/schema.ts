@@ -9,7 +9,14 @@ export interface Window {
    id: number;
 }
 
+export interface IpcApi {
+   version: number;
+}
+export type ipc = { ready: boolean };
+
 export default defineChannels({
+   getApi: invoke<() => Promise<IpcApi>>(),
+   getIpc: invoke<() => Promise<ipc>>(),
    getWindow: invoke<(id: number) => Promise<Window>>(),
    openWindow: send<(options: BrowserWindow) => void>(),
    eventHappened: emit<(event: IpcMainEvent) => void>({ trigger: "focus" }),

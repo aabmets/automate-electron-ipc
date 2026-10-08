@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 36 delivered, 35 remaining, 1 dropped.
+**Progress:** 37 delivered, 35 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -60,7 +60,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 
 ## Phase 2: Core API, listener lifecycle and security
 
-- [ ] [T13: Naming of generated API members](./tasks/T13-naming-of-generated-api-members.md) · depends on: T05
+- [x] [T13: Naming of generated API members](./tasks/T13-naming-of-generated-api-members.md) · depends on: T05
 - [ ] [T14: Renderer listener disposers and `once`](./tasks/T14-renderer-listener-disposers-and-once.md) · depends on: T13
 - [ ] [T15: Main-process listener and handler disposers and `handleOnce`](./tasks/T15-main-process-listener-and-handler.md) · depends on: T13
 - [ ] [T16: Sender validation (Electron security checklist #17)](./tasks/T16-sender-validation.md) · depends on: T15
@@ -68,6 +68,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T18: Typed error envelope for Unicast](./tasks/T18-typed-error-envelope-for-unicast.md) · depends on: T15
 - [ ] [T19: Structured-clone awareness in signatures](./tasks/T19-structured-clone-awareness-in-signatures.md) · depends on: T08
 - [ ] [T20: Channel name prefix / namespacing](./tasks/T20-channel-name-prefix-namespacing.md) · depends on: T13
+- [ ] [T72: Channel name rules left over from the listener names](./tasks/T72-channel-name-rules-from-listener-names.md) · depends on: T13
 
 ## Phase 3: Missing Electron features
 

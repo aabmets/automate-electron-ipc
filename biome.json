@@ -138,6 +138,12 @@
                }
             }
          }
+      },
+      {
+         "includes": ["tests/fixtures/**"],
+         "javascript": {
+            "globals": ["ipc"]
+         }
       }
    ]
 }

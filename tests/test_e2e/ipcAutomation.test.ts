@@ -21,6 +21,13 @@ afterEach(async () => {
    project = undefined;
 });
 
+/** The line of the method `method` of the channel object `channel` in a generated file. */
+const methodLine = (text: string, channel: string, method: string): string => {
+   const lines = text.split("\n");
+   const start = lines.findIndex((line) => line.trim() === `${channel}: {`);
+   return lines.slice(start + 1).find((line) => line.trim().startsWith(`${method}:`)) ?? "";
+};
+
 describe("ipcAutomation, single schema file", () => {
    it("generates the three files from the channels of schema.ts", async () => {
       project = await runFixture("single-file");
@@ -29,10 +36,12 @@ describe("ipcAutomation, single schema file", () => {
       expect(generated["main.ts"]).toContain("getUser");
       expect(generated["main.ts"]).toContain("echoUserName");
       expect(generated["main.ts"]).toContain("windowFocused");
-      expect(generated["preload.ts"]).toContain("sendEchoUserName");
-      expect(generated["window.d.ts"]).toContain("sendEchoUserName");
+      expect(generated["preload.ts"]).toContain("echoUserName: {\n      send:");
+      expect(generated["window.d.ts"]).toContain("echoUserName: {\n      send:");
       expect(generated["window.d.ts"]).toContain('import type { User } from "./schema";');
-      expect(generated["window.d.ts"]).toContain("sendGetUser: (id: number) => Promise<User>;");
+      expect(generated["window.d.ts"]).toContain(
+         "getUser: {\n      invoke: (id: number) => Promise<User>;",
+      );
    });
 
    it("generates files that type-check", async () => {
@@ -85,7 +94,7 @@ describe("ipcAutomation, schema directory", () => {
       expect(generated["main.ts"]).toContain("getUser");
       expect(generated["main.ts"]).toContain("renameUser");
       expect(generated["main.ts"]).toContain("windowBlurred");
-      expect(generated["preload.ts"]).toContain("sendRenameUser");
+      expect(generated["preload.ts"]).toContain("renameUser: {\n      send:");
       expect(generated["window.d.ts"]).toContain("logStream");
    });
 
@@ -93,7 +102,7 @@ describe("ipcAutomation, schema directory", () => {
    // to be read from the schema directory.
    it("ignores files that are not schema sources", async () => {
       project = await runFixture("schema-dir");
-      expect(project.generated["main.ts"].match(/getUser/g)).toHaveLength(1);
+      expect(project.generated["main.ts"].match(/getUser: \{/g)).toHaveLength(1);
    });
 
    it("generates files that type-check", async () => {
@@ -187,8 +196,8 @@ describe("ipcAutomation, workspace", () => {
       });
 
       expect(project.generated["main.ts"]).toContain("getUser");
-      expect(project.generated["preload.ts"]).toContain("sendEchoUserName");
-      expect(project.generated["window.d.ts"]).toContain("sendGetUser: (id: number) =>");
+      expect(project.generated["preload.ts"]).toContain("echoUserName: {\n      send:");
+      expect(project.generated["window.d.ts"]).toContain("invoke: (id: number) =>");
       await expect(fsp.stat(path.join(project.root, "wrong"))).rejects.toMatchObject({
          code: "ENOENT",
       });
@@ -208,7 +217,7 @@ describe("ipcAutomation, wrapped channel map export", () => {
    it("generates bindings for a map followed by satisfies", async () => {
       project = await runFixture("export-forms");
       expect(project.generated["main.ts"]).toContain("getUser");
-      expect(project.generated["preload.ts"]).toContain("sendEchoUserName");
+      expect(project.generated["preload.ts"]).toContain("echoUserName: {\n      send:");
    });
 
    it("generates files that type-check", async () => {
@@ -232,7 +241,7 @@ describe("ipcAutomation, type definition edge cases", () => {
          ]);
          expect(generated[file]).not.toContain("Internal");
       }
-      expect(generated["window.d.ts"]).toContain("sendEcho: <T>(value: T) => Promise<T>;");
+      expect(generated["window.d.ts"]).toContain("invoke: <T>(value: T) => Promise<T>;");
    });
 
    it("generates files that type-check", async () => {
@@ -353,10 +362,6 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       }
       return match[1] ?? exported;
    };
-   const lineOf = (text: string, member: string): string => {
-      return text.split("\n").find((line) => line.includes(`${member}:`)) ?? "";
-   };
-
    it("imports types of the same name that are declared in two schema files under distinct names", async () => {
       project = await runFixture("name-collisions");
       const { generated } = project;
@@ -366,9 +371,9 @@ describe("ipcAutomation, type names that collide across schema files", () => {
          const userC = importedAs(generated[file], "User", "./schema/c");
          expect(userB).not.toBe(userC);
 
-         const member = file === "main.ts" ? "onGetUser" : "sendGetUser";
-         expect(lineOf(generated[file], `${member}B`)).toContain(`Promise<${userB}>`);
-         expect(lineOf(generated[file], `${member}C`)).toContain(`Promise<${userC}>`);
+         const method = file === "main.ts" ? "handle" : "invoke";
+         expect(methodLine(generated[file], "getUserB", method)).toContain(`Promise<${userB}>`);
+         expect(methodLine(generated[file], "getUserC", method)).toContain(`Promise<${userC}>`);
       }
    });
 
@@ -381,9 +386,9 @@ describe("ipcAutomation, type names that collide across schema files", () => {
          const declared = importedAs(generated[file], "User", "./schema/b");
          expect(imported).not.toBe(declared);
 
-         const member = file === "main.ts" ? "onGetUser" : "sendGetUser";
-         expect(lineOf(generated[file], `${member}A`)).toContain(`Promise<${imported}>`);
-         expect(lineOf(generated[file], `${member}B`)).toContain(`Promise<${declared}>`);
+         const method = file === "main.ts" ? "handle" : "invoke";
+         expect(methodLine(generated[file], "getUserA", method)).toContain(`Promise<${imported}>`);
+         expect(methodLine(generated[file], "getUserB", method)).toContain(`Promise<${declared}>`);
       }
       // Three declarations are called User: they get User, User_2 and User_3.
       const names = new Set(
@@ -408,9 +413,9 @@ describe("ipcAutomation, type names that collide across schema files", () => {
          expect(two).toBeDefined();
          expect(one).not.toBe(two);
 
-         const member = file === "main.ts" ? "onGetItem" : "sendGetItem";
-         expect(lineOf(text, `${member}A`)).toContain(`Promise<${one}.Item>`);
-         expect(lineOf(text, `${member}B`)).toContain(`Promise<${two}.Item>`);
+         const method = file === "main.ts" ? "handle" : "invoke";
+         expect(methodLine(text, "getItemA", method)).toContain(`Promise<${one}.Item>`);
+         expect(methodLine(text, "getItemB", method)).toContain(`Promise<${two}.Item>`);
       }
    });
 
@@ -422,13 +427,13 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       const userC = importedAs(main, "User", "./schema/c");
       expect(userC).not.toBe("User");
 
-      expect(lineOf(main, "onFindUserC")).toContain(
+      expect(methodLine(main, "findUserC", "handle")).toContain(
          `(callback: <T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => Promise<T>)`,
       );
       expect(main).toContain(
          `<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => callback(event, user)`,
       );
-      expect(lineOf(main, "sendPushUserC")).toContain(
+      expect(methodLine(main, "pushUserC", "send")).toContain(
          `<T extends ${userC}>(browserWindow: BrowserWindow, user: T)`,
       );
    });
@@ -440,18 +445,20 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       const userC = importedAs(main, "User", "./schema/c");
       expect(userC).not.toBe("User");
 
-      expect(lineOf(main, "onTagUserC")).toContain(
+      expect(methodLine(main, "tagUserC", "handle")).toContain(
          `(callback: (event: IpcMainInvokeEvent, tag: \`user-\${${userC}["email"]}\`, ` +
             `shape: { User(): ${userC} }) => Promise<${userC}["email"]>)`,
       );
-      expect(lineOf(project.generated["window.d.ts"], "sendTagUserC")).toContain(
+      expect(methodLine(project.generated["window.d.ts"], "tagUserC", "invoke")).toContain(
          `(tag: \`user-\${${userC}["email"]}\`, shape: { User(): ${userC} }) => `,
       );
    });
 
    it("accepts a Promise< void > return type for a send channel", async () => {
       project = await runFixture("name-collisions");
-      expect(lineOf(project.generated["main.ts"], "onNotifyC")).toContain("Promise< void >");
+      expect(methodLine(project.generated["main.ts"], "notifyC", "on")).toContain(
+         "Promise< void >",
+      );
    });
 
    it("imports a type that two schema files import once", async () => {
@@ -486,8 +493,15 @@ describe("ipcAutomation, schema types named like generated names", () => {
       expect(importLine(main, "BrowserWindow", "./schema")).toBe(
          'import type { BrowserWindow as BrowserWindow_2 } from "./schema";',
       );
+      // `Window` is not declared by main.ts, nor by window.d.ts, so it keeps its name.
       expect(importLine(main, "Window", "./schema")).toBe(
          'import type { Window } from "./schema";',
+      );
+      expect(importLine(main, "ipc", "./schema")).toBe(
+         'import type { ipc as ipc_2 } from "./schema";',
+      );
+      expect(importLine(main, "IpcApi", "./schema")).toBe(
+         'import type { IpcApi } from "./schema";',
       );
       expect(importLine(main, "IpcMainEvent", "./types/events")).toBe(
          'import type { IpcMainEvent as IpcMainEvent_2 } from "./types/events";',
@@ -495,17 +509,21 @@ describe("ipcAutomation, schema types named like generated names", () => {
       // The schema type is used in the signatures, the Electron type in the generated wrapper.
       expect(main).toContain("(callback: (event: IpcMainEvent, options: BrowserWindow_2) => void)");
       expect(main).toContain("(browserWindow: BrowserWindow, event: IpcMainEvent_2)");
+      expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent) => Promise<ipc_2>)");
    });
 
    it("imports the schema types under aliases in window.d.ts", async () => {
       project = await runFixture("reserved-names");
       const types = project.generated["window.d.ts"];
 
-      expect(importLine(types, "Window", "./schema")).toBe(
-         'import type { Window as Window_2 } from "./schema";',
+      expect(importLine(types, "IpcApi", "./schema")).toBe(
+         'import type { IpcApi as IpcApi_2 } from "./schema";',
       );
-      expect(types).toContain("Promise<Window_2>");
-      expect(types).toContain("export default Window;");
+      expect(types).toContain("Promise<IpcApi_2>");
+      expect(types).toContain("interface IpcApi {");
+      expect(importLine(types, "Window", "./schema")).toBe(
+         'import type { Window } from "./schema";',
+      );
    });
 
    it("generates files that type-check", async () => {
@@ -572,7 +590,7 @@ describe("ipcAutomation, schema without channels", () => {
    it("generates an empty window.d.ts that is a module", async () => {
       project = await runFixture("no-channels");
       expect(project.generated["window.d.ts"]).toContain("export {};");
-      expect(project.generated["window.d.ts"]).toContain("interface Window {}");
+      expect(project.generated["window.d.ts"]).toContain("interface IpcApi {}");
    });
 
    it("generates files that type-check", async () => {
@@ -587,9 +605,11 @@ describe("ipcAutomation, schema with only port channels", () => {
       project = await runFixture("port-only");
       const { generated } = project;
 
-      expect(generated["main.ts"]).toContain("export const ipcMain = {\n   ports: {");
-      expect(generated["preload.ts"]).toContain("exposeInMainWorld('ipc', {\n   ports: {");
-      expect(generated["window.d.ts"]).toContain("ipc: {\n         ports: {");
+      expect(generated["main.ts"]).toContain("export const ipc = {\n   chat: {\n      connect:");
+      expect(generated["preload.ts"]).toContain(
+         "exposeInMainWorld('ipc', {\n   chat: getPortObject('chat'),",
+      );
+      expect(generated["window.d.ts"]).toContain("interface IpcApi {\n   chat: {\n      send:");
       expect(generated["main.ts"]).not.toMatch(/\{\s*,/);
       expect(generated["preload.ts"]).not.toMatch(/\{\s*,/);
    });
@@ -627,9 +647,9 @@ describe("ipcAutomation, handler and sender types", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
-      expect(main).toContain("onGetUser: (callback: (event: IpcMainInvokeEvent, id: number)");
+      expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent, id: number)");
       expect(main).toContain("(event: IpcMainInvokeEvent, id: number) => callback(event, id)");
-      expect(main).toContain("onEcho: (callback: (event: IpcMainEvent, text: string,");
+      expect(main).toContain("on: (callback: (event: IpcMainEvent, text: string,");
       expect(main).toContain("(event: IpcMainEvent, text: string, ...rest: number[]) =>");
       expect(main).toContain("callback(event, text, ...rest)");
       // No loosely typed parameter, as a whole word.
@@ -640,9 +660,13 @@ describe("ipcAutomation, handler and sender types", () => {
       project = await runFixture("handler-types");
       const windowTypes = project.generated["window.d.ts"];
 
-      expect(windowTypes).toContain("sendEcho: (text: string, ...rest: number[]) => void;");
-      expect(windowTypes).toContain("sendPing: (text: string) => void;");
-      expect(windowTypes).toContain("sendGetUser: (id: number) => Promise<string>;");
+      expect(methodLine(windowTypes, "echo", "send")).toContain(
+         "send: (text: string, ...rest: number[]) => void;",
+      );
+      expect(methodLine(windowTypes, "ping", "send")).toContain("send: (text: string) => void;");
+      expect(methodLine(windowTypes, "getUser", "invoke")).toContain(
+         "invoke: (id: number) => Promise<string>;",
+      );
    });
 
    it("generates files that type-check against the declared signatures", async () => {
@@ -671,10 +695,6 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
 });
 
 describe("ipcAutomation, non-ASCII schema source", () => {
-   const lineOf = (text: string, member: string): string => {
-      return text.split("\n").find((line) => line.includes(`${member}:`)) ?? "";
-   };
-
    // Regression for T66: swc spans are UTF-8 byte offsets, so non-ASCII text (and a BOM) in front
    // of a signature shifted every later slice and garbled the generated signatures.
    it("generates intact signatures from a schema with a BOM and non-ASCII text", async () => {
@@ -684,16 +704,16 @@ describe("ipcAutomation, non-ASCII schema source", () => {
          /^\uFEFF/,
       );
 
-      expect(lineOf(generated["main.ts"], "onGetÜser")).toContain(
+      expect(methodLine(generated["main.ts"], "getÜser", "handle")).toContain(
          '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
       );
       expect(generated["main.ts"]).toContain(
          `electronIpcMain.handle('generic', <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => callback(event, arg))`,
       );
-      expect(lineOf(generated["window.d.ts"], "sendGetÜser")).toContain(
+      expect(methodLine(generated["window.d.ts"], "getÜser", "invoke")).toContain(
          '(id: "ñ", size: Größe) => Promise<Üser>',
       );
-      expect(lineOf(generated["window.d.ts"], "sendGreet")).toContain(
+      expect(methodLine(generated["window.d.ts"], "greet", "send")).toContain(
          '(message: "héllo 😀") => void',
       );
       expect(generated["window.d.ts"]).toContain('import type { Größe } from "./schema";');
@@ -710,24 +730,25 @@ describe("ipcAutomation, locale-independent output order", () => {
    // Regression for T67: members were ordered with `localeCompare`, which depends on the locale
    // of the process and compared the whole callable, so `sendItem` and `sendItem2` swapped places.
    const members = (text: string): string[] =>
-      Array.from(text.matchAll(/^\s*((?:on|send)[^\s:]+): /gmu), (match) => match[1]);
+      Array.from(text.matchAll(/^ {3}([^\s:]+): /gmu), (match) => match[1]);
 
    // Order of the code units: `L` < `l`, `2` < `X` < `_`, and `ö` after all ASCII letters.
-   const rendererToMain = ["ALpha", "Alpha", "Alzz", "Item", "Item2", "ItemX", "Item_x", "Zöld"];
-   const mainToRenderer = ["BRavo", "Bravo"];
+   const names = [
+      "aLpha",
+      "alpha",
+      "alzz",
+      "bRavo",
+      "bravo",
+      "item",
+      "item2",
+      "itemX",
+      "item_x",
+      "zöld",
+   ];
    const expected = {
-      "window.d.ts": [
-         ...mainToRenderer.map((name) => `on${name}`),
-         ...rendererToMain.map((name) => `send${name}`),
-      ],
-      "preload.ts": [
-         ...mainToRenderer.map((name) => `on${name}`),
-         ...rendererToMain.map((name) => `send${name}`),
-      ],
-      "main.ts": [
-         ...rendererToMain.map((name) => `on${name}`),
-         ...mainToRenderer.map((name) => `send${name}`),
-      ],
+      "window.d.ts": names,
+      "preload.ts": names,
+      "main.ts": names,
    };
 
    it.each(["sv", "en", "de-u-co-phonebk", "reversed en"])(

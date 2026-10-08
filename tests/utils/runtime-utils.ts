@@ -73,7 +73,7 @@ export function createFakePreloadElectron() {
    };
 }
 
-/** The dotted paths of the callable members of an object, such as `ports.chat.sendMessage`. */
+/** The dotted paths of the callable members of an object, such as `chat.send`. */
 export function callablePaths(api: Record<string, unknown>, prefix = ""): string[] {
    return Object.entries(api)
       .flatMap(([key, value]) => {
@@ -86,7 +86,7 @@ export function callablePaths(api: Record<string, unknown>, prefix = ""): string
 }
 
 /**
- * The dotted paths of the function members of `Window.ipc` in the text of a generated
+ * The dotted paths of the function members of the `IpcApi` interface in the text of a generated
  * `window.d.ts`, read from its syntax tree.
  */
 export function windowIpcPaths(windowTypes: string): string[] {
@@ -98,9 +98,8 @@ export function windowIpcPaths(windowTypes: string): string[] {
          return type?.type === "TsTypeLiteral" ? collect(type.members, `${path}.`) : [path];
       });
    const find = (node: any): string[] | null => {
-      if (node?.type === "TsInterfaceDeclaration" && node.id.value === "Window") {
-         const ipc = node.body.body.find((member: any) => member.key?.value === "ipc");
-         return ipc ? collect(ipc.typeAnnotation.typeAnnotation.members, "") : [];
+      if (node?.type === "TsInterfaceDeclaration" && node.id.value === "IpcApi") {
+         return collect(node.body.body, "");
       }
       for (const child of Object.values(node ?? {})) {
          for (const item of Array.isArray(child) ? child : [child]) {

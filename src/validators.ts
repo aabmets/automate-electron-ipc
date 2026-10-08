@@ -56,18 +56,6 @@ const TriggerStruct = refine(string(), "event", (value) => {
 });
 
 function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<any, any> {
-   const ListenersStruct = refine(string(), "format", (value) => {
-      if (value.length < 5) {
-         const msg = "Channel listener names must be at least 5 characters in length";
-         return `'${value}'\n${msg}\n`;
-      } else if (!/^on[A-Z]\w+/.test(value)) {
-         const msg =
-            "Channel listener names must begin with " +
-            "lowercase 'on', followed by a capital letter";
-         return `'${value}'\n${msg}\n`;
-      }
-      return true;
-   });
    return object({
       name: refine(string(), "camelcase", (value) => {
          if (value.length < 3) {
@@ -120,7 +108,6 @@ function getChannelSpecStruct(kind: t.ChannelKind, triggerable = false): Struct<
          async: boolean(),
          typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
       }),
-      listeners: kind === "Broadcast" ? optional(array(ListenersStruct)) : optional(never()),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
    });
 }
@@ -145,12 +132,29 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
    }
 }
 
-export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.ChannelSpec[] {
+/**
+ * The names that every object has, such as `constructor` and `toString`. A channel object with
+ * such a key would hide the member or, as `__proto__` does, change the prototype of the API.
+ */
+const OBJECT_MEMBER_NAMES = new Set(Object.getOwnPropertyNames(Object.prototype));
+
+/**
+ * Validates the channel specs of one schema file. `file` is only used in error messages.
+ */
+export function validateChannelSpecs(
+   specs: Partial<t.ChannelSpec>[],
+   file?: string,
+): t.ChannelSpec[] {
    const seenChannelNames = new Set<string>();
-   const listenerNames: string[] = [];
    for (const spec of specs) {
+      if (spec?.name !== undefined && OBJECT_MEMBER_NAMES.has(spec.name)) {
+         const where = file === undefined ? "" : `Schema file '${file}': `;
+         throw new Error(
+            `${where}Channel name '${spec.name}' is reserved, since it is a member of every ` +
+               "object. Choose another name.",
+         );
+      }
       validateChannelSpecWithStruct(spec);
-      listenerNames.push(...(spec.listeners || []));
 
       if (spec?.name) {
          if (seenChannelNames.has(spec.name)) {
@@ -158,7 +162,6 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
          } else {
             seenChannelNames.add((spec as t.ChannelSpec).name);
          }
-         listenerNames.push(`on${utils.capitalize(spec.name)}`);
       }
 
       if (spec?.kind) {
@@ -175,25 +178,19 @@ export function validateChannelSpecs(specs: Partial<t.ChannelSpec>[]): t.Channel
          }
       }
    }
-   const duplicates = utils.findDuplicates(listenerNames);
-   if (duplicates.length > 0) {
-      const dupes = duplicates.join("', '");
-      throw new Error(`Duplicate listener names not allowed: ['${dupes}']`);
-   }
    return specs as t.ChannelSpec[];
 }
 
 /**
- * Checks that channel names and listener names are unique across all parsed files.
- * Per-file validation cannot see clashes between files, which would produce duplicate
- * object keys in the generated code and a second handler registration at runtime.
+ * Checks that channel names are unique across all parsed files. Per-file validation cannot see
+ * clashes between files, which would produce duplicate object keys in the generated code
+ * and a second handler registration at runtime.
  */
 export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
    // The order of ipcAutomation, so that the file named in an error is the first one processed.
    const normalize = (file: t.ParsedFileSpecs) => file.relativePath.replaceAll("\\", "/");
    const sorted = [...files].sort((a, b) => utils.compareStrings(normalize(a), normalize(b)));
    const channelOwners = new Map<string, string>();
-   const listenerOwners = new Map<string, { file: string; channel: string }>();
 
    for (const file of sorted) {
       for (const spec of file.specs.channelSpecArray) {
@@ -205,20 +202,6 @@ export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
             );
          }
          channelOwners.set(spec.name, file.relativePath);
-
-         const listeners = [...(spec.listeners ?? []), `on${utils.capitalize(spec.name)}`];
-         for (const listener of listeners) {
-            const first = listenerOwners.get(listener);
-            if (first !== undefined) {
-               throw new Error(
-                  `Listener name '${listener}' of channel '${spec.name}' in ` +
-                     `'${file.relativePath}' clashes with a listener of channel ` +
-                     `'${first.channel}' in '${first.file}'. Listener names must be ` +
-                     "unique across the application.",
-               );
-            }
-            listenerOwners.set(listener, { file: file.relativePath, channel: spec.name });
-         }
       }
    }
 }
