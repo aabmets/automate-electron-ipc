@@ -118,6 +118,35 @@ export function watchedPaths(config: t.IPCResolvedConfig, configFile?: string): 
 }
 
 /**
+ * Tells what a changed file is about for a run: a schema source (the schema file or a source file
+ * in the schema directory), a file that configures the run (`package.json`, `tsconfig.json`, the
+ * config file), or neither. It applies the rules of `--watch`, so generated files are never a change.
+ *
+ * @param config - The resolved config of the run.
+ * @param file - The absolute path of the changed file.
+ * @param [configFile] - The config file of the run, absolute or relative to the working directory.
+ * @returns `"schema"`, `"config"`, or `null` for a file that does not start a run.
+ */
+export function classifyChange(
+   config: t.IPCResolvedConfig,
+   file: string,
+   configFile?: string,
+): ChangeKind | null {
+   const posixFile = utils.toPosix(path.resolve(file));
+   for (const target of targetsOf(config, configFile)) {
+      const name = path.posix.relative(target.dir, posixFile);
+      const inside = name !== "" && !name.startsWith("..") && !path.posix.isAbsolute(name);
+      if (inside && (target.recursive || !name.includes("/"))) {
+         const kind = target.classify(name);
+         if (kind) {
+            return kind;
+         }
+      }
+   }
+   return null;
+}
+
+/**
  * Runs the generator, and runs it again whenever the schema or the config changes, until the
  * returned function is called. A burst of changes causes one run; changes during a run cause one
  * more run after it. A run that fails is printed and does not stop the watcher.

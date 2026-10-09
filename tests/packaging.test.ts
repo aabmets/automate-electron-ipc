@@ -116,7 +116,7 @@ describe("package.json", () => {
       ][];
 
       it("lists the entry points of the package", () => {
-         expect(entries.map(([key]) => key)).toEqual([".", "./api"]);
+         expect(entries.map(([key]) => key)).toEqual([".", "./api", "./vite"]);
       });
 
       it.each(entries)("points the types of '%s' at a file that exists", (_key, target) => {

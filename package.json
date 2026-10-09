@@ -37,6 +37,10 @@
       "./api": {
          "types": "./types/api.d.ts",
          "default": "./dist/api.js"
+      },
+      "./vite": {
+         "types": "./types/vite.d.ts",
+         "default": "./dist/vite.js"
       }
    },
    "bin": {

@@ -69,6 +69,7 @@ export async function typecheck(files: Record<string, string>): Promise<string> 
             paths: {
                "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
                "automate-electron-ipc/api": [path.join(root, "types/api.d.ts")],
+               "automate-electron-ipc/vite": [path.join(root, "types/vite.d.ts")],
             },
          },
          files: Object.keys(files),

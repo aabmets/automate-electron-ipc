@@ -30,4 +30,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   `tests/packaging.test.ts` covers the new export. Use fake timers / promises, no sleeps.
 - **README:** an electron-vite setup snippet using the plugin (T48c writes the full example).
 - **Follow-up IDs:** T154-T155.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `autoipc` in `src/vite.ts` (types in `types/vite.d.ts`, `./vite` in `exports`), with `classifyChange` exported from `src/watch.ts` as the shared event filter of `--watch` and `handleHotUpdate`. Runs are single-flight per project (`cwd`, `configFile`, `overrides`): `buildStart` joins a run that is going, so three instances started together run one generation, while `handleHotUpdate` queues exactly one more run after the one that is going. A relative `configFile` is resolved against `cwd`, as `--watch` does. No follow-ups, so T154-T155 are unused.

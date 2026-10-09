@@ -259,6 +259,32 @@ const { stale } = await check({ overrides: { codeIndent: 2 } });
   exist, whose message is the one of the CLI warning. Unlike the CLI, `generate` does not create
   the missing directory.
 
+### Vite and electron-vite
+
+`automate-electron-ipc/vite` is a plugin that generates the bindings when a build starts, and again
+when the schema or the config changes while the dev server runs. Vite is not a dependency of this
+package: the plugin only needs the one you have.
+
+```ts
+// electron.vite.config.ts
+import { autoipc } from "automate-electron-ipc/vite";
+import { defineConfig } from "electron-vite";
+
+export default defineConfig({
+   main: { plugins: [autoipc()] },
+   preload: { plugins: [autoipc()] },
+   renderer: { plugins: [autoipc()] },
+});
+```
+
+- `autoipc(options?)` takes the options of [`generate`](#api): `cwd`, `configFile`, `overrides` and
+  `logger`. The logger is on unless you set it.
+- electron-vite starts the main, preload and renderer builds in one process. Add the plugin to each
+  one that imports the generated files, and it still runs once: the builds share the run.
+- A schema error fails the build. In the dev server it is printed and the server keeps running; the
+  generated files of the last good run stay in place. Vite does not reload the page for a change of
+  a schema file, because the schema is not part of the app.
+
 ### Composing the preload script
 
 The generated `preload.ts` exports the API it builds, and a function that exposes it:
