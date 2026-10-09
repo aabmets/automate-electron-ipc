@@ -200,6 +200,54 @@ const scenarios: Record<string, Scenario> = {
       return page;
    },
 
+   slowReader: async (ctx) => {
+      const child = await ctx.fork(() => {
+         let produced = 0;
+         let finalized = false;
+         ipc.windowed.handle(async function* () {
+            try {
+               for (;;) {
+                  produced += 1;
+                  yield produced;
+               }
+            } finally {
+               finalized = true;
+            }
+         });
+         ipc.produced.handle(async () => produced);
+         ipc.finalized.handle(async () => finalized);
+      });
+      const win = await ctx.open();
+      ctx.ipc.windowed.connect(child, win);
+      const read = await ctx.evaluate(win, async () => {
+         const stream = ipc.windowed.stream();
+         const chunks: number[] = [];
+         for (let n = 0; n < 3; n++) {
+            chunks.push((await stream.next()).value);
+         }
+         (globalThis as any).slow = stream;
+         return chunks;
+      });
+      await ctx.sleep(300);
+      const pausedAt = await ctx.ipc.produced.invoke(child);
+      await ctx.sleep(300);
+      const stillPausedAt = await ctx.ipc.produced.invoke(child);
+      const more = await ctx.evaluate(win, async () => {
+         const stream = (globalThis as any).slow;
+         const chunks: number[] = [];
+         for (let n = 0; n < 6; n++) {
+            chunks.push((await stream.next()).value);
+         }
+         stream.cancel();
+         return chunks;
+      });
+      await ctx.waitFor(
+         () => ctx.ipc.finalized.invoke(child),
+         "the paused generator to be finalized",
+      );
+      return { read, pausedAt, stillPausedAt, more };
+   },
+
    closeConnection: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.hang.handle(() => new Promise(() => undefined));
@@ -412,6 +460,15 @@ describeElectron("utility ports in Electron", "electron-utility-ports", scenario
       const { chunks, afterCancel } = group.value("cancel");
       expect(chunks).toStrictEqual([1, 2, 3]);
       expect(afterCancel).toStrictEqual({ done: true });
+   });
+
+   it("pauses the generator in the child when the page does not read, and goes on when it does", () => {
+      const result = group.value("slowReader");
+      expect(result.read).toStrictEqual([1, 2, 3]);
+      expect(result.pausedAt).toBeGreaterThanOrEqual(4);
+      expect(result.pausedAt).toBeLessThanOrEqual(7);
+      expect(result.stillPausedAt).toBe(result.pausedAt);
+      expect(result.more).toStrictEqual([4, 5, 6, 7, 8, 9]);
    });
 
    it("fails the calls with IPC_UTILITY_EXITED when the main process closes the connection", () => {

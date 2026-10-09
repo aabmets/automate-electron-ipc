@@ -18,4 +18,33 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `utility.ts` is the producer to pause.
 - **Tests:** runtime tests with a slow reader (the generator pauses at the limit and resumes), a reader
   that cancels while paused, and ordering.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Deviations and notes:
+  - New option `highWaterMark` of `stream` and `streamUtility`: a non-negative integer literal or
+    `Infinity` (parsed like `maxQueue`, validated by `validateCountLimit`; `StreamConfig` and a new
+    `UtilityStreamConfig` in `types/index.d.ts`). The default is 1024 chunks, the unit is the chunk,
+    whatever its size. No project-wide default in the `autoipc` config, as `timeoutMs` has; add it
+    with the config work of T38 if it is wanted.
+  - Scheme: a credit window over the port of the call. The producer starts with `limit = highWaterMark`,
+    counts the chunks it sent, and does not call `iterator.next()` while `sent >= limit`. The page sends
+    `{ type: 'credit', limit }` (the utility process gets `{ __ipc: 'credit', channel, id, limit }`),
+    where `limit` is the total of chunks the page allows so far, so a repeated, late or lower message is
+    harmless: only a higher number counts, and a non-number is ignored. The reader grants
+    `consumed + max(highWaterMark, waiting reads)` once that is at least half a window beyond what it
+    granted, so a fast reader costs one message per half window and the queue does not run dry. `0` is
+    pull-based (a grant per waiting read), and `Infinity` sends no credit and never pauses.
+  - Both ends take the window from the generated code, not from the wire: the producer from its own
+    spec (`startStream` in `main.ts`, `brokerWindows` in `utility.ts`), the page from `openStream` and
+    `openUtilityStream`. A page cannot lift the window of the producer by asking for one in the start
+    message; it can only grant credit, which only costs its own memory.
+  - A paused pump waits on a wake-up that cancel, port close, destroyed contents and credit all fire, so
+    `cancel()` and the end paths work while paused. The generator is suspended at a `yield` then, so
+    `return()` runs its `finally` at once. An error or the end of the generator is found by a pull, so
+    it reaches the page once the page has granted that pull (always, for a page that keeps reading).
+  - Shared reader (`createStreamReader`) now takes the window and a `grant` function, which returns
+    `false` when the port is not there yet; `topUp()` repeats the grant when the port arrives or the
+    start message is posted.
+  - Tests: parser, validators, writer text, runtime tests of the generated main, preload and utility
+    scripts (pause at the limit, resume on credit, ignored credits, per-call windows, cancel, close and
+    destroy while paused, error after the pause, window 0 and `Infinity`, the default), real
+    `MessageChannel` round trips with a slow reader, and real Electron scenarios (`stream` and
+    `streamUtility` with a slow reader, a pull-based stream, a cancel while paused).

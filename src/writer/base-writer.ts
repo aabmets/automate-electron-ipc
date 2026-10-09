@@ -41,6 +41,8 @@ function renameTypeReferences(
 }
 /** The `maxQueue` of a port channel which does not set it: how many messages a send queue holds. */
 export const DEFAULT_MAX_QUEUE = 1000;
+/** The `highWaterMark` of a stream which does not set it: how many chunks the page may not have read. */
+export const DEFAULT_HIGH_WATER_MARK = 1024;
 
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
@@ -350,6 +352,11 @@ export class BaseWriter {
    /** The `maxQueue` of a port channel as source text: a number, or `Infinity`. */
    protected getMaxQueue(spec: t.ChannelSpec): string {
       return String(spec.maxQueue ?? DEFAULT_MAX_QUEUE);
+   }
+
+   /** The `highWaterMark` of a stream channel as source text: a number, or `Infinity`. */
+   protected getHighWaterMark(spec: t.ChannelSpec): string {
+      return String(spec.highWaterMark ?? DEFAULT_HIGH_WATER_MARK);
    }
 
    protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {

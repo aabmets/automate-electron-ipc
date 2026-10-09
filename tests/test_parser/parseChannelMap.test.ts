@@ -867,6 +867,102 @@ describe("parseChannelMapModule, maxQueue", () => {
    });
 });
 
+describe("parseChannelMapModule, highWaterMark", () => {
+   const verbs = ["stream", "streamUtility"];
+
+   it.each(verbs)("reads a non-negative integer literal on %s", (verb) => {
+      for (const [text, value] of [
+         ["0", 0],
+         ["1", 1],
+         ["1024", 1024],
+         ["1e3", 1000],
+         ["(5)", 5],
+      ] as const) {
+         const spec = parseOne(
+            `chan: ${verb}<() => AsyncIterable<number>>({ highWaterMark: ${text} })`,
+         );
+         expect(spec.highWaterMark).toBe(value);
+      }
+   });
+
+   it.each(verbs)("reads Infinity on %s", (verb) => {
+      const spec = parseOne(
+         `chan: ${verb}<() => AsyncIterable<number>>({ highWaterMark: Infinity })`,
+      );
+      expect(spec.highWaterMark).toBe(Number.POSITIVE_INFINITY);
+   });
+
+   it("reads the option of the alternative form", () => {
+      const spec = parseOne("chan: stream({ highWaterMark: 7 }) as () => AsyncIterable<number>");
+      expect(spec.highWaterMark).toBe(7);
+   });
+
+   it("reads it next to the other options of the stream", () => {
+      const spec = parseOne(
+         'chan: stream<() => AsyncIterable<number>>({ highWaterMark: 2, allowedOrigins: ["app://."], scopes: ["a"] })',
+      );
+      expect(spec).toMatchObject({
+         highWaterMark: 2,
+         allowedOrigins: ["app://."],
+         scopes: ["a"],
+      });
+   });
+
+   it("leaves the option out when it is not given, so that the default applies", () => {
+      expect(parseOne("chan: stream<() => AsyncIterable<number>>()")).not.toHaveProperty(
+         "highWaterMark",
+      );
+      expect(parseOne("chan: streamUtility<() => AsyncIterable<number>>({})")).not.toHaveProperty(
+         "highWaterMark",
+      );
+   });
+
+   it.each(["-1", "-0", "1.5", "1e400", "9007199254740993", "+1", "NaN", "-Infinity"])(
+      "rejects %s, naming the channel and the option",
+      (text) => {
+         const message = parseError(
+            `export default defineChannels({ chan: stream<() => AsyncIterable<number>>({ highWaterMark: ${text} }) });`,
+         );
+         expect(message).toMatch(/chan/);
+         expect(message).toMatch(/highWaterMark/);
+      },
+   );
+
+   it.each(['"10"', "true", "null", "limit", "1000 + 1", "[1]"])(
+      "rejects %s, which is not a number literal",
+      (text) => {
+         const message = parseError(
+            `const limit = 3; export default defineChannels({ chan: streamUtility<() => AsyncIterable<number>>({ highWaterMark: ${text} }) });`,
+         );
+         expect(message).toMatch(
+            /option 'highWaterMark' must be a non-negative integer literal or Infinity/,
+         );
+      },
+   );
+
+   it("names the size limit for numbers beyond the safe integers", () => {
+      const message = parseError(
+         "export default defineChannels({ chan: stream<() => AsyncIterable<number>>({ highWaterMark: 9007199254740993 }) });",
+      );
+      expect(message).toMatch(/cannot exceed 9007199254740991\. Use Infinity/);
+      expect(message).toMatch(/option 'highWaterMark'/);
+   });
+
+   it.each([
+      "invoke<() => Promise<void>>",
+      "send<() => void>",
+      "emit<() => void>",
+      "ask<() => void>",
+      "port<() => void>",
+      "invokeUtility<() => void>",
+   ])("is not an option of %s", (verb) => {
+      const message = parseError(
+         `export default defineChannels({ chan: ${verb}({ highWaterMark: 5 }) });`,
+      );
+      expect(message).toMatch(/option 'highWaterMark' is not supported by/);
+   });
+});
+
 describe("stream channels", () => {
    const wrapStream = (entry: string) => `export default defineChannels({ ${entry} });`;
 

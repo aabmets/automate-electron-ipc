@@ -313,7 +313,7 @@ const VERBS = new Map<string, VerbInfo>([
       {
          kind: "Stream",
          direction: "RendererToMain",
-         options: ["allowedOrigins", "validate", "scopes"],
+         options: ["allowedOrigins", "validate", "highWaterMark", "scopes"],
          errors: true,
       },
    ],
@@ -329,7 +329,12 @@ const VERBS = new Map<string, VerbInfo>([
    ],
    [
       "streamUtility",
-      { kind: "Stream", direction: "RendererToUtility", options: ["scopes"], errors: true },
+      {
+         kind: "Stream",
+         direction: "RendererToUtility",
+         options: ["highWaterMark", "scopes"],
+         errors: true,
+      },
    ],
    [
       "invokeFromWorker",
@@ -1054,10 +1059,16 @@ function parseValidatorRef(
 }
 
 /**
- * Resolves the `maxQueue` option: a non-negative integer literal, or the global `Infinity`.
+ * Resolves the `maxQueue` or `highWaterMark` option: a non-negative integer literal, or the
+ * global `Infinity`.
  */
-function parseMaxQueue(value: AstNode, fail: (message: string) => Error, src: Source): number {
-   const expected = "option 'maxQueue' must be a non-negative integer literal or Infinity";
+function parseCountLimit(
+   option: string,
+   value: AstNode,
+   fail: (message: string) => Error,
+   src: Source,
+): number {
+   const expected = `option '${option}' must be a non-negative integer literal or Infinity`;
    if (value.type === "Identifier" && value.value === "Infinity") {
       return Number.POSITIVE_INFINITY;
    } else if (value.type !== "NumericLiteral") {
@@ -1065,7 +1076,7 @@ function parseMaxQueue(value: AstNode, fail: (message: string) => Error, src: So
    } else if (!Number.isInteger(value.value)) {
       throw fail(`${expected}, found '${value.value}'.`);
    } else if (!Number.isSafeInteger(value.value)) {
-      throw fail(`option 'maxQueue' cannot exceed ${Number.MAX_SAFE_INTEGER}. Use Infinity.`);
+      throw fail(`option '${option}' cannot exceed ${Number.MAX_SAFE_INTEGER}. Use Infinity.`);
    }
    return value.value;
 }
@@ -1096,8 +1107,8 @@ function parseOption(
 ): Partial<t.ChannelSpec> {
    if (key === "validate") {
       return { validate: parseValidatorRef(value, fail, ctx) };
-   } else if (key === "maxQueue") {
-      return { maxQueue: parseMaxQueue(value, fail, ctx.src) };
+   } else if (key === "maxQueue" || key === "highWaterMark") {
+      return { [key]: parseCountLimit(key, value, fail, ctx.src) };
    } else if (key === "timeoutMs") {
       return { timeoutMs: parseTimeoutMs(value, fail, ctx.src) };
    } else if (ARRAY_OPTIONS.has(key)) {

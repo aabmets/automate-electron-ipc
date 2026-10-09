@@ -1343,3 +1343,459 @@ describe("a main process and a page over real message channels", () => {
       expect(three).toStrictEqual(["3:0", "3:1", "3:2"]);
    });
 });
+
+describe("stream, main process, flow control", () => {
+   const credit = (limit: unknown) => ({ type: "credit", limit });
+   /** The values of the chunks that were sent, in order. */
+   const sentValues = () =>
+      posted()
+         .filter((message) => message.type === "chunk")
+         .map((message) => message.value);
+   const upTo = (count: number) => Array.from({ length: count }, (_, value) => value);
+   const fill = (source: ReturnType<typeof createSource>, count: number) => {
+      for (const value of upTo(count)) {
+         source.push(value);
+      }
+   };
+
+   it("stops pulling from the generator once highWaterMark chunks are sent, and goes on when the page grants more", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "windowed");
+
+      fill(source, 10);
+      await settle();
+      expect(sentValues()).toStrictEqual(upTo(4));
+      expect(source.iterator.next).toHaveBeenCalledTimes(4);
+
+      fromPage(credit(6));
+      await settle();
+      expect(sentValues()).toStrictEqual(upTo(6));
+      expect(source.iterator.next).toHaveBeenCalledTimes(6);
+
+      fromPage(credit(100));
+      source.end();
+      await settle();
+      expect(sentValues()).toStrictEqual(upTo(10));
+      expect(posted().at(-1)).toStrictEqual({ type: "end" });
+      expect(lastChannel().port1.close).toHaveBeenCalledOnce();
+      expect(source.iterator.return).not.toHaveBeenCalled();
+   });
+
+   it("uses a window of 1024 chunks when the channel sets none", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "counter");
+
+      fill(source, 1500);
+      await settle();
+      expect(sentValues()).toHaveLength(1024);
+      expect(source.iterator.next).toHaveBeenCalledTimes(1024);
+
+      fromPage(credit(1600));
+      await settle();
+      expect(sentValues()).toStrictEqual(upTo(1500));
+   });
+
+   it("never pauses a channel with an infinite window", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "unbounded");
+
+      fill(source, 3000);
+      source.end();
+      await settle();
+
+      expect(sentValues()).toStrictEqual(upTo(3000));
+      expect(posted().at(-1)).toStrictEqual({ type: "end" });
+   });
+
+   it("pulls only what the page grants when the window is 0", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "pulled");
+
+      fill(source, 3);
+      await settle();
+      expect(source.iterator.next).not.toHaveBeenCalled();
+      expect(posted()).toStrictEqual([]);
+
+      fromPage(credit(1));
+      await settle();
+      expect(sentValues()).toStrictEqual([0]);
+
+      fromPage(credit(3));
+      await settle();
+      expect(sentValues()).toStrictEqual([0, 1, 2]);
+      expect(source.iterator.next).toHaveBeenCalledTimes(3);
+   });
+
+   it("ignores a credit which does not raise the limit, or is not a number", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "windowed");
+      fill(source, 10);
+      await settle();
+
+      for (const limit of [4, 3, 0, -5, "9", Number.NaN, null, undefined, {}, [9], true]) {
+         fromPage(credit(limit));
+      }
+      fromPage({ type: "credit" });
+      fromPage({ type: "creditt", limit: 9 });
+      fromPage(null);
+      await settle();
+
+      expect(sentValues()).toStrictEqual(upTo(4));
+      expect(source.iterator.next).toHaveBeenCalledTimes(4);
+   });
+
+   it("keeps the credits of two calls apart", async () => {
+      const context = await loadMain();
+      const first = await start(context, "windowed", { id: 1 });
+      const second = await start(context, "windowed", { id: 2 });
+      fill(first.source, 10);
+      fill(second.source, 10);
+      await settle();
+
+      channelsMade[1].port1.emit("message", { data: credit(7) });
+      await settle();
+
+      expect(channelsMade[0].port1.postMessage).toHaveBeenCalledTimes(4);
+      expect(channelsMade[1].port1.postMessage).toHaveBeenCalledTimes(7);
+   });
+
+   it("cancels a paused stream: the generator runs its finally block at once, and nothing is sent", async () => {
+      const context = await loadMain();
+      let produced = 0;
+      let finalized = 0;
+      context.ipc.windowed.handle(async function* () {
+         try {
+            for (let n = 0; ; n++) {
+               produced += 1;
+               yield n;
+            }
+         } finally {
+            finalized += 1;
+         }
+      });
+      await context.listener("windowed")(createEvent(createContents(), createFrame()), 7);
+      await settle();
+      expect(produced).toBe(4);
+      expect(finalized).toBe(0);
+
+      fromPage({ type: "cancel" });
+      await settle();
+      fromPage(credit(50));
+      await settle();
+
+      expect(finalized).toBe(1);
+      expect(produced).toBe(4);
+      expect(sentValues()).toStrictEqual(upTo(4));
+      expect(posted().some((message) => message.type === "end" || message.type === "error")).toBe(
+         false,
+      );
+      expect(lastChannel().port1.close).toHaveBeenCalledOnce();
+   });
+
+   it("stops a paused stream when the page closes the port, and when the contents are destroyed", async () => {
+      const context = await loadMain();
+      const closed = await start(context, "windowed", { id: 1 });
+      const contents = createContents();
+      const destroyed = await start(context, "windowed", { id: 2, contents });
+      fill(closed.source, 10);
+      fill(destroyed.source, 10);
+      await settle();
+
+      channelsMade[0].port1.emit("close");
+      contents.emit("destroyed");
+      await settle();
+      channelsMade[0].port1.emit("message", { data: credit(50) });
+      channelsMade[1].port1.emit("message", { data: credit(50) });
+      await settle();
+
+      expect(closed.source.iterator.return).toHaveBeenCalledOnce();
+      expect(destroyed.source.iterator.return).toHaveBeenCalledOnce();
+      expect(closed.source.iterator.next).toHaveBeenCalledTimes(4);
+      expect(destroyed.source.iterator.next).toHaveBeenCalledTimes(4);
+      expect(channelsMade[0].port1.postMessage).toHaveBeenCalledTimes(4);
+      expect(channelsMade[1].port1.postMessage).toHaveBeenCalledTimes(4);
+   });
+
+   it("sends the error of the generator after the chunks, once the page has granted the pull that finds it", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "windowed");
+      fill(source, 4);
+      source.fail({ name: "Boom", message: "exploded", code: "E1" });
+      await settle();
+      expect(posted()).toHaveLength(4);
+
+      fromPage(credit(5));
+      await settle();
+
+      expect(posted().slice(0, 4)).toStrictEqual(
+         upTo(4).map((value) => ({ type: "chunk", value })),
+      );
+      expect(posted()[4]).toStrictEqual({
+         type: "error",
+         error: { name: "Boom", message: "exploded", code: "E1" },
+      });
+      expect(lastChannel().port1.close).toHaveBeenCalledOnce();
+   });
+
+   it("keeps the order of the chunks across many pauses", async () => {
+      const context = await loadMain();
+      const { source } = await start(context, "windowed");
+      fill(source, 100);
+      source.end();
+
+      for (let limit = 4; limit <= 104; limit += 2) {
+         // biome-ignore lint/performance/noAwaitInLoops: each grant lets the pump run to the next pause
+         await settle();
+         fromPage(credit(limit));
+      }
+      await settle();
+
+      expect(sentValues()).toStrictEqual(upTo(100));
+      expect(posted().at(-1)).toStrictEqual({ type: "end" });
+   });
+});
+
+describe("stream, preload script, flow control", () => {
+   const sentCredits = (port: FakePagePort) =>
+      port.postMessage.mock.calls
+         .map(([message]) => message as { type: string; limit?: number })
+         .filter((message) => message.type === "credit")
+         .map((message) => message.limit);
+   const chunks = (port: FakePagePort, count: number, from = 0) => {
+      for (let n = from; n < from + count; n++) {
+         port.deliver({ type: "chunk", value: n });
+      }
+   };
+
+   it("grants more once half of the window is read, as a total, so that the queue does not run dry", async () => {
+      const { api, arrive } = await loadPreload();
+      const stream = api.windowed.stream();
+      const port = arrive("windowed", 1);
+      chunks(port, 4);
+
+      await stream.next();
+      expect(sentCredits(port)).toStrictEqual([]);
+      await stream.next();
+      expect(sentCredits(port)).toStrictEqual([6]);
+      await stream.next();
+      expect(sentCredits(port)).toStrictEqual([6]);
+      await stream.next();
+      expect(sentCredits(port)).toStrictEqual([6, 8]);
+   });
+
+   it("grants nothing while the page does not read", async () => {
+      const { api, arrive } = await loadPreload();
+      api.windowed.stream();
+      const port = arrive("windowed", 1);
+
+      chunks(port, 4);
+      await settle();
+
+      expect(sentCredits(port)).toStrictEqual([]);
+   });
+
+   it("grants the reads which wait first, when the window is 0, and the port has arrived later", async () => {
+      const { api, arrive } = await loadPreload();
+      const stream = api.pulled.stream();
+      const first = stream.next();
+      const second = stream.next();
+      const port = arrive("pulled", 1);
+      expect(sentCredits(port)).toStrictEqual([2]);
+
+      chunks(port, 2);
+      expect(await Promise.all([first, second])).toStrictEqual([
+         { done: false, value: 0 },
+         { done: false, value: 1 },
+      ]);
+      expect(sentCredits(port)).toStrictEqual([2]);
+
+      const third = stream.next();
+      expect(sentCredits(port)).toStrictEqual([2, 3]);
+      port.deliver({ type: "end" });
+      expect(await third).toStrictEqual({ done: true, value: undefined });
+   });
+
+   it("never grants when the window is infinite, or before the default window is half read", async () => {
+      const { api, arrive } = await loadPreload();
+      const unbounded = api.unbounded.stream();
+      const unboundedPort = arrive("unbounded", 1);
+      const standard = api.counter.stream();
+      const standardPort = arrive("counter", 2);
+      chunks(unboundedPort, 2000);
+      chunks(standardPort, 2000);
+
+      for (let read = 0; read < 511; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         await unbounded.next();
+         await standard.next();
+      }
+      expect(sentCredits(standardPort)).toStrictEqual([]);
+      await standard.next();
+      expect(sentCredits(standardPort)).toStrictEqual([1536]);
+
+      for (let read = 0; read < 1400; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         await unbounded.next();
+      }
+      expect(sentCredits(unboundedPort)).toStrictEqual([]);
+   });
+
+   it("grants nothing after the stream ended, failed or was cancelled", async () => {
+      const { api, arrive } = await loadPreload();
+      const ended = api.windowed.stream();
+      const endedPort = arrive("windowed", 1);
+      const cancelled = api.windowed.stream();
+      const cancelledPort = arrive("windowed", 2);
+      chunks(endedPort, 2);
+      chunks(cancelledPort, 4);
+      endedPort.deliver({ type: "end" });
+
+      cancelled.cancel();
+      await cancelled.next();
+      await ended.next();
+      await ended.next();
+
+      expect(sentCredits(endedPort)).toStrictEqual([]);
+      expect(sentCredits(cancelledPort)).toStrictEqual([]);
+   });
+
+   it("keeps reading when a grant cannot be posted, and grants the new total at the next read", async () => {
+      const { api, arrive } = await loadPreload();
+      const stream = api.windowed.stream();
+      const port = arrive("windowed", 1);
+      chunks(port, 8);
+      port.postMessage.mockImplementationOnce(() => {
+         throw new Error("The port is closed");
+      });
+
+      const values: number[] = [];
+      for (let read = 0; read < 4; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         values.push((await stream.next()).value);
+      }
+
+      expect(values).toStrictEqual([0, 1, 2, 3]);
+      // The first attempt (6) threw, so the next read grants the total of that moment.
+      expect(sentCredits(port)).toStrictEqual([6, 7]);
+   });
+});
+
+describe("stream, main process and page, flow control over real message channels", () => {
+   /** A generator which counts the chunks that it produced. */
+   const counting = (state: { produced: number; finalized: boolean }) =>
+      async function* () {
+         try {
+            for (;;) {
+               state.produced += 1;
+               yield state.produced;
+            }
+         } finally {
+            state.finalized = true;
+         }
+      };
+
+   it("keeps a fast generator within the window of a reader which stopped reading", async () => {
+      const { ipc, api } = await loadBoth();
+      const state = { produced: 0, finalized: false };
+      ipc.windowed.handle(counting(state));
+
+      const stream = api.windowed.stream();
+      for (let read = 0; read < 3; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         await stream.next();
+      }
+      await settle();
+      await settle();
+
+      // Three chunks are read, and the reader granted a window of 4 on top of those it read.
+      expect(state.produced).toBeGreaterThanOrEqual(4);
+      expect(state.produced).toBeLessThanOrEqual(3 + 4);
+      const paused = state.produced;
+      await settle();
+      expect(state.produced).toBe(paused);
+
+      stream.cancel();
+      await settle();
+      expect(state.finalized).toBe(true);
+   });
+
+   it("reads every chunk in order through many pauses, with a slow reader", async () => {
+      const { ipc, api } = await loadBoth();
+      ipc.windowed.handle(async function* () {
+         for (let n = 0; n < 300; n++) {
+            yield n;
+         }
+      });
+
+      const seen: number[] = [];
+      for await (const n of api.windowed.stream()) {
+         seen.push(n);
+         if (n % 50 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2));
+         }
+      }
+
+      expect(seen).toStrictEqual(Array.from({ length: 300 }, (_, n) => n));
+   });
+
+   it("produces a chunk at a time for a reader that pulls, when the window is 0", async () => {
+      const { ipc, api } = await loadBoth();
+      const state = { produced: 0, finalized: false };
+      ipc.pulled.handle(counting(state));
+
+      const stream = api.pulled.stream();
+      for (let read = 1; read <= 5; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         expect(await stream.next()).toStrictEqual({ done: false, value: read });
+         await settle();
+         expect(state.produced).toBe(read);
+      }
+
+      stream.cancel();
+      await settle();
+      expect(state.finalized).toBe(true);
+   });
+
+   it("ends a stream whose chunks exactly fill the window, and one that is shorter", async () => {
+      const { ipc, api } = await loadBoth();
+      ipc.windowed.handle(async function* () {
+         yield* [1, 2, 3, 4];
+      });
+      ipc.pulled.handle(async function* () {
+         yield* [1, 2];
+      });
+
+      const full: number[] = [];
+      for await (const n of api.windowed.stream()) {
+         full.push(n);
+      }
+      const pulled: number[] = [];
+      for await (const n of api.pulled.stream()) {
+         pulled.push(n);
+      }
+
+      expect(full).toStrictEqual([1, 2, 3, 4]);
+      expect(pulled).toStrictEqual([1, 2]);
+   });
+
+   it("fails a paused stream with the error of the generator once the page reads on", async () => {
+      const { ipc, api } = await loadBoth();
+      ipc.windowed.handle(async function* () {
+         yield* [1, 2, 3, 4];
+         throw Object.assign(new Error("exploded"), { code: "E_BOOM" });
+      });
+
+      const seen: number[] = [];
+      let failure: unknown;
+      try {
+         for await (const n of api.windowed.stream()) {
+            seen.push(n);
+         }
+      } catch (error) {
+         failure = error;
+      }
+
+      expect(seen).toStrictEqual([1, 2, 3, 4]);
+      expect(failure).toMatchObject({ message: "exploded", code: "E_BOOM" });
+   });
+});

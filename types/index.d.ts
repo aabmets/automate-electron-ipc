@@ -145,10 +145,16 @@ export interface SendConfig<S extends ChannelSignature = ChannelSignature> exten
  * @property allowedOrigins - The origins which may start the stream. See `InvokeConfig`.
  * @property validate - A Standard Schema of the arguments. See `InvokeConfig`. A call with invalid
  *    arguments fails the stream with an `IpcValidationError`, before the handler runs.
+ * @property highWaterMark - The most chunks that the generator may be ahead of the page: the main
+ *    process sends this many chunks, and then stops pulling from the generator until the page has
+ *    read some of them. A non-negative integer literal, or `Infinity` for no limit. The default is
+ *    1024. The unit is the chunk, whatever its size, so lower it for large chunks. `0` makes the
+ *    stream pull-based: the generator is asked for a chunk only while the page waits for one.
  */
 export interface StreamConfig<S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
+   highWaterMark?: number;
 }
 
 /**
@@ -198,6 +204,18 @@ export interface UtilityConfig<_S extends ChannelSignature = ChannelSignature> {
  */
 export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignature>
    extends ScopedConfig {}
+
+/**
+ * Options of `streamUtility` channels. See `UtilityPortConfig`.
+ *
+ * @property highWaterMark - The most chunks that the generator in the child may be ahead of the
+ *    page. See `StreamConfig`. The window is per call, though all the streams of a channel share
+ *    one port.
+ */
+export interface UtilityStreamConfig<S extends ChannelSignature = ChannelSignature>
+   extends UtilityPortConfig<S> {
+   highWaterMark?: number;
+}
 
 /**
  * Options of the channels that a service worker calls in the main process (`invokeFromWorker` and
@@ -361,7 +379,10 @@ export function ask<S extends ChannelSignature = never>(
  * `{ name, message, code?, data? }` of an `invoke` error. The optional second type argument lists
  * the error types, like that of `invoke`.
  *
- * There is no backpressure: the generator runs ahead of a page that reads slowly.
+ * The generator is slowed down for a page that reads slowly. The page grants the main process a
+ * window of `highWaterMark` unread chunks, the main process stops pulling from the generator when
+ * the window is used up, and the page grants more as it reads. `cancel()` and errors work while
+ * the generator is paused.
  *
  * @example
  * exportRows: stream<(table: string) => AsyncIterable<Row>, DatabaseError>()
@@ -500,8 +521,9 @@ export function invokeUtility<S extends ChannelSignature = never, E extends Erro
  * The page calls `ipc.<name>.stream(...args)`, which returns the same async iterator with
  * `cancel()` as that of a `stream` channel. All the streams of a channel share the one port, so
  * the chunks of each carry the ID of its call. A stream that is open when the connection closes
- * fails with `IPC_UTILITY_EXITED`, and the generator in the child is stopped. There is no
- * backpressure: the generator runs ahead of a page that reads slowly.
+ * fails with `IPC_UTILITY_EXITED`, and the generator in the child is stopped. The generator is
+ * slowed down for a page that reads slowly, as for a `stream` channel: see `highWaterMark` of
+ * `StreamConfig`. Each call has its own window.
  *
  * @example
  * scanRows: streamUtility<(table: string) => AsyncIterable<Row>, DatabaseError>()
@@ -510,7 +532,7 @@ export function invokeUtility<S extends ChannelSignature = never, E extends Erro
  * scanRows: streamUtility() as (table: string) => AsyncIterable<Row>
  */
 export function streamUtility<S extends ChannelSignature = never, E extends Error = never>(
-   config?: UtilityPortConfig<NoInfer<S>>,
+   config?: UtilityStreamConfig<NoInfer<S>>,
 ): ChannelResult<S, E>;
 
 /**

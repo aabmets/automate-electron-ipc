@@ -502,7 +502,7 @@ export class PreloadBindingsWriter extends BaseWriter {
     * `break` of a `for await` loop.
     */
    private buildStreamChannel(spec: t.ChannelSpec): ChannelEntry {
-      const implementation = `(...args: any[]) => openStream('${spec.name}', ${this.wireName(spec.name)}, args)`;
+      const implementation = `(...args: any[]) => openStream('${spec.name}', ${this.wireName(spec.name)}, args, ${this.getHighWaterMark(spec)})`;
       return this.buildChannel(spec.name, "stream", implementation);
    }
 
@@ -512,8 +512,16 @@ export class PreloadBindingsWriter extends BaseWriter {
     * page gets no `ipcRenderer`, only the object with `next`, `return`, `cancel` and
     * `Symbol.asyncIterator`. The transport feeds it with `push` and ends it with `finish`:
     * - chunks are queued until the page reads them, and a read resolves in order, also when the
-    *   page asks for several chunks at once. The stream is not slowed down for a slow reader, so a
-    *   reader that stops reading without cancelling keeps the chunks in memory;
+    *   page asks for several chunks at once;
+    * - the flow is controlled by credits (see `startStream` in the main process). The sender may
+    *   send `highWaterMark` chunks that are not read yet, and the reader grants more through
+    *   `grant(limit)`, with the total number of chunks that it allows so far: the chunks it has
+    *   read, plus the window, which is at least the number of reads that wait. It does so once
+    *   half a window has been read, so that a fast reader costs one message per half window and the
+    *   queue does not run dry in the meantime. `grant` returns false when the transport cannot send
+    *   yet, and then the grant is made later, by `topUp()`, which the transport calls when it can.
+    *   A reader that stops reading without cancelling holds at most the window in memory.
+    *   `Infinity` never grants, and the sender is not slowed down;
     * - `finish()` closes the stream after the queued chunks, and `finish({ error })` does so by
     *   rejecting a read with the error object, once the queued chunks have been read, as a plain
     *   object, since contextBridge does not keep the fields of an `Error`;
@@ -525,16 +533,28 @@ export class PreloadBindingsWriter extends BaseWriter {
       return [
          "type StreamResult = { done: boolean; value: unknown };",
          "",
-         "function createStreamReader(stop: () => void, cancelRemote: () => void) {",
+         "function createStreamReader(stop: () => void, cancelRemote: () => void, highWaterMark: number, grant: (limit: number) => boolean) {",
          `${i1}const chunks: unknown[] = [];`,
          `${i1}const waiters: { resolve: (result: StreamResult) => void; reject: (error: unknown) => void }[] = [];`,
          `${i1}let finished = false;`,
          `${i1}let failure: { error: unknown } | null = null;`,
-         `${i1}const drain = () => {`,
+         `${i1}let consumed = 0;`,
+         `${i1}let granted = highWaterMark;`,
+         `${i1}const topUp = () => {`,
+         `${i2}if (finished || highWaterMark === Infinity) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}const wanted = consumed + Math.max(highWaterMark, waiters.length);`,
+         `${i2}if (wanted - granted >= Math.max(1, Math.ceil(highWaterMark / 2)) && grant(wanted)) {`,
+         `${i3}granted = wanted;`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const flush = () => {`,
          `${i2}while (waiters.length > 0) {`,
          `${i3}const waiter = waiters[0];`,
          `${i3}if (chunks.length > 0) {`,
          `${i4}waiters.shift();`,
+         `${i4}consumed += 1;`,
          `${i4}waiter.resolve({ done: false, value: chunks.shift() });`,
          `${i3}} else if (!finished) {`,
          `${i4}return;`,
@@ -548,6 +568,10 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i4}waiter.resolve({ done: true, value: undefined });`,
          `${i3}}`,
          `${i2}}`,
+         `${i1}};`,
+         `${i1}const drain = () => {`,
+         `${i2}flush();`,
+         `${i2}topUp();`,
          `${i1}};`,
          `${i1}const finish = (error?: { error: unknown }) => {`,
          `${i2}if (finished) {`,
@@ -589,7 +613,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}drain();`,
          `${i2}}`,
          `${i1}};`,
-         `${i1}return { stream, push, finish, isFinished: () => finished };`,
+         `${i1}return { stream, push, finish, topUp, isFinished: () => finished };`,
          "}",
          "",
       ].join("\n");
@@ -612,7 +636,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          "const streamPorts: { [id: number]: ((port: MessagePort | undefined) => void) | undefined } = { __proto__: null } as any;",
          "let lastStreamId = 0;",
          "",
-         "function openStream(channel: string, wire: string, args: any[]) {",
+         "function openStream(channel: string, wire: string, args: any[], highWaterMark: number) {",
          `${i1}const id = ++lastStreamId;`,
          `${i1}let port: MessagePort | null = null;`,
          `${i1}const reader = createStreamReader(`,
@@ -626,6 +650,18 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}}`,
          `${i2}},`,
          `${i2}() => port?.postMessage({ type: 'cancel' }),`,
+         `${i2}highWaterMark,`,
+         `${i2}(limit) => {`,
+         `${i3}if (!port) {`,
+         `${i4}return false;`,
+         `${i3}}`,
+         `${i3}try {`,
+         `${i4}port.postMessage({ type: 'credit', limit });`,
+         `${i4}return true;`,
+         `${i3}} catch {`,
+         `${i4}return false;`,
+         `${i3}}`,
+         `${i2}},`,
          `${i1});`,
          `${i1}streamPorts[id] = (next) => {`,
          `${i2}if (!next) {`,
@@ -663,6 +699,8 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i4}reader.finish({ error: { name: 'IpcStreamError', message, code: 'IPC_STREAM_CLOSED' } });`,
          `${i3}}`,
          `${i2}});`,
+         `${i2}// Reads that were made before the port arrived have not granted anything yet.`,
+         `${i2}reader.topUp();`,
          `${i1}};`,
          `${i1}const unreadable = { name: 'IpcStreamError', message: \`The main process sent an unreadable reply to the channel '\${channel}'\`, code: 'IPC_STREAM_INVALID_REPLY' };`,
          `${i1}try {`,
@@ -721,7 +759,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          return this.buildChannel(
             spec.name,
             "stream",
-            `(...args: any[]) => openUtilityStream(${client}, args)`,
+            `(...args: any[]) => openUtilityStream(${client}, args, ${this.getHighWaterMark(spec)})`,
          );
       }
       return this.buildChannel(
@@ -740,7 +778,8 @@ export class PreloadBindingsWriter extends BaseWriter {
     *   `IPC_UTILITY_EXITED`, since the process is gone;
     * - a call posts `{ __ipc: 'call', channel, id, args }` and is answered by `reply` with the
     *   envelope of the `invoke` channels. A stream posts `stream` and is fed by `chunk`, `end`
-    *   and `error` messages of the same ID, all of one port, and `cancel` stops it in the child;
+    *   and `error` messages of the same ID, all of one port, `credit` (see `createStreamReader`)
+    *   lets the child send more, and `cancel` stops it in the child;
     * - a port that arrives for the channel replaces the one it has, and the calls and streams that
     *   were open on the old one fail with `IPC_UTILITY_EXITED`. The main process closes the
     *   connection through `<channel>:close` with the key, which ignores any other key. The close of
@@ -877,11 +916,23 @@ export class PreloadBindingsWriter extends BaseWriter {
          "",
          ...(streams
             ? [
-                 "function openUtilityStream(client: UtilityClient, args: any[]) {",
+                 "function openUtilityStream(client: UtilityClient, args: any[], highWaterMark: number) {",
                  `${i1}const id = ++lastUtilityCallId;`,
                  `${i1}const reader = createStreamReader(`,
                  `${i2}() => void client.streams.delete(id),`,
                  `${i2}() => client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id }),`,
+                 `${i2}highWaterMark,`,
+                 `${i2}(limit) => {`,
+                 `${i3}if (!client.port || !client.streams.has(id)) {`,
+                 `${i4}return false;`,
+                 `${i3}}`,
+                 `${i3}try {`,
+                 `${i4}client.port.postMessage({ __ipc: 'credit', channel: client.channel, id, limit });`,
+                 `${i4}return true;`,
+                 `${i3}} catch {`,
+                 `${i4}return false;`,
+                 `${i3}}`,
+                 `${i2}},`,
                  `${i1});`,
                  `${i1}const start = () => {`,
                  `${i2}if (reader.isFinished()) {`,
@@ -890,6 +941,7 @@ export class PreloadBindingsWriter extends BaseWriter {
                  `${i2}client.streams.set(id, { push: reader.push, finish: reader.finish });`,
                  `${i2}try {`,
                  `${i3}client.port?.postMessage({ __ipc: 'stream', channel: client.channel, id, args });`,
+                 `${i3}reader.topUp();`,
                  `${i2}} catch (error) {`,
                  `${i3}reader.finish({ error: utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE') });`,
                  `${i2}}`,

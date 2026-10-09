@@ -32,6 +32,11 @@ export default defineChannels({
       allowedOrigins: ["app://."],
       validate: countArgs,
    }),
+   // The flow control of the stream: a window of unread chunks, a pull-based stream, and no limit.
+   windowed: stream<() => AsyncIterable<number>>({ highWaterMark: 4 }),
+   pulled: stream<() => AsyncIterable<number>>({ highWaterMark: 0 }),
+   // biome-ignore lint/style/useNumberNamespace: the schema syntax for no limit is Infinity
+   unbounded: stream<() => AsyncIterable<number>>({ highWaterMark: Infinity }),
    // The as form.
    asForm: stream() as (count: number) => AsyncIterable<number>,
    // The other verbs next to the streams.

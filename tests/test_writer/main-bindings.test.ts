@@ -1633,7 +1633,43 @@ describe("MainBindingsWriter", () => {
             "const listener = (event: IpcMainInvokeEvent, id: unknown, ...rest: unknown[]) =>",
          );
          expect(output).toContain(
-            "settleInvoke(() => startStream(event, 'exportRows', 'exportRows', id, () => (handler as (...rest: unknown[]) => unknown)(event, ...rest)));",
+            "settleInvoke(() => startStream(event, 'exportRows', 'exportRows', id, 1024, () => (handler as (...rest: unknown[]) => unknown)(event, ...rest)));",
+         );
+      });
+
+      it("passes the window of the channel to the stream: 1024 chunks, or the highWaterMark", async () => {
+         const windowed = { ...rows, name: "windowed", highWaterMark: 4 };
+         const pulled = { ...rows, name: "pulled", highWaterMark: 0 };
+         const unbounded = { ...rows, name: "unbounded", highWaterMark: Number.POSITIVE_INFINITY };
+         const output = await render([rows, windowed, pulled, unbounded]);
+
+         for (const [name, window] of [
+            ["exportRows", "1024"],
+            ["windowed", "4"],
+            ["pulled", "0"],
+            ["unbounded", "Infinity"],
+         ]) {
+            expect(output).toContain(
+               `startStream(event, '${name}', '${name}', id, ${window}, () =>`,
+            );
+         }
+      });
+
+      it("pauses the pump at the limit, and resumes it on a credit, a cancel or a stop", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain("highWaterMark: number,");
+         expect(output).toContain("let limit = highWaterMark;");
+         expect(output).toContain("if (sent >= limit) {");
+         expect(output).toContain(
+            "data.type === 'credit' && typeof data.limit === 'number' && data.limit > limit",
+         );
+         expect(output).toContain("sent += 1;");
+         // The stop of a stream wakes the pump that waits, so that it can end.
+         expect(output).toMatch(/done = true;\n\s+resume\(\);/);
+         // The check comes before the generator is asked for a chunk.
+         expect(output.indexOf("if (sent >= limit) {")).toBeLessThan(
+            output.indexOf("step = await iterator.next();"),
          );
       });
 
@@ -1726,9 +1762,9 @@ describe("MainBindingsWriter", () => {
          const output = await render([rows], { channelPrefix: "app:" });
 
          expect(output).toContain("target.ipc.handle('app:exportRows', listener);");
-         expect(output).toContain("startStream(event, 'exportRows', 'app:exportRows', id, ");
+         expect(output).toContain("startStream(event, 'exportRows', 'app:exportRows', id, 1024, ");
          const bare = await render([rows], { channelPrefix: "" });
-         expect(bare).toContain("startStream(event, 'exportRows', 'exportRows', id, ");
+         expect(bare).toContain("startStream(event, 'exportRows', 'exportRows', id, 1024, ");
          expect(await render([rows], {})).toBe(bare);
       });
 
@@ -1747,7 +1783,7 @@ describe("MainBindingsWriter", () => {
             "const listener = (_event: IpcMainInvokeEvent, _id: unknown, ..._rest: unknown[]) =>",
          );
          expect(output).toContain(
-            "startStream(_event, 'clash', 'clash', _id, () => (_handler as (..._rest: unknown[]) => unknown)(_event, ..._rest))",
+            "startStream(_event, 'clash', 'clash', _id, 1024, () => (_handler as (..._rest: unknown[]) => unknown)(_event, ..._rest))",
          );
       });
 

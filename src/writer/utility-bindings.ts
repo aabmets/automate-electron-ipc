@@ -44,6 +44,7 @@ export class UtilityBindingsWriter extends BaseWriter {
                  "BrokerStream",
                  "brokerCalls",
                  "brokerStreams",
+                 "brokerWindows",
                  "brokerChannels",
                  "setBrokerCall",
                  "setBrokerStream",
@@ -165,14 +166,26 @@ export class UtilityBindingsWriter extends BaseWriter {
     * of the call. A `cancel` message, and the close of the port, stop the iterator once with
     * `return()`, so the generator runs its `finally` blocks, and no chunk is sent after it. Everything
     * that goes wrong before the first chunk is sent as the `error` message of the call. A chunk that
-    * cannot be cloned stops the iterator and fails the stream. The generator is not slowed down for a
-    * page that reads slowly: there is no backpressure.
+    * cannot be cloned stops the iterator and fails the stream.
+    *
+    * The flow is controlled by credits, per call, as in `startStream` of `main.ts`. A call starts
+    * with a `limit` of the `highWaterMark` of its channel, and the pump does not pull from the
+    * generator once it has sent that many chunks. The page raises the limit with `{ __ipc: 'credit',
+    * channel, id, limit }`, the total number of chunks that it allows so far, as it reads. A
+    * cancel, a closed port and an error wake a paused pump, so they work while the generator is
+    * paused.
     */
    private buildBrokerServer(brokered: t.ChannelSpec[]): string {
       const [i1, i2, i3, i4, i5] = this.indents;
       const channels = brokered
          .map((spec) => this.wireName(spec.name))
          .sort(utils.compareStrings)
+         .join(", ");
+      const windows = brokered
+         .filter((spec) => spec.kind === "Stream")
+         .map((spec) => [this.wireName(spec.name), this.getHighWaterMark(spec)] as const)
+         .sort(([a], [b]) => utils.compareStrings(a, b))
+         .map(([wire, mark]) => `[${wire}, ${mark}]`)
          .join(", ");
       return [
          "interface BrokerPort {",
@@ -185,9 +198,12 @@ export class UtilityBindingsWriter extends BaseWriter {
          "interface BrokerStream {",
          `${i1}iterator?: AsyncIterator<unknown>;`,
          `${i1}cancelled: boolean;`,
+         `${i1}limit: number;`,
+         `${i1}wake?: () => void;`,
          "}",
          "",
          `const brokerChannels = new Set<string>([${channels}]);`,
+         `const brokerWindows = new Map<string, number>([${windows}]);`,
          "const brokerCalls = new Map<string, UtilityCallback>();",
          "const brokerStreams = new Map<string, UtilityCallback>();",
          "",
@@ -226,7 +242,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i1}id: number,`,
          `${i1}args: unknown[],`,
          "): Promise<void> {",
-         `${i1}const entry: BrokerStream = { cancelled: false };`,
+         `${i1}const entry: BrokerStream = { cancelled: false, limit: brokerWindows.get(channel) ?? 0 };`,
          `${i1}streams.set(id, entry);`,
          `${i1}const fail = (error: unknown): void => {`,
          `${i2}entry.cancelled = true;`,
@@ -261,7 +277,15 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i2}return;`,
          `${i1}}`,
          `${i1}entry.iterator = iterator;`,
+         `${i1}let sent = 0;`,
          `${i1}while (!entry.cancelled) {`,
+         `${i2}if (sent >= entry.limit) {`,
+         `${i3}// The page has not read enough chunks: the generator waits for credit or a cancel.`,
+         `${i3}await new Promise<void>((resolve) => {`,
+         `${i4}entry.wake = resolve;`,
+         `${i3}});`,
+         `${i3}continue;`,
+         `${i2}}`,
          `${i2}let step: IteratorResult<unknown>;`,
          `${i2}try {`,
          `${i3}step = await iterator.next();`,
@@ -286,6 +310,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}try {`,
          `${i3}peer.post({ __ipc: 'chunk', channel, id, value: step.value });`,
+         `${i3}sent += 1;`,
          `${i2}} catch (error) {`,
          `${i3}stopBrokerIterator(iterator);`,
          `${i3}fail({ name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
@@ -307,11 +332,18 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i3}if (!streams.has(source.id)) {`,
          `${i4}void runBrokeredStream(channel, peer, streams, source.id, source.args);`,
          `${i3}}`,
+         `${i2}} else if (source.__ipc === 'credit' && typeof source.id === 'number') {`,
+         `${i3}const entry = streams.get(source.id);`,
+         `${i3}if (entry && typeof source.limit === 'number' && source.limit > entry.limit) {`,
+         `${i4}entry.limit = source.limit;`,
+         `${i4}entry.wake?.();`,
+         `${i3}}`,
          `${i2}} else if (source.__ipc === 'cancel' && typeof source.id === 'number') {`,
          `${i3}const entry = streams.get(source.id);`,
          `${i3}if (entry) {`,
          `${i4}entry.cancelled = true;`,
          `${i4}streams.delete(source.id);`,
+         `${i4}entry.wake?.();`,
          `${i4}if (entry.iterator) {`,
          `${i5}stopBrokerIterator(entry.iterator);`,
          `${i4}}`,
@@ -324,6 +356,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i2}closeUtilityPeer(peer, 'The page closed the connection');`,
          `${i2}for (const entry of [...streams.values()]) {`,
          `${i3}entry.cancelled = true;`,
+         `${i3}entry.wake?.();`,
          `${i3}if (entry.iterator) {`,
          `${i4}stopBrokerIterator(entry.iterator);`,
          `${i3}}`,

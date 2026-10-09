@@ -17,7 +17,9 @@ export default defineChannels({
    count: streamUtility<(to: number) => AsyncIterable<number>>(),
    endless: streamUtility<() => AsyncIterable<number>>(),
    broken: streamUtility<(failAt: number) => AsyncIterable<number>>(),
+   windowed: streamUtility<() => AsyncIterable<number>>({ highWaterMark: 4 }),
    // The main process asks the utility process, next to the ports of the pages.
    double: callUtility<(n: number) => Promise<number>>(),
    finalized: callUtility<() => Promise<boolean>>(),
+   produced: callUtility<() => Promise<number>>(),
 });

@@ -14,4 +14,6 @@ export default defineChannels({
    count: stream<(to: number) => AsyncIterable<number>>(),
    endless: stream<() => AsyncIterable<number>>(),
    broken: stream<(failAt: number) => AsyncIterable<number>, StreamFailure>(),
+   windowed: stream<() => AsyncIterable<number>>({ highWaterMark: 4 }),
+   pulled: stream<() => AsyncIterable<number>>({ highWaterMark: 0 }),
 });

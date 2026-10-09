@@ -245,6 +245,11 @@ export interface ChannelSpec {
     */
    maxQueue?: number;
    /**
+    * The most chunks of a Stream channel that the page has not read yet, which the producer may
+    * send ahead, or `Infinity` for no limit. Absent means the default of the generated code.
+    */
+   highWaterMark?: number;
+   /**
     * The time in milliseconds after which an `invoke` channel rejects with an `IpcTimeoutError`.
     * `0` means no timeout, also where the config sets a default. Absent means the default of the
     * config.

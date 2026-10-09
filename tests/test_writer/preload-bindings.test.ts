@@ -781,9 +781,34 @@ describe("PreloadBindingsWriter", () => {
          const output = await render([rows]);
 
          expect(output).toContain(
-            "\n   exportRows: {\n      stream: (...args: any[]) => openStream('exportRows', 'exportRows', args),\n   },",
+            "\n   exportRows: {\n      stream: (...args: any[]) => openStream('exportRows', 'exportRows', args, 1024),\n   },",
          );
          expect(output).not.toContain("exportRows: {\n      invoke:");
+      });
+
+      it("passes the window of the channel to the stream: 1024 chunks, or the highWaterMark", async () => {
+         const windowed = { ...rows, name: "windowed", highWaterMark: 4 };
+         const pulled = { ...rows, name: "pulled", highWaterMark: 0 };
+         const unbounded = { ...rows, name: "unbounded", highWaterMark: Number.POSITIVE_INFINITY };
+         const output = await render([rows, windowed, pulled, unbounded]);
+
+         for (const [name, window] of [
+            ["exportRows", "1024"],
+            ["windowed", "4"],
+            ["pulled", "0"],
+            ["unbounded", "Infinity"],
+         ]) {
+            expect(output).toContain(`openStream('${name}', '${name}', args, ${window})`);
+         }
+      });
+
+      it("grants credits from the reader, and only to a port that can be posted to", async () => {
+         const output = await render([rows]);
+
+         expect(output).toContain("highWaterMark: number, grant: (limit: number) => boolean");
+         expect(output).toContain("port.postMessage({ type: 'credit', limit });");
+         expect(output).toContain("Math.max(1, Math.ceil(highWaterMark / 2))");
+         expect(output).toContain("reader.topUp();");
       });
 
       it("listens for the ports of the calls of every channel, in name order", async () => {
@@ -836,10 +861,10 @@ describe("PreloadBindingsWriter", () => {
       it("puts the prefix in front of the request and the port channel only", async () => {
          const output = await render([rows], { channelPrefix: "app:" });
 
-         expect(output).toContain("openStream('exportRows', 'app:exportRows', args)");
+         expect(output).toContain("openStream('exportRows', 'app:exportRows', args, 1024)");
          expect(output).toContain("listenForStreamPorts('app:exportRows:port');");
          const bare = await render([rows], { channelPrefix: "" });
-         expect(bare).toContain("openStream('exportRows', 'exportRows', args)");
+         expect(bare).toContain("openStream('exportRows', 'exportRows', args, 1024)");
          expect(await render([rows], {})).toBe(bare);
       });
 
@@ -922,8 +947,27 @@ describe("PreloadBindingsWriter, renderer to utility channels", () => {
          "\n   queryRows: {\n      invoke: (...args: any[]) => callUtilityPort(utilityClients['queryRows'], args),\n   },",
       );
       expect(output).toContain(
-         "\n   scanRows: {\n      stream: (...args: any[]) => openUtilityStream(utilityClients['scanRows'], args),\n   },",
+         "\n   scanRows: {\n      stream: (...args: any[]) => openUtilityStream(utilityClients['scanRows'], args, 1024),\n   },",
       );
+   });
+
+   it("passes the window of the channel to the client of a stream, and grants credits to the child", async () => {
+      const windowed = { ...streamUtility, name: "windowed", highWaterMark: 4 };
+      const unbounded = {
+         ...streamUtility,
+         name: "unbounded",
+         highWaterMark: Number.POSITIVE_INFINITY,
+      };
+      const output = await render(streamUtility, windowed, unbounded);
+
+      for (const [name, window] of [
+         ["scanRows", "1024"],
+         ["windowed", "4"],
+         ["unbounded", "Infinity"],
+      ]) {
+         expect(output).toContain(`openUtilityStream(utilityClients['${name}'], args, ${window})`);
+      }
+      expect(output).toContain("{ __ipc: 'credit', channel: client.channel, id, limit }");
    });
 
    it("listens for the port and the close of each channel, on the wire names, sorted", async () => {

@@ -1063,6 +1063,69 @@ describe("getCloneWarnings", () => {
    });
 });
 
+describe("validateChannelSpecs, highWaterMark", () => {
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      highWaterMark: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const spec = new ChannelSpecGenerator().generate(
+         direction,
+         kind,
+         kind === "Stream" ? "AsyncIterable<number>" : undefined,
+      );
+      return [{ ...spec, highWaterMark } as Partial<t.ChannelSpec>];
+   };
+
+   it.each([
+      ["RendererToMain", 0],
+      ["RendererToMain", 1024],
+      ["RendererToMain", Number.POSITIVE_INFINITY],
+      ["RendererToMain", Number.MAX_SAFE_INTEGER],
+      ["RendererToMain", undefined],
+      ["RendererToUtility", 4],
+      ["RendererToUtility", Number.POSITIVE_INFINITY],
+   ] as const)("accepts %s %s on Stream channels", (direction, highWaterMark) => {
+      expect(() =>
+         vld.validateChannelSpecs(make(direction, "Stream", highWaterMark)),
+      ).not.toThrowError();
+   });
+
+   it.each([-1, 1.5, Number.NEGATIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2])(
+      "rejects %s and names the channel and the file",
+      (highWaterMark) => {
+         const specs = make("RendererToMain", "Stream", highWaterMark);
+         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+            /Schema file 'schema\.ts': Channel 'vitestChannel_0': highWaterMark must be a non-negative integer or Infinity/,
+         );
+      },
+   );
+
+   it("rejects a number that is not a number", () => {
+      expect(() =>
+         vld.validateChannelSpecs(make("RendererToMain", "Stream", Number.NaN)),
+      ).toThrowError(/highWaterMark/);
+      expect(() => vld.validateChannelSpecs(make("RendererToMain", "Stream", "10"))).toThrowError(
+         /highWaterMark/,
+      );
+   });
+
+   it("rejects highWaterMark on the channels that are not streams", () => {
+      for (const [direction, kind] of [
+         ["RendererToMain", "Unicast"],
+         ["RendererToMain", "Broadcast"],
+         ["MainToRenderer", "Broadcast"],
+         ["MainToRenderer", "Unicast"],
+         ["RendererToRenderer", "Port"],
+         ["RendererToUtility", "Unicast"],
+      ] as const) {
+         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(
+            /highWaterMark/,
+         );
+      }
+   });
+});
+
 describe("validateChannelSpecs, maxQueue", () => {
    const make = (
       direction: t.ChannelDirection,

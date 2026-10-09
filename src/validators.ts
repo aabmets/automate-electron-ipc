@@ -311,6 +311,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
       scopes: scoped ? optional(ScopesStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
+      highWaterMark: streaming ? optional(number()) : optional(never()),
       timeoutMs:
          kind === "Unicast" && !asking && !utility && !brokered && !workerCall && !workerNotify
             ? optional(number())
@@ -397,17 +398,21 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
 }
 
 /**
- * Throws if `maxQueue` is not a non-negative safe integer or `Infinity`. The parser reports the
- * same for the schema file, so this guards the specs that did not come from it.
+ * Throws if `maxQueue` or `highWaterMark` is not a non-negative safe integer or `Infinity`. The
+ * parser reports the same for the schema file, so this guards the specs that did not come from it.
  */
-function validateMaxQueue(spec: Partial<t.ChannelSpec>, file?: string): void {
-   const value = spec.maxQueue;
+function validateCountLimit(
+   spec: Partial<t.ChannelSpec>,
+   option: "maxQueue" | "highWaterMark",
+   file?: string,
+): void {
+   const value = spec[option];
    if (value === undefined || value === Number.POSITIVE_INFINITY) {
       return;
    } else if (!Number.isSafeInteger(value) || value < 0) {
       const where = file === undefined ? "" : `Schema file '${file}': `;
       throw new Error(
-         `${where}Channel '${spec.name}': maxQueue must be a non-negative integer or Infinity, ` +
+         `${where}Channel '${spec.name}': ${option} must be a non-negative integer or Infinity, ` +
             `found ${value}.`,
       );
    }
@@ -498,7 +503,8 @@ export function validateChannelSpecs(
          );
       }
       validateChannelSpecWithStruct(spec);
-      validateMaxQueue(spec, file);
+      validateCountLimit(spec, "maxQueue", file);
+      validateCountLimit(spec, "highWaterMark", file);
       validateTimeoutMs(spec, file);
       validateCloneIssues(spec, file);
 

@@ -118,10 +118,13 @@ describe("utility ports, files", () => {
          "counter.stream",
          "getUser.invoke",
          "ping.invoke",
+         "pulledRows.stream",
          "queryRows.invoke",
          "scanRows.stream",
          "streamForm.stream",
          "tagged.invoke",
+         "unboundedRows.stream",
+         "windowedRows.stream",
       ];
       expect(callablePaths(preload.exposed.ipc)).toStrictEqual(paths);
       expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual(paths);
@@ -1545,5 +1548,368 @@ describe("utility ports, the three scripts together over real ports", () => {
       finishLoading(contents);
 
       expect(await page.countRows.invoke("rows!")).toBe(5);
+   });
+});
+
+describe("utility ports, the utility process, flow control", () => {
+   const credit = (channel: string, id: number, limit: unknown) => ({
+      __ipc: "credit",
+      channel: wire(channel),
+      id,
+      limit,
+   });
+   const upTo = (count: number) => Array.from({ length: count }, (_, value) => value);
+   const fill = (source: ReturnType<typeof createSource>, count: number) => {
+      for (const value of upTo(count)) {
+         source.push(value);
+      }
+   };
+   /** The values of the chunks of one call that were sent to the page. */
+   const sentValues = (port: FakeBrokerPort, id: number) =>
+      port
+         .posted("chunk")
+         .filter((message) => message.id === id)
+         .map((message) => message.value);
+
+   it("stops pulling from the generator at the window of the channel, and goes on when the page grants more", async () => {
+      const { ipc, broker } = await loadUtility();
+      const source = createSource();
+      ipc.windowedRows.handle(() => source.iterable);
+      const port = broker("windowedRows");
+
+      port.fromPage(startStream("windowedRows", 1));
+      await flush();
+      fill(source, 10);
+      await settle();
+      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+      expect(source.iterator.next).toHaveBeenCalledTimes(4);
+
+      port.fromPage(credit("windowedRows", 1, 6));
+      await settle();
+      expect(sentValues(port, 1)).toStrictEqual(upTo(6));
+
+      port.fromPage(credit("windowedRows", 1, 100));
+      source.end();
+      await settle();
+      expect(sentValues(port, 1)).toStrictEqual(upTo(10));
+      expect(port.posted("end")).toHaveLength(1);
+      expect(source.iterator.return).not.toHaveBeenCalled();
+   });
+
+   it("gives every call a window of its own on the shared port", async () => {
+      const { ipc, broker } = await loadUtility();
+      const sources = [createSource(), createSource()];
+      let opened = 0;
+      ipc.windowedRows.handle(() => sources[opened++].iterable);
+      const port = broker("windowedRows");
+      port.fromPage(startStream("windowedRows", 1));
+      port.fromPage(startStream("windowedRows", 2));
+      await flush();
+      fill(sources[0], 10);
+      fill(sources[1], 10);
+      await settle();
+
+      port.fromPage(credit("windowedRows", 2, 7));
+      port.fromPage(credit("windowedRows", 99, 7));
+      port.fromPage(credit("pulledRows", 1, 7));
+      await settle();
+
+      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+      expect(sentValues(port, 2)).toStrictEqual(upTo(7));
+   });
+
+   it("uses a window of 1024 chunks when the channel sets none, and never pauses an infinite one", async () => {
+      const { ipc, broker } = await loadUtility();
+      const standard = createSource();
+      const unbounded = createSource();
+      ipc.counter.handle(() => standard.iterable as never);
+      ipc.unboundedRows.handle(() => unbounded.iterable);
+      const counter = broker("counter");
+      const rows = broker("unboundedRows");
+      counter.fromPage(startStream("counter", 1));
+      rows.fromPage(startStream("unboundedRows", 1));
+      await flush();
+
+      fill(standard, 1500);
+      fill(unbounded, 3000);
+      unbounded.end();
+      await settle();
+
+      expect(sentValues(counter, 1)).toHaveLength(1024);
+      expect(sentValues(rows, 1)).toStrictEqual(upTo(3000));
+      expect(rows.posted("end")).toHaveLength(1);
+   });
+
+   it("pulls only what the page grants when the window is 0", async () => {
+      const { ipc, broker } = await loadUtility();
+      const source = createSource();
+      ipc.pulledRows.handle(() => source.iterable);
+      const port = broker("pulledRows");
+      port.fromPage(startStream("pulledRows", 1));
+      await flush();
+      fill(source, 3);
+      await settle();
+      expect(source.iterator.next).not.toHaveBeenCalled();
+
+      port.fromPage(credit("pulledRows", 1, 1));
+      await settle();
+      expect(sentValues(port, 1)).toStrictEqual([0]);
+
+      port.fromPage(credit("pulledRows", 1, 3));
+      await settle();
+      expect(sentValues(port, 1)).toStrictEqual([0, 1, 2]);
+   });
+
+   it("ignores a credit which does not raise the limit, or is not a number", async () => {
+      const { ipc, broker } = await loadUtility();
+      const source = createSource();
+      ipc.windowedRows.handle(() => source.iterable);
+      const port = broker("windowedRows");
+      port.fromPage(startStream("windowedRows", 1));
+      await flush();
+      fill(source, 10);
+      await settle();
+
+      for (const limit of [4, 3, -1, "9", Number.NaN, null, undefined, {}, true]) {
+         port.fromPage(credit("windowedRows", 1, limit));
+      }
+      port.fromPage({ __ipc: "credit", channel: wire("windowedRows"), id: "1", limit: 9 });
+      await settle();
+
+      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+   });
+
+   it("cancels a paused stream at once, and ignores a credit which comes after", async () => {
+      const { ipc, broker } = await loadUtility();
+      let produced = 0;
+      let finalized = 0;
+      ipc.windowedRows.handle(async function* () {
+         try {
+            for (let n = 0; ; n++) {
+               produced += 1;
+               yield n;
+            }
+         } finally {
+            finalized += 1;
+         }
+      });
+      const port = broker("windowedRows");
+      port.fromPage(startStream("windowedRows", 1));
+      await settle();
+      expect(produced).toBe(4);
+
+      port.fromPage(cancel("windowedRows", 1));
+      await settle();
+      port.fromPage(credit("windowedRows", 1, 50));
+      await settle();
+
+      expect(finalized).toBe(1);
+      expect(produced).toBe(4);
+      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+      expect(port.posted("end")).toHaveLength(0);
+      expect(port.posted("error")).toHaveLength(0);
+   });
+
+   it("stops every paused stream when the port closes", async () => {
+      const { ipc, broker } = await loadUtility();
+      const sources = [createSource(), createSource()];
+      let opened = 0;
+      ipc.windowedRows.handle(() => sources[opened++].iterable);
+      const port = broker("windowedRows");
+      port.fromPage(startStream("windowedRows", 1));
+      port.fromPage(startStream("windowedRows", 2));
+      await flush();
+      fill(sources[0], 10);
+      fill(sources[1], 10);
+      await settle();
+
+      port.emit("close");
+      await settle();
+
+      for (const source of sources) {
+         expect(source.iterator.return).toHaveBeenCalledOnce();
+         expect(source.iterator.next).toHaveBeenCalledTimes(4);
+      }
+   });
+
+   it("sends the error of the generator after the chunks, once the page has granted the pull that finds it", async () => {
+      const { ipc, broker } = await loadUtility();
+      const source = createSource();
+      ipc.windowedRows.handle(() => source.iterable);
+      const port = broker("windowedRows");
+      port.fromPage(startStream("windowedRows", 1));
+      await flush();
+      fill(source, 4);
+      source.fail({ name: "Boom", message: "exploded", code: "E1" });
+      await settle();
+      expect(port.posted("error")).toHaveLength(0);
+
+      port.fromPage(credit("windowedRows", 1, 5));
+      await settle();
+
+      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+      expect(port.posted("error")).toStrictEqual([
+         {
+            __ipc: "error",
+            channel: wire("windowedRows"),
+            id: 1,
+            error: { name: "Boom", message: "exploded", code: "E1" },
+         },
+      ]);
+   });
+});
+
+describe("utility ports, the page, flow control", () => {
+   const credits = (port: FakePagePort) =>
+      port.posted("credit").map((message) => ({ id: message.id, limit: message.limit }));
+   const chunks = (port: FakePagePort, name: string, id: number, count: number) => {
+      for (let n = 0; n < count; n++) {
+         port.deliver({ __ipc: "chunk", channel: wire(name), id, value: n });
+      }
+   };
+
+   it("grants more once half of the window is read, as a total", async () => {
+      const { api, arrive } = await loadPage();
+      const port = arrive("windowedRows");
+      const stream = api.windowedRows.stream();
+      const [start] = port.posted("stream");
+      chunks(port, "windowedRows", start.id, 4);
+
+      await stream.next();
+      expect(credits(port)).toStrictEqual([]);
+      await stream.next();
+      expect(credits(port)).toStrictEqual([{ id: start.id, limit: 6 }]);
+      await stream.next();
+      await stream.next();
+      expect(credits(port)).toStrictEqual([
+         { id: start.id, limit: 6 },
+         { id: start.id, limit: 8 },
+      ]);
+      expect(port.posted("credit")[0].channel).toBe(wire("windowedRows"));
+   });
+
+   it("grants the reads which wait only after the stream is started, when the window is 0", async () => {
+      const { api, arrive } = await loadPage();
+      const stream = api.pulledRows.stream();
+      const first = stream.next();
+      const port = arrive("pulledRows");
+      const [start] = port.posted("stream");
+      expect(credits(port)).toStrictEqual([{ id: start.id, limit: 1 }]);
+
+      chunks(port, "pulledRows", start.id, 1);
+      expect(await first).toStrictEqual({ done: false, value: 0 });
+      const second = stream.next();
+      expect(credits(port)).toStrictEqual([
+         { id: start.id, limit: 1 },
+         { id: start.id, limit: 2 },
+      ]);
+      port.deliver({ __ipc: "end", channel: wire("pulledRows"), id: start.id });
+      expect(await second).toStrictEqual({ done: true, value: undefined });
+   });
+
+   it("grants nothing before the stream is started, nor on an infinite window", async () => {
+      const { api, arrive } = await loadPage();
+      const early = api.windowedRows.stream();
+      const unbounded = api.unboundedRows.stream();
+      const port = arrive("windowedRows");
+      const other = arrive("unboundedRows");
+      const [start] = other.posted("stream");
+      chunks(other, "unboundedRows", start.id, 100);
+
+      for (let read = 0; read < 100; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         await unbounded.next();
+      }
+
+      expect(credits(other)).toStrictEqual([]);
+      expect(credits(port)).toStrictEqual([]);
+      early.cancel();
+   });
+
+   it("grants nothing for another call, and nothing after the end", async () => {
+      const { api, arrive } = await loadPage();
+      const port = arrive("windowedRows");
+      const one = api.windowedRows.stream();
+      const two = api.windowedRows.stream();
+      const [first, second] = port.posted("stream");
+      chunks(port, "windowedRows", first.id, 2);
+      chunks(port, "windowedRows", second.id, 4);
+      port.deliver({ __ipc: "end", channel: wire("windowedRows"), id: first.id });
+
+      await one.next();
+      await one.next();
+      await two.next();
+      await two.next();
+
+      expect(credits(port)).toStrictEqual([{ id: second.id, limit: 6 }]);
+   });
+});
+
+describe("utility ports, the three scripts together, flow control", () => {
+   it("keeps a fast generator in the child within the window of a reader which stopped reading", async () => {
+      const { main, utility, page, child, contents } = await loadAll();
+      const state = { produced: 0, finalized: false };
+      utility.windowedRows.handle(async function* () {
+         try {
+            for (;;) {
+               state.produced += 1;
+               yield state.produced;
+            }
+         } finally {
+            state.finalized = true;
+         }
+      });
+      main.windowedRows.connect(child, contents);
+
+      const stream = page.windowedRows.stream();
+      for (let read = 0; read < 3; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         await stream.next();
+      }
+      await settle();
+      await settle();
+
+      expect(state.produced).toBeGreaterThanOrEqual(4);
+      expect(state.produced).toBeLessThanOrEqual(3 + 4);
+      const paused = state.produced;
+      await settle();
+      expect(state.produced).toBe(paused);
+
+      stream.cancel();
+      await settle();
+      expect(state.finalized).toBe(true);
+   });
+
+   it("reads every chunk in order through many pauses, and produces a chunk at a time when the window is 0", async () => {
+      const { main, utility, page, child, contents } = await loadAll();
+      let produced = 0;
+      utility.windowedRows.handle(async function* () {
+         for (let n = 0; n < 200; n++) {
+            yield n;
+         }
+      });
+      utility.pulledRows.handle(async function* () {
+         for (;;) {
+            produced += 1;
+            yield produced;
+         }
+      });
+      main.windowedRows.connect(child, contents);
+      main.pulledRows.connect(child, contents);
+
+      const seen: number[] = [];
+      for await (const n of page.windowedRows.stream()) {
+         seen.push(n);
+      }
+      const pulled = page.pulledRows.stream();
+      for (let read = 1; read <= 4; read++) {
+         // biome-ignore lint/performance/noAwaitInLoops: the reads are made one after the other
+         expect(await pulled.next()).toStrictEqual({ done: false, value: read });
+         await settle();
+         expect(produced).toBe(read);
+      }
+      pulled.cancel();
+
+      expect(seen).toStrictEqual(Array.from({ length: 200 }, (_, n) => n));
    });
 });

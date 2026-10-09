@@ -593,12 +593,35 @@ before the handler runs.
 
 Things to know:
 
-- **There is no backpressure.** The generator runs ahead of a page that reads slowly, and the chunks
-  wait in the memory of the page until they are read. A page that stops reading should `cancel()`.
+- **A slow reader slows the generator down.** The page grants the main process a window of
+  `highWaterMark` chunks that it has not read yet (the default is 1024). The main process stops
+  pulling from the generator when the window is used up, and the page grants more as it reads, in
+  steps of half a window. A page that stops reading holds at most one window in memory, and the
+  generator waits. `cancel()`, `return()`, a closed port and destroyed contents stop a paused
+  generator at once, since it is suspended at a `yield`. See Backpressure below.
 - A stream starts when `stream(...)` is called, not at the first read.
 - A channel has one handler, as for `invoke`: registering `handle` again replaces the previous
   one, and a stream that runs keeps the generator it started with. There is no `handleOnce`.
 - A stream is not cut off when a handler is replaced or removed, only when it ends or is cancelled.
+
+##### Backpressure
+
+`highWaterMark` is the most chunks that the generator may be ahead of the page:
+
+```typescript
+exportRows: stream<(table: string) => AsyncIterable<Row>>({ highWaterMark: 64 }),
+tokens: stream<(prompt: string) => AsyncIterable<string>>({ highWaterMark: Infinity }), // no limit
+rows: stream<() => AsyncIterable<Row>>({ highWaterMark: 0 }), // pull-based
+```
+
+It is a non-negative integer literal, or `Infinity`. The unit is the chunk, whatever its size, so
+use a lower value for large chunks (a window of 1024 chunks of 1 MB is a gigabyte). With `0` the
+generator is asked for a chunk only while the page waits for one, which costs a round trip for each
+chunk. With `Infinity` nothing is paused and the page sends no credits.
+The credits travel over the port of the call, as `{ type: 'credit', limit }` messages from the page,
+where `limit` is the total of chunks that the page allows so far. A reader that reads fast sends one
+message for half a window of chunks. `streamUtility` channels take the same option, and the window
+is per call, though all the streams of a channel share one port.
 
 #### Port channels
 
@@ -1103,7 +1126,8 @@ A few things to know:
    are rejected with `IPC_UTILITY_EXITED` until the main process connects again, such as to a new child.
  - All the calls and streams of a channel share its port and are told apart by an ID. Cancelling a
    stream (`cancel()`, `return()` or a `break`) and closing the connection stop the generator in the
-   child. There is no backpressure: the generator runs ahead of a page that reads slowly.
+   child. The generator is slowed down for a page that reads slowly, with `highWaterMark` as for
+   `stream` (the default is 1024 chunks, per call).
  - The handler of the child is single, as for `callUtility`: a new `handle` replaces the old one, and
    the function it returns removes only its own. Register the handlers when the process starts, since a
    call for a channel without a handler is answered with `IPC_UTILITY_NO_HANDLER`.

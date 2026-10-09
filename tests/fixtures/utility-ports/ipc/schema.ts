@@ -25,6 +25,10 @@ export default defineChannels({
    asForm: invokeUtility() as (n: number) => Promise<number>,
    scanRows: streamUtility<(table: string) => AsyncIterable<Row>, QueryError>(),
    counter: streamUtility<() => AsyncGenerator<number, void, undefined>>(),
+   windowedRows: streamUtility<() => AsyncIterable<number>>({ highWaterMark: 4 }),
+   pulledRows: streamUtility<() => AsyncIterable<number>>({ highWaterMark: 0 }),
+   // biome-ignore lint/style/useNumberNamespace: the schema syntax for no limit is Infinity
+   unboundedRows: streamUtility<() => AsyncIterable<number>>({ highWaterMark: Infinity }),
    streamForm: streamUtility() as (seed: string) => AsyncIterable<string>,
    // The main process to the utility process, next to the ports of the pages.
    indexFile: callUtility<(path: string) => Promise<number>>(),

@@ -318,6 +318,30 @@ describe("UtilityBindingsWriter, renderer to utility channels", () => {
       );
    });
 
+   it("gives the server the window of every stream channel, sorted by the wire name", async () => {
+      const windowed = { ...streamUtility, name: "windowed", highWaterMark: 4 };
+      const unbounded = { ...streamUtility, name: "aaa", highWaterMark: Number.POSITIVE_INFINITY };
+      const output = await render(invokeUtility, windowed, streamUtility, unbounded);
+
+      expect(output).toContain(
+         "const brokerWindows = new Map<string, number>([['autoipc:aaa', Infinity], ['autoipc:scanRows', 1024], ['autoipc:windowed', 4]]);",
+      );
+   });
+
+   it("pauses the pump at the limit of the call, before it asks the generator for a chunk", async () => {
+      const output = await render(streamUtility);
+
+      expect(output).toContain("limit: brokerWindows.get(channel) ?? 0");
+      expect(output).toContain("if (sent >= entry.limit) {");
+      expect(output).toContain("source.__ipc === 'credit' && typeof source.id === 'number'");
+      expect(output).toContain("sent += 1;");
+      expect(output.indexOf("if (sent >= entry.limit) {")).toBeLessThan(
+         output.indexOf("step = await iterator.next();"),
+      );
+      // A cancel and the close of the port wake a paused pump.
+      expect(output.match(/entry\.wake\?\.\(\);/g)).toHaveLength(3);
+   });
+
    it("reserves the names of the server only for a schema with such channels", () => {
       const reserved = (...channels: shared.SimpleChannel[]) =>
          (
@@ -328,7 +352,13 @@ describe("UtilityBindingsWriter, renderer to utility channels", () => {
             }
          ).getReservedNames();
 
-      for (const name of ["BrokerPort", "serveBrokeredPort", "setBrokerCall", "Symbol"]) {
+      for (const name of [
+         "BrokerPort",
+         "serveBrokeredPort",
+         "setBrokerCall",
+         "brokerWindows",
+         "Symbol",
+      ]) {
          expect(reserved(invokeUtility)).toContain(name);
          expect(reserved(callUtility)).not.toContain(name);
       }

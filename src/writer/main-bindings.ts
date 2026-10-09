@@ -1130,7 +1130,7 @@ export class MainBindingsWriter extends BaseWriter {
       const result = w.encodesResult ? `encodeValue(${n.channel}, await ${run})` : run;
       const params = `${n.event}: ${n.eventType}, ...${w.argsName}: unknown[]`;
       if (spec.kind === "Stream") {
-         const start = `startStream(${n.event}, ${n.channel}, ${this.wireName(spec.name)}, ${w.idName}, () => ${run})`;
+         const start = `startStream(${n.event}, ${n.channel}, ${this.wireName(spec.name)}, ${w.idName}, ${this.getHighWaterMark(spec)}, () => ${run})`;
          return [
             ...inner,
             `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ${w.idName}: unknown, ...${w.argsName}: unknown[]) =>`,
@@ -1539,7 +1539,15 @@ export class MainBindingsWriter extends BaseWriter {
     * `finally` blocks, and no chunk is sent after it. A chunk that cannot be cloned stops the
     * iterator and fails the stream. Everything that goes wrong before the port is handed over is
     * thrown, and reaches the page as the envelope of the call, so no port exists for it.
-    * The generator is not slowed down for a page that reads slowly: there is no backpressure.
+    *
+    * The flow is controlled by credits. The page may have at most `highWaterMark` chunks that it
+    * has not read, so the main process starts with a `limit` of that many chunks. It counts the
+    * chunks that it sent, and does not pull from the generator once `sent` reaches `limit`.
+    * The page raises the limit with `{ type: 'credit', limit }`, the total number of chunks that it
+    * allows so far, as it reads. An absolute total is safe against a repeated or late message, and
+    * only a higher one counts. A stop wakes the pump that waits for credit, so a cancel, a closed
+    * port and a destroyed contents work while the generator is paused. With `Infinity` the
+    * generator is never paused.
     */
    private buildStreamHelpers(): string {
       const [i1, i2, i3, i4, i5] = this.indents;
@@ -1558,6 +1566,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}channel: string,`,
          `${i1}wire: string,`,
          `${i1}id: unknown,`,
+         `${i1}highWaterMark: number,`,
          `${i1}produce: () => unknown,`,
          "): Promise<void> {",
          `${i1}if (typeof id !== 'number') {`,
@@ -1589,11 +1598,20 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}}`,
          `${i1}const sender = event.sender;`,
          `${i1}let done = false;`,
+         `${i1}let limit = highWaterMark;`,
+         `${i1}let sent = 0;`,
+         `${i1}let wake: (() => void) | null = null;`,
+         `${i1}const resume = (): void => {`,
+         `${i2}const waiting = wake;`,
+         `${i2}wake = null;`,
+         `${i2}waiting?.();`,
+         `${i1}};`,
          `${i1}const finish = (): boolean => {`,
          `${i2}if (done) {`,
          `${i3}return false;`,
          `${i2}}`,
          `${i2}done = true;`,
+         `${i2}resume();`,
          `${i2}sender.removeListener('destroyed', cancel);`,
          `${i2}port1.close();`,
          `${i2}return true;`,
@@ -1614,9 +1632,12 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i1}};`,
          `${i1}port1.on('message', (message: { data: unknown }) => {`,
-         `${i2}const data = message.data as { type?: unknown } | null;`,
+         `${i2}const data = message.data as { type?: unknown; limit?: unknown } | null;`,
          `${i2}if (data && data.type === 'cancel') {`,
          `${i3}cancel();`,
+         `${i2}} else if (data && data.type === 'credit' && typeof data.limit === 'number' && data.limit > limit) {`,
+         `${i3}limit = data.limit;`,
+         `${i3}resume();`,
          `${i2}}`,
          `${i1}});`,
          `${i1}port1.on('close', cancel);`,
@@ -1624,6 +1645,13 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}port1.start();`,
          `${i1}const pump = async (): Promise<void> => {`,
          `${i2}while (!done) {`,
+         `${i3}if (sent >= limit) {`,
+         `${i4}// The page has not read enough chunks: the generator waits for credit, a cancel or a stop.`,
+         `${i4}await new Promise<void>((resolve) => {`,
+         `${i5}wake = resolve;`,
+         `${i4}});`,
+         `${i4}continue;`,
+         `${i3}}`,
          `${i3}let step: IteratorResult<unknown>;`,
          `${i3}try {`,
          `${i4}step = await iterator.next();`,
@@ -1645,6 +1673,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}}`,
          `${i3}try {`,
          `${i4}port1.postMessage({ type: 'chunk', value: ${this.usesSerializer() ? "encodeValue(channel, step.value)" : "step.value"} });`,
+         `${i4}sent += 1;`,
          `${i3}} catch (error) {`,
          `${i4}stopIterator(iterator);`,
          `${i4}fail({ name: 'IpcStreamError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_STREAM_UNSENDABLE' });`,

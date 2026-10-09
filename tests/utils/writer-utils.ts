@@ -164,6 +164,8 @@ export interface SimpleChannel {
    validate?: t.ValidatorRef;
    /** The size of the send queues of a port channel. */
    maxQueue?: number;
+   /** The most unread chunks of a stream channel, or `Infinity`. */
+   highWaterMark?: number;
    /** The timeout of an invoke channel in milliseconds. */
    timeoutMs?: number;
    /** The error types of an invoke or stream channel, such as `"NotFoundError | AuthError"`. */
