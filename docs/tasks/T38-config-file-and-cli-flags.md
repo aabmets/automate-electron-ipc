@@ -3,6 +3,9 @@
 Phase 4: Developer experience.
 Status and dependencies are in the [roadmap](../roadmap.md).
 
+> **Split** (architect review, 2026-10-09) into the parts listed in the roadmap. Each part's file is
+> the plan to build from; this file keeps the original scope for reference.
+
 - **Problem:**
   - Config can only live in `package.json`, and there are no CLI flags.
   - Output paths are fixed.

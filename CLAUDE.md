@@ -83,6 +83,20 @@ get an overview; the roadmap is enough. Every session follows this protocol:
 8. **Stop.** Report what was delivered and which task is next, as read from the updated roadmap.
    Do not continue to the next task. The user clears the session between tasks.
 
+### Parallel builders
+
+When several builder sessions work on the same branch at the same time, each is given its task by
+name (step 1), and these rules replace parts of steps 5 to 7:
+
+- Run `bun run check`, `bunx vitest run`, and `bun run test:electron` (with `REQUIRE_ELECTRON=1`
+  when the Electron binary and a display are available, else say that it skipped) before committing.
+- In `docs/roadmap.md`, flip only your own task's marker, and recount the **Progress** line from
+  the markers.
+- New follow-up tasks take IDs from the range named in your task file, not the next free ID.
+- Before pushing, `git pull --rebase origin <branch>`. A conflict in `docs/roadmap.md` is always
+  resolved the same way: keep every `[x]`, keep every added entry, and recount **Progress**. Any
+  other conflict: resolve it, then run the three test commands again before pushing.
+
 If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so
 on, each with its own task file and roadmap entry. Deliver only the first part, mark only that
 part `[x]` in the roadmap, and say so.

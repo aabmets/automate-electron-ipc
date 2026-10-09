@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 130 delivered, 10 remaining, 1 dropped.
+**Progress:** 130 delivered, 20 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -167,14 +167,28 @@ tasks work down, and `bun run check` fails when one of them grows.
 
 ## Phase 4: Developer experience
 
-- [ ] [T38: Config file and CLI flags](./tasks/T38-config-file-and-cli-flags.md) · depends on: T07
-- [ ] [T39: `ipcgen --check`](./tasks/T39-ipcgen-check.md) · depends on: T06, T38
-- [ ] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38
-- [ ] [T41: Programmatic API and Vite / electron-vite plugin](./tasks/T41-programmatic-api-and-vite-electron.md) · depends on: T39, T40
-- [ ] [T42: Diagnostics](./tasks/T42-diagnostics.md) · depends on: T08
-- [ ] [T43: Generated file hygiene](./tasks/T43-generated-file-hygiene.md) · depends on: T39
-- [ ] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13
+Planned for parallel builders (architect review, 2026-10-09): T38, T41, T42, T43, T47 and T48 were
+split into the parts below, and T139 was added first so that the features share one render
+pipeline. Builders running at the same time follow "Parallel builders" in `CLAUDE.md`.
+
+- [ ] [T139: Render the generated files in memory](./tasks/T139-render-generated-files-in-memory.md) · depends on: none
+- [ ] [T38a: Config file, precedence, `--cwd` and `--config`](./tasks/T38a-config-file-and-cli-options.md) · depends on: T07
+- [ ] [T42a: Error positions and code frames](./tasks/T42a-error-positions-and-code-frames.md) · depends on: T08
+- [ ] [T38b: Output path options and `--out-*` flags](./tasks/T38b-output-path-options.md) · depends on: T38a
+- [ ] [T38c: Detect NodeNext from `tsconfig.json`](./tasks/T38c-nodenext-detection.md) · depends on: T38a
+- [ ] [T39: `ipcgen --check`](./tasks/T39-ipcgen-check.md) · depends on: T06, T38a, T139
+- [ ] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38a
+- [ ] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13, T139
+- [ ] [T42b: Report multiple schema errors together](./tasks/T42b-collect-multiple-errors.md) · depends on: T42a, T139
+- [ ] [T41a: Programmatic API (`automate-electron-ipc/api`)](./tasks/T41a-programmatic-api.md) · depends on: T38a, T39
+- [ ] [T43a: Generated file headers and stale-file removal](./tasks/T43a-generated-file-headers-and-stale-files.md) · depends on: T39
+- [ ] [T46: Mock generation for renderer tests](./tasks/T46-mock-generation-for-renderer-tests.md) · depends on: T14, T38a, T44
+- [ ] [T47a: React hooks (optional output)](./tasks/T47a-react-hooks.md) · depends on: T14, T38a, T44
+- [ ] [T41b: Vite / electron-vite plugin (`automate-electron-ipc/vite`)](./tasks/T41b-vite-plugin.md) · depends on: T40, T41a
+- [ ] [T43b: `format` option](./tasks/T43b-format-option.md) · depends on: T43a
+- [ ] [T47b: Vue composables (optional output)](./tasks/T47b-vue-composables.md) · depends on: T47a
 - [-] [T45: Generic DSL syntax](./tasks/T45-generic-dsl-syntax.md)
-- [ ] [T46: Mock generation for renderer tests](./tasks/T46-mock-generation-for-renderer-tests.md) · depends on: T14, T44
-- [ ] [T47: Framework hooks (optional output)](./tasks/T47-framework-hooks.md) · depends on: T14, T44
-- [ ] [T48: README rewrite](./tasks/T48-readme-rewrite.md) · depends on: all previous tasks
+- [ ] [T48a: README reference sections and the README example check](./tasks/T48a-readme-reference-and-example-harness.md) · depends on: T38b, T38c, T41b, T42b, T43b, T46, T47b
+- [ ] [T48b: README channel kinds with their generated output](./tasks/T48b-readme-channel-kinds.md) · depends on: T48a
+- [ ] [T48c: README electron-vite example, preload bundling and sandbox notes](./tasks/T48c-readme-electron-vite-and-preload.md) · depends on: T48a
+- [ ] [T48d: README security guide and migration notes](./tasks/T48d-readme-security-guide-and-migration.md) · depends on: T48a
