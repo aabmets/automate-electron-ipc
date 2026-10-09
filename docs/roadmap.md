@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 93 delivered, 10 remaining, 1 dropped.
+**Progress:** 94 delivered, 31 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -120,6 +120,35 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T81b: Serializer for utility process channels](./tasks/T81b-serializer-for-utility-process-channels.md) · depends on: T81a, T30, T79
 - [x] [T81c: Serializer for service worker channels](./tasks/T81c-serializer-for-service-worker-channels.md) · depends on: T81a, T36, T80
 - [x] [T83: Real-Electron coverage of the features that only fakes tested](./tasks/T83-real-electron-coverage-gaps.md) · depends on: T75
+
+## Phase 3b: Module structure
+
+Runs before Phase 4 on purpose: a task is picked by its place in this file, and the features of
+Phase 4 would otherwise grow the big files first. `size-baseline.json` lists the files that these
+tasks work down, and `bun run check` fails when one of them grows.
+
+- [x] [T102: The file size gate and the project skills](./tasks/T102-file-size-gate-and-project-skills.md) · depends on: none
+- [ ] [T103: Split `main-bindings.ts`, part 1: imports, support, scopes and validation](./tasks/T103-main-bindings-part-1-support-scopes-validation.md) · depends on: T102
+- [ ] [T104: Split `main-bindings.ts`, part 2: channels, `ask` and streams](./tasks/T104-main-bindings-part-2-channels-and-asks.md) · depends on: T103
+- [ ] [T105: Split `main-bindings.ts`, part 3: ports, utility and brokered channels](./tasks/T105-main-bindings-part-3-ports-utility-and-broker.md) · depends on: T104
+- [ ] [T106: Split `main-bindings.ts`, part 4: service workers, and the final shape](./tasks/T106-main-bindings-part-4-service-workers.md) · depends on: T105
+- [ ] [T107: Split `preload-bindings.ts`](./tasks/T107-preload-bindings-split.md) · depends on: T102
+- [ ] [T108: Split `parser.ts`, part 1: AST helpers, signatures, clone check and diagnostics](./tasks/T108-parser-part-1-ast-clone-check-and-diagnostics.md) · depends on: T102
+- [ ] [T109: Split `parser.ts`, part 2: channel maps, imports, definitions and `parseSpecs`](./tasks/T109-parser-part-2-channel-maps-and-specs.md) · depends on: T108
+- [ ] [T110: Split `validators.ts`](./tasks/T110-validators-split.md) · depends on: T102
+- [ ] [T111: Split the remaining writer modules](./tasks/T111-remaining-writer-modules-split.md) · depends on: T102
+- [ ] [T112: Split `types/index.d.ts` and `types/internal.d.ts`](./tasks/T112-types-split.md) · depends on: T102 · **Decision needed**
+- [ ] [T113: Split `tests/test_writer/main-bindings.test.ts`](./tasks/T113-main-bindings-tests-split.md) · depends on: T102
+- [ ] [T114: Split the writer tests, part 1: preload, imports and base writer](./tasks/T114-writer-tests-split-a.md) · depends on: T102
+- [ ] [T115: Split the writer tests, part 2: renderer types, service workers, serializer, utility](./tasks/T115-writer-tests-split-b.md) · depends on: T102
+- [ ] [T116: Split the parser tests](./tasks/T116-parser-tests-split.md) · depends on: T102
+- [ ] [T117: Split `tests/validators.test.ts`](./tasks/T117-validators-tests-split.md) · depends on: T102
+- [ ] [T118: Split the root tests and the test utilities](./tasks/T118-root-tests-and-test-utils-split.md) · depends on: T102
+- [ ] [T119: Split the real-Electron tests](./tasks/T119-electron-tests-split.md) · depends on: T102
+- [ ] [T120: Split the e2e tests, part 1: ports](./tasks/T120-e2e-port-tests-split.md) · depends on: T102
+- [ ] [T121: Split the e2e tests, part 2: streams, asks and runtime](./tasks/T121-e2e-stream-ask-runtime-tests-split.md) · depends on: T102
+- [ ] [T122: Split the e2e tests, part 3: automation, utility, scopes and handlers](./tasks/T122-e2e-automation-utility-scopes-tests-split.md) · depends on: T102
+- [ ] [T123: Split the e2e tests, part 4: service workers, serializers and the rest](./tasks/T123-e2e-service-worker-serializer-tests-split.md) · depends on: T102
 
 ## Phase 4: Developer experience
 
