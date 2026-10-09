@@ -14,7 +14,9 @@ import type * as t from "@types";
 import type { AstNode, Source, TypeDefinitionNode } from "./ast.js";
 import { parseModule } from "./ast.js";
 import { parseChannelMapModule } from "./channel-map.js";
+import { validateChannelSpecs } from "./channel-validation.js";
 import { SchemaSyntaxError } from "./diagnostics.js";
+import { validateTypeSpecs } from "./global-validation.js";
 import { parseImportDeclarations, parseImportEquals } from "./import-specs.js";
 import { declarationOf, isTypeDefinition } from "./module-bindings.js";
 import {
@@ -23,7 +25,6 @@ import {
    parseTypeDefinitions,
    parseValueDefinitions,
 } from "./type-definitions.js";
-import vld from "./validators.js";
 
 export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
    const importSpecArray: t.ImportSpec[] = [];
@@ -58,9 +59,9 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
 
    applyExportSpecifiers(module.body as AstNode[], typeSpecArray);
 
-   const channelSpecArray = vld.validateChannelSpecs(channelSpecs, file);
+   const channelSpecArray = validateChannelSpecs(channelSpecs, file);
    return {
-      typeSpecArray: vld.validateTypeSpecs(typeSpecArray, channelSpecArray),
+      typeSpecArray: validateTypeSpecs(typeSpecArray, channelSpecArray),
       channelSpecArray,
       importSpecArray: importSpecArray.filter((item) => {
          return item.customTypes.length > 0 || item.namespace !== null;

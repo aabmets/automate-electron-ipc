@@ -12,12 +12,13 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
+import { getCloneWarnings } from "./clone-issues.js";
 import cfg from "./config.js";
+import { validateGlobalChannelSpecs, validateReservedApiNames } from "./global-validation.js";
 import logger from "./logger.js";
 import parser from "./parser.js";
 import scopeUtils from "./scopes.js";
 import utils from "./utils.js";
-import vld from "./validators.js";
 import writer from "./writer/index.js";
 
 /**
@@ -104,10 +105,10 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
          }
       }
    }
-   vld.validateGlobalChannelSpecs(pfsArray);
-   vld.validateReservedApiNames(pfsArray, config);
+   validateGlobalChannelSpecs(pfsArray);
+   validateReservedApiNames(pfsArray, config);
    logger.cloneWarnings(
-      pfsArray.flatMap((pfs) => vld.getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
+      pfsArray.flatMap((pfs) => getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
    // The file for utility processes exists only for a schema that has channels to them.
    const utilityWriter = new writer.UtilityBindingsWriter(config, pfsArray);

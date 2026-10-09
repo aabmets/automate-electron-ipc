@@ -5,7 +5,9 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 `main.ts`, `preload.ts` and `window.d.ts`.
 
 - `src/parser.ts` parses schema files with swc and collects channel, type and import specs.
-- `src/validators.ts` validates those specs (superstruct).
+- Validation (superstruct): `src/config-validation.ts` (config), `src/channel-validation.ts` with
+  `src/channel-spec-structs.ts`, `src/option-structs.ts` and `src/clone-issues.ts` (one file's
+  channel specs), `src/global-validation.ts` (across files, and type specs).
 - `src/writer/*` emits the three generated files.
 - `src/automation.ts` orchestrates a run; `src/cli.ts` is the bin entry.
 - Public types live in `types/index.d.ts`; internal types in `types/internal.d.ts` (alias `@types`).

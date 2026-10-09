@@ -15,4 +15,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** No assertion changes. The generated output of every fixture in `tests/fixtures` is
   byte-identical before and after (dump it into the scratchpad first, then `diff -r`), the whole
   suite passes, and `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Six modules: `config-validation.ts`, `option-structs.ts`,
+  `channel-spec-structs.ts`, `clone-issues.ts`, `channel-validation.ts` and `global-validation.ts`.
+  The default export `vld` is gone: callers import the functions, with no barrel. The output of
+  all 95 fixtures is byte-identical. The per-file branch gate failed for `channel-validation.ts`
+  after the split, so its dead `spec?.kind` guard (the struct has already accepted the spec) was
+  dropped, and `tests/channel-validation.test.ts` covers the error without a file name. The
+  assertions of `tests/validators.test.ts` are unchanged; only its imports and the `vld.` prefix.

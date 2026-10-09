@@ -9,7 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import vld from "@src/validators.js";
+import { validateChannelSpecs } from "@src/channel-validation.js";
+import { getCloneWarnings } from "@src/clone-issues.js";
+import { validateOptionalConfig } from "@src/config-validation.js";
+import {
+   validateGlobalChannelSpecs,
+   validateReservedApiNames,
+   validateTypeSpecs,
+} from "@src/global-validation.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
@@ -21,7 +28,7 @@ describe("validateOptionalConfig", () => {
          ipcDataDir: "/absolute/path/auto-ipc",
          codeIndent: 3,
       };
-      expect(() => vld.validateOptionalConfig(config)).toThrowError(
+      expect(() => validateOptionalConfig(config)).toThrowError(
          "ipcDataDir must be relative to the project root",
       );
    });
@@ -29,24 +36,22 @@ describe("validateOptionalConfig", () => {
    it("should throw an error if codeIndent is not an integer", () => {
       // Regression for T58: 2.5 was accepted and silently rounded down by `repeat`.
       const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
-      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 2.5 })).toThrowError(
+      expect(() => validateOptionalConfig({ ...config, codeIndent: 2.5 })).toThrowError(/integer/);
+      expect(() => validateOptionalConfig({ ...config, codeIndent: 3.999 })).toThrowError(
          /integer/,
       );
-      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 3.999 })).toThrowError(
-         /integer/,
-      );
-      expect(() => vld.validateOptionalConfig({ ...config, codeIndent: 1 })).toThrowError(
+      expect(() => validateOptionalConfig({ ...config, codeIndent: 1 })).toThrowError(
          /cannot be less than 2 or greater than 4/,
       );
       for (const codeIndent of [2, 3, 4]) {
-         expect(() => vld.validateOptionalConfig({ ...config, codeIndent })).not.toThrowError();
+         expect(() => validateOptionalConfig({ ...config, codeIndent })).not.toThrowError();
       }
    });
 
    it("should throw errors if codeIndent value is out of range", () => {
       const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
       for (const codeIndent of [1, 5]) {
-         expect(() => vld.validateOptionalConfig({ ...config, codeIndent })).toThrowError(
+         expect(() => validateOptionalConfig({ ...config, codeIndent })).toThrowError(
             "value cannot be less than 2 or greater than 4",
          );
       }
@@ -64,7 +69,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("MainToRenderer", "Port"),
       ];
       try {
-         const retVal = vld.validateChannelSpecs(channelSpecsArray);
+         const retVal = validateChannelSpecs(channelSpecsArray);
          expect(retVal).toMatchObject(channelSpecsArray);
       } catch {
          throw new Error(
@@ -76,7 +81,7 @@ describe("validateChannelSpecs", () => {
    it("should throw Struct error when channel name is not a plain identifier", () => {
       for (const name of ["", "get-user", "get user", "1st", "a.b", "a'b"]) {
          const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel name '${name}' is not a plain identifier`,
          );
       }
@@ -97,7 +102,7 @@ describe("validateChannelSpecs", () => {
       ];
       for (const name of names) {
          const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
-         expect(vld.validateChannelSpecs([{ ...spec, name }])).toStrictEqual([{ ...spec, name }]);
+         expect(validateChannelSpecs([{ ...spec, name }])).toStrictEqual([{ ...spec, name }]);
       }
    });
 
@@ -105,7 +110,7 @@ describe("validateChannelSpecs", () => {
       const names = ["constructor", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf"];
       for (const name of [...names, "__proto__", "toLocaleString", "propertyIsEnumerable"]) {
          const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel name '${name}' is reserved`,
          );
       }
@@ -116,7 +121,7 @@ describe("validateChannelSpecs", () => {
          ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"),
          name: "constructor",
       };
-      expect(() => vld.validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
+      expect(() => validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
          "Schema file 'ipc/schema.ts': Channel name 'constructor' is reserved",
       );
    });
@@ -124,14 +129,14 @@ describe("validateChannelSpecs", () => {
    it("should accept channel names that merely contain or extend a reserved name", () => {
       for (const name of ["constructors", "toStringify", "valueOfIt", "hasOwn"]) {
          const spec = { ...new ChannelSpecGenerator().generate("RendererToMain", "Unicast"), name };
-         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+         expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
    it("should throw Struct error when channel kind is not a known kind", () => {
       const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
       const invalid = { ...spec, kind: "Pipe" } as unknown as t.ChannelSpec;
-      expect(() => vld.validateChannelSpecs([invalid])).toThrowError(
+      expect(() => validateChannelSpecs([invalid])).toThrowError(
          "Channel kind must be one of: ['Broadcast', 'Unicast', 'Port', 'Stream']",
       );
    });
@@ -144,7 +149,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToMain", "Port"),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel kind '${spec.kind}' is not allowed when channel direction is '${spec.direction}'.`,
          );
       }
@@ -159,7 +164,7 @@ describe("validateChannelSpecs", () => {
          csg.generate("RendererToRenderer", "Port", "Promise<string>"),
       ];
       for (const spec of invalidChannelSpecsArray) {
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel return type '${spec.signature.returnType}' not allowed when channel kind is '${spec.kind}'`,
          );
       }
@@ -172,14 +177,14 @@ describe("validateChannelSpecs", () => {
          const direction = kind === "Port" ? "RendererToRenderer" : "RendererToMain";
          const spec = csg.generate(direction, kind, "Promise<void >");
          spec.signature.returnsVoid = true;
-         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+         expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
    it("should trust returnsVoid over the text of the return type", () => {
       const spec = new ChannelSpecGenerator().generate("RendererToMain", "Broadcast", "Foo");
       spec.signature.returnsVoid = false;
-      expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+      expect(() => validateChannelSpecs([spec])).toThrowError(
          "Channel return type 'Foo' not allowed when channel kind is 'Broadcast'",
       );
    });
@@ -190,7 +195,7 @@ describe("validateChannelSpecs", () => {
          "Broadcast",
          "Promise<void >",
       );
-      expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+      expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
    });
 });
 
@@ -199,13 +204,13 @@ describe("validateOptionalConfig, rawErrors", () => {
 
    it("accepts a boolean, and no value at all", () => {
       for (const rawErrors of [true, false, undefined]) {
-         expect(() => vld.validateOptionalConfig({ ...config, rawErrors })).not.toThrowError();
+         expect(() => validateOptionalConfig({ ...config, rawErrors })).not.toThrowError();
       }
    });
 
    it.each(["true", 1, null, {}])("rejects %j, since it is not a boolean", (rawErrors) => {
       const value = rawErrors as unknown as boolean;
-      expect(() => vld.validateOptionalConfig({ ...config, rawErrors: value })).toThrowError(
+      expect(() => validateOptionalConfig({ ...config, rawErrors: value })).toThrowError(
          /rawErrors/,
       );
    });
@@ -215,14 +220,14 @@ describe("validateOptionalConfig, timeoutMs", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
 
    it.each([0, 1, 30_000, Number.MAX_SAFE_INTEGER, undefined])("accepts %s", (timeoutMs) => {
-      expect(() => vld.validateOptionalConfig({ ...config, timeoutMs })).not.toThrowError();
+      expect(() => validateOptionalConfig({ ...config, timeoutMs })).not.toThrowError();
    });
 
    it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "10", null])(
       "rejects %j, since it is not a non-negative integer",
       (timeoutMs) => {
          const value = timeoutMs as unknown as number;
-         expect(() => vld.validateOptionalConfig({ ...config, timeoutMs: value })).toThrowError(
+         expect(() => validateOptionalConfig({ ...config, timeoutMs: value })).toThrowError(
             /timeoutMs/,
          );
       },
@@ -232,7 +237,7 @@ describe("validateOptionalConfig, timeoutMs", () => {
 describe("validateOptionalConfig, channelPrefix", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (channelPrefix: unknown) =>
-      vld.validateOptionalConfig({ ...config, channelPrefix: channelPrefix as string });
+      validateOptionalConfig({ ...config, channelPrefix: channelPrefix as string });
 
    it.each(["", "autoipc:", "my-app/v1:", "app_2.", "@scope/app#", "A".repeat(64)])(
       "accepts '%s'",
@@ -242,7 +247,7 @@ describe("validateOptionalConfig, channelPrefix", () => {
    );
 
    it("accepts a config without a prefix", () => {
-      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(config)).not.toThrowError();
    });
 
    it.each([
@@ -271,7 +276,7 @@ describe("validateOptionalConfig, channelPrefix", () => {
 describe("validateOptionalConfig, exposeAs", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (exposeAs: unknown) =>
-      vld.validateOptionalConfig({ ...config, exposeAs: exposeAs as string });
+      validateOptionalConfig({ ...config, exposeAs: exposeAs as string });
 
    it.each(["ipc", "api", "myApp", "_bridge", "$ipc", "ipc2", "IpcApi", "electronApi"])(
       "accepts '%s'",
@@ -316,14 +321,14 @@ describe("validateOptionalConfig, exposeAs", () => {
 describe("validateOptionalConfig, isolatedWorldId", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (isolatedWorldId: unknown) =>
-      vld.validateOptionalConfig({ ...config, isolatedWorldId: isolatedWorldId as number });
+      validateOptionalConfig({ ...config, isolatedWorldId: isolatedWorldId as number });
 
    it.each([1000, 1001, 5000, 2 ** 31 - 1])("accepts %d", (id) => {
       expect(() => check(id)).not.toThrowError();
    });
 
    it("accepts a config without a world", () => {
-      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(config)).not.toThrowError();
    });
 
    it.each([0, 1, 999, -1000, 1000.5, 2 ** 31, Number.POSITIVE_INFINITY])("rejects %d", (id) => {
@@ -341,7 +346,7 @@ describe("validateOptionalConfig, isolatedWorldId", () => {
 describe("validateOptionalConfig, getPathForFile", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (getPathForFile: unknown) =>
-      vld.validateOptionalConfig({ ...config, getPathForFile: getPathForFile as boolean });
+      validateOptionalConfig({ ...config, getPathForFile: getPathForFile as boolean });
 
    it.each([true, false])("accepts %s", (value) => {
       expect(() => check(value)).not.toThrowError();
@@ -355,7 +360,7 @@ describe("validateOptionalConfig, getPathForFile", () => {
 describe("validateOptionalConfig, serializer", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (serializer: unknown) =>
-      vld.validateOptionalConfig({ ...config, serializer: serializer as string });
+      validateOptionalConfig({ ...config, serializer: serializer as string });
 
    it.each([
       "superjson",
@@ -370,7 +375,7 @@ describe("validateOptionalConfig, serializer", () => {
    });
 
    it("accepts a config without a serializer", () => {
-      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(config)).not.toThrowError();
    });
 
    it.each([
@@ -396,7 +401,7 @@ describe("validateOptionalConfig, serializer", () => {
 describe("validateOptionalConfig, autoExpose", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (autoExpose: unknown) =>
-      vld.validateOptionalConfig({ ...config, autoExpose: autoExpose as boolean });
+      validateOptionalConfig({ ...config, autoExpose: autoExpose as boolean });
 
    it.each([true, false])("accepts %s", (value) => {
       expect(() => check(value)).not.toThrowError();
@@ -420,7 +425,7 @@ describe("validateChannelSpecs, errors", () => {
 
    it("accepts the error types of a Unicast channel", () => {
       const specs = make("RendererToMain", "Unicast", errors);
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it("rejects error types on every other channel", () => {
@@ -430,14 +435,14 @@ describe("validateChannelSpecs, errors", () => {
          ["RendererToRenderer", "Port"],
       ] as const) {
          const specs = make(direction, kind, errors);
-         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/errors/);
+         expect(() => validateChannelSpecs(specs)).toThrowError(/errors/);
       }
    });
 
    it("rejects error types which lack the text or the custom types", () => {
       for (const value of [{ definition: "X" }, { customTypes: [] }, "X", 5]) {
          const specs = make("RendererToMain", "Unicast", value);
-         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/errors/);
+         expect(() => validateChannelSpecs(specs)).toThrowError(/errors/);
       }
    });
 });
@@ -450,10 +455,10 @@ describe("validateTypeSpecs, error types", () => {
       } as t.ChannelSpec;
       const spec = { name: "Hidden", kind: "type", generics: null, isExported: false };
 
-      expect(() => vld.validateTypeSpecs([spec], [channel])).toThrowError(
+      expect(() => validateTypeSpecs([spec], [channel])).toThrowError(
          /Type 'Hidden' is used by channel .* must be exported/,
       );
-      expect(() => vld.validateTypeSpecs([{ ...spec, isExported: true }], [channel])).not.toThrow();
+      expect(() => validateTypeSpecs([{ ...spec, isExported: true }], [channel])).not.toThrow();
    });
 });
 
@@ -463,13 +468,13 @@ describe("validateChannelSpecs, ask channels", () => {
 
    it("accepts a Unicast channel from the main process to a renderer, with any return type", () => {
       for (const returnType of ["void", "boolean", "Promise<Document>", "Promise<void>"]) {
-         expect(() => vld.validateChannelSpecs([generate(returnType)])).not.toThrowError();
+         expect(() => validateChannelSpecs([generate(returnType)])).not.toThrowError();
       }
    });
 
    it("still rejects a Unicast channel between two renderers", () => {
       const spec = new ChannelSpecGenerator().generate("RendererToRenderer", "Unicast");
-      expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+      expect(() => validateChannelSpecs([spec])).toThrowError(
          "Channel kind 'Unicast' is not allowed when channel direction is 'RendererToRenderer'.",
       );
    });
@@ -483,7 +488,7 @@ describe("validateChannelSpecs, ask channels", () => {
          { trigger: "focus" },
       ]) {
          const [key] = Object.keys(extra);
-         expect(() => vld.validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
+         expect(() => validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
             new RegExp(key),
          );
       }
@@ -492,7 +497,7 @@ describe("validateChannelSpecs, ask channels", () => {
    it("keeps the names of the asks unique among all channels", () => {
       const spec = generate();
       const clash = { ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast") };
-      expect(() => vld.validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
+      expect(() => validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
       );
    });
@@ -509,7 +514,7 @@ describe("validateChannelSpecs, stream channels", () => {
          "AsyncGenerator<string, void, undefined>",
       ]) {
          const spec = generate(returnType);
-         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+         expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
@@ -521,7 +526,7 @@ describe("validateChannelSpecs, stream channels", () => {
          validate: ref,
          errors: { definition: "NotFoundError", customTypes: ["NotFoundError"] },
       };
-      expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+      expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
    });
 
    it("rejects every other direction", () => {
@@ -531,7 +536,7 @@ describe("validateChannelSpecs, stream channels", () => {
             "Stream",
             "AsyncIterable<number>",
          );
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel kind 'Stream' is not allowed when channel direction is '${direction}'.`,
          );
       }
@@ -540,7 +545,7 @@ describe("validateChannelSpecs, stream channels", () => {
    it("needs the chunk type that the parser reads from the return type", () => {
       const spec = generate();
       const { chunkType: _chunkType, chunkStart: _chunkStart, ...signature } = spec.signature;
-      expect(() => vld.validateChannelSpecs([{ ...spec, signature }])).toThrowError(
+      expect(() => validateChannelSpecs([{ ...spec, signature }])).toThrowError(
          /signature\.chunkType/,
       );
    });
@@ -548,7 +553,7 @@ describe("validateChannelSpecs, stream channels", () => {
    it("allows the chunk type only on a Stream channel", () => {
       const spec = new ChannelSpecGenerator().generate("RendererToMain", "Unicast");
       const signature = { ...spec.signature, chunkType: "number" };
-      expect(() => vld.validateChannelSpecs([{ ...spec, signature }])).toThrowError(
+      expect(() => validateChannelSpecs([{ ...spec, signature }])).toThrowError(
          /signature\.chunkType/,
       );
    });
@@ -556,7 +561,7 @@ describe("validateChannelSpecs, stream channels", () => {
    it("rejects the trigger and the queue size of other verbs", () => {
       for (const extra of [{ trigger: "focus" }, { maxQueue: 5 }]) {
          const [key] = Object.keys(extra);
-         expect(() => vld.validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
+         expect(() => validateChannelSpecs([{ ...generate(), ...extra }])).toThrowError(
             new RegExp(key),
          );
       }
@@ -565,15 +570,15 @@ describe("validateChannelSpecs, stream channels", () => {
    it("does not require a void return type, and keeps the names unique among all channels", () => {
       const spec = generate("AsyncIterable<string>");
       const clash = { ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast") };
-      expect(() => vld.validateChannelSpecs([spec])).not.toThrowError();
-      expect(() => vld.validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
+      expect(() => validateChannelSpecs([spec])).not.toThrowError();
+      expect(() => validateChannelSpecs([spec, { ...clash, name: spec.name }])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
       );
    });
 
    it("reports a chunk which cannot be cloned like any other part of a signature", () => {
       const spec = generate("AsyncIterable<() => void>");
-      expect(() => vld.validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
+      expect(() => validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
          /Schema file 'ipc\/schema.ts': Channel 'vitestChannel_0': chunk type contains a function/,
       );
    });
@@ -602,7 +607,7 @@ describe("validateChannelSpecs, scopes", () => {
       ["RendererToUtility", "Stream"],
    ] as const)("accepts scopes on a %s %s channel", (direction, kind) => {
       expect(() =>
-         vld.validateChannelSpecs(make(direction, kind, ["settings", "plugin-host"])),
+         validateChannelSpecs(make(direction, kind, ["settings", "plugin-host"])),
       ).not.toThrowError();
    });
 
@@ -614,7 +619,7 @@ describe("validateChannelSpecs, scopes", () => {
    ] as const)(
       "rejects scopes on a %s %s channel, which no page has a part in",
       (direction, kind) => {
-         expect(() => vld.validateChannelSpecs(make(direction, kind, ["settings"]))).toThrowError(
+         expect(() => validateChannelSpecs(make(direction, kind, ["settings"]))).toThrowError(
             /scopes/,
          );
       },
@@ -622,27 +627,27 @@ describe("validateChannelSpecs, scopes", () => {
 
    it("accepts a channel without scopes", () => {
       const specs = [new ChannelSpecGenerator().generate("RendererToMain", "Unicast")];
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it.each(["settings", "a", "editor2", "plugin-host", "a-b-c", "x".repeat(32)])(
       "accepts '%s' as the name of a scope",
       (name) => {
          expect(() =>
-            vld.validateChannelSpecs(make("RendererToMain", "Unicast", [name])),
+            validateChannelSpecs(make("RendererToMain", "Unicast", [name])),
          ).not.toThrowError();
       },
    );
 
    it("rejects an empty list, since it would put the channel in no window", () => {
-      expect(() => vld.validateChannelSpecs(make("RendererToMain", "Unicast", []))).toThrowError(
+      expect(() => validateChannelSpecs(make("RendererToMain", "Unicast", []))).toThrowError(
          /at least one scope/,
       );
    });
 
    it("rejects 'default', which is the scope of the channels without scopes", () => {
       expect(() =>
-         vld.validateChannelSpecs(make("RendererToMain", "Unicast", ["settings", "default"])),
+         validateChannelSpecs(make("RendererToMain", "Unicast", ["settings", "default"])),
       ).toThrowError(/'default' is the scope of the channels without scopes/);
    });
 
@@ -661,21 +666,21 @@ describe("validateChannelSpecs, scopes", () => {
       "é",
       "x".repeat(33),
    ])("rejects '%s' as the name of a scope", (name) => {
-      expect(() =>
-         vld.validateChannelSpecs(make("RendererToMain", "Unicast", [name])),
-      ).toThrowError(/is not a scope name/);
+      expect(() => validateChannelSpecs(make("RendererToMain", "Unicast", [name]))).toThrowError(
+         /is not a scope name/,
+      );
    });
 
    it("rejects a scope that is listed twice", () => {
       expect(() =>
-         vld.validateChannelSpecs(make("RendererToMain", "Unicast", ["a", "b", "a"])),
+         validateChannelSpecs(make("RendererToMain", "Unicast", ["a", "b", "a"])),
       ).toThrowError(/scope 'a' is listed twice/);
    });
 
    it("rejects a value which is not an array of strings", () => {
       for (const value of ["settings", [1], { a: 1 }]) {
          expect(() =>
-            vld.validateChannelSpecs(make("RendererToMain", "Unicast", value)),
+            validateChannelSpecs(make("RendererToMain", "Unicast", value)),
          ).toThrowError();
       }
    });
@@ -700,13 +705,13 @@ describe("validateChannelSpecs, allowedOrigins", () => {
             "file://",
             "https://[::1]:8080",
          ]);
-         expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+         expect(() => validateChannelSpecs(specs)).not.toThrowError();
       }
    });
 
    it("accepts a channel without allowedOrigins", () => {
       const specs = [new ChannelSpecGenerator().generate("RendererToMain", "Unicast")];
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it("rejects allowedOrigins on MainToRenderer and Port channels", () => {
@@ -715,13 +720,13 @@ describe("validateChannelSpecs, allowedOrigins", () => {
          ["RendererToRenderer", "Port"],
       ] as const) {
          const specs = make(direction, kind, ["app://."]);
-         expect(() => vld.validateChannelSpecs(specs)).toThrowError(/allowedOrigins/);
+         expect(() => validateChannelSpecs(specs)).toThrowError(/allowedOrigins/);
       }
    });
 
    it("rejects an empty list, since it would allow no caller", () => {
       const specs = make("RendererToMain", "Unicast", []);
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/at least one origin/);
+      expect(() => validateChannelSpecs(specs)).toThrowError(/at least one origin/);
    });
 
    it.each([
@@ -748,7 +753,7 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "://host",
    ])("rejects '%s' as it is not an origin", (origin) => {
       const specs = make("RendererToMain", "Broadcast", ["app://.", origin]);
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/is not an origin/);
+      expect(() => validateChannelSpecs(specs)).toThrowError(/is not an origin/);
    });
 
    it.each([
@@ -762,7 +767,7 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "rejects '%s', which has the default port of its scheme and so matches no origin",
       (origin) => {
          const specs = make("RendererToMain", "Unicast", ["app://.", origin]);
-         expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+         expect(() => validateChannelSpecs(specs)).toThrowError(
             /has the default port of its scheme.*Write '[^']+'/,
          );
       },
@@ -782,14 +787,14 @@ describe("validateChannelSpecs, allowedOrigins", () => {
    ])("rejects '%s', whose port is not a number from 0 to 65535", (origin) => {
       // Regression for T98: the pattern let a malformed port through.
       const specs = make("RendererToMain", "Unicast", ["app://.", origin]);
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+      expect(() => validateChannelSpecs(specs)).toThrowError(
          /which is not a number from 0 to 65535/,
       );
    });
 
    it("names the port that it refuses", () => {
       const specs = make("RendererToMain", "Unicast", ["https://example.com:443x"]);
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+      expect(() => validateChannelSpecs(specs)).toThrowError(
          "'https://example.com:443x' has the port '443x'",
       );
    });
@@ -803,12 +808,12 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "app://main",
    ])("accepts the origin '%s'", (origin) => {
       const specs = make("RendererToMain", "Unicast", [origin]);
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it("names the origin without the port in the message", () => {
       const specs = make("RendererToMain", "Unicast", ["https://example.com:443"]);
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError("Write 'https://example.com'");
+      expect(() => validateChannelSpecs(specs)).toThrowError("Write 'https://example.com'");
    });
 
    it.each([
@@ -819,20 +824,20 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "app://.:80",
    ])("keeps the origin '%s', whose port is not the default one of its scheme", (origin) => {
       const specs = make("RendererToMain", "Unicast", [origin]);
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it("rejects a default port in the origins of the channels that a worker calls", () => {
       const spec = new ChannelSpecGenerator().generate("ServiceWorkerToMain", "Unicast");
       expect(() =>
-         vld.validateChannelSpecs([{ ...spec, allowedOrigins: ["https://example.com:443"] }]),
+         validateChannelSpecs([{ ...spec, allowedOrigins: ["https://example.com:443"] }]),
       ).toThrowError(/default port/);
    });
 
    it("rejects a value which is not an array of strings", () => {
       for (const value of ["app://.", [1], { a: 1 }]) {
          const specs = make("RendererToMain", "Unicast", value);
-         expect(() => vld.validateChannelSpecs(specs)).toThrowError();
+         expect(() => validateChannelSpecs(specs)).toThrowError();
       }
    });
 });
@@ -850,9 +855,7 @@ describe("validateChannelSpecs, validate", () => {
 
    it("accepts a validator on Unicast and Broadcast channels from a renderer", () => {
       for (const kind of ["Unicast", "Broadcast"] as const) {
-         expect(() =>
-            vld.validateChannelSpecs(make("RendererToMain", kind, ref)),
-         ).not.toThrowError();
+         expect(() => validateChannelSpecs(make("RendererToMain", kind, ref))).not.toThrowError();
       }
    });
 
@@ -862,7 +865,7 @@ describe("validateChannelSpecs, validate", () => {
          exported: "default",
          fromPath: "@scope/validators",
       });
-      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+      expect(() => validateChannelSpecs(specs)).not.toThrowError();
    });
 
    it("rejects validate on MainToRenderer and Port channels", () => {
@@ -870,9 +873,7 @@ describe("validateChannelSpecs, validate", () => {
          ["MainToRenderer", "Broadcast"],
          ["RendererToRenderer", "Port"],
       ] as const) {
-         expect(() => vld.validateChannelSpecs(make(direction, kind, ref))).toThrowError(
-            /validate/,
-         );
+         expect(() => validateChannelSpecs(make(direction, kind, ref))).toThrowError(/validate/);
       }
    });
 
@@ -885,9 +886,7 @@ describe("validateChannelSpecs, validate", () => {
       "idArgs",
       null,
    ])("rejects the malformed reference %j", (value) => {
-      expect(() =>
-         vld.validateChannelSpecs(make("RendererToMain", "Unicast", value)),
-      ).toThrowError();
+      expect(() => validateChannelSpecs(make("RendererToMain", "Unicast", value))).toThrowError();
    });
 });
 
@@ -909,12 +908,12 @@ describe("validateGlobalChannelSpecs", () => {
 
    it("should accept unique channels across files", () => {
       const files = [file("a.ts", [spec("getUser")]), file("b.ts", [spec("getPost")])];
-      expect(() => vld.validateGlobalChannelSpecs(files)).not.toThrowError();
+      expect(() => validateGlobalChannelSpecs(files)).not.toThrowError();
    });
 
    it("should throw an error naming both files when a channel is declared twice", () => {
       const files = [file("b.ts", [spec("getUser")]), file("a.ts", [spec("getUser")])];
-      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
+      expect(() => validateGlobalChannelSpecs(files)).toThrowError(
          "Channel name 'getUser' is declared in both 'a.ts' and 'b.ts'",
       );
    });
@@ -923,11 +922,11 @@ describe("validateGlobalChannelSpecs", () => {
    // normalized like in ipcAutomation, so the file named first was not the first one processed.
    it("should name the files in code unit order of their normalized paths", () => {
       const files = [file("a.ts", [spec("getUser")]), file("B.ts", [spec("getUser")])];
-      expect(() => vld.validateGlobalChannelSpecs(files)).toThrowError(
+      expect(() => validateGlobalChannelSpecs(files)).toThrowError(
          "Channel name 'getUser' is declared in both 'B.ts' and 'a.ts'",
       );
       const nested = [file("dir\\z.ts", [spec("getUser")]), file("dir-a/x.ts", [spec("getUser")])];
-      expect(() => vld.validateGlobalChannelSpecs(nested)).toThrowError(
+      expect(() => validateGlobalChannelSpecs(nested)).toThrowError(
          "Channel name 'getUser' is declared in both 'dir-a/x.ts' and 'dir\\z.ts'",
       );
    });
@@ -950,22 +949,18 @@ describe("validateReservedApiNames", () => {
 
    it("accepts a channel named getPathForFile while the config is off", () => {
       const files = [file("a.ts", ["getPathForFile"])];
-      expect(() => vld.validateReservedApiNames(files, {})).not.toThrowError();
-      expect(() =>
-         vld.validateReservedApiNames(files, { getPathForFile: false }),
-      ).not.toThrowError();
+      expect(() => validateReservedApiNames(files, {})).not.toThrowError();
+      expect(() => validateReservedApiNames(files, { getPathForFile: false })).not.toThrowError();
    });
 
    it("accepts other channels while the config is on", () => {
       const files = [file("a.ts", ["getPath", "getPathForFiles"])];
-      expect(() =>
-         vld.validateReservedApiNames(files, { getPathForFile: true }),
-      ).not.toThrowError();
+      expect(() => validateReservedApiNames(files, { getPathForFile: true })).not.toThrowError();
    });
 
    it("rejects a channel named getPathForFile while the config is on, and names its file", () => {
       const files = [file("a.ts", ["ok"]), file("b.ts", ["getPathForFile"])];
-      expect(() => vld.validateReservedApiNames(files, { getPathForFile: true })).toThrowError(
+      expect(() => validateReservedApiNames(files, { getPathForFile: true })).toThrowError(
          /Schema file 'b\.ts': Channel name 'getPathForFile' is reserved/,
       );
    });
@@ -973,7 +968,7 @@ describe("validateReservedApiNames", () => {
 
 describe("validateTypeSpecs", () => {
    it("should accept exported types", () => {
-      vld.validateTypeSpecs([
+      validateTypeSpecs([
          {
             name: "VitestInterface",
             kind: "interface" as t.TypeKind,
@@ -994,16 +989,12 @@ describe("validateTypeSpecs", () => {
 
    // T09: a helper type in the schema file no longer has to be exported.
    it("should accept non-exported types that no channel uses", () => {
-      expect(vld.validateTypeSpecs([hiddenSpec])).toStrictEqual([hiddenSpec]);
-      expect(vld.validateTypeSpecs([hiddenSpec], [channelUsing("Other")])).toStrictEqual([
-         hiddenSpec,
-      ]);
+      expect(validateTypeSpecs([hiddenSpec])).toStrictEqual([hiddenSpec]);
+      expect(validateTypeSpecs([hiddenSpec], [channelUsing("Other")])).toStrictEqual([hiddenSpec]);
    });
 
    it("should throw on a non-exported type that a channel uses", () => {
-      expect(() =>
-         vld.validateTypeSpecs([hiddenSpec], [channelUsing("VitestInterface")]),
-      ).toThrowError(
+      expect(() => validateTypeSpecs([hiddenSpec], [channelUsing("VitestInterface")])).toThrowError(
          "Type 'VitestInterface' is used by channel 'vitestChannel' and must be exported",
       );
    });
@@ -1011,7 +1002,7 @@ describe("validateTypeSpecs", () => {
    it("should throw on a non-exported type that a channel uses by a qualified name", () => {
       const spec = { ...hiddenSpec, kind: "enum" as t.TypeKind };
       expect(() =>
-         vld.validateTypeSpecs([spec], [channelUsing("VitestInterface.Member")]),
+         validateTypeSpecs([spec], [channelUsing("VitestInterface.Member")]),
       ).toThrowError("Type 'VitestInterface' is used by channel 'vitestChannel'");
    });
 
@@ -1026,35 +1017,31 @@ describe("validateTypeSpecs", () => {
 
       it("should accept an alias that is not exported, since it is resolved to its target", () => {
          const spec = alias("User", "Models.User");
-         expect(vld.validateTypeSpecs([spec], [channelUsing("User")])).toStrictEqual([spec]);
+         expect(validateTypeSpecs([spec], [channelUsing("User")])).toStrictEqual([spec]);
       });
 
       it("should throw when the target of an alias, through a chain, is not exported", () => {
          const specs = [alias("Point", "Shapes.Point"), alias("Shapes", "Hidden"), hiddenSpec];
          const hidden = { ...hiddenSpec, name: "Hidden" };
          expect(() =>
-            vld.validateTypeSpecs([...specs.slice(0, 2), hidden], [channelUsing("Point")]),
+            validateTypeSpecs([...specs.slice(0, 2), hidden], [channelUsing("Point")]),
          ).toThrowError("Type 'Hidden' is used by channel 'vitestChannel' and must be exported");
       });
 
       it("should accept aliases that refer to one another", () => {
          const specs = [alias("A", "B.X"), alias("B", "A.Y")];
-         expect(vld.validateTypeSpecs(specs, [channelUsing("A")])).toStrictEqual(specs);
+         expect(validateTypeSpecs(specs, [channelUsing("A")])).toStrictEqual(specs);
       });
    });
 
    it("should accept a type that is exported under another name", () => {
       const spec = { ...hiddenSpec, isExported: true, exportedAs: "Public" };
-      expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([
-         spec,
-      ]);
+      expect(validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([spec]);
    });
 
    it("should accept exported types that a channel uses", () => {
       const spec = { ...hiddenSpec, isExported: true, isDefault: true };
-      expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([
-         spec,
-      ]);
+      expect(validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([spec]);
    });
 });
 
@@ -1072,7 +1059,7 @@ describe("validateChannelSpecs, structured clone", () => {
    };
 
    it("throws for an error issue and names the channel, the place and the type", () => {
-      expect(() => vld.validateChannelSpecs([specWith(issue())])).toThrowError(
+      expect(() => validateChannelSpecs([specWith(issue())])).toThrowError(
          "Channel 'runTask': parameter 'cb' contains a function ('() => void'). " +
             "It cannot be sent over IPC, and Electron throws 'An object could not be cloned'.",
       );
@@ -1080,7 +1067,7 @@ describe("validateChannelSpecs, structured clone", () => {
 
    it("names the schema file and the local types that lead to the issue", () => {
       const spec = specWith(issue({ type: "symbol", reason: "a symbol", via: "Options → Key" }));
-      expect(() => vld.validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
+      expect(() => validateChannelSpecs([spec], "ipc/schema.ts")).toThrowError(
          "Schema file 'ipc/schema.ts': Channel 'runTask': parameter 'cb' contains a symbol " +
             "('symbol') through 'Options → Key'.",
       );
@@ -1088,7 +1075,7 @@ describe("validateChannelSpecs, structured clone", () => {
 
    it("explains that only the result of invoke is a Promise", () => {
       const spec = specWith(issue({ type: "Promise<string>", reason: "a Promise" }));
-      expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+      expect(() => validateChannelSpecs([spec])).toThrowError(
          "Only the result of an 'invoke' channel is a Promise, so send the resolved value.",
       );
    });
@@ -1096,7 +1083,7 @@ describe("validateChannelSpecs, structured clone", () => {
    it("explains that a Promise in a result is only allowed as the outermost type", () => {
       for (const where of ["return type", "chunk type"]) {
          const spec = specWith(issue({ where, type: "Promise<string>", reason: "a Promise" }));
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `${where} contains a Promise ('Promise<string>'). It cannot be sent over IPC. ` +
                "Only the result of an async signature is a Promise, and only as the outermost type, " +
                "so await it and send the resolved value.",
@@ -1111,7 +1098,7 @@ describe("validateChannelSpecs, structured clone", () => {
       );
       let message = "";
       try {
-         vld.validateChannelSpecs([spec]);
+         validateChannelSpecs([spec]);
       } catch (err) {
          message = (err as Error).message;
       }
@@ -1125,23 +1112,23 @@ describe("validateChannelSpecs, structured clone", () => {
       const direction = kind === "Port" ? "RendererToRenderer" : "RendererToMain";
       const generated = new ChannelSpecGenerator().generate(direction, kind);
       const spec = { ...generated, signature: { ...generated.signature, cloneIssues: [issue()] } };
-      expect(() => vld.validateChannelSpecs([spec])).toThrowError(/contains a function/);
+      expect(() => validateChannelSpecs([spec])).toThrowError(/contains a function/);
    });
 
    it("does not throw for a warning, and returns the spec", () => {
       const spec = specWith(
          issue({ level: "warning", type: "User", reason: "an instance of the class 'User'" }),
       );
-      expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+      expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
    });
 
    it("accepts a signature without issues", () => {
-      expect(() => vld.validateChannelSpecs([specWith()])).not.toThrowError();
+      expect(() => validateChannelSpecs([specWith()])).not.toThrowError();
    });
 
    it("rejects an issue with an unknown level", () => {
       const spec = specWith(issue({ level: "fatal" as never }));
-      expect(() => vld.validateChannelSpecs([spec])).toThrowError(/level must be/);
+      expect(() => validateChannelSpecs([spec])).toThrowError(/level must be/);
    });
 });
 
@@ -1158,7 +1145,7 @@ describe("getCloneWarnings", () => {
    };
 
    it("describes each warning with the file, the channel and the advice", () => {
-      const warnings = vld.getCloneWarnings([specWith("saveUser", warning)], "ipc/schema.ts");
+      const warnings = getCloneWarnings([specWith("saveUser", warning)], "ipc/schema.ts");
       expect(warnings).toStrictEqual([
          "Schema file 'ipc/schema.ts': Channel 'saveUser': parameter 'user' contains an instance " +
             "of the class 'User' ('User'). An instance loses its prototype and methods over IPC " +
@@ -1172,13 +1159,13 @@ describe("getCloneWarnings", () => {
          specWith("b"),
          specWith("c", { ...warning, level: "error" }),
       ];
-      const warnings = vld.getCloneWarnings(specs);
+      const warnings = getCloneWarnings(specs);
       expect(warnings).toHaveLength(1);
       expect(warnings[0].startsWith("Channel 'a': parameter 'user'")).toBe(true);
    });
 
    it("names the local types that lead to the class", () => {
-      const warnings = vld.getCloneWarnings([specWith("a", { ...warning, via: "Row" })]);
+      const warnings = getCloneWarnings([specWith("a", { ...warning, via: "Row" })]);
       expect(warnings[0]).toContain("('User') through 'Row'.");
    });
 });
@@ -1207,7 +1194,7 @@ describe("validateChannelSpecs, highWaterMark", () => {
       ["RendererToUtility", Number.POSITIVE_INFINITY],
    ] as const)("accepts %s %s on Stream channels", (direction, highWaterMark) => {
       expect(() =>
-         vld.validateChannelSpecs(make(direction, "Stream", highWaterMark)),
+         validateChannelSpecs(make(direction, "Stream", highWaterMark)),
       ).not.toThrowError();
    });
 
@@ -1215,17 +1202,17 @@ describe("validateChannelSpecs, highWaterMark", () => {
       "rejects %s and names the channel and the file",
       (highWaterMark) => {
          const specs = make("RendererToMain", "Stream", highWaterMark);
-         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+         expect(() => validateChannelSpecs(specs, "schema.ts")).toThrowError(
             /Schema file 'schema\.ts': Channel 'vitestChannel_0': highWaterMark must be a non-negative integer or Infinity/,
          );
       },
    );
 
    it("rejects a number that is not a number", () => {
-      expect(() =>
-         vld.validateChannelSpecs(make("RendererToMain", "Stream", Number.NaN)),
-      ).toThrowError(/highWaterMark/);
-      expect(() => vld.validateChannelSpecs(make("RendererToMain", "Stream", "10"))).toThrowError(
+      expect(() => validateChannelSpecs(make("RendererToMain", "Stream", Number.NaN))).toThrowError(
+         /highWaterMark/,
+      );
+      expect(() => validateChannelSpecs(make("RendererToMain", "Stream", "10"))).toThrowError(
          /highWaterMark/,
       );
    });
@@ -1239,9 +1226,7 @@ describe("validateChannelSpecs, highWaterMark", () => {
          ["RendererToRenderer", "Port"],
          ["RendererToUtility", "Unicast"],
       ] as const) {
-         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(
-            /highWaterMark/,
-         );
+         expect(() => validateChannelSpecs(make(direction, kind, 5))).toThrowError(/highWaterMark/);
       }
    });
 });
@@ -1265,24 +1250,24 @@ describe("validateChannelSpecs, maxQueue", () => {
       ["MainToRenderer", Number.MAX_SAFE_INTEGER],
       ["MainToRenderer", undefined],
    ] as const)("accepts %s %s on Port channels", (direction, maxQueue) => {
-      expect(() => vld.validateChannelSpecs(make(direction, "Port", maxQueue))).not.toThrowError();
+      expect(() => validateChannelSpecs(make(direction, "Port", maxQueue))).not.toThrowError();
    });
 
    it.each([-1, 1.5, Number.NEGATIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2])(
       "rejects %s and names the channel and the file",
       (maxQueue) => {
          const specs = make("RendererToRenderer", "Port", maxQueue);
-         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+         expect(() => validateChannelSpecs(specs, "schema.ts")).toThrowError(
             /Schema file 'schema\.ts': Channel 'vitestChannel_0': maxQueue must be a non-negative integer or Infinity/,
          );
       },
    );
 
    it("rejects a number that is not a number", () => {
-      expect(() =>
-         vld.validateChannelSpecs(make("MainToRenderer", "Port", Number.NaN)),
-      ).toThrowError(/maxQueue/);
-      expect(() => vld.validateChannelSpecs(make("MainToRenderer", "Port", "10"))).toThrowError(
+      expect(() => validateChannelSpecs(make("MainToRenderer", "Port", Number.NaN))).toThrowError(
+         /maxQueue/,
+      );
+      expect(() => validateChannelSpecs(make("MainToRenderer", "Port", "10"))).toThrowError(
          /maxQueue/,
       );
    });
@@ -1294,7 +1279,7 @@ describe("validateChannelSpecs, maxQueue", () => {
          ["MainToRenderer", "Broadcast"],
          ["MainToRenderer", "Unicast"],
       ] as const) {
-         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/maxQueue/);
+         expect(() => validateChannelSpecs(make(direction, kind, 5))).toThrowError(/maxQueue/);
       }
    });
 });
@@ -1317,7 +1302,7 @@ describe("validateChannelSpecs, timeoutMs", () => {
       "accepts %s on invoke channels",
       (timeoutMs) => {
          const specs = make("RendererToMain", "Unicast", timeoutMs);
-         expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+         expect(() => validateChannelSpecs(specs)).not.toThrowError();
       },
    );
 
@@ -1325,7 +1310,7 @@ describe("validateChannelSpecs, timeoutMs", () => {
       "rejects %s and names the channel and the file",
       (timeoutMs) => {
          const specs = make("RendererToMain", "Unicast", timeoutMs);
-         expect(() => vld.validateChannelSpecs(specs, "schema.ts")).toThrowError(
+         expect(() => validateChannelSpecs(specs, "schema.ts")).toThrowError(
             /Schema file 'schema\.ts': Channel 'vitestChannel_0': timeoutMs must be a non-negative integer/,
          );
       },
@@ -1333,7 +1318,7 @@ describe("validateChannelSpecs, timeoutMs", () => {
 
    it("rejects a value that is not a number", () => {
       const specs = make("RendererToMain", "Unicast", "10");
-      expect(() => vld.validateChannelSpecs(specs)).toThrowError(/timeoutMs/);
+      expect(() => validateChannelSpecs(specs)).toThrowError(/timeoutMs/);
    });
 
    it("rejects timeoutMs on the channels that do not wait for a reply", () => {
@@ -1346,7 +1331,7 @@ describe("validateChannelSpecs, timeoutMs", () => {
          ["MainToUtility", "Broadcast"],
          ["UtilityToMain", "Broadcast"],
       ] as const) {
-         expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/timeoutMs/);
+         expect(() => validateChannelSpecs(make(direction, kind, 5))).toThrowError(/timeoutMs/);
       }
    });
 
@@ -1359,12 +1344,10 @@ describe("validateChannelSpecs, timeoutMs", () => {
       "accepts timeoutMs on %s %s channels, and rejects a bad value",
       (direction, kind) => {
          for (const timeoutMs of [0, 1, 30_000]) {
-            expect(() =>
-               vld.validateChannelSpecs(make(direction, kind, timeoutMs)),
-            ).not.toThrowError();
+            expect(() => validateChannelSpecs(make(direction, kind, timeoutMs))).not.toThrowError();
          }
          for (const timeoutMs of [-1, 1.5, Number.POSITIVE_INFINITY]) {
-            expect(() => vld.validateChannelSpecs(make(direction, kind, timeoutMs))).toThrowError(
+            expect(() => validateChannelSpecs(make(direction, kind, timeoutMs))).toThrowError(
                /timeoutMs must be a non-negative integer/,
             );
          }
@@ -1379,14 +1362,14 @@ describe("validateOptionalConfig, utilityBindingsPath", () => {
       "accepts %s",
       (utilityBindingsPath) => {
          expect(() =>
-            vld.validateOptionalConfig({ ...config, utilityBindingsPath }),
+            validateOptionalConfig({ ...config, utilityBindingsPath }),
          ).not.toThrowError();
       },
    );
 
    it("rejects an absolute path", () => {
       expect(() =>
-         vld.validateOptionalConfig({ ...config, utilityBindingsPath: "/srv/ipc.ts" }),
+         validateOptionalConfig({ ...config, utilityBindingsPath: "/srv/ipc.ts" }),
       ).toThrowError("utilityBindingsPath must be relative to the project root");
    });
 
@@ -1398,16 +1381,16 @@ describe("validateOptionalConfig, utilityBindingsPath", () => {
       "worker/ipc.d.cts",
       "",
    ])("rejects %j, since it is not the path of a .ts file", (utilityBindingsPath) => {
-      expect(() => vld.validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
+      expect(() => validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
          "utilityBindingsPath must be the path of a .ts file",
       );
    });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;
-      expect(() =>
-         vld.validateOptionalConfig({ ...config, utilityBindingsPath: value }),
-      ).toThrowError(/utilityBindingsPath/);
+      expect(() => validateOptionalConfig({ ...config, utilityBindingsPath: value })).toThrowError(
+         /utilityBindingsPath/,
+      );
    });
 });
 
@@ -1420,12 +1403,12 @@ describe("validateChannelSpecs, utility channels", () => {
       (direction) => {
          for (const returnType of ["void", "number", "Promise<string>"]) {
             expect(() =>
-               vld.validateChannelSpecs([generate(direction, "Unicast", returnType)]),
+               validateChannelSpecs([generate(direction, "Unicast", returnType)]),
             ).not.toThrowError();
          }
          for (const returnType of ["void", "Promise<void>"]) {
             expect(() =>
-               vld.validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
+               validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
             ).not.toThrowError();
          }
       },
@@ -1433,14 +1416,14 @@ describe("validateChannelSpecs, utility channels", () => {
 
    it("rejects a Broadcast channel to the utility process which returns a value", () => {
       expect(() =>
-         vld.validateChannelSpecs([generate("MainToUtility", "Broadcast", "string")]),
+         validateChannelSpecs([generate("MainToUtility", "Broadcast", "string")]),
       ).toThrowError("Channel return type 'string' not allowed when channel kind is 'Broadcast'");
    });
 
    it.each(["Port", "Stream"] as const)("rejects a %s channel with a utility direction", (kind) => {
       for (const direction of ["MainToUtility", "UtilityToMain"] as const) {
          const spec = generate(direction, kind);
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel kind '${kind}' is not allowed when channel direction is '${direction}'.`,
          );
       }
@@ -1452,12 +1435,12 @@ describe("validateChannelSpecs, utility channels", () => {
          ["MainToRenderer", "Broadcast"],
          ["RendererToRenderer", "Broadcast"],
       ] as const) {
-         expect(() => vld.validateChannelSpecs([generate(direction, kind)])).not.toThrowError(
+         expect(() => validateChannelSpecs([generate(direction, kind)])).not.toThrowError(
             /Utility/,
          );
       }
       const wrong = { ...generate("MainToUtility", "Unicast"), direction: "ToUtility" };
-      expect(() => vld.validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
+      expect(() => validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
          /direction/,
       );
    });
@@ -1474,7 +1457,7 @@ describe("validateChannelSpecs, utility channels", () => {
          ]) {
             const [key] = Object.keys(extra);
             const spec = { ...generate("MainToUtility", kind), ...extra };
-            expect(() => vld.validateChannelSpecs([spec])).toThrowError(new RegExp(key));
+            expect(() => validateChannelSpecs([spec])).toThrowError(new RegExp(key));
          }
       }
    });
@@ -1482,7 +1465,7 @@ describe("validateChannelSpecs, utility channels", () => {
    it("keeps the names of the utility channels unique among all channels", () => {
       const spec = generate("UtilityToMain", "Unicast");
       const clash = { ...generate("RendererToMain", "Broadcast"), name: spec.name };
-      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+      expect(() => validateChannelSpecs([spec, clash])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
       );
    });
@@ -1495,27 +1478,23 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
 
    it("accepts a Unicast channel with any return type", () => {
       for (const returnType of ["void", "number", "Promise<string>"]) {
-         expect(() =>
-            vld.validateChannelSpecs([generate("Unicast", returnType)]),
-         ).not.toThrowError();
+         expect(() => validateChannelSpecs([generate("Unicast", returnType)])).not.toThrowError();
       }
    });
 
    it("accepts a Stream channel with a chunk type, and error types for both", () => {
-      expect(() => vld.validateChannelSpecs([chunked()])).not.toThrowError();
+      expect(() => validateChannelSpecs([chunked()])).not.toThrowError();
       const errors = { definition: "Error", customTypes: [] };
-      expect(() => vld.validateChannelSpecs([{ ...chunked(), errors }])).not.toThrowError();
-      expect(() =>
-         vld.validateChannelSpecs([{ ...generate("Unicast"), errors }]),
-      ).not.toThrowError();
+      expect(() => validateChannelSpecs([{ ...chunked(), errors }])).not.toThrowError();
+      expect(() => validateChannelSpecs([{ ...generate("Unicast"), errors }])).not.toThrowError();
    });
 
    it("rejects a Stream channel without a chunk type", () => {
-      expect(() => vld.validateChannelSpecs([generate("Stream")])).toThrowError(/chunkType/);
+      expect(() => validateChannelSpecs([generate("Stream")])).toThrowError(/chunkType/);
    });
 
    it.each(["Broadcast", "Port"] as const)("rejects a %s channel", (kind) => {
-      expect(() => vld.validateChannelSpecs([generate(kind)])).toThrowError(
+      expect(() => validateChannelSpecs([generate(kind)])).toThrowError(
          `Channel kind '${kind}' is not allowed when channel direction is 'RendererToUtility'.`,
       );
    });
@@ -1531,7 +1510,7 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
          ]) {
             const [key] = Object.keys(extra);
             const base = kind === "Stream" ? chunked() : generate(kind);
-            expect(() => vld.validateChannelSpecs([{ ...base, ...extra }])).toThrowError(
+            expect(() => validateChannelSpecs([{ ...base, ...extra }])).toThrowError(
                new RegExp(key),
             );
          }
@@ -1541,7 +1520,7 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
    it("keeps the names unique among all channels", () => {
       const spec = generate("Unicast");
       const clash = { ...generate("Unicast", "void", "RendererToMain"), name: spec.name };
-      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+      expect(() => validateChannelSpecs([spec, clash])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
       );
    });
@@ -1558,13 +1537,13 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       undefined,
    ])("accepts %s", (serviceWorkerPreloadPath) => {
       expect(() =>
-         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
+         validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
       ).not.toThrowError();
    });
 
    it("rejects an absolute path", () => {
       expect(() =>
-         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath: "/srv/sw.ts" }),
+         validateOptionalConfig({ ...config, serviceWorkerPreloadPath: "/srv/sw.ts" }),
       ).toThrowError("serviceWorkerPreloadPath must be relative to the project root");
    });
 
@@ -1576,15 +1555,15 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       "worker/preload.d.cts",
       "",
    ])("rejects %j, since it is not the path of a .ts file", (serviceWorkerPreloadPath) => {
-      expect(() =>
-         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
-      ).toThrowError("serviceWorkerPreloadPath must be the path of a .ts file");
+      expect(() => validateOptionalConfig({ ...config, serviceWorkerPreloadPath })).toThrowError(
+         "serviceWorkerPreloadPath must be the path of a .ts file",
+      );
    });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;
       expect(() =>
-         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath: value }),
+         validateOptionalConfig({ ...config, serviceWorkerPreloadPath: value }),
       ).toThrowError(/serviceWorkerPreloadPath/);
    });
 });
@@ -1598,12 +1577,12 @@ describe("validateChannelSpecs, service worker channels", () => {
       (direction) => {
          for (const returnType of ["void", "number", "Promise<string>"]) {
             expect(() =>
-               vld.validateChannelSpecs([generate(direction, "Unicast", returnType)]),
+               validateChannelSpecs([generate(direction, "Unicast", returnType)]),
             ).not.toThrowError();
          }
          for (const returnType of ["void", "Promise<void>"]) {
             expect(() =>
-               vld.validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
+               validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
             ).not.toThrowError();
          }
       },
@@ -1611,14 +1590,14 @@ describe("validateChannelSpecs, service worker channels", () => {
 
    it("rejects a Broadcast channel of a worker which returns a value", () => {
       expect(() =>
-         vld.validateChannelSpecs([generate("ServiceWorkerToMain", "Broadcast", "string")]),
+         validateChannelSpecs([generate("ServiceWorkerToMain", "Broadcast", "string")]),
       ).toThrowError("Channel return type 'string' not allowed when channel kind is 'Broadcast'");
    });
 
    it.each(["Port", "Stream"] as const)("rejects a %s channel with a worker direction", (kind) => {
       for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
          const spec = generate(direction, kind);
-         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+         expect(() => validateChannelSpecs([spec])).toThrowError(
             `Channel kind '${kind}' is not allowed when channel direction is '${direction}'.`,
          );
       }
@@ -1629,36 +1608,32 @@ describe("validateChannelSpecs, service worker channels", () => {
       const allowedOrigins = ["app://main"];
       for (const kind of ["Unicast", "Broadcast"] as const) {
          expect(() =>
-            vld.validateChannelSpecs([
-               { ...generate("ServiceWorkerToMain", kind), allowedOrigins },
-            ]),
+            validateChannelSpecs([{ ...generate("ServiceWorkerToMain", kind), allowedOrigins }]),
          ).not.toThrowError();
          expect(() =>
-            vld.validateChannelSpecs([
-               { ...generate("MainToServiceWorker", kind), allowedOrigins },
-            ]),
+            validateChannelSpecs([{ ...generate("MainToServiceWorker", kind), allowedOrigins }]),
          ).toThrowError(/allowedOrigins/);
       }
       expect(() =>
-         vld.validateChannelSpecs([{ ...generate("ServiceWorkerToMain", "Unicast"), errors }]),
+         validateChannelSpecs([{ ...generate("ServiceWorkerToMain", "Unicast"), errors }]),
       ).not.toThrowError();
       for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
          expect(() =>
-            vld.validateChannelSpecs([{ ...generate(direction, "Broadcast"), errors }]),
+            validateChannelSpecs([{ ...generate(direction, "Broadcast"), errors }]),
          ).toThrowError(/errors/);
       }
       expect(() =>
-         vld.validateChannelSpecs([{ ...generate("MainToServiceWorker", "Unicast"), errors }]),
+         validateChannelSpecs([{ ...generate("MainToServiceWorker", "Unicast"), errors }]),
       ).toThrowError(/errors/);
    });
 
    it("rejects an allowedOrigins list that holds no origin", () => {
       const spec = generate("ServiceWorkerToMain", "Unicast");
-      expect(() => vld.validateChannelSpecs([{ ...spec, allowedOrigins: [] }])).toThrowError(
+      expect(() => validateChannelSpecs([{ ...spec, allowedOrigins: [] }])).toThrowError(
          /at least one origin/,
       );
       expect(() =>
-         vld.validateChannelSpecs([{ ...spec, allowedOrigins: ["app://main/path"] }]),
+         validateChannelSpecs([{ ...spec, allowedOrigins: ["app://main/path"] }]),
       ).toThrowError(/is not an origin/);
    });
 
@@ -1666,33 +1641,27 @@ describe("validateChannelSpecs, service worker channels", () => {
       const validate = { name: "args", exported: "args", fromPath: "./v" };
       for (const kind of ["Unicast", "Broadcast"] as const) {
          expect(() =>
-            vld.validateChannelSpecs([{ ...generate("ServiceWorkerToMain", kind), validate }]),
+            validateChannelSpecs([{ ...generate("ServiceWorkerToMain", kind), validate }]),
          ).not.toThrowError();
          expect(() =>
-            vld.validateChannelSpecs([{ ...generate("MainToServiceWorker", kind), validate }]),
+            validateChannelSpecs([{ ...generate("MainToServiceWorker", kind), validate }]),
          ).toThrowError(/validate/);
       }
    });
 
    it("accepts a timeout for the calls of a worker only, not for its messages or questions", () => {
       expect(() =>
-         vld.validateChannelSpecs([
-            { ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: 5 },
-         ]),
+         validateChannelSpecs([{ ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: 5 }]),
       ).not.toThrowError();
       expect(() =>
-         vld.validateChannelSpecs([
-            { ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: -1 },
-         ]),
+         validateChannelSpecs([{ ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: -1 }]),
       ).toThrowError(/timeoutMs must be a non-negative integer/);
       for (const spec of [
          generate("ServiceWorkerToMain", "Broadcast"),
          generate("MainToServiceWorker", "Unicast"),
          generate("MainToServiceWorker", "Broadcast"),
       ]) {
-         expect(() => vld.validateChannelSpecs([{ ...spec, timeoutMs: 5 }])).toThrowError(
-            /timeoutMs/,
-         );
+         expect(() => validateChannelSpecs([{ ...spec, timeoutMs: 5 }])).toThrowError(/timeoutMs/);
       }
    });
 
@@ -1702,7 +1671,7 @@ describe("validateChannelSpecs, service worker channels", () => {
             for (const extra of [{ trigger: "focus" }, { maxQueue: 5 }, { scopes: ["a"] }]) {
                const [key] = Object.keys(extra);
                const spec = { ...generate(direction, kind), ...extra };
-               expect(() => vld.validateChannelSpecs([spec])).toThrowError(new RegExp(key));
+               expect(() => validateChannelSpecs([spec])).toThrowError(new RegExp(key));
             }
          }
       }
@@ -1710,7 +1679,7 @@ describe("validateChannelSpecs, service worker channels", () => {
 
    it("rejects a direction that no worker verb has", () => {
       const wrong = { ...generate("MainToServiceWorker", "Unicast"), direction: "ToServiceWorker" };
-      expect(() => vld.validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
+      expect(() => validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
          /direction/,
       );
    });
@@ -1718,7 +1687,7 @@ describe("validateChannelSpecs, service worker channels", () => {
    it("keeps the names of the worker channels unique among all channels", () => {
       const spec = generate("MainToServiceWorker", "Unicast");
       const clash = { ...generate("RendererToMain", "Broadcast"), name: spec.name };
-      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+      expect(() => validateChannelSpecs([spec, clash])).toThrowError(
          `Channel name '${spec.name}' is not unique across application.`,
       );
    });

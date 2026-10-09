@@ -12,8 +12,8 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
+import { validateOptionalConfig } from "./config-validation.js";
 import utils from "./utils.js";
-import valid from "./validators.js";
 
 /** The extensions that a module specifier of a `.ts`, `.mts` or `.cts` file may end with. */
 const SCRIPT_EXTENSIONS: Record<string, string[]> = {
@@ -139,7 +139,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       getPathForFile: false,
       ...userConfig,
    };
-   valid.validateOptionalConfig(mergedConfig);
+   validateOptionalConfig(mergedConfig);
 
    const projectRoot = utils.resolveUserProjectPath("", cwd);
    const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir, cwd);

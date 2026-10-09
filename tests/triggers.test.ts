@@ -12,8 +12,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { BROWSER_WINDOW_EVENTS } from "@src/browser-window-events.js";
+import { validateChannelSpecs } from "@src/channel-validation.js";
 import parser from "@src/parser.js";
-import vld from "@src/validators.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
 import { describe, expect, it } from "vitest";
 
@@ -28,13 +28,13 @@ describe("trigger validation", () => {
    it("accepts every documented BrowserWindow event", () => {
       for (const event of BROWSER_WINDOW_EVENTS) {
          const spec = triggerSpec(event);
-         expect(vld.validateChannelSpecs([spec])).toStrictEqual([spec]);
+         expect(validateChannelSpecs([spec])).toStrictEqual([spec]);
       }
    });
 
    // Regression for B5: the `as` form and untyped schemas bypass the type-level check.
    it("rejects a trigger which is not a BrowserWindow event", () => {
-      expect(() => vld.validateChannelSpecs([triggerSpec("not-an-event")])).toThrowError(
+      expect(() => validateChannelSpecs([triggerSpec("not-an-event")])).toThrowError(
          /'not-an-event' is not a BrowserWindow event\. Use one of: show, ready-to-show/,
       );
    });
