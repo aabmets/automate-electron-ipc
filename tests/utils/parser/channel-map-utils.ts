@@ -29,11 +29,22 @@ export function parseOne(entry: string): Partial<t.ChannelSpec> {
    return channelSpecs[0];
 }
 
-export function parseError(code: string, imports = IMPORT): string {
+/** The message of the error that the parser throws, with all of its text including the code frame. */
+export function parseFullError(code: string, imports = IMPORT): string {
    try {
       parseMap(code, imports);
    } catch (err) {
       return (err as Error).message;
    }
    throw new Error("Expected the parser to throw");
+}
+
+/**
+ * The message of the error that the parser throws, without the position and the code frame, which
+ * `tests/test_parser/diagnostics/positions.test.ts` covers.
+ */
+export function parseError(code: string, imports = IMPORT): string {
+   return parseFullError(code, imports)
+      .replace(/^(Schema file '[^']*') \(\d+:\d+\)/, "$1")
+      .replace(/\n\n[\s\S]*$/, "");
 }

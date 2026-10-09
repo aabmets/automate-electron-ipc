@@ -71,6 +71,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
       workerNotify = false,
    } = flags;
    return object({
+      loc: optional(object({ line: number(), column: number() })),
       name: refine(string(), "identifier", (value) =>
          CHANNEL_NAME.test(value) ? true : `Channel name '${value}' is not a plain identifier`,
       ),

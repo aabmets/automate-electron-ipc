@@ -12,7 +12,7 @@
 import type { Module, Span, TsFunctionType } from "@swc/core";
 import type * as t from "@types";
 import type { AstNode, Source, SpanRef } from "../ast.js";
-import { unwrapParentheses, unwrapTypeParentheses } from "../ast.js";
+import { nodeSpan, unwrapParentheses, unwrapTypeParentheses } from "../ast.js";
 import { SchemaError } from "../diagnostics.js";
 import { collectLibraryImports, resolveLibraryName } from "../library-imports.js";
 import { collectModuleBindings, collectTypeDeclarations } from "../module-bindings.js";
@@ -57,17 +57,25 @@ function parseErrors(node: AstNode, ctx: ParseContext): t.ErrorsSpec {
  */
 function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.ChannelSpec> {
    if (prop.type === "SpreadElement") {
-      throw new SchemaError(ctx.file, "spread elements are not allowed in a channel map.");
+      throw new SchemaError(
+         ctx.file,
+         "spread elements are not allowed in a channel map.",
+         undefined,
+         { span: nodeSpan(prop), src: ctx.src },
+      );
    }
    const key = prop.type === "KeyValueProperty" ? prop.key : null;
    if (key?.type !== "Identifier") {
       throw new SchemaError(
          ctx.file,
          `channel names must be plain identifier keys, found a ${prop.type}.`,
+         undefined,
+         { span: nodeSpan(prop), src: ctx.src },
       );
    }
    const name: string = key.value;
-   const fail = (message: string) => new SchemaError(ctx.file, message, name);
+   const fail = (message: string, node: AstNode = prop) =>
+      new SchemaError(ctx.file, message, name, { span: nodeSpan(node), src: ctx.src });
 
    let value = unwrapParentheses(prop.value);
    let asType: AstNode | null = null;
@@ -76,15 +84,18 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       value = unwrapParentheses(value.expression);
    }
    if (value.type === "ObjectExpression") {
-      throw fail("nested objects are not supported in a channel map.");
+      throw fail("nested objects are not supported in a channel map.", value);
    } else if (value.type !== "CallExpression") {
-      throw fail(`expected a call to one of: ${Array.from(VERBS.keys()).join(", ")}.`);
+      throw fail(`expected a call to one of: ${Array.from(VERBS.keys()).join(", ")}.`, value);
    }
    const verb = resolveLibraryName(value.callee, ctx.imports);
    const info = verb ? VERBS.get(verb) : undefined;
    if (!(verb && info)) {
       const callee = ctx.src.text(value.callee);
-      throw fail(`unknown verb '${callee}'. Use one of: ${Array.from(VERBS.keys()).join(", ")}.`);
+      throw fail(
+         `unknown verb '${callee}'. Use one of: ${Array.from(VERBS.keys()).join(", ")}.`,
+         value.callee,
+      );
    }
 
    const config = parseChannelConfig(value, verb, info, name, ctx);
@@ -95,11 +106,13 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
          info.errors
             ? `'${verb}' takes at most two type arguments, the signature and the error types.`
             : `'${verb}' takes exactly one type argument, the signature.`,
+         value.typeArguments,
       );
    } else if (typeArgs.length > 0 && asType) {
       throw fail(
          `the signature is given twice, as a type argument and with 'as'. ` +
             `Use only one of them. Error types need the type argument form.`,
+         asType,
       );
    }
    const signature = asType ?? (typeArgs.length > 0 ? unwrapTypeParentheses(typeArgs[0]) : null);
@@ -107,14 +120,18 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       throw fail(
          `no signature. Write ${verb}<(arg: string) => void>() ` +
             `or ${verb}() as (arg: string) => void.`,
+         value,
       );
    } else if (signature.type !== "TsFunctionType") {
       const text = ctx.src.text(signature as { span: Span });
-      throw fail(`the signature must be a function type, found '${text}'.`);
+      throw fail(`the signature must be a function type, found '${text}'.`, signature);
    } else if (
       (signature.params as AstNode[]).some((p) => p.type === "Identifier" && p.value === "this")
    ) {
-      throw fail("a 'this' parameter is not supported, since IPC does not transfer 'this'.");
+      throw fail(
+         "a 'this' parameter is not supported, since IPC does not transfer 'this'.",
+         signature,
+      );
    }
    const parsed = parseSignature(
       signature as unknown as TsFunctionType,
@@ -127,10 +144,12 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       throw fail(
          `the signature of '${verb}' must return AsyncIterable<Chunk>, AsyncIterableIterator<Chunk> ` +
             `or AsyncGenerator<Chunk>, found '${parsed.returnType}'.`,
+         signature,
       );
    }
    return {
       name,
+      loc: ctx.src.position(key.span),
       kind: info.kind,
       direction: info.direction,
       signature: parsed,
@@ -144,7 +163,10 @@ function parseChannelMap(call: AstNode, ctx: ParseContext): Partial<t.ChannelSpe
    const map =
       call.arguments.length === 1 && !arg.spread ? unwrapParentheses(arg.expression) : null;
    if (map?.type !== "ObjectExpression") {
-      throw new SchemaError(ctx.file, "defineChannels accepts one object literal.");
+      throw new SchemaError(ctx.file, "defineChannels accepts one object literal.", undefined, {
+         span: call.span,
+         src: ctx.src,
+      });
    }
    return (map.properties as AstNode[]).map((prop) => parseChannelProperty(prop, ctx));
 }
@@ -166,12 +188,16 @@ export function parseChannelMapModule(
    if (calls.length === 0) {
       return { channelSpecs: [], channelMapExport: null };
    } else if (calls.length > 1) {
-      throw new SchemaError(file, "only one defineChannels call is allowed per file.");
+      throw new SchemaError(file, "only one defineChannels call is allowed per file.", undefined, {
+         span: calls[1].span,
+         src,
+      });
    }
    const found =
       body.map((item) => findExportedMap(item, imports)).find((map) => map !== null) ??
       findIndirectlyExportedMap(body, imports);
-   if (!found && body.some((item) => item.type === "TsExportAssignment")) {
+   const exportAssignment = body.find((item) => item.type === "TsExportAssignment");
+   if (!found && exportAssignment) {
       // `export = X` makes the module the value of X, which has no name for the generated files
       // to import. It is a CommonJS form of `export default`.
       throw new SchemaError(
@@ -179,6 +205,8 @@ export function parseChannelMapModule(
          "'export =' is not supported in a schema file. " +
             "Export the channels with 'export default defineChannels({...})' or " +
             "'export const <name> = defineChannels({...})'.",
+         undefined,
+         { span: exportAssignment.span, src },
       );
    }
    if (!found || found.call !== calls[0]) {
@@ -186,6 +214,8 @@ export function parseChannelMapModule(
          file,
          "the defineChannels call must be exported, with " +
             "'export default defineChannels({...})' or 'export const <name> = defineChannels({...})'.",
+         undefined,
+         { span: calls[0].span, src },
       );
    }
    const locals = collectModuleBindings(module);

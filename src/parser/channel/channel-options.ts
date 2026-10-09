@@ -12,7 +12,7 @@
 import type { Module, Span } from "@swc/core";
 import type * as t from "@types";
 import type { AstNode, Source } from "../ast.js";
-import { unwrapParentheses } from "../ast.js";
+import { nodeSpan, unwrapParentheses } from "../ast.js";
 import { SchemaError } from "../diagnostics.js";
 import type { LibraryImports } from "../library-imports.js";
 import type { TypeDeclarations } from "../module-bindings.js";
@@ -70,27 +70,30 @@ export interface ParseContext {
  */
 function parseValidatorRef(
    value: AstNode,
-   fail: (message: string) => Error,
+   fail: (message: string, node?: AstNode) => Error,
    ctx: ParseContext,
 ): t.ValidatorRef {
    if (value.type !== "Identifier") {
-      throw fail("option 'validate' must be an identifier which the schema file imports.");
+      throw fail("option 'validate' must be an identifier which the schema file imports.", value);
    }
    const binding = ctx.importBindings.get(value.value);
    if (!binding) {
       throw fail(
          `option 'validate' refers to '${value.value}', which is not imported in the schema file. ` +
             "Import the schema from another module.",
+         value,
       );
    } else if (binding.typeOnly) {
       throw fail(
          `option 'validate' refers to '${value.value}', which is a type-only import. ` +
             "Import it as a value.",
+         value,
       );
    } else if (binding.exported === "*") {
       throw fail(
          `option 'validate' refers to '${value.value}', a namespace import. ` +
             "Import the schema itself, such as `import { schema } from '...'`.",
+         value,
       );
    }
    return { name: value.value, exported: binding.exported, fromPath: binding.fromPath };
@@ -103,18 +106,21 @@ function parseValidatorRef(
 function parseCountLimit(
    option: string,
    value: AstNode,
-   fail: (message: string) => Error,
+   fail: (message: string, node?: AstNode) => Error,
    src: Source,
 ): number {
    const expected = `option '${option}' must be a non-negative integer literal or Infinity`;
    if (value.type === "Identifier" && value.value === "Infinity") {
       return Number.POSITIVE_INFINITY;
    } else if (value.type !== "NumericLiteral") {
-      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`);
+      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`, value);
    } else if (!Number.isInteger(value.value)) {
-      throw fail(`${expected}, found '${value.value}'.`);
+      throw fail(`${expected}, found '${value.value}'.`, value);
    } else if (!Number.isSafeInteger(value.value)) {
-      throw fail(`option '${option}' cannot exceed ${Number.MAX_SAFE_INTEGER}. Use Infinity.`);
+      throw fail(
+         `option '${option}' cannot exceed ${Number.MAX_SAFE_INTEGER}. Use Infinity.`,
+         value,
+      );
    }
    return value.value;
 }
@@ -122,14 +128,18 @@ function parseCountLimit(
 /**
  * Resolves the `timeoutMs` option: a non-negative integer literal.
  */
-function parseTimeoutMs(value: AstNode, fail: (message: string) => Error, src: Source): number {
+function parseTimeoutMs(
+   value: AstNode,
+   fail: (message: string, node?: AstNode) => Error,
+   src: Source,
+): number {
    const expected = "option 'timeoutMs' must be a non-negative integer literal";
    if (value.type !== "NumericLiteral") {
-      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`);
+      throw fail(`${expected}, found '${src.text(value as { span: Span })}'.`, value);
    } else if (!Number.isInteger(value.value)) {
-      throw fail(`${expected}, found '${value.value}'.`);
+      throw fail(`${expected}, found '${value.value}'.`, value);
    } else if (!Number.isSafeInteger(value.value)) {
-      throw fail(`option 'timeoutMs' cannot exceed ${Number.MAX_SAFE_INTEGER}.`);
+      throw fail(`option 'timeoutMs' cannot exceed ${Number.MAX_SAFE_INTEGER}.`, value);
    }
    return value.value;
 }
@@ -140,7 +150,7 @@ function parseTimeoutMs(value: AstNode, fail: (message: string) => Error, src: S
 function parseOption(
    key: string,
    value: AstNode,
-   fail: (message: string) => Error,
+   fail: (message: string, node?: AstNode) => Error,
    ctx: ParseContext,
 ): Partial<t.ChannelSpec> {
    if (key === "validate") {
@@ -159,11 +169,11 @@ function parseOption(
          value.type !== "ArrayExpression" ||
          literals.some((literal) => literal?.type !== "StringLiteral")
       ) {
-         throw fail(`option '${key}' must be an array of string literals.`);
+         throw fail(`option '${key}' must be an array of string literals.`, value);
       }
       return { [key]: literals.map((literal) => literal?.value) };
    } else if (value.type !== "StringLiteral") {
-      throw fail(`option '${key}' must be a string literal.`);
+      throw fail(`option '${key}' must be a string literal.`, value);
    }
    return { [key]: value.value };
 }
@@ -175,7 +185,8 @@ export function parseChannelConfig(
    name: string,
    ctx: ParseContext,
 ): Partial<t.ChannelSpec> {
-   const fail = (message: string) => new SchemaError(ctx.file, message, name);
+   const fail = (message: string, node: AstNode = call) =>
+      new SchemaError(ctx.file, message, name, { span: nodeSpan(node), src: ctx.src });
    const result: Partial<t.ChannelSpec> = {};
    if (call.arguments.length === 0) {
       return result;
@@ -183,15 +194,15 @@ export function parseChannelConfig(
    const arg = call.arguments[0];
    const config = arg.spread ? null : unwrapParentheses(arg.expression);
    if (call.arguments.length > 1 || config?.type !== "ObjectExpression") {
-      throw fail(`'${verb}' accepts one optional config object literal.`);
+      throw fail(`'${verb}' accepts one optional config object literal.`, config ?? arg.expression);
    }
    for (const prop of config.properties as AstNode[]) {
       const key = prop.type === "KeyValueProperty" ? prop.key : null;
       if (key?.type !== "Identifier") {
-         throw fail(`'${verb}' config keys must be plain identifiers.`);
+         throw fail(`'${verb}' config keys must be plain identifiers.`, prop);
       }
       if (!info.options.includes(key.value)) {
-         throw fail(`option '${key.value}' is not supported by '${verb}'.`);
+         throw fail(`option '${key.value}' is not supported by '${verb}'.`, key);
       }
       Object.assign(result, parseOption(key.value, unwrapParentheses(prop.value), fail, ctx));
    }

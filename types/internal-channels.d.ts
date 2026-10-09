@@ -38,8 +38,16 @@ export interface ValidatorRef {
    fromPath: string;
 }
 
+/** A position in a source file: 1-based line, and 1-based column in UTF-16 code units. */
+export interface SourcePosition {
+   line: number;
+   column: number;
+}
+
 export interface ChannelSpec {
    name: string;
+   /** Where the channel key is in its schema file. Absent for specs that the parser did not make. */
+   loc?: SourcePosition;
    kind: ChannelKind;
    direction: ChannelDirection;
    signature: CallableSignature;

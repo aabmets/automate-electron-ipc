@@ -36,4 +36,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   character before the error; a BOM file; an error on line 1 (no line before). Existing
   assertions keep passing, or are updated in the same commit if they matched the whole message.
 - **Follow-up IDs:** T156-T157.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `Source` got `position` and `frame`; `SchemaError` takes an `ErrorSite`
+  (span and source). Every parser call site passes a node span, and a property of an object literal
+  has none, so `nodeSpan` derives it. `ChannelSpec.loc` is the position of the channel key (the spec
+  structs accept it), used by the reserved-name, `maxQueue`, `timeoutMs`, clone and duplicate-channel
+  messages. The `parseError` test helper strips the position and frame; `parseFullError` keeps them.

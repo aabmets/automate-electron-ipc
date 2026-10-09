@@ -153,7 +153,9 @@ describe("parseSpecs", () => {
             relativePath: "schema/user.ts",
             fullPath: "/app/src/ipc/schema/user.ts",
          }),
-      ).toThrow("Schema file '/app/src/ipc/schema/user.ts': channel 'userChannel': no signature");
+      ).toThrow(
+         "Schema file '/app/src/ipc/schema/user.ts' (3:61): channel 'userChannel': no signature",
+      );
    });
 
    it("should report syntax errors with the file path, line and column", () => {

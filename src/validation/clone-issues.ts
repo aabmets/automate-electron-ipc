@@ -26,7 +26,7 @@ export function validateCloneIssues(spec: Partial<t.ChannelSpec>, file?: string)
    if (errors.length === 0) {
       return;
    }
-   const where = schemaFilePrefix(file);
+   const where = schemaFilePrefix(file, spec.loc);
    const lines = errors.map((issue) => {
       const hint =
          issue.reason === "a Promise"
@@ -56,13 +56,12 @@ const NESTED_PROMISE_HINT =
  * not as they are, such as a class instance that loses its prototype and methods.
  */
 export function getCloneWarnings(specs: t.ChannelSpec[], file?: string): string[] {
-   const where = schemaFilePrefix(file);
    return specs.flatMap((spec) =>
       (spec.signature.cloneIssues ?? [])
          .filter((issue) => issue.level === "warning")
          .map(
             (issue) =>
-               `${where}${describeCloneIssue(spec.name, issue)}. ` +
+               `${schemaFilePrefix(file, spec.loc)}${describeCloneIssue(spec.name, issue)}. ` +
                "An instance loses its prototype and methods over IPC and arrives as a plain " +
                "object. Use an interface or a type alias for the data.",
          ),

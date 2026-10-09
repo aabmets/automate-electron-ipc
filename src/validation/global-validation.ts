@@ -22,18 +22,21 @@ import utils from "../utils.js";
 export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
    // The order of ipcAutomation, so that the file named in an error is the first one processed.
    const sorted = [...files].sort((a, b) => utils.comparePaths(a.relativePath, b.relativePath));
-   const channelOwners = new Map<string, string>();
+   const channelOwners = new Map<string, { path: string; loc?: t.SourcePosition }>();
 
    for (const file of sorted) {
       for (const spec of file.specs.channelSpecArray) {
-         const firstFile = channelOwners.get(spec.name);
-         if (firstFile !== undefined) {
+         const first = channelOwners.get(spec.name);
+         if (first !== undefined) {
+            const at = (path: string, loc?: t.SourcePosition) =>
+               `'${path}'${loc ? ` (${loc.line}:${loc.column})` : ""}`;
             throw new Error(
-               `Channel name '${spec.name}' is declared in both '${firstFile}' and ` +
-                  `'${file.relativePath}'. Channel names must be unique across the application.`,
+               `Channel name '${spec.name}' is declared in both ${at(first.path, first.loc)} and ` +
+                  `${at(file.relativePath, spec.loc)}. ` +
+                  "Channel names must be unique across the application.",
             );
          }
-         channelOwners.set(spec.name, file.relativePath);
+         channelOwners.set(spec.name, { path: file.relativePath, loc: spec.loc });
       }
    }
 }
@@ -54,7 +57,7 @@ export function validateReservedApiNames(
       for (const spec of file.specs.channelSpecArray) {
          if (spec.name === "getPathForFile") {
             throw new Error(
-               `${schemaFilePrefix(file.relativePath)}Channel name 'getPathForFile' is reserved, ` +
+               `${schemaFilePrefix(file.relativePath, spec.loc)}Channel name 'getPathForFile' is reserved, ` +
                   "since the config 'getPathForFile' adds a member of that name to the API. " +
                   "Rename the channel, or turn the config off.",
             );

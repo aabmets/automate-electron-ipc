@@ -9,14 +9,27 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Span } from "@swc/core";
+import type { SourcePosition } from "@types";
+import type { Source } from "./ast.js";
+
+/** Where in the schema source a `SchemaError` happened, see `Source.frame`. */
+export interface ErrorSite {
+   span: Span;
+   src: Source;
+}
+
 /**
  * Raised for channel declarations that cannot be turned into channel specs.
- * The message names the schema file and, when known, the channel.
+ * The message names the schema file, the position when `at` is given, and the channel when known.
+ * With `at`, a code frame of the source follows the message.
  */
 export class SchemaError extends Error {
-   constructor(file: string, message: string, channel?: string) {
+   constructor(file: string, message: string, channel?: string, at?: ErrorSite) {
       const where = channel === undefined ? "" : ` channel '${channel}':`;
-      super(`Schema file '${file}':${where} ${message}`);
+      const position = at === undefined ? undefined : at.src.position(at.span);
+      const head = `${schemaFilePrefix(file, position).slice(0, -1)}${where} ${message}`;
+      super(at === undefined ? head : `${head}\n\n${at.src.frame(at.span)}`);
       this.name = "SchemaError";
    }
 }
@@ -25,10 +38,12 @@ export class SchemaError extends Error {
  * The start of an error message that names the schema file, or nothing when the file is unknown.
  *
  * @param [file] - The path of the schema file.
- * @returns `Schema file '<file>': `, with the trailing space, or an empty string.
+ * @param [loc] - The 1-based line and column in the file, when known.
+ * @returns `Schema file '<file>' (<line>:<column>): `, with the trailing space, or an empty string.
  */
-export function schemaFilePrefix(file?: string): string {
-   return file === undefined ? "" : `Schema file '${file}': `;
+export function schemaFilePrefix(file?: string, loc?: SourcePosition): string {
+   const position = loc === undefined ? "" : ` (${loc.line}:${loc.column})`;
+   return file === undefined ? "" : `Schema file '${file}'${position}: `;
 }
 
 /** Tab stops of the code frame, which expands a tab to the next multiple of this width. */
@@ -49,7 +64,7 @@ const WIDE_RANGES: [number, number][] = [
 ];
 
 /** The number of terminal columns of a character: 0 for combining marks, 2 for wide ones. */
-function displayWidth(char: string): number {
+export function displayWidth(char: string): number {
    const codePoint = char.codePointAt(0) ?? 0;
    if (/^[\p{Mn}\p{Me}\p{Cf}]$/u.test(char)) {
       return 0;
@@ -66,7 +81,7 @@ function widthAt(char: string, column: number): number {
 }
 
 /** Expands the tabs of a line like the code frame of swc does. */
-function expandTabs(line: string): string {
+export function expandTabs(line: string): string {
    let column = 0;
    let result = "";
    for (const char of line) {
@@ -75,6 +90,48 @@ function expandTabs(line: string): string {
       column += width;
    }
    return result;
+}
+
+/** The width of a text in terminal columns, where tabs are expanded like in the code frame. */
+function textWidth(text: string): number {
+   let width = 0;
+   for (const char of expandTabs(text)) {
+      width += displayWidth(char);
+   }
+   return width;
+}
+
+/**
+ * Renders the code frame of an error: the line of `start` with the line before and after it, a
+ * gutter of line numbers, and a caret line under the start (`^`, followed by `~` up to
+ * `endColumn`). The columns are 1-based indexes into the line, in UTF-16 code units. Tabs and wide
+ * characters are expanded, so that the caret lines up with the code.
+ *
+ * @param lines - The lines of the source, without line terminators.
+ * @param start - The position of the start of the span.
+ * @param [endColumn] - The column after the span, when it ends on the line of `start`.
+ */
+export function renderCodeFrame(
+   lines: string[],
+   start: SourcePosition,
+   endColumn?: number,
+): string {
+   const index = start.line - 1;
+   const first = Math.max(index - 1, 0);
+   const last = Math.min(index + 1, lines.length - 1);
+   const gutter = String(last + 1).length;
+   const rows: string[] = [];
+   for (let i = first; i <= last; i++) {
+      rows.push(`${String(i + 1).padStart(gutter)} | ${expandTabs(lines[i])}`.trimEnd());
+      if (i === index) {
+         const before = lines[i].slice(0, start.column - 1);
+         const covered = lines[i].slice(start.column - 1, (endColumn ?? start.column) - 1);
+         const lead = textWidth(before);
+         const length = Math.max(textWidth(before + covered) - lead, 1);
+         rows.push(`${" ".repeat(gutter)} | ${" ".repeat(lead)}^${"~".repeat(length - 1)}`);
+      }
+   }
+   return rows.join("\n");
 }
 
 const BOM_CHAR = "\uFEFF";

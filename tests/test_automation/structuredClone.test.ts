@@ -50,7 +50,7 @@ describe("ipcAutomation", () => {
          expect(warn).toHaveBeenCalledTimes(1);
          expect(warn.mock.calls[0][0]).toStrictEqual([
             expect.stringContaining(
-               "Schema file 'ipc/schema.ts': Channel 'save': parameter 'user'",
+               "Schema file 'ipc/schema.ts' (4:4): Channel 'save': parameter 'user'",
             ),
          ]);
          expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).toContain(
