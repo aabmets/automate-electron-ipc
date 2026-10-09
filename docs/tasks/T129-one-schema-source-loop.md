@@ -11,4 +11,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   errors stay the same.
 - **Tests:** The `tests/test_automation` and e2e tests pass unchanged; generated output
   byte-identical.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `loadSchemaSources(config)` is in the new `src/schema-sources.ts`; `ipcAutomation` parses its result in one loop. Order, warnings and errors are unchanged. 3288 tests (5 new, for the loader).

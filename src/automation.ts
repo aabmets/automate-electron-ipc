@@ -15,6 +15,7 @@ import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import { parseSpecs } from "./parser/parser.js";
+import { loadSchemaSources } from "./schema-sources.js";
 import { collectScopes, filterByScope, scopedFilePath } from "./scopes.js";
 import utils from "./utils.js";
 import { getCloneWarnings } from "./validation/clone-issues.js";
@@ -68,47 +69,11 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       await fsp.mkdir(path.dirname(config.ipcSchema.path), { recursive: true });
       logger.nonExistentSchemaPath(config.ipcSchema.path);
       return;
-   } else if (config.ipcSchema.stats.isFile()) {
-      const contents = await fsp.readFile(config.ipcSchema.path);
-      const fileData: t.FileMeta = {
-         fullPath: config.ipcSchema.path,
-         // The data dir is the directory of the file, so the file is named with `schema.ts`.
-         relativePath: path.posix.join(utils.toPosix(config.ipcDataDir), "schema.ts"),
-      };
-      const specs = parseSpecs({
-         contents: contents.toString(),
-         ...fileData,
-      });
+   }
+   for (const source of await loadSchemaSources(config)) {
+      const specs = parseSpecs(source);
       if (specs.channelSpecArray.length > 0) {
-         pfsArray.push({ specs: specs, ...fileData });
-      }
-   } else if (config.ipcSchema.stats.isDirectory()) {
-      const files = await fsp.readdir(config.ipcSchema.path, { recursive: true });
-      // The order of `readdir` results and of read completions varies between runs, so files are
-      // sorted by relative path and the results are collected in that order.
-      const schemaFiles = files.filter(utils.isSchemaSourceFile).sort(utils.comparePaths);
-      const rawFileContents = (
-         await Promise.all(
-            schemaFiles.map(async (file): Promise<t.RawFileContents | null> => {
-               const fullPath = path.join(config.ipcSchema.path, file);
-               const stat = await fsp.stat(fullPath);
-               if (!stat.isFile()) {
-                  return null;
-               }
-               const contents = await fsp.readFile(fullPath);
-               return { fullPath, relativePath: file, contents: contents.toString() };
-            }),
-         )
-      ).filter((item) => item !== null);
-      for (const item of rawFileContents) {
-         const specs = parseSpecs(item);
-         if (specs.channelSpecArray.length > 0) {
-            pfsArray.push({
-               fullPath: item.fullPath,
-               relativePath: item.relativePath,
-               specs: specs,
-            });
-         }
+         pfsArray.push({ fullPath: source.fullPath, relativePath: source.relativePath, specs });
       }
    }
    validateGlobalChannelSpecs(pfsArray);
