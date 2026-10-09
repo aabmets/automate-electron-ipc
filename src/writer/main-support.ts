@@ -12,15 +12,18 @@
 import type * as t from "@types";
 import { buildAskHelpers } from "./main-asks.js";
 import type { MainContext } from "./main-bindings.js";
+import { buildMainPortHelpers } from "./main-port-helpers.js";
+import { buildPortHelpers, buildPortRegistry } from "./main-ports.js";
 import { buildScopeRegistry, buildTargetResolver } from "./main-registries.js";
 import { buildSenderHelpers } from "./main-senders.js";
 import { buildStreamHelpers } from "./main-streams.js";
+import { buildBrokerHelpers, buildUtilityHelpers } from "./main-utility.js";
 import {
    buildArgumentValidation,
    buildSenderValidation,
    getValidatedWorkerEvents,
 } from "./main-validation.js";
-import { buildEventWatch } from "./main-watches.js";
+import { buildEventWatch, buildPageLoadWatch } from "./main-watches.js";
 import { buildErrorEnvelope, buildSerializerRuntime } from "./utility-runtime.js";
 
 /** Which helpers the channels of the file use. */
@@ -56,12 +59,6 @@ export interface SupportBuilders {
       validators: Map<t.ChannelSpec, string>,
    ) => string;
    workerEventType: (spec: t.ChannelSpec) => string;
-   utilityHelpers: () => string;
-   portRegistry: () => string;
-   pageLoadWatch: () => string;
-   brokerHelpers: () => string;
-   portHelpers: () => string;
-   mainPortHelpers: () => string;
 }
 
 /** The helpers that the channels of the file use, in the order that they are declared. */
@@ -125,22 +122,22 @@ export function buildSupport(
       support.push(buildStreamHelpers(ctx));
    }
    if (uses.usesUtility) {
-      support.push(builders.utilityHelpers());
+      support.push(buildUtilityHelpers(indents, uses.usesSerializer));
    }
    if (uses.usesPorts) {
-      support.push(builders.portRegistry());
+      support.push(buildPortRegistry(indents));
    }
    if (uses.usesPorts || uses.usesBrokers) {
-      support.push(builders.pageLoadWatch());
+      support.push(buildPageLoadWatch(indents));
    }
    if (uses.usesBrokers) {
-      support.push(builders.brokerHelpers());
+      support.push(buildBrokerHelpers(indents));
    }
    if (uses.usesRendererPorts) {
-      support.push(builders.portHelpers());
+      support.push(buildPortHelpers(indents));
    }
    if (uses.usesMainPorts) {
-      support.push(builders.mainPortHelpers());
+      support.push(buildMainPortHelpers(ctx));
    }
    return support;
 }

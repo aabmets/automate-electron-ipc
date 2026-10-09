@@ -13,4 +13,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** No assertion changes. The generated output of every fixture in `tests/fixtures` is
   byte-identical before and after (dump it into the scratchpad first, then `diff -r`), the whole
   suite passes, and `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Follows T103 and T104. New modules: `main-ports.ts` (the registry,
+  the page pairing and both port channels, plus `buildPort`), `main-port-helpers.ts`
+  (`buildMainPortHelpers` alone, 270 lines) and `main-utility.ts` (utility and brokered channels
+  with `BROKER_TYPES`). The page-load watch joined the event watch in `main-watches.ts`.
+  `buildUtilityHelpers` now takes the serializer flag as a parameter, where it used to call
+  `hasSerializedChannels`. `SupportBuilders` is down to the two worker callbacks.
+  `main-bindings.ts` went from 2001 to 1265 lines, and the output of all 95 fixtures is
+  byte-identical.
