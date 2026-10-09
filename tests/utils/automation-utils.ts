@@ -22,6 +22,7 @@ function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolvedConfi
       codeIndent: 3,
       projectUsesNodeNext: false,
       ipcDataDir: "ipc",
+      projectRoot: dir,
       mainBindingsFilePath: path.join(dir, "out/main.ts"),
       preloadBindingsFilePath: path.join(dir, "out/preload.ts"),
       rendererTypesFilePath: path.join(dir, "out/window.d.ts"),

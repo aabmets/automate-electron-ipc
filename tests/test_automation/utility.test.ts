@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import logger from "@src/logger.js";
+import { GENERATED_PREFIX } from "@src/output-files.js";
 import { withAutomationDir } from "@testutils/automation-utils.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,7 +41,7 @@ describe("ipcAutomation", () => {
          await generate("getUser: invoke<() => Promise<string>>(), run: callUtility<() => void>()");
 
          const utility = await fsp.readFile(path.join(automation.dir, "out/utility.ts"), "utf8");
-         expect(utility).toContain("ANY CHANGES TO THIS FILE WILL NOT PERSIST");
+         expect(utility).toContain(GENERATED_PREFIX);
          expect(utility).toContain("   run: {");
          expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).toContain(
             "attachUtility",

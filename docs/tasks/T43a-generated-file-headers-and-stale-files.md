@@ -47,4 +47,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     Fix lint findings in the generated code, or suppress them in the header if they are inherent.
 - **README:** describe the header and stale-file removal.
 - **Follow-up IDs:** T160-T161.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `notice(config)` in `src/output-files.ts` is the header, with
+  `biome-ignore-all` lines for lint, assist and format (all three are accepted by Biome 2.5.15);
+  stale files are found in `src/stale-files.ts` and are part of `RunPlan.staleFiles`, so
+  `findStaleOutputs` lists them too. `biomeLint.test.ts` shares the all-fixtures loop with
+  `blankLines.test.ts` through `tests/utils/e2e/all-fixtures.ts`. Lint findings of the generated
+  code are all inherent (loose `any` and `{}` typings, shared helpers a schema does not use,
+  schema names that shadow globals, imports that only a `@throws` tag uses), so the header
+  suppresses them, and the test pins that list of rules, so that a new kind of finding fails it.

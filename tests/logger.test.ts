@@ -164,4 +164,15 @@ describe("logger", () => {
          expect(errorSpy).not.toHaveBeenCalled();
       });
    });
+
+   describe("removedStaleFiles", () => {
+      it("lists the removed files relative to the project root", () => {
+         logger.removedStaleFiles(["/project/ipc/utility.ts", "/elsewhere/x.ts"], "/project");
+         const text = output();
+         expect(text).toContain("Removed stale generated files:");
+         expect(text).toContain("ipc/utility.ts");
+         expect(text).toContain("/elsewhere/x.ts");
+         expect(text).not.toContain("/project/");
+      });
+   });
 });

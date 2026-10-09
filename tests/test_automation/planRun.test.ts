@@ -13,7 +13,7 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation, planRun } from "@src/automation.js";
-import { NOTICE } from "@src/output-files.js";
+import { notice } from "@src/output-files.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../fixtures");
@@ -53,14 +53,17 @@ describe("planRun", () => {
 
          const plan = await planRun({ cwd: dir });
 
-         const outputs = plan?.outputs ?? [];
+         if (plan === null) {
+            throw new Error("expected a plan");
+         }
+         const { outputs } = plan;
          const planned = outputs.map((output) => path.posix.basename(output.path));
          expect(planned).toEqual(expect.arrayContaining(names));
          expect(new Set(planned).size).toBe(planned.length);
          for (const output of outputs) {
             expect(path.isAbsolute(output.path)).toBe(true);
             expect(output.path).not.toContain("\\");
-            expect(output.contents.startsWith(`${NOTICE}\n\n`)).toBe(true);
+            expect(output.contents.startsWith(`${notice(plan.config)}\n\n`)).toBe(true);
          }
          expect(await fsp.readdir(path.join(dir, "ipc"))).toEqual(before);
 

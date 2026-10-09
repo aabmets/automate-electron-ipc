@@ -181,7 +181,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [ ] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13, T139
 - [x] [T42b: Report multiple schema errors together](./tasks/T42b-collect-multiple-errors.md) · depends on: T42a, T139
 - [ ] [T41a: Programmatic API (`automate-electron-ipc/api`)](./tasks/T41a-programmatic-api.md) · depends on: T38a, T39
-- [ ] [T43a: Generated file headers and stale-file removal](./tasks/T43a-generated-file-headers-and-stale-files.md) · depends on: T39
+- [x] [T43a: Generated file headers and stale-file removal](./tasks/T43a-generated-file-headers-and-stale-files.md) · depends on: T39
 - [ ] [T46: Mock generation for renderer tests](./tasks/T46-mock-generation-for-renderer-tests.md) · depends on: T14, T38a, T44
 - [ ] [T47a: React hooks (optional output)](./tasks/T47a-react-hooks.md) · depends on: T14, T38a, T44
 - [ ] [T41b: Vite / electron-vite plugin (`automate-electron-ipc/vite`)](./tasks/T41b-vite-plugin.md) · depends on: T40, T41a

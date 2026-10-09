@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import logger from "@src/logger.js";
+import { GENERATED_PREFIX } from "@src/output-files.js";
 import { withAutomationDir } from "@testutils/automation-utils.js";
 import type * as t from "@types";
 import { describe, expect, it, vi } from "vitest";
@@ -47,7 +48,7 @@ describe("ipcAutomation", () => {
             path.join(automation.dir, "out/service-worker-preload.ts"),
             "utf8",
          );
-         expect(preload).toContain("ANY CHANGES TO THIS FILE WILL NOT PERSIST");
+         expect(preload).toContain(GENERATED_PREFIX);
          expect(preload).toContain("   token: {");
          expect(preload).not.toContain("getUser");
          const types = await fsp.readFile(

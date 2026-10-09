@@ -106,6 +106,11 @@ export function staleFiles(paths: string[], projectRoot?: string): void {
    error(["Generated files are out of date:", ...paths.map((p) => displayPath(p, projectRoot))]);
 }
 
+/** Reports the generated files of earlier runs that a run deleted. Paths are shown like those of `reportSuccess`. */
+export function removedStaleFiles(paths: string[], projectRoot?: string): void {
+   success(["Removed stale generated files:", ...paths.map((p) => displayPath(p, projectRoot))]);
+}
+
 export default {
    nonExistentSchemaPath,
    noChannelExpressions,
@@ -115,4 +120,5 @@ export default {
    reportSuccess,
    staleFiles,
    watching,
+   removedStaleFiles,
 };

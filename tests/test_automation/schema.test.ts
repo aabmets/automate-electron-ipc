@@ -14,6 +14,7 @@ import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import cfg from "@src/config.js";
 import logger from "@src/logger.js";
+import { GENERATED_PREFIX } from "@src/output-files.js";
 import { withAutomationDir } from "@testutils/automation-utils.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -71,7 +72,7 @@ describe("ipcAutomation", () => {
 
       expect(warn).toHaveBeenCalledWith(schemaPath);
       expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).toContain(
-         "ANY CHANGES TO THIS FILE WILL NOT PERSIST",
+         GENERATED_PREFIX,
       );
    });
 

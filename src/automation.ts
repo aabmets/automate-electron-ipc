@@ -20,6 +20,7 @@ import { parseSpecs } from "./parser/parser.js";
 import { isSchemaFailure, type SchemaErrors, toSchemaFailure } from "./parser/schema-errors.js";
 import { loadSchemaSources } from "./schema-sources.js";
 import { collectScopes, filterByScope, scopedFilePath } from "./scopes.js";
+import { findStaleGeneratedFiles, removeFiles } from "./stale-files.js";
 import utils from "./utils.js";
 import { getCloneWarnings } from "./validation/clone-issues.js";
 import {
@@ -131,7 +132,8 @@ export async function planRun(options?: t.RunOptions | string): Promise<t.RunPla
       pfsArray.flatMap((pfs) => getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
    const outputs = collectWriters(config, pfsArray).map((writer) => writer.toOutputFile());
-   return { config, pfsArray, outputs };
+   const staleFiles = await findStaleGeneratedFiles(config, outputs);
+   return { config, pfsArray, outputs, staleFiles };
 }
 
 /**
@@ -150,6 +152,10 @@ export async function ipcAutomation(options?: t.RunOptions | string): Promise<vo
       return;
    }
    await writeOutputs(plan.outputs);
+   if (plan.staleFiles.length > 0) {
+      await removeFiles(plan.staleFiles);
+      logger.removedStaleFiles(plan.staleFiles, plan.config.projectRoot);
+   }
    if (plan.pfsArray.length === 0) {
       logger.noChannelExpressions(plan.config.ipcSchema.path);
    } else {

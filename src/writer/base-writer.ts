@@ -10,7 +10,7 @@
  */
 
 import type * as t from "@types";
-import { NOTICE } from "../output-files.js";
+import { notice } from "../output-files.js";
 import { type Scope, scopedFilePath } from "../scopes.js";
 import utils from "../utils.js";
 import { anySpec } from "./channel-kinds.js";
@@ -258,7 +258,7 @@ export class BaseWriter {
       const contents = (this.isEmpty() ? this.renderEmptyFileContents() : this.renderFileContents())
          // The file starts with its first line, not with a blank one.
          .replace(/^\n+/, "");
-      return withNotice ? `${NOTICE}\n\n${contents}` : contents;
+      return withNotice ? `${notice(this.config)}\n\n${contents}` : contents;
    }
 
    /** The file as a run writes it: the absolute posix path, and the full text with the notice. */

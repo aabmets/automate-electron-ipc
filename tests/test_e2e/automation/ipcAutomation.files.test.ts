@@ -11,6 +11,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { GENERATED_PREFIX } from "@src/output-files.js";
 import { runFixture } from "@testutils/e2e-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
@@ -152,7 +153,7 @@ describe("ipcAutomation, generated file start", () => {
       async (fixture) => {
          const project = await fixtures.run(fixture);
          for (const contents of Object.values(project.generated)) {
-            expect(contents.startsWith("// NOTICE: THIS FILE WAS GENERATED")).toBe(true);
+            expect(contents.startsWith(GENERATED_PREFIX)).toBe(true);
             expect(contents).not.toMatch(/\n\n\n/);
          }
       },

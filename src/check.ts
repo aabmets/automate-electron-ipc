@@ -26,7 +26,8 @@ async function matchesOnDisk(output: t.OutputFile): Promise<boolean> {
 
 /**
  * Renders the output files in memory and compares each with the bytes on disk, without writing
- * anything. A file that does not exist is stale.
+ * anything. A file that does not exist is stale, and so is a generated file of an earlier run that a run
+ * would delete.
  *
  * @param [options] - The options of the run, as for `ipcAutomation`.
  * @returns The absolute paths, in posix form and sorted, of the files that a run would change or
@@ -38,8 +39,8 @@ export async function findStaleOutputs(options?: t.RunOptions): Promise<string[]
       return null;
    }
    const matches = await Promise.all(plan.outputs.map(matchesOnDisk));
-   return plan.outputs
-      .filter((_, index) => !matches[index])
-      .map((output) => output.path)
-      .sort(utils.comparePaths);
+   return [
+      ...plan.outputs.filter((_, index) => !matches[index]).map((output) => output.path),
+      ...plan.staleFiles,
+   ].sort(utils.comparePaths);
 }

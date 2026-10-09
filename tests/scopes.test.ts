@@ -9,7 +9,13 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { collectScopes, filterByScope, isInScope, scopedFilePath } from "@src/scopes.js";
+import {
+   collectScopes,
+   filterByScope,
+   isInScope,
+   scopedFilePath,
+   scopeOfFile,
+} from "@src/scopes.js";
 import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
@@ -152,5 +158,35 @@ describe("scopedFilePath", () => {
 
    it("changes the extension of the file name only, not a directory with dots", () => {
       expect(scopedFilePath("/p/a.ts/ipc/preload.ts", "x")).toBe("/p/a.ts/ipc/preload.x.ts");
+   });
+});
+
+describe("scopeOfFile", () => {
+   it("gives the scope that scopedFilePath puts into the name", () => {
+      expect(
+         scopeOfFile("/p/ipc/preload.ts", scopedFilePath("/p/ipc/preload.ts", "settings")),
+      ).toBe("settings");
+      expect(
+         scopeOfFile("/p/ipc/window.d.ts", scopedFilePath("/p/ipc/window.d.ts", "my-editor")),
+      ).toBe("my-editor");
+   });
+
+   it("gives null for the base file itself", () => {
+      expect(scopeOfFile("/p/ipc/preload.ts", "/p/ipc/preload.ts")).toBeNull();
+   });
+
+   it("gives null for a file of another base, directory or extension", () => {
+      expect(scopeOfFile("/p/ipc/preload.ts", "/p/ipc/window.settings.d.ts")).toBeNull();
+      expect(scopeOfFile("/p/ipc/preload.ts", "/p/other/preload.settings.ts")).toBeNull();
+      expect(scopeOfFile("/p/ipc/preload.ts", "/p/ipc/preload.settings.d.ts")).toBeNull();
+      expect(scopeOfFile("/p/ipc/window.d.ts", "/p/ipc/window.settings.ts")).toBeNull();
+   });
+
+   it("gives null for a base that has no scoped files", () => {
+      expect(scopeOfFile("/p/ipc/preload.js", "/p/ipc/preload.settings.js")).toBeNull();
+   });
+
+   it("compares paths with / as the separator", () => {
+      expect(scopeOfFile("C:\\p\\preload.ts", "C:/p/preload.settings.ts")).toBe("settings");
    });
 });

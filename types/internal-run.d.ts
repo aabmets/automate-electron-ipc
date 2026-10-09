@@ -33,4 +33,6 @@ export interface RunPlan {
    config: IPCResolvedConfig;
    pfsArray: ParsedFileSpecs[];
    outputs: OutputFile[];
+   /** Generated files of earlier runs that this run does not generate, which a run deletes. */
+   staleFiles: string[];
 }

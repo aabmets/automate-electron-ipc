@@ -71,3 +71,22 @@ export function scopedFilePath(filePath: string, scope: Scope): string {
    }
    return `${filePath.slice(0, extension.index)}.${scope}${extension[0]}`;
 }
+
+/**
+ * The scope that the file is the file of, when it is named after one next to `basePath` as
+ * `scopedFilePath` does, such as `settings` for `preload.settings.ts` and `preload.ts`. A file of
+ * no scope, or of another base, gives `null`.
+ */
+export function scopeOfFile(basePath: string, file: string): Scope {
+   const extension = /(\.d\.ts|\.ts)$/.exec(basePath);
+   if (!extension) {
+      return null;
+   }
+   const prefix = `${utils.toPosix(basePath.slice(0, extension.index))}.`;
+   const posixFile = utils.toPosix(file);
+   if (!(posixFile.startsWith(prefix) && posixFile.endsWith(extension[0]))) {
+      return null;
+   }
+   const scope = posixFile.slice(prefix.length, posixFile.length - extension[0].length);
+   return /^[^./]+$/.test(scope) ? scope : null;
+}
