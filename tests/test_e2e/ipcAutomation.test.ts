@@ -935,3 +935,34 @@ describe("ipcAutomation, config values that would break the output", () => {
       expect(failure).toContain("Write 'http://localhost'");
    });
 });
+
+describe("ipcAutomation, diagnostics that name a path", () => {
+   it("names the schema file, and not its directory, in an error about one of its channels", async () => {
+      // Regression for T92: the single schema file was reported as its directory, 'ipc'.
+      const failure = await runFixture("schema-file-reserved-name").then(
+         (fixture) => {
+            project = fixture;
+            return "the run did not fail";
+         },
+         (error: Error) => error.message,
+      );
+
+      expect(failure).toContain("Schema file 'ipc/schema.ts'");
+      expect(failure).not.toContain("Schema file 'ipc'");
+   });
+
+   it("names the package.json which is not valid JSON", async () => {
+      // Regression for T92: the error was the bare message of `JSON.parse`.
+      const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
+      try {
+         await fsp.writeFile(path.join(root, "package.json"), '{ "name": "broken", }');
+         const failure = await ipcAutomation(root).then(
+            () => "the run did not fail",
+            (error: Error) => error.message,
+         );
+         expect(failure).toContain(`Cannot parse '${root.replaceAll("\\", "/")}/package.json'`);
+      } finally {
+         await fsp.rm(root, { recursive: true, force: true });
+      }
+   });
+});

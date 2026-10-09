@@ -63,7 +63,8 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       const contents = await fsp.readFile(config.ipcSchema.path);
       const fileData: t.FileMeta = {
          fullPath: config.ipcSchema.path,
-         relativePath: config.ipcDataDir,
+         // The data dir is the directory of the file, so the file is named with `schema.ts`.
+         relativePath: path.posix.join(config.ipcDataDir.replaceAll("\\", "/"), "schema.ts"),
       };
       const specs = parser.parseSpecs({
          contents: contents.toString(),

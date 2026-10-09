@@ -33,6 +33,7 @@ describe("ipcAutomation", () => {
       vi.spyOn(cfg, "getResolvedConfig").mockResolvedValue({
          codeIndent: 3,
          projectUsesNodeNext: false,
+         ipcDataDir: "ipc",
          mainBindingsFilePath: path.join(dir, "out/main.ts"),
          preloadBindingsFilePath: path.join(dir, "out/preload.ts"),
          rendererTypesFilePath: path.join(dir, "out/window.d.ts"),
@@ -181,8 +182,9 @@ describe("ipcAutomation", () => {
 
       await ipcAutomation();
 
+      // T92: the relative path names the schema file, and not its directory.
       expect(success.mock.calls[0][0].map((pfs) => pfs.relativePath)).toStrictEqual([
-         "src/autoipc",
+         "src/autoipc/schema.ts",
       ]);
    });
 
@@ -595,7 +597,7 @@ describe("ipcAutomation", () => {
          await fsp.mkdir(path.dirname(schemaPath), { recursive: true });
          await fsp.writeFile(schemaPath, contents);
          mockConfig({
-            ipcDataDir: "ipc/schema.ts",
+            ipcDataDir: "ipc",
             ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
          } as never);
          vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);

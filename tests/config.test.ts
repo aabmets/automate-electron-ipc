@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import fsp from "node:fs/promises";
 import cfg from "@src/config.js";
 import utils from "@src/utils.js";
 import mocks from "@testutils/shared-mocks.js";
@@ -43,6 +44,27 @@ describe("getConfigFromUserPackage", () => {
       mocks.mockFspReadFile({ config: { autoipc: optionalConfig } });
       const config = await cfg.getConfigFromUserPackage();
       expect(config).toMatchObject(optionalConfig);
+   });
+});
+
+describe("getConfigFromUserPackage with a manifest that is not valid JSON", () => {
+   beforeEach(mocks.mockResolveUserProjectPath);
+   afterEach(vi.restoreAllMocks);
+
+   it("names the manifest in the error", async () => {
+      // Regression for T92: the error was the bare message of `JSON.parse`, which names no file.
+      vi.spyOn(fsp, "readFile").mockResolvedValue('{ "name": "broken", }' as never);
+      const resolved = utils.resolveUserProjectPath("package.json");
+
+      await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
+         `Cannot parse '${resolved}': it is not valid JSON.`,
+      );
+   });
+
+   it("keeps the reason of the parse error", async () => {
+      vi.spyOn(fsp, "readFile").mockResolvedValue("" as never);
+
+      await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(/package\.json'.*JSON/s);
    });
 });
 

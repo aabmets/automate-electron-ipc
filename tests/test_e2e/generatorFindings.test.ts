@@ -12,12 +12,8 @@
 // Bugs of the generator that the review of 2026-10-09 found, one `describe` per task. Each test is
 // an `it.fails` until its task fixes the bug, and then moves to the tests of its feature.
 
-import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { ipcAutomation } from "@src/automation.js";
 import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 let project: E2EProject | undefined;
 
@@ -76,28 +72,5 @@ describe("T90: TypeScript syntax that the schema parser does not support", () =>
    it.fails("binds a name that import-equals declares", async () => {
       project = await runFixture("import-equals");
       expect(await project.typecheck()).toBe("");
-   });
-});
-
-describe("T92: diagnostics which name the wrong path, or none", () => {
-   // The single schema file is reported as its directory, 'ipc'.
-   it.fails("names the schema file in an error about one of its channels", async () => {
-      expect(await failureOf("schema-file-reserved-name")).toContain("Schema file 'ipc/schema.ts'");
-   });
-
-   it.fails("names the package.json which is not valid JSON", async () => {
-      const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-      try {
-         await fsp.writeFile(path.join(root, "package.json"), '{ "name": "broken", }');
-         const failure = await ipcAutomation(root).then(
-            () => null,
-            (error: Error) => error.message,
-         );
-         expect(failure).toContain("package.json");
-      } finally {
-         warn.mockRestore();
-         await fsp.rm(root, { recursive: true, force: true });
-      }
    });
 });

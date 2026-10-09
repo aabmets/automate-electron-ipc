@@ -73,7 +73,13 @@ function describeSourceFile(
 export async function getConfigFromUserPackage(cwd?: string): Promise<t.IPCOptionalConfig> {
    const filePath = utils.resolveUserProjectPath("package.json", cwd);
    const fileContents = await fsp.readFile(filePath);
-   const data = JSON.parse(fileContents.toString());
+   let data: { config?: { autoipc?: t.IPCOptionalConfig } } | null;
+   try {
+      data = JSON.parse(fileContents.toString());
+   } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot parse '${filePath}': it is not valid JSON. ${reason}`);
+   }
    return data?.config?.autoipc || {};
 }
 

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 78 delivered, 17 remaining, 1 dropped.
+**Progress:** 79 delivered, 16 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -69,7 +69,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T89: Import paths of script extensions, JSON modules and import types](./tasks/T89-import-paths-of-script-extensions-and-import-types.md) · depends on: T55
 - [ ] [T90: Decorators and import-equals in schema files](./tasks/T90-schema-syntax-decorators-and-import-equals.md) · depends on: T54
 - [x] [T91: A Promise nested in a result is not reported](./tasks/T91-promise-nested-in-a-result.md) · depends on: T19
-- [ ] [T92: Diagnostics which name the wrong path, or none](./tasks/T92-diagnostics-that-name-the-wrong-path.md) · depends on: T71
+- [x] [T92: Diagnostics which name the wrong path, or none](./tasks/T92-diagnostics-that-name-the-wrong-path.md) · depends on: T71
 - [x] [T93: Review of the source and the tests](./tasks/T93-review-of-the-source-and-the-tests.md) · depends on: T83
 
 ## Phase 2: Core API, listener lifecycle and security
