@@ -12,6 +12,7 @@
 import path from "node:path";
 import { styleText } from "node:util";
 import type * as t from "@types";
+import { toPosix } from "./utils.js";
 
 function paint(color: "yellow" | "green" | "red", text: string): string {
    return styleText(color, text, { stream: process.stderr });
@@ -77,7 +78,7 @@ export function reportSuccess(pfsArray: t.ParsedFileSpecs[], projectRoot?: strin
       ...pfsArray.map((pfs) => {
          const relative = projectRoot ? path.relative(projectRoot, pfs.fullPath) : "";
          const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-         const resultPath = inside ? relative.replaceAll("\\", "/") : pfs.fullPath;
+         const resultPath = inside ? toPosix(relative) : pfs.fullPath;
          const count = pfs.specs.channelSpecArray.length;
          return `${count} channels from path '${resultPath}'`;
       }),

@@ -20,8 +20,7 @@ import utils from "../utils.js";
  */
 export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
    // The order of ipcAutomation, so that the file named in an error is the first one processed.
-   const normalize = (file: t.ParsedFileSpecs) => file.relativePath.replaceAll("\\", "/");
-   const sorted = [...files].sort((a, b) => utils.compareStrings(normalize(a), normalize(b)));
+   const sorted = [...files].sort((a, b) => utils.comparePaths(a.relativePath, b.relativePath));
    const channelOwners = new Map<string, string>();
 
    for (const file of sorted) {

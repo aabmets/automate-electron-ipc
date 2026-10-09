@@ -45,7 +45,7 @@ function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): vo
          for (const [option, taken] of configured) {
             if (file === taken) {
                throw new Error(
-                  `The config '${option}' ('${path.relative(config.projectRoot, file).replaceAll("\\", "/")}') ` +
+                  `The config '${option}' ('${utils.toPosix(path.relative(config.projectRoot, file))}') ` +
                      `is the file that the scope '${scope}' is generated to. Choose a different path.`,
                );
             }
@@ -73,7 +73,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       const fileData: t.FileMeta = {
          fullPath: config.ipcSchema.path,
          // The data dir is the directory of the file, so the file is named with `schema.ts`.
-         relativePath: path.posix.join(config.ipcDataDir.replaceAll("\\", "/"), "schema.ts"),
+         relativePath: path.posix.join(utils.toPosix(config.ipcDataDir), "schema.ts"),
       };
       const specs = parseSpecs({
          contents: contents.toString(),
@@ -86,9 +86,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       const files = await fsp.readdir(config.ipcSchema.path, { recursive: true });
       // The order of `readdir` results and of read completions varies between runs, so files are
       // sorted by relative path and the results are collected in that order.
-      const schemaFiles = files
-         .filter(utils.isSchemaSourceFile)
-         .sort((a, b) => utils.compareStrings(a.replaceAll("\\", "/"), b.replaceAll("\\", "/")));
+      const schemaFiles = files.filter(utils.isSchemaSourceFile).sort(utils.comparePaths);
       const rawFileContents = (
          await Promise.all(
             schemaFiles.map(async (file): Promise<t.RawFileContents | null> => {

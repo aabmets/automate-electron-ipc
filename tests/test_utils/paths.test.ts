@@ -154,3 +154,27 @@ describe("resolveUserProjectPath", () => {
       expect(utils.resolveUserProjectPath("", bare)).toBe(posix(bare));
    });
 });
+
+describe("toPosix", () => {
+   it("turns every backslash into a slash and leaves other paths as they are", () => {
+      expect(utils.toPosix("ipc\\schema\\main.ts")).toBe("ipc/schema/main.ts");
+      expect(utils.toPosix("C:\\app\\ipc/schema.ts")).toBe("C:/app/ipc/schema.ts");
+      expect(utils.toPosix("ipc/schema.ts")).toBe("ipc/schema.ts");
+      expect(utils.toPosix("")).toBe("");
+   });
+});
+
+describe("comparePaths", () => {
+   it("compares the slash spelling, so that the order is the same on every platform", () => {
+      // Raw code units would put 'aA.ts' before 'a\b.ts', as 'A' (0x41) sorts before '\' (0x5C),
+      // but after 'a/b.ts', as '/' (0x2F) sorts before 'A'.
+      const sorted = ["aA.ts", "a\\b.ts", "a/c.ts"].sort(utils.comparePaths);
+      expect(sorted).toStrictEqual(["a\\b.ts", "a/c.ts", "aA.ts"]);
+   });
+
+   it("returns zero for the two spellings of one path", () => {
+      expect(utils.comparePaths("a\\b.ts", "a/b.ts")).toBe(0);
+      expect(utils.comparePaths("a/a.ts", "a/b.ts")).toBeLessThan(0);
+      expect(utils.comparePaths("a/b.ts", "a/a.ts")).toBeGreaterThan(0);
+   });
+});

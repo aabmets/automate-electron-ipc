@@ -10,10 +10,10 @@
  */
 
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 import { LRUCache } from "./cache.js";
+import { isCaseInsensitiveFileSystem } from "./file-system.js";
 
 /**
  * Recursively searches upwards from the provided module URL or directory
@@ -71,7 +71,18 @@ export function resolveUserProjectPath(subPath = "", cwd: string = process.cwd()
          `Cannot find the project root: no package.json in '${startDir}' or any parent directory.`,
       );
    }
-   return path.join(path.dirname(manifest), subPath).replaceAll("\\", "/");
+   return toPosix(path.join(path.dirname(manifest), subPath));
+}
+
+/**
+ * Spells a path with `/` separators, as the generated files and the messages show it on every
+ * platform.
+ *
+ * @param filePath - A path, which may use `\` as the separator.
+ * @returns The same path with every `\` turned into `/`.
+ */
+export function toPosix(filePath: string): string {
+   return filePath.replaceAll("\\", "/");
 }
 
 /**
@@ -91,6 +102,18 @@ export function compareStrings(a: string, b: string): number {
 }
 
 /**
+ * Compares two paths by their `/` spelling, so that the order of the files is the same on every
+ * platform. Use it as the comparator of `Array.prototype.sort`.
+ *
+ * @param a - The first path.
+ * @param b - The second path.
+ * @returns A negative number, zero or a positive number.
+ */
+export function comparePaths(a: string, b: string): number {
+   return compareStrings(toPosix(a), toPosix(b));
+}
+
+/**
  * Tells whether a file name in a schema directory is a schema source file:
  * a `.ts`, `.mts` or `.cts` file that is not a declaration file (`.d.ts`, `.d.mts`, `.d.cts`).
  *
@@ -99,18 +122,6 @@ export function compareStrings(a: string, b: string): number {
  */
 export function isSchemaSourceFile(fileName: string): boolean {
    return /\.[mc]?ts$/.test(fileName) && !/\.d\.[mc]?ts$/.test(fileName);
-}
-
-/**
- * Concatenates an array of regular expressions into a single regular expression.
- *
- * @param parts - An array of smaller regex patterns to be concatenated.
- * @param [flags=''] - Optional flags (e.g., 'g', 'i') to apply to the final concatenated regex.
- * @returns A new regular expression composed of the concatenated patterns.
- */
-export function concatRegex(parts: RegExp[], flags = ""): RegExp {
-   const pattern = parts.map((part) => part.source).join("");
-   return new RegExp(pattern, flags);
 }
 
 /**
@@ -130,67 +141,13 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
    );
 }
 
-/**
- * Removes the common leading whitespace from each line in a multiline string.
- *
- * This function calculates the minimum indentation level of all non-blank lines and
- * removes that amount of leading whitespace from every line. Useful for cleaning up
- * multiline strings without altering the relative indentation of lines.
- *
- * @param text - The multiline string to dedent.
- * @returns The de-dented string with common leading whitespace removed.
- */
-export function dedent(text: string): string {
-   const reducer = (minIndent: number, line: string) =>
-      Math.min(minIndent, /^(\s*)/.exec(line)?.[0].length ?? 0);
-   const lines = text.split("\n");
-   const indent = lines
-      .filter((line) => line.trim()) // Exclude blank lines
-      .reduce(reducer, Number.POSITIVE_INFINITY);
-   return lines.map((line) => line.slice(indent)).join("\n");
-}
-
-/** Swaps the case of every letter, so that `Src` becomes `sRC`. */
-function swapCase(text: string): string {
-   return Array.from(text, (char) =>
-      char === char.toUpperCase() ? char.toLowerCase() : char.toUpperCase(),
-   ).join("");
-}
-
-/**
- * Tells whether the file system that holds `directory` ignores case, so that `ipc/Main.ts` and
- * `ipc/main.ts` are one file. It looks up the same directory by a name with swapped case and checks
- * whether that finds the directory itself, so it writes nothing. The nearest existing ancestor
- * stands in for a directory that does not exist yet. Defaults to `false` when no part of the path
- * has a letter to swap.
- *
- * @param directory - A directory of the project, which need not exist.
- * @returns True if the file system ignores case.
- */
-export async function isCaseInsensitiveFileSystem(directory: string): Promise<boolean> {
-   const current = path.resolve(directory);
-   const name = path.basename(current);
-   const swapped = swapCase(name);
-   if (swapped !== name) {
-      const original = await fsp.stat(current, { bigint: true }).catch(() => null);
-      if (original !== null) {
-         const other = await fsp
-            .stat(path.join(path.dirname(current), swapped), { bigint: true })
-            .catch(() => null);
-         return other !== null && other.ino === original.ino && other.dev === original.dev;
-      }
-   }
-   const parent = path.dirname(current);
-   return parent === current ? false : await isCaseInsensitiveFileSystem(parent);
-}
-
 export default {
    searchUpwards,
    resolveUserProjectPath,
+   toPosix,
    compareStrings,
+   comparePaths,
    isSchemaSourceFile,
-   concatRegex,
    isPathInside,
    isCaseInsensitiveFileSystem,
-   dedent,
 };

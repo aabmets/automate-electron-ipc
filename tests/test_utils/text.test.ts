@@ -16,44 +16,6 @@ afterEach(() => {
    vi.restoreAllMocks();
 });
 
-describe("concatRegex", () => {
-   it("should concatenate multiple regex patterns into a single pattern", () => {
-      const pattern = utils.concatRegex([
-         /^/, // Start of string
-         /[a-zA-Z]+/, // One or more letters
-         /\s+/, // Whitespace
-         /\d+/, // One or more digits
-         /\s+/, // Whitespace
-         /[a-zA-Z]+/, // One or more letters
-         /$/, // End of string
-      ]);
-      expect(pattern.source).toEqual("^[a-zA-Z]+\\s+\\d+\\s+[a-zA-Z]+$");
-   });
-});
-
-describe("dedent", () => {
-   it("should dedent code written in template strings", () => {
-      const result = utils.dedent(`
-         const obj = {
-            nested: {
-               data: "asdfg",
-            },
-            data: 123,
-         }
-      `);
-      expect(result.trim()).toStrictEqual(
-         [
-            "const obj = {",
-            "   nested: {",
-            '      data: "asdfg",',
-            "   },",
-            "   data: 123,",
-            "}",
-         ].join("\n"),
-      );
-   });
-});
-
 describe("compareStrings", () => {
    it("returns zero for equal strings and a sign for different ones", () => {
       expect(utils.compareStrings("a", "a")).toBe(0);

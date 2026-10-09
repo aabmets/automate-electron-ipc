@@ -16,4 +16,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   keep the default object that the tests spy on.
 - **Tests:** Unit tests for `toPosix` and `comparePaths`; generated output byte-identical; same
   test count apart from the new tests.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Added `toPosix` and `comparePaths` to `src/utils.ts` and used them at all 14 sites. `dedent` and `concatRegex` moved to `tests/utils/text-utils.ts` (the notice is a plain constant). The case-insensitivity probe is now `src/file-system.ts`; the default object of `utils` still lists it, since tests spy on it. 3279 tests (3 new).

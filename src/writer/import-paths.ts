@@ -11,6 +11,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { toPosix } from "../utils.js";
 
 const SCRIPT_EXTENSION = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/;
 
@@ -187,8 +188,7 @@ export class ImportPathResolver {
       const sourceDir = path.dirname(sourceFilePath);
       const targetDir = path.dirname(this.targetFilePath);
       const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
-      let adjustedPath = path.relative(targetDir, importAbsolutePath);
-      adjustedPath = adjustedPath.replace(/\\/g, "/");
+      let adjustedPath = toPosix(path.relative(targetDir, importAbsolutePath));
       if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
          adjustedPath = `./${adjustedPath}`;
       }

@@ -10,7 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
-import utils from "@src/utils.js";
+import { dedent } from "@testutils/text-utils.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
@@ -61,7 +61,7 @@ describe("MainBindingsWriter, scopes", () => {
 
    it("writes registerScope as a function that takes a window, a view or contents", async () => {
       const output = await render(invoke(["settings"]));
-      const expected = utils.dedent(`
+      const expected = dedent(`
          export function registerScope(
             target: BrowserWindow | WebContents | WebContentsView,
             scope: IpcScope,
@@ -132,7 +132,7 @@ describe("MainBindingsWriter, scopes", () => {
 
    it("lets isSenderAllowed check the scope of the sender before the origin and the validator", async () => {
       const output = await render(invoke(["settings"]));
-      const expected = utils.dedent(`
+      const expected = dedent(`
          function isSenderAllowed(event: IpcMainInvokeEvent, channel: string, allowedOrigins?: string[], scopes?: readonly IpcScope[]): boolean {
             const validateSender = ipcConfig.validateSender;
             if (!allowedOrigins && !scopes && !validateSender) {

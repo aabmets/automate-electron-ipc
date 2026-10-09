@@ -10,7 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
-import utils from "@src/utils.js";
+import { dedent } from "@testutils/text-utils.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
@@ -22,7 +22,7 @@ describe("RendererTypesWriter", () => {
       const obj = new shared.VitestRendererTypesWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          interface IpcApi {}
 
          declare global {
@@ -39,7 +39,7 @@ describe("RendererTypesWriter", () => {
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
                /** @throws {IpcError} */
@@ -73,7 +73,7 @@ describe("RendererTypesWriter", () => {
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
                send: (arg1: string, arg2: string) => void;
@@ -94,7 +94,7 @@ describe("RendererTypesWriter", () => {
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
                on: (callback: (arg1: number, ...arg2: number[]) => Promise<CustomType>) => () => void;

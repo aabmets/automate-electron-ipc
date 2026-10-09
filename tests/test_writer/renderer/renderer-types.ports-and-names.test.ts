@@ -10,7 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
-import utils from "@src/utils.js";
+import { dedent } from "@testutils/text-utils.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
@@ -24,7 +24,7 @@ describe("RendererTypesWriter", () => {
       const obj = new shared.VitestRendererTypesWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          interface IpcPortOverflowInfo {
             channel: string;
             max: number;

@@ -10,7 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
-import utils from "@src/utils.js";
+import { dedent } from "@testutils/text-utils.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
@@ -23,7 +23,7 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { contextBridge } from "electron";\n
          export const api = {};\n
          export function expose(key = 'ipc'): void {
@@ -39,7 +39,7 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
          export const api = {
@@ -68,7 +68,7 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
          export const api = {
@@ -91,7 +91,7 @@ describe("PreloadBindingsWriter", () => {
       const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
          interface ChannelSubscriber {

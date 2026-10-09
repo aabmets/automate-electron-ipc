@@ -10,7 +10,7 @@
  */
 
 import fsp from "node:fs/promises";
-import utils from "@src/utils.js";
+import { dedent } from "@testutils/text-utils.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
@@ -23,7 +23,7 @@ describe("MainBindingsWriter", () => {
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { webContents as electronWebContents } from "electron";
          import type { BrowserWindow, WebContents, WebContentsView, WebFrameMain } from "electron";
 
@@ -94,7 +94,7 @@ describe("MainBindingsWriter", () => {
       const obj = new shared.VitestMainBindingsWriter(pfsArray);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
-      const expectedOutput = utils.dedent(`
+      const expectedOutput = dedent(`
          import { webContents as electronWebContents } from "electron";
          import type { BrowserWindow, WebContents, WebContentsView, WebFrameMain } from "electron";
 

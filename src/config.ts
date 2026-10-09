@@ -150,27 +150,27 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       fsp.stat(schemaFile).catch(() => null),
    ]);
    const onlySchemaDir = schemaDirStats && !schemaFileStats;
-   const mainBindingsFilePath = path.join(ipcDataDir, "main.ts").replace(/\\/g, "/");
-   const preloadBindingsFilePath = path.join(ipcDataDir, "preload.ts").replace(/\\/g, "/");
-   const rendererTypesFilePath = path.join(ipcDataDir, "window.d.ts").replace(/\\/g, "/");
-   const utilityBindingsFilePath = (
+   const mainBindingsFilePath = utils.toPosix(path.join(ipcDataDir, "main.ts"));
+   const preloadBindingsFilePath = utils.toPosix(path.join(ipcDataDir, "preload.ts"));
+   const rendererTypesFilePath = utils.toPosix(path.join(ipcDataDir, "window.d.ts"));
+   const utilityBindingsFilePath = utils.toPosix(
       mergedConfig.utilityBindingsPath === undefined
          ? path.join(ipcDataDir, "utility.ts")
-         : utils.resolveUserProjectPath(mergedConfig.utilityBindingsPath, cwd)
-   ).replace(/\\/g, "/");
-   const serviceWorkerPreloadFilePath = (
+         : utils.resolveUserProjectPath(mergedConfig.utilityBindingsPath, cwd),
+   );
+   const serviceWorkerPreloadFilePath = utils.toPosix(
       mergedConfig.serviceWorkerPreloadPath === undefined
          ? path.join(ipcDataDir, "service-worker-preload.ts")
-         : utils.resolveUserProjectPath(mergedConfig.serviceWorkerPreloadPath, cwd)
-   ).replace(/\\/g, "/");
+         : utils.resolveUserProjectPath(mergedConfig.serviceWorkerPreloadPath, cwd),
+   );
    // The typings of the worker are written next to its preload script.
-   const serviceWorkerTypesFilePath = path
-      .join(path.dirname(serviceWorkerPreloadFilePath), "service-worker.d.ts")
-      .replace(/\\/g, "/");
+   const serviceWorkerTypesFilePath = utils.toPosix(
+      path.join(path.dirname(serviceWorkerPreloadFilePath), "service-worker.d.ts"),
+   );
    const serializerFilePath = mergedConfig.serializer?.startsWith(".")
       ? utils.resolveUserProjectPath(mergedConfig.serializer, cwd)
       : undefined;
-   const schemaPath = (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/");
+   const schemaPath = utils.toPosix(onlySchemaDir ? schemaDir : schemaFile);
    const outputs: [string, string | undefined, string][] = [
       ["utilityBindingsPath", mergedConfig.utilityBindingsPath, utilityBindingsFilePath],
       [
