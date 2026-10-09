@@ -12,7 +12,11 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 
 ## Commands
 
-- Type check and lint: `bun run check`
+- Type check, lint and file size gate: `bun run check`. The gate (`scripts/check-size.ts`) allows at
+  most 300 lines per file in `src/`, `tests/` and `types/` (license header not counted; 280 is the
+  soft limit, and draws a warning). Files that were already over are in `size-baseline.json` and may
+  only shrink: never add or raise an entry. Put new code in a new module, not in a big file. Read
+  `.claude/skills/module-structure` before adding, splitting or growing files.
 - Tests: `bunx vitest run` (tests live in `tests/**`, named `*.test.ts`; helpers in `tests/utils/`)
 - Real-Electron tests: `bun run test:electron` (`tests/test_electron/`). They run the generated bindings
   in the `electron` binary, with hidden sandboxed windows, and need the binary (`node
@@ -23,6 +27,7 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
   alone. The scenarios are functions that are turned into text and run in Electron, so they can use
   only their `ctx` argument (`ctx.data` for constants). A scenario that finds a bug in the generated
   code is not fixed in the same task: add it as `it.fails`, with the new task's ID in a comment.
+- Read `.claude/skills/vitest-conventions` before writing or fixing tests.
 - Biome formats on pre-commit (lefthook). Use 3-space indents, double quotes, and the Apache-2.0 header on new source files.
 
 ## Work tracker: one task per session
