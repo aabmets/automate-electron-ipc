@@ -22,4 +22,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   a syntax error in one file and a bad channel in another → both; one error → unchanged message.
   Exact-string assertions.
 - **Follow-up IDs:** T158-T159.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `SchemaErrors` and its helpers are in the new `src/parser/schema-errors.ts`
+  (`diagnostics.ts` stays below the soft limit). `SchemaError` keeps its `file` and `position`, which
+  the sort needs, and `SchemaSyntaxError` is now a `SchemaError` (same message), so that a syntax
+  error is reported together with the others. `SchemaErrors` keeps 20 errors and counts the rest in
+  `omitted`; `planRun` merges the per-file reports, so the 20 kept are the first 20 of the run. Only
+  schema errors are collected: any other error (for example from `validateChannelSpecs`) still
+  stops the run at once. `Tests`: `multipleErrors.test.ts` and a `fatalError` case in `logger.test.ts`.

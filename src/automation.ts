@@ -15,7 +15,9 @@ import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import { writeOutputs } from "./output-files.js";
+import type { SchemaError } from "./parser/diagnostics.js";
 import { parseSpecs } from "./parser/parser.js";
+import { isSchemaFailure, type SchemaErrors, toSchemaFailure } from "./parser/schema-errors.js";
 import { loadSchemaSources } from "./schema-sources.js";
 import { collectScopes, filterByScope, scopedFilePath } from "./scopes.js";
 import utils from "./utils.js";
@@ -105,11 +107,23 @@ export async function planRun(options?: t.RunOptions | string): Promise<t.RunPla
       return null;
    }
    const pfsArray: t.ParsedFileSpecs[] = [];
+   const failures: (SchemaError | SchemaErrors)[] = [];
    for (const source of await loadSchemaSources(config)) {
-      const specs = parseSpecs(source);
-      if (specs.channelSpecArray.length > 0) {
-         pfsArray.push({ fullPath: source.fullPath, relativePath: source.relativePath, specs });
+      // Every file is parsed, so that the errors of all of them are reported together.
+      try {
+         const specs = parseSpecs(source);
+         if (specs.channelSpecArray.length > 0) {
+            pfsArray.push({ fullPath: source.fullPath, relativePath: source.relativePath, specs });
+         }
+      } catch (error) {
+         if (!isSchemaFailure(error)) {
+            throw error;
+         }
+         failures.push(error);
       }
+   }
+   if (failures.length > 0) {
+      throw toSchemaFailure(failures);
    }
    validateGlobalChannelSpecs(pfsArray);
    validateReservedApiNames(pfsArray, config);

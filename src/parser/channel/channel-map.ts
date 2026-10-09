@@ -16,6 +16,7 @@ import { nodeSpan, unwrapParentheses, unwrapTypeParentheses } from "../ast.js";
 import { SchemaError } from "../diagnostics.js";
 import { collectLibraryImports, resolveLibraryName } from "../library-imports.js";
 import { collectModuleBindings, collectTypeDeclarations } from "../module-bindings.js";
+import { toSchemaFailure } from "../schema-errors.js";
 import { parseSignature } from "../type/signature.js";
 import { collectCustomTypes } from "../type/type-references.js";
 import {
@@ -168,12 +169,29 @@ function parseChannelMap(call: AstNode, ctx: ParseContext): Partial<t.ChannelSpe
          src: ctx.src,
       });
    }
-   return (map.properties as AstNode[]).map((prop) => parseChannelProperty(prop, ctx));
+   const specs: Partial<t.ChannelSpec>[] = [];
+   const failures: SchemaError[] = [];
+   for (const prop of map.properties as AstNode[]) {
+      // An error in one channel does not stop the others from being checked.
+      try {
+         specs.push(parseChannelProperty(prop, ctx));
+      } catch (error) {
+         if (!(error instanceof SchemaError)) {
+            throw error;
+         }
+         failures.push(error);
+      }
+   }
+   if (failures.length > 0) {
+      throw toSchemaFailure(failures);
+   }
+   return specs;
 }
 
 /**
  * Parses the channel map of a schema module: the single exported `defineChannels` call.
- * Throws a `SchemaError` that names the file (and the channel) for invalid declarations.
+ * Throws a `SchemaError` that names the file (and the channel) for invalid declarations, or a
+ * `SchemaErrors` with all of them when several channels are invalid.
  */
 export function parseChannelMapModule(
    module: Module,

@@ -25,12 +25,19 @@ export interface ErrorSite {
  * With `at`, a code frame of the source follows the message.
  */
 export class SchemaError extends Error {
+   /** The schema file of the error. */
+   readonly file: string;
+   /** The 1-based line and column of the error in the file, when known. */
+   position?: SourcePosition;
+
    constructor(file: string, message: string, channel?: string, at?: ErrorSite) {
       const where = channel === undefined ? "" : ` channel '${channel}':`;
       const position = at === undefined ? undefined : at.src.position(at.span);
       const head = `${schemaFilePrefix(file, position).slice(0, -1)}${where} ${message}`;
       super(at === undefined ? head : `${head}\n\n${at.src.frame(at.span)}`);
       this.name = "SchemaError";
+      this.file = file;
+      this.position = position;
    }
 }
 
@@ -215,13 +222,16 @@ export function describeSyntaxError(
 
 /**
  * Raised when a schema file is not valid TypeScript. The message names the file,
- * as `path:line:column` when the position is known.
+ * as `path:line:column` when the position is known. It is a `SchemaError`, so that a run can
+ * report it together with the errors of other files, and it keeps its own message.
  */
-export class SchemaSyntaxError extends Error {
+export class SchemaSyntaxError extends SchemaError {
    constructor(file: string, cause: unknown, source: string) {
       const { reason, line, column } = describeSyntaxError(cause, source);
+      super(file, reason);
       const where = line === undefined ? file : `${file}:${line}:${column}`;
-      super(`Syntax error in schema file '${where}': ${reason}`);
+      this.message = `Syntax error in schema file '${where}': ${reason}`;
       this.name = "SchemaSyntaxError";
+      this.position = line === undefined ? undefined : { line, column: column ?? 1 };
    }
 }

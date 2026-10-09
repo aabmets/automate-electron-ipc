@@ -10,6 +10,8 @@
  */
 
 import logger from "@src/logger.js";
+import { SchemaError } from "@src/parser/diagnostics.js";
+import { SchemaErrors } from "@src/parser/schema-errors.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("logger", () => {
@@ -59,6 +61,24 @@ describe("logger", () => {
       expect(first).toContain("second line");
       expect(String(errorSpy.mock.calls[1][0])).toContain("plain text");
       expect(warnSpy).not.toHaveBeenCalled();
+   });
+
+   it("prints the message of several schema errors as it is, blank lines included", () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const one = new SchemaError("a.ts", "first");
+      const two = new SchemaError("b.ts", "second");
+
+      logger.fatalError(new SchemaErrors([two, one]));
+
+      const rows = String(errorSpy.mock.calls[0][0]).split("\n");
+      expect(rows.map((row) => row.trim())).toEqual([
+         "✖ – IPC automation failed:",
+         "Schema file 'a.ts': first",
+         "",
+         "Schema file 'b.ts': second",
+         "",
+         "2 errors",
+      ]);
    });
 
    it("warns about executing channels only once", () => {
