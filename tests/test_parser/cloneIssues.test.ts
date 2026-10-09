@@ -161,6 +161,18 @@ describe("cloneIssues, return types", () => {
       expect(issuesOf("(a: number) => Promise<string[]>")).toStrictEqual([]);
    });
 
+   // T91: only the Promise of an async signature may be in the result, and Electron cannot clone a
+   // Promise anywhere below it, as it cannot clone one in a parameter.
+   it.fails.each([
+      ["a Promise in the async result", "() => Promise<{ avatar: Promise<string> }>"],
+      ["an array of Promises", "() => Promise<number>[]"],
+      ["a Promise in a sync result", "() => { avatar: Promise<string> }"],
+   ])("rejects %s", (_name, definition) => {
+      const issues = issuesOf(definition);
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({ level: "error", where: "return type" });
+   });
+
    it("allows a bare Promise return type", () => {
       expect(issuesOf("() => Promise")).toStrictEqual([]);
    });

@@ -403,6 +403,59 @@ const scenarios: Record<string, Scenario> = {
       return { before, after };
    },
 
+   // A navigation which never commits, such as one that will-navigate prevents (Electron security
+   // checklist #13), leaves the page and its port as they were (T85).
+   abortedNavigation: async (ctx) => {
+      const child = await ctx.fork(() => {
+         ipc.whoami.handle(async () => 7);
+         ipc.hang.handle(() => new Promise(() => undefined));
+      });
+      const win = await ctx.open();
+      ctx.ipc.whoami.connect(child, win);
+      ctx.ipc.hang.connect(child, win);
+      const before = await ctx.evaluate(win, () => ipc.whoami.invoke());
+      await ctx.evaluate(win, () => {
+         (window as any).marker = "same document";
+         (window as any).hung = "pending";
+         ipc.hang.invoke().catch((error: any) => {
+            (window as any).hung = `${error.code}: ${error.message}`;
+         });
+      });
+      win.webContents.on("will-navigate", (event: any) => event.preventDefault());
+      await ctx.evaluate(win, () => {
+         location.href = "app://main/elsewhere.html";
+      });
+      await ctx.sleep(1000);
+      const page = await ctx.evaluate(win, async () => ({
+         marker: (window as any).marker,
+         hung: (window as any).hung,
+         after: await ipc.whoami.invoke(),
+      }));
+      return { before, ...page };
+   },
+
+   // The child exits before the main process connects a page to it (T86). The page races the
+   // call with a pause, so that the scenario returns what happened.
+   connectExitedChild: async (ctx) => {
+      const child = await ctx.fork(() => {
+         ipc.whoami.handle(async () => 7);
+      });
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill();
+      await exited;
+      const win = await ctx.open();
+      ctx.ipc.whoami.connect(child, win);
+      return await ctx.evaluate(win, () =>
+         Promise.race([
+            ipc.whoami.invoke().then(
+               () => "answered",
+               (error: any) => error.code,
+            ),
+            new Promise((resolve) => setTimeout(() => resolve("still pending"), 1500)),
+         ]),
+      );
+   },
+
    twoPages: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.query.handle(async (sql: string) => [{ id: process.pid, label: sql }]);
@@ -445,6 +498,27 @@ const scenarios: Record<string, Scenario> = {
 describeElectron("utility ports in Electron", "electron-utility-ports", scenarios, (group) => {
    it("has no uncaught errors in the main process", () => {
       expect(group.run().uncaught).toStrictEqual([]);
+   });
+
+   it("runs every scenario to completion", () => {
+      const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+      expect(failed).toStrictEqual([]);
+   });
+
+   // T85: the did-stop-loading of a navigation that never committed counts as a new load, so the
+   // live page is paired again and its pending call fails as replaced.
+   it.fails("leaves the port of a page alone when a navigation of it does not commit", () => {
+      expect(group.value("abortedNavigation")).toStrictEqual({
+         before: 7,
+         marker: "same document",
+         hung: "pending",
+         after: 7,
+      });
+   });
+
+   // T86: a child that exited before connect is never marked as closed, so the page waits forever.
+   it.fails("fails the calls of a page connected to a child that exited", () => {
+      expect(group.value("connectExitedChild")).toBe("IPC_UTILITY_EXITED");
    });
 
    it("calls the handlers of a real utility process from a sandboxed page, with no hop through main", () => {

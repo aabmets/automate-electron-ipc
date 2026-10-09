@@ -103,7 +103,11 @@ describe("fixture raw-errors", () => {
 
    it("declares no error type, and ignores the errors of a send", async () => {
       project = await runFixture("raw-errors");
-      expect(project.generated["main.ts"]).not.toContain("toIpcError");
+      const { "main.ts": main, "window.d.ts": types } = project.generated;
+      expect(main).not.toContain("toIpcError");
+      expect(types).not.toContain("@throws");
+      expect(types).not.toContain("IpcError");
+      expect(types).toContain("ping: {\n      send: () => void;\n   };");
    });
 });
 

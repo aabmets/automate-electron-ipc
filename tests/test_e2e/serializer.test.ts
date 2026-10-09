@@ -18,6 +18,7 @@ import {
    createFakePreloadElectron,
    createSource,
    loadGenerated,
+   settlePorts,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +30,7 @@ afterEach(async () => {
    project = undefined;
 });
 
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
+const settle = () => settlePorts(10);
 
 /** The `Appointment` of the fixture, with the types that structured clone cannot tell apart. */
 const appointment = () => ({

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-decorators",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -1,0 +1,11 @@
+{
+   "name": "fixture-declaration-output-paths",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "utilityBindingsPath": "ipc/utility.d.mts",
+         "serviceWorkerPreloadPath": "ipc/sw.d.cts"
+      }
+   }
+}

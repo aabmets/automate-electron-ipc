@@ -45,6 +45,13 @@ const describeError = (error) =>
    error instanceof Error ? `${error.stack ?? error.message}` : String(error);
 process.on("uncaughtException", (error) => uncaught.push(describeError(error)));
 process.on("unhandledRejection", (error) => uncaught.push(describeError(error)));
+// A preload script that throws while it loads leaves the page without its API, and nothing in the
+// main process would notice: Electron reports it with this event only.
+app.on("web-contents-created", (_event, contents) => {
+   contents.on("preload-error", (_preloadEvent, preloadPath, error) =>
+      uncaught.push(`preload-error in ${preloadPath}: ${describeError(error)}`),
+   );
+});
 
 // Without a listener, Electron quits when the scenarios close their last window.
 app.on("window-all-closed", () => undefined);

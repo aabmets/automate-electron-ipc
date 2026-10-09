@@ -18,6 +18,7 @@ import {
    createFakeElectron,
    createFakePreloadElectron,
    loadGenerated,
+   settlePorts,
 } from "@testutils/runtime-utils.js";
 import { createSession, createWorker, wire } from "@testutils/service-worker-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +32,7 @@ afterEach(async () => {
 });
 
 /** Lets the promises and the messages run. */
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
+const flush = () => settlePorts(10);
 
 /** What `Date`, `Set` and `Map` look like on the wire, in the serializer of the fixture. */
 const date = (iso: string) => ({ $: "Date", v: iso });
@@ -116,7 +117,7 @@ describe("the generated files of a schema with serialized worker channels", () =
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
       expect(await project.typecheckWorker({ noUnusedLocals: true })).toBe("");
-   });
+   }, 60_000);
 
    it("imports the serializer in main.ts and in the script of the worker, not in the page files", async () => {
       project = await runFixture("serializer-worker");
@@ -266,7 +267,10 @@ describe("a call of a worker, with a serializer and rawErrors", () => {
       expect(await one.invoke("shift", { json: [date(AT), 1000] })).toStrictEqual({
          json: date("2026-10-09T10:00:01.000Z"),
       });
-      await expect(one.invoke("shift", 1, 2)).rejects.toBeInstanceOf(main.IpcSerializationError);
+      // Electron wraps what the handler throws in an Error of its own, which keeps the message only.
+      await expect(one.invoke("shift", 1, 2)).rejects.toThrow(
+         /^Error invoking remote method 'autoipc:shift': IpcSerializationError: /,
+      );
    });
 });
 

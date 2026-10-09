@@ -1,0 +1,10 @@
+{
+   "name": "fixture-schema-file-reserved-name",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "getPathForFile": true
+      }
+   }
+}

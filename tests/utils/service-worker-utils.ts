@@ -46,9 +46,22 @@ export function createWorker(versionId = 1, scope = "app://main/") {
       end,
       handlers,
       listeners,
-      /** The worker calls a channel of the main process like `ipcRenderer.invoke` does. */
-      invoke: (channel: string, ...args: unknown[]) =>
-         Promise.resolve(handlers.get(wire(channel))?.(event(), ...args)),
+      /**
+       * The worker calls a channel of the main process like `ipcRenderer.invoke` does: Electron
+       * rejects a call without a handler, and wraps what a handler throws in an Error of its own.
+       */
+      invoke: async (channel: string, ...args: unknown[]) => {
+         const name = wire(channel);
+         const handler = handlers.get(name);
+         try {
+            if (!handler) {
+               throw new Error(`No handler registered for '${name}'`);
+            }
+            return await handler(event(), ...args);
+         } catch (error) {
+            throw new Error(`Error invoking remote method '${name}': ${String(error)}`);
+         }
+      },
       /** The worker sends to a channel of the main process like `ipcRenderer.send` does. */
       sendFrom: (channel: string, ...args: unknown[]) => {
          for (const listener of listeners.get(wire(channel)) ?? []) {

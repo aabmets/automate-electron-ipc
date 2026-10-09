@@ -90,6 +90,12 @@ describeElectron(
    "path-for-file",
    scenarios,
    (group) => {
+      it("runs every scenario to completion, without uncaught errors in the main process", () => {
+         const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+         expect(failed).toStrictEqual([]);
+         expect(group.run().uncaught).toStrictEqual([]);
+      });
+
       it("exposes the helper next to the channels", () => {
          expect(group.value("members")).toStrictEqual({
             members: ["getPathForFile", "upload"],

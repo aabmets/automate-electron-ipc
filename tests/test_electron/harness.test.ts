@@ -247,6 +247,22 @@ describe.skipIf(!supported)("runElectronGroup", () => {
       expect(run.uncaught[0]).toContain("thrown in a timer");
    }, 60_000);
 
+   it("reports a preload script which fails, which the main process would not see otherwise", async () => {
+      const run = await runElectronGroup({
+         fixture: "electron-core",
+         scenarios: {
+            missingPreload: async (ctx) => {
+               const win = ctx.blank({ webPreferences: { preload: "/no/such/preload.js" } });
+               await win.loadURL("app://main/index.html");
+               await ctx.sleep(200);
+            },
+         },
+      });
+      expect(run.results.missingPreload.ok).toBe(true);
+      expect(run.uncaught).toHaveLength(1);
+      expect(run.uncaught[0]).toContain("preload-error in /no/such/preload.js");
+   }, 60_000);
+
    it("kills a process which hangs, and leaves no process and no temp dir behind", async () => {
       const dirs = trackTempDirs();
       let child: ChildProcess | undefined;

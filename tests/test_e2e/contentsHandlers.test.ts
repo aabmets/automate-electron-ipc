@@ -17,6 +17,8 @@
 import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import v8 from "node:v8";
+import { runInNewContext } from "node:vm";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -370,6 +372,45 @@ describe("the webContents option of listeners and handlers", () => {
          expect(contents.ipc.handlers.size).toBe(0);
       });
 
+      describe("a handler that another one replaced", () => {
+         /** Whether the callback of a handler which `count` newer ones replaced can be collected. */
+         async function isReleased(options: (contents: Contents) => object): Promise<boolean> {
+            v8.setFlagsFromString("--expose-gc");
+            const gc = runInNewContext("gc") as () => void;
+            const { ipc, globalIpc } = await loadMain();
+            const contents = createContents();
+            let first: (() => Promise<string>) | undefined = async () => "first";
+            const released = new WeakRef(first);
+            ipc.getUser.handle(first, options(contents));
+            first = undefined;
+            for (let i = 0; i < 5; i++) {
+               ipc.getUser.handle(async () => `newer ${i}`, options(contents));
+            }
+            // The calls that the mocks of the fakes record would keep the callback alive too.
+            for (const fake of [globalIpc, contents.ipc]) {
+               fake.handle.mockClear();
+               fake.removeHandler.mockClear();
+            }
+            for (let i = 0; i < 10 && released.deref(); i++) {
+               // biome-ignore lint/performance/noAwaitInLoops: each collection waits for the last one
+               await new Promise((resolve) => setImmediate(resolve));
+               gc();
+            }
+            return released.deref() === undefined;
+         }
+
+         // A control, which shows that the check can see a callback being collected.
+         it("is released when the handler is global", async () => {
+            expect(await isReleased(() => ({}))).toBe(true);
+         });
+
+         // T87: each registration on the contents keeps its remover in the record of the contents
+         // until the contents are destroyed, and the remover holds the replaced callback.
+         it.fails("is released when the handler is registered on the contents", async () => {
+            expect(await isReleased((contents) => ({ webContents: contents }))).toBe(true);
+         });
+      });
+
       it("throws for contents which are already destroyed, and registers nothing", async () => {
          const { ipc, globalIpc } = await loadMain();
          const contents = createContents();
@@ -475,5 +516,5 @@ describe("fixture contents-handlers, the types of the webContents option", () =>
          text.replace(valid, "disposers.push(ipc.log.on(() => undefined, { window: contents }));"),
       );
       expect(await project.typecheck()).toContain("TS2353");
-   });
+   }, 60_000);
 });

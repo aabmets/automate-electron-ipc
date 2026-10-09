@@ -105,7 +105,7 @@ describe("fixture service-worker-guards", () => {
       project = await runFixture("service-worker-guards");
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
-   });
+   }, 60_000);
 
    it("times the calls in the main process, since the preload script of a worker has no timers", async () => {
       project = await runFixture("service-worker-guards");

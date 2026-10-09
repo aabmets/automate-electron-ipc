@@ -1,0 +1,10 @@
+{
+   "name": "fixture-output-over-schema",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "utilityBindingsPath": "ipc/schema.ts"
+      }
+   }
+}

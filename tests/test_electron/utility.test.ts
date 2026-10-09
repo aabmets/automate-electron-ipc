@@ -134,6 +134,31 @@ const scenarios: Record<string, Scenario> = {
       return { whilePending, afterwards, sendAfterwards };
    },
 
+   // The child exits before a channel of the bindings first used it (T86). The scenario races the
+   // call with a pause, so that it returns what happened and does not fail with a timeout.
+   exitedBeforeFirstUse: async (ctx) => {
+      const child = await ctx.fork(() => {
+         ipc.double.handle(async (n: number) => n * 2);
+      });
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill();
+      await exited;
+      const call = await Promise.race([
+         ctx.ipc.double.invoke(child, 2).then(
+            () => "answered",
+            (error: any) => error.code,
+         ),
+         ctx.sleep(1500).then(() => "still pending"),
+      ]);
+      let send = "no error";
+      try {
+         ctx.ipc.start.send(child, 1);
+      } catch (error: any) {
+         send = error.code;
+      }
+      return { call, send };
+   },
+
    timeouts: async (ctx) => {
       const describeFailure = (error: any, main: any) => ({
          isUtilityError: error instanceof main.IpcUtilityError,
@@ -248,6 +273,20 @@ const scenarios: Record<string, Scenario> = {
 describeElectron("utility channels in Electron", "electron-utility", scenarios, (group) => {
    it("has no uncaught errors in the main process", () => {
       expect(group.run().uncaught).toStrictEqual([]);
+   });
+
+   it("runs every scenario to completion", () => {
+      const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+      expect(failed).toStrictEqual([]);
+   });
+
+   // T86: the bindings listen for the 'exit' of a child only from its first use, so a child that
+   // exited before is never marked as closed, and Electron drops what is posted to it.
+   it.fails("rejects a call and a send to a child that exited before its first use", () => {
+      expect(group.value("exitedBeforeFirstUse")).toStrictEqual({
+         call: "IPC_UTILITY_EXITED",
+         send: "IPC_UTILITY_EXITED",
+      });
    });
 
    it("calls the handlers of a real utility process", () => {

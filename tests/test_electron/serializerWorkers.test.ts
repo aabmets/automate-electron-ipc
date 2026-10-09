@@ -120,6 +120,12 @@ describeElectron(
    "serializer-worker",
    scenarios,
    (group) => {
+      it("runs every scenario to completion, without uncaught errors in the main process", () => {
+         const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+         expect(failed).toStrictEqual([]);
+         expect(group.run().uncaught).toStrictEqual([]);
+      });
+
       it("brings a Date to the handler and a Date back to the worker, and fails what cannot be serialized", () => {
          expect(group.value("workerCalls")).toStrictEqual({
             shifted: { isDate: true, time: 1500 },

@@ -36,6 +36,23 @@ export function loadGenerated(source: string, modules: Record<string, unknown>):
    return exports;
 }
 
+/**
+ * Waits `ms`, and then lets the real `MessagePort`s of Node deliver what is queued for them.
+ *
+ * A timer alone is not enough: when the process is descheduled for longer than `ms`, the timer
+ * phase of the next turn of the event loop runs before its poll phase, which is where the queued
+ * messages of the ports are delivered, so a plain timeout can resolve before any message arrived.
+ * An immediate runs after the poll phase, and each round lets a message that a listener posted on
+ * delivery go one hop further.
+ */
+export async function settlePorts(ms: number, rounds = 5): Promise<void> {
+   await new Promise<void>((resolve) => setTimeout(resolve, ms));
+   for (let round = 0; round < rounds; round++) {
+      // biome-ignore lint/performance/noAwaitInLoops: each round waits for the poll phase of the last
+      await new Promise<void>((resolve) => setImmediate(resolve));
+   }
+}
+
 /** A BrowserWindow stand-in which emits window events and records what is sent to it. */
 export function createFakeWindow() {
    const win = new EventEmitter() as EventEmitter & {
@@ -84,6 +101,33 @@ export function createFakeElectron() {
    };
 }
 
+/**
+ * What `contextBridge` hands the page: a copy of the objects and arrays, made when the API is
+ * exposed, so that a later change of the original does not reach the page. The functions are the
+ * same ones, as the proxies of Electron call the originals.
+ */
+function bridgeCopy(value: unknown): unknown {
+   if (Array.isArray(value)) {
+      return value.map(bridgeCopy);
+   }
+   if (value === null || typeof value !== "object") {
+      return value;
+   }
+   const copy: Record<string, unknown> = Object.create(Object.getPrototypeOf(value));
+   for (const [key, member] of Object.entries(value)) {
+      copy[key] = bridgeCopy(member);
+   }
+   return copy;
+}
+
+/** Throws as `contextBridge` does when the key of the world is taken already. */
+function exposeOnce(world: Record<string, unknown>, key: string, api: unknown): void {
+   if (Object.hasOwn(world, key)) {
+      throw new Error("Cannot bind an API on top of an existing property on the window object");
+   }
+   world[key] = bridgeCopy(api);
+}
+
 /** A fake `electron` module for the generated preload script, which records what it exposes. */
 export function createFakePreloadElectron() {
    const exposed: Record<string, any> = {};
@@ -93,11 +137,10 @@ export function createFakePreloadElectron() {
       exposedInWorld,
       electron: {
          contextBridge: {
-            exposeInMainWorld: vi.fn((key: string, api: unknown) => {
-               exposed[key] = api;
-            }),
+            exposeInMainWorld: vi.fn((key: string, api: unknown) => exposeOnce(exposed, key, api)),
             exposeInIsolatedWorld: vi.fn((worldId: number, key: string, api: unknown) => {
-               exposedInWorld[worldId] = { ...exposedInWorld[worldId], [key]: api };
+               exposedInWorld[worldId] ??= {};
+               exposeOnce(exposedInWorld[worldId], key, api);
             }),
          },
          ipcRenderer: {

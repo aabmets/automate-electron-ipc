@@ -189,6 +189,34 @@ const scenarios: Record<string, Scenario> = {
       };
    },
 
+   // The reply of sendToSender reaches the frame that sent, here an iframe, and not its main frame.
+   sendToSenderFrame: async (ctx) => {
+      ctx.serve("app://main/index.html", '<iframe src="app://main/frame.html"></iframe>');
+      ctx.serve("app://main/frame.html", "<p>frame</p>");
+      const win = await ctx.open({ subframes: true });
+      const frame = win.webContents.mainFrame.frames[0];
+      const delivered = [];
+      ctx.ipc.log.on((event: any, text: string) => {
+         delivered.push(ctx.ipc.notice.sendToSender(event, `reply to ${text}`));
+      });
+      for (const target of [win, frame]) {
+         await ctx.evaluate(target, () => {
+            (window as any).notices = [];
+            ipc.notice.on((text: string) => (window as any).notices.push(text));
+         });
+      }
+      await ctx.evaluate(frame, () => ipc.log.send("the frame"));
+      await ctx.until(frame, () => (window as any).notices.length === 1);
+      await ctx.evaluate(win, () => ipc.log.send("the main frame"));
+      await ctx.until(win, () => (window as any).notices.length === 1);
+      await ctx.sleep(100);
+      return {
+         delivered,
+         main: await ctx.evaluate(win, () => (window as any).notices),
+         frame: await ctx.evaluate(frame, () => (window as any).notices),
+      };
+   },
+
    emitTargets: async (ctx) => {
       const { WebContentsView } = ctx.electron;
       const win = await ctx.open();
@@ -516,6 +544,14 @@ describeElectron("core channels in Electron", "electron-core", scenarios, (group
             ["to frame", 3],
          ]);
          expect(view).toStrictEqual([["to view", 1]]);
+      });
+
+      it("replies with sendToSender to the frame that sent, which may be an iframe", () => {
+         expect(group.value("sendToSenderFrame")).toStrictEqual({
+            delivered: [true, true],
+            main: ["reply to the main frame"],
+            frame: ["reply to the frame"],
+         });
       });
 
       it("broadcasts to all windows, and filters with broadcastTo", () => {

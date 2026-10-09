@@ -19,6 +19,7 @@ import {
    createFakeElectron,
    createFakePreloadElectron,
    loadGenerated,
+   settlePorts,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -38,7 +39,7 @@ afterEach(async () => {
 });
 
 /** Lets the messages and the events of the real ports, and the promises, run. */
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+const settle = () => settlePorts(20);
 
 /** What `Date`, `Set` and `Map` look like on the wire, in the serializer of the fixture. */
 const date = (iso: string) => ({ $: "Date", v: iso });

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 75 delivered, 10 remaining, 1 dropped.
+**Progress:** 76 delivered, 19 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -61,6 +61,16 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T77: `ask` on a destroyed `BrowserWindow` throws a TypeError](./tasks/T77-ask-on-destroyed-browser-window.md) · depends on: T75
 - [x] [T78: `connect` leaves an entry behind when the second window is destroyed](./tasks/T78-connect-leaks-first-end-on-destroyed-window.md) · depends on: T76
 - [x] [T82: A synchronous error of the preload script loses its fields across `contextBridge`](./tasks/T82-synchronous-errors-lose-fields-across-contextbridge.md) · depends on: T81a
+- [ ] [T84: An `ask` never settles when the asked page reloads, navigates or crashed](./tasks/T84-ask-hangs-when-the-page-goes-away.md) · depends on: T77
+- [ ] [T85: The page-load watch takes error pages and aborted navigations for loads](./tasks/T85-page-load-watch-error-pages-and-aborted-navigations.md) · depends on: T76, T30
+- [ ] [T86: Calls to a utility process that exited before the bindings saw it hang forever](./tasks/T86-calls-to-a-utility-child-that-already-exited.md) · depends on: T30 · **Decision needed**
+- [ ] [T87: Listeners that grow with each call, stream, connection or registration](./tasks/T87-listeners-that-grow-per-call-or-registration.md) · depends on: T84, T85
+- [ ] [T88: Config values which are accepted, but break the output](./tasks/T88-config-values-that-break-the-output.md) · depends on: T29, T36
+- [ ] [T89: Import paths of script extensions, JSON modules and import types](./tasks/T89-import-paths-of-script-extensions-and-import-types.md) · depends on: T55
+- [ ] [T90: Decorators and import-equals in schema files](./tasks/T90-schema-syntax-decorators-and-import-equals.md) · depends on: T54
+- [ ] [T91: A Promise nested in a result is not reported](./tasks/T91-promise-nested-in-a-result.md) · depends on: T19
+- [ ] [T92: Diagnostics which name the wrong path, or none](./tasks/T92-diagnostics-that-name-the-wrong-path.md) · depends on: T71
+- [x] [T93: Review of the source and the tests](./tasks/T93-review-of-the-source-and-the-tests.md) · depends on: T83
 
 ## Phase 2: Core API, listener lifecycle and security
 

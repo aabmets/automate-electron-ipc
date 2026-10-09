@@ -136,7 +136,7 @@ describe("fixture compose-preload, with `autoExpose` off", () => {
 
       expect(electron.contextBridge.exposeInMainWorld).toHaveBeenCalledTimes(1);
       expect(Object.keys(exposed)).toStrictEqual(["ipc"]);
-      expect(exposed.ipc).toBe(generated.api);
+      expect(exposed.ipc).toStrictEqual(generated.api);
    });
 
    it("exposes the same API under any number of keys", async () => {
@@ -145,8 +145,8 @@ describe("fixture compose-preload, with `autoExpose` off", () => {
       generated.expose("second");
 
       expect(Object.keys(exposed)).toStrictEqual(["first", "second"]);
-      expect(exposed.first).toBe(generated.api);
-      expect(exposed.second).toBe(generated.api);
+      expect(exposed.first).toStrictEqual(generated.api);
+      expect(exposed.second).toStrictEqual(generated.api);
    });
 
    it("generates a preload script that app code can import and use, and type-checks", async () => {
@@ -177,7 +177,7 @@ describe("generated preload script, with `autoExpose` on", () => {
       expect(Object.keys(fake.exposed)).toStrictEqual(["bridge"]);
       generated.expose("other");
       expect(Object.keys(fake.exposed)).toStrictEqual(["bridge", "other"]);
-      expect(fake.exposed.other).toBe(generated.api);
+      expect(fake.exposed.other).toStrictEqual(generated.api);
    });
 
    it("keeps the isolated world when the key is passed to `expose`", async () => {

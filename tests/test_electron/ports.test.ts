@@ -276,6 +276,83 @@ const scenarios: Record<string, Scenario> = {
       await ctx.sleep(500);
       return { events: await ctx.evaluate(win, () => (window as any).events), warnings };
    },
+
+   // The scenarios below find T85 and T87. They read the state after a pause, as the ones above.
+
+   // A main-frame load fails, and Electron shows its error page, with a did-finish-load of its own.
+   mainPortFailedLoad: async (ctx) => {
+      ctx.serve("app://main/log.html", ctx.data.logPage);
+      const win = ctx.blank();
+      const connection = ctx.ipc.logTail.connect(win);
+      const main: string[] = [];
+      connection.onReady(() => main.push("ready"));
+      connection.onClose(() => main.push("close"));
+      connection.send("queued");
+      // Port 1 is one that Chromium refuses to load, so the load fails without a network.
+      const failure = await win.loadURL("http://127.0.0.1:1/").then(
+         () => "loaded",
+         (error: any) => error.code,
+      );
+      await ctx.sleep(500);
+      const afterFailure = [...main];
+      await win.loadURL("app://main/log.html");
+      await ctx.sleep(500);
+      return { failure, afterFailure, page: await ctx.evaluate(win, () => (window as any).events) };
+   },
+
+   // A navigation which never commits, such as one that will-navigate prevents (Electron security
+   // checklist #13), leaves the page as it was, with its ports.
+   abortedNavigation: async (ctx) => {
+      ctx.serve("app://main/chat.html", ctx.data.chatPage);
+      ctx.serve("app://main/log.html", ctx.data.logPage);
+      const chatA = await ctx.open({ url: "app://main/chat.html" });
+      const chatB = await ctx.open({ url: "app://main/chat.html" });
+      const log = await ctx.open({ url: "app://main/log.html" });
+      ctx.ipc.chat.connect(chatA, chatB);
+      const connection = ctx.ipc.logTail.connect(log);
+      const main: string[] = [];
+      connection.onReady(() => main.push("ready"));
+      connection.onClose(() => main.push("close"));
+      for (const win of [chatA, chatB, log]) {
+         await ctx.until(win, () => (window as any).events.length === 1);
+         win.webContents.on("will-navigate", (event: any) => event.preventDefault());
+      }
+      for (const win of [chatA, log]) {
+         await ctx.evaluate(win, () => {
+            (window as any).marker = "same document";
+            location.href = "app://main/elsewhere.html";
+         });
+      }
+      await ctx.sleep(1000);
+      const page = (win: unknown) =>
+         ctx.evaluate(win, () => ({
+            marker: (window as any).marker,
+            events: (window as any).events,
+         }));
+      return { main, log: await page(log), chatA: await page(chatA), chatB: await page(chatB) };
+   },
+
+   // Eleven connections of one window, such as one per channel, are normal use.
+   manyConnections: async (ctx) => {
+      ctx.serve("app://main/log.html", ctx.data.logPage);
+      const warnings: string[] = [];
+      const onWarning = (warning: Error) => warnings.push(`${warning.name}: ${warning.message}`);
+      process.on("warning", onWarning);
+      try {
+         const win = await ctx.open({ url: "app://main/log.html" });
+         const connections = [];
+         for (let n = 0; n < 11; n++) {
+            connections.push(ctx.ipc.logTail.connect(win));
+         }
+         await ctx.sleep(300);
+         for (const connection of connections) {
+            connection.close();
+         }
+         return warnings;
+      } finally {
+         process.off("warning", onWarning);
+      }
+   },
 };
 
 describeElectron("port channels in Electron", "electron-ports", scenarios, body, {
@@ -385,6 +462,32 @@ function body(group: ElectronGroup) {
       it("flushes the newest messages of a full queue once the window is paired", () => {
          expect(group.value("mainPortBounded").events).toStrictEqual([3, 4, 5]);
       });
+
+      // T85: watchPageLoad takes the did-finish-load of the error page for a load, and pairs the
+      // error page, which flushes the queue into a port that no page reads.
+      it.fails("does not pair the error page of a failed load, and keeps the queue for the next page", () => {
+         expect(group.value("mainPortFailedLoad")).toStrictEqual({
+            failure: "ERR_UNSAFE_PORT",
+            afterFailure: [],
+            page: [["ready"], ["message", "queued"]],
+         });
+      });
+   });
+
+   // T85: did-start-navigation resets the state of the load, so the did-stop-loading of a
+   // navigation that never committed pairs the page again.
+   it.fails("leaves the ports of a page alone when a navigation of it does not commit", () => {
+      expect(group.value("abortedNavigation")).toStrictEqual({
+         main: ["ready"],
+         log: { marker: "same document", events: [["ready"]] },
+         chatA: { marker: "same document", events: [["ready"]] },
+         chatB: { events: [["ready"]] },
+      });
+   });
+
+   // T87: every connection adds its own 'destroyed' listener and four load listeners to the contents.
+   it.fails("connects a window many times without a MaxListenersExceededWarning", () => {
+      expect(group.value("manyConnections")).toStrictEqual([]);
    });
 
    it("type-checks the generated files of the fixture", async () => {

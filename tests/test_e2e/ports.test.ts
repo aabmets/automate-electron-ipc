@@ -16,6 +16,7 @@ import {
    createFakePreloadElectron,
    finishLoading,
    loadGenerated,
+   settlePorts,
    startLoading,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -738,7 +739,7 @@ async function loadPreload() {
 }
 
 /** Lets the messages and the events of the real ports arrive. */
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+const settle = () => settlePorts(20);
 
 describe("generated preload script of a port channel", () => {
    it("exposes the six methods and nothing else", async () => {

@@ -1,0 +1,10 @@
+{
+   "name": "fixture-json-import-node-next",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "projectUsesNodeNext": true
+      }
+   }
+}

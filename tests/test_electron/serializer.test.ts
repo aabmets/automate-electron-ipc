@@ -182,6 +182,12 @@ const scenarios: Record<string, Scenario> = {
 };
 
 describeElectron("serializer in a sandboxed window", "serializer", scenarios, (group) => {
+   it("runs every scenario to completion, without uncaught errors in the main process", () => {
+      const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+      expect(failed).toStrictEqual([]);
+      expect(group.run().uncaught).toStrictEqual([]);
+   });
+
    it("brings a Date to the handler and a Date, a Set, a Map and a bigint back to the page", () => {
       expect(group.value("invokeRoundTrip")).toStrictEqual({
          seen: [{ id: 7, isDate: true, time: 1000 }],

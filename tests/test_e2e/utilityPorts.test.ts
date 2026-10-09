@@ -21,6 +21,7 @@ import {
    createSource,
    finishLoading,
    loadGenerated,
+   settlePorts,
    startLoading,
    windowIpcPaths,
 } from "@testutils/runtime-utils.js";
@@ -43,7 +44,7 @@ afterEach(async () => {
 });
 
 /** Lets the promises and the events of the ports run. */
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+const settle = () => settlePorts(20);
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
@@ -75,7 +76,10 @@ function createChild() {
 }
 
 /** The ports a `MessageChannelMain` made, in order. */
-const channelsMade: { port1: { close: ReturnType<typeof vi.fn> }; port2: object }[] = [];
+const channelsMade: {
+   port1: { close: ReturnType<typeof vi.fn> };
+   port2: { close: ReturnType<typeof vi.fn> };
+}[] = [];
 
 class FakeChannelMain {
    port1 = { name: `port1 of ${channelsMade.length + 1}`, close: vi.fn() };
@@ -340,7 +344,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(() => ipc.queryRows.connect(child, contents)).toThrow("the child is gone");
 
       expect(channelsMade[0].port1.close).toHaveBeenCalledTimes(1);
-      expect((channelsMade[0].port2 as { close: () => void }).close).toBeDefined();
+      expect(channelsMade[0].port2.close).toHaveBeenCalledTimes(1);
       expect(contents.listenerCount("destroyed")).toBe(0);
       expect(child.listenerCount("exit")).toBe(0);
       expect(contents.listenerCount("did-finish-load")).toBe(0);
@@ -1670,13 +1674,16 @@ describe("utility ports, the utility process, flow control", () => {
       fill(source, 10);
       await settle();
 
-      for (const limit of [4, 3, -1, "9", Number.NaN, null, undefined, {}, true]) {
+      // The credits come in the same turn as one that raises the limit to 8, before the paused
+      // generator goes on, so a lower one that was taken would shrink the window it has.
+      port.fromPage(credit("windowedRows", 1, 8));
+      for (const limit of [7, 4, 0, -1, "9", Number.NaN, null, undefined, {}, true]) {
          port.fromPage(credit("windowedRows", 1, limit));
       }
       port.fromPage({ __ipc: "credit", channel: wire("windowedRows"), id: "1", limit: 9 });
       await settle();
 
-      expect(sentValues(port, 1)).toStrictEqual(upTo(4));
+      expect(sentValues(port, 1)).toStrictEqual(upTo(8));
    });
 
    it("cancels a paused stream at once, and ignores a credit which comes after", async () => {

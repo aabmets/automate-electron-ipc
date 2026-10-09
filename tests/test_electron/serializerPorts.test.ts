@@ -157,6 +157,12 @@ describeElectron(
    "serializer-ports",
    scenarios,
    (group) => {
+      it("runs every scenario to completion, without uncaught errors in the main process", () => {
+         const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+         expect(failed).toStrictEqual([]);
+         expect(group.run().uncaught).toStrictEqual([]);
+      });
+
       it("delivers a Date and a Set between two pages as they were sent", () => {
          expect(group.value("trackerBetweenPages")).toStrictEqual({
             a: [{ isDate: true, time: 2000, isSet: true, tags: [] }],

@@ -17,6 +17,7 @@ import {
    createFakePreloadElectron,
    createSource,
    loadGenerated,
+   settlePorts,
    windowIpcPaths,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,7 +38,7 @@ afterEach(async () => {
 });
 
 /** Lets the promises and the events of the real ports run. */
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+const settle = () => settlePorts(20);
 
 /** A WebContents stand-in: an emitter that announces its end, as the real one does. */
 function createContents(id = 1) {
@@ -1432,7 +1433,10 @@ describe("stream, main process, flow control", () => {
       fill(source, 10);
       await settle();
 
-      for (const limit of [4, 3, 0, -5, "9", Number.NaN, null, undefined, {}, [9], true]) {
+      // The credits come in the same turn as one that raises the limit to 8, before the paused
+      // generator goes on, so a lower one that was taken would shrink the window it has.
+      fromPage(credit(8));
+      for (const limit of [7, 4, 0, -5, "9", Number.NaN, null, undefined, {}, [9], true]) {
          fromPage(credit(limit));
       }
       fromPage({ type: "credit" });
@@ -1440,8 +1444,8 @@ describe("stream, main process, flow control", () => {
       fromPage(null);
       await settle();
 
-      expect(sentValues()).toStrictEqual(upTo(4));
-      expect(source.iterator.next).toHaveBeenCalledTimes(4);
+      expect(sentValues()).toStrictEqual(upTo(8));
+      expect(source.iterator.next).toHaveBeenCalledTimes(8);
    });
 
    it("keeps the credits of two calls apart", async () => {

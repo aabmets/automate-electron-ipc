@@ -166,6 +166,12 @@ describeElectron(
    "serializer-utility",
    scenarios,
    (group) => {
+      it("runs every scenario to completion, without uncaught errors in the main process", () => {
+         const failed = Object.entries(group.run().results).filter(([, result]) => !result.ok);
+         expect(failed).toStrictEqual([]);
+         expect(group.run().uncaught).toStrictEqual([]);
+      });
+
       it("delivers Dates, Sets and Maps between the main process and the utility process as they were", () => {
          expect(group.value("mainAndChild")).toStrictEqual({
             shifted: { isDate: true, time: 1500 },

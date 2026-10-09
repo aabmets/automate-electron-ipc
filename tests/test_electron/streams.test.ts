@@ -258,6 +258,76 @@ const scenarios: Record<string, Scenario> = {
       await ctx.waitFor(() => finalized, "the generator to be finalized");
       return { finalized };
    },
+   // The port of a stream goes to the frame that opened it: an iframe and its main frame read
+   // streams of their own at the same time.
+   iframeStream: async (ctx) => {
+      ctx.serve("app://main/index.html", '<iframe src="app://main/frame.html"></iframe>');
+      ctx.serve("app://main/frame.html", "<p>frame</p>");
+      const win = await ctx.open({ subframes: true });
+      const frame = win.webContents.mainFrame.frames[0];
+      ctx.ipc.count.handle(async function* (_event: unknown, to: number) {
+         for (let n = 1; n <= to; n++) {
+            yield n;
+            await ctx.sleep(10);
+         }
+      });
+      // A port that went to the wrong frame never arrives, so the read is raced with a pause.
+      const read = (target: unknown, to: number) =>
+         ctx.evaluate(
+            target,
+            (count: number) => {
+               const chunks: number[] = [];
+               const reading = (async () => {
+                  for await (const n of ipc.count.stream(count)) {
+                     chunks.push(n);
+                  }
+                  return chunks;
+               })();
+               const pause = new Promise((resolve) =>
+                  setTimeout(() => resolve({ stuck: chunks }), 3000),
+               );
+               return Promise.race([reading, pause]);
+            },
+            to,
+         );
+      const [main, inFrame] = await Promise.all([read(win, 3), read(frame, 5)]);
+      return { main, frame: inFrame };
+   },
+
+   // Twelve streams that one page reads at once are normal use (T87).
+   manyStreams: async (ctx) => {
+      const warnings: string[] = [];
+      const onWarning = (warning: Error) => warnings.push(`${warning.name}: ${warning.message}`);
+      process.on("warning", onWarning);
+      try {
+         const win = await ctx.open();
+         ctx.ipc.count.handle(async function* (_event: unknown, to: number) {
+            for (let n = 1; n <= to; n++) {
+               yield n;
+               await ctx.sleep(20);
+            }
+         });
+         const chunks = await ctx.evaluate(win, async () => {
+            const streams = [];
+            for (let i = 0; i < 12; i++) {
+               streams.push(ipc.count.stream(5));
+            }
+            let total = 0;
+            await Promise.all(
+               streams.map(async (chunks: AsyncIterable<number>) => {
+                  for await (const _ of chunks) {
+                     total++;
+                  }
+               }),
+            );
+            return total;
+         });
+         await ctx.sleep(50);
+         return { chunks, warnings };
+      } finally {
+         process.off("warning", onWarning);
+      }
+   },
 };
 
 describeElectron("stream channels in Electron", "electron-streams", scenarios, (group) => {
@@ -329,6 +399,18 @@ describeElectron("stream channels in Electron", "electron-streams", scenarios, (
 
    it("stops the generator when the window of the reader is destroyed", () => {
       expect(group.value("destroyed")).toStrictEqual({ finalized: true });
+   });
+
+   it("hands the port of a stream to the frame that opened it, which may be an iframe", () => {
+      expect(group.value("iframeStream")).toStrictEqual({
+         main: [1, 2, 3],
+         frame: [1, 2, 3, 4, 5],
+      });
+   });
+
+   // T87: every open stream adds a 'destroyed' listener of its own to the contents of its page.
+   it.fails("reads many streams of one page at once without a MaxListenersExceededWarning", () => {
+      expect(group.value("manyStreams")).toStrictEqual({ chunks: 60, warnings: [] });
    });
 
    it("type-checks the generated files of the fixture", async () => {

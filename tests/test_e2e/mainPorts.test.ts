@@ -16,6 +16,7 @@ import {
    createFakePreloadElectron,
    finishLoading,
    loadGenerated,
+   settlePorts,
    startLoading,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -868,7 +869,7 @@ async function loadBoth() {
 }
 
 /** Lets the messages and the events of the real ports arrive. */
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+const settle = () => settlePorts(20);
 
 describe("a main process and a page over a real message channel", () => {
    it("sends in both directions, and queues until the page is connected", async () => {

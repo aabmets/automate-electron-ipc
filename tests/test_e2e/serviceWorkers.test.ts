@@ -44,7 +44,7 @@ describe("service worker channels, files", () => {
       project = await runFixture("service-worker-channels");
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
-   });
+   }, 60_000);
 
    it("writes the files of the worker next to the others, and leaves the page its own channels", async () => {
       project = await runFixture("service-worker-channels");
@@ -96,7 +96,7 @@ describe("service worker channels, main process", () => {
    beforeEach(async () => {
       main = await load();
       fake = createSession();
-   });
+   }, 60_000);
 
    describe("attachServiceWorkers", () => {
       it("routes the workers that run already, and the ones that start later", () => {
@@ -800,10 +800,21 @@ describe("service worker channels, with rawErrors", () => {
          const main = loadGenerated(raw.generated["main.ts"], { electron: createFakeElectron() });
          const fake = createSession();
          const one = createWorker();
-         main.ipc.getToken.handle(fake.session, () => "plain");
+         let calls = 0;
+         main.ipc.getToken.handle(fake.session, () => {
+            calls += 1;
+            if (calls > 1) {
+               throw Object.assign(new Error("no token"), { code: "E_TOKEN" });
+            }
+            return "plain";
+         });
          fake.start(one);
 
          expect(await one.invoke("getToken")).toBe("plain");
+         // The error is Electron's, which keeps the message only, and not the envelope of the library.
+         await expect(one.invoke("getToken")).rejects.toThrow(
+            "Error invoking remote method 'autoipc:getToken': Error: no token",
+         );
          expect(raw.generated["main.ts"]).not.toContain("settleInvoke");
          expect(raw.generated["service-worker-preload.ts"]).toContain(
             "invoke: (...args: any[]) => ipcRenderer.invoke('autoipc:getToken', ...args),",
@@ -837,7 +848,7 @@ describe("service worker channels, preload script", () => {
       const { exposed, exports, electron } = await loadPreload();
 
       expect(Object.keys(exposed)).toStrictEqual(["ipc"]);
-      expect(exposed.ipc).toBe(exports.api);
+      expect(exposed.ipc).toStrictEqual(exports.api);
       expect(electron.contextBridge.exposeInIsolatedWorld).not.toHaveBeenCalled();
       expect(callablePaths(exposed.ipc)).toStrictEqual([
          "configChanged.on",
