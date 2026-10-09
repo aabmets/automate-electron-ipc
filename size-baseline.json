@@ -1,9 +1,7 @@
 {
-   "tests/test_e2e/asks.test.ts": 1333,
    "tests/test_e2e/contentsHandlers.test.ts": 509,
    "tests/test_e2e/errors.test.ts": 345,
    "tests/test_e2e/ipcAutomation.test.ts": 1111,
-   "tests/test_e2e/runtime.test.ts": 1334,
    "tests/test_e2e/scopes.test.ts": 495,
    "tests/test_e2e/senders.test.ts": 349,
    "tests/test_e2e/serializer.test.ts": 716,
@@ -13,7 +11,6 @@
    "tests/test_e2e/serviceWorkerGuards.test.ts": 638,
    "tests/test_e2e/serviceWorkers.test.ts": 1007,
    "tests/test_e2e/signatures.test.ts": 356,
-   "tests/test_e2e/streams.test.ts": 1838,
    "tests/test_e2e/utility.test.ts": 959,
    "tests/test_e2e/utilityTimeouts.test.ts": 673
 }

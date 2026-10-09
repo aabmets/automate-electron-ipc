@@ -171,7 +171,11 @@
          }
       },
       {
-         "includes": ["tests/fixtures/stream-channels/**", "tests/test_e2e/streams.test.ts"],
+         "includes": [
+            "tests/fixtures/stream-channels/**",
+            "tests/test_e2e/streams.*.test.ts",
+            "tests/utils/stream-*"
+         ],
          "linter": {
             "rules": {
                "suspicious": {

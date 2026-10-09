@@ -13,4 +13,9 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `streams`, `runtime` and `asks` of `tests/test_e2e` are now 25 files of at
+  most 272 lines (with header), split along their describe blocks, with the shared builders in
+  `tests/utils/stream-main-utils.ts`, `stream-preload-utils.ts`, `stream-real-utils.ts`,
+  `runtime-main-utils.ts`, `runtime-validation-utils.ts` and `ask-utils.ts`. 276 tests before and after
+  with identical titles, none skipped, no assertion changed. The Biome override for the stream tests
+  in `biome.json` now matches the new file names. The three baseline entries are removed.
