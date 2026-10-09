@@ -194,6 +194,22 @@ no directory. Use it in CI to catch a schema change whose generated files were n
 
 It takes `--cwd` and `--config` like a normal run.
 
+#### Watch mode
+
+`ipcgen --watch` generates the bindings once, then again whenever the schema or the config changes,
+until you stop it with Ctrl+C. It takes the same flags as a normal run (`--cwd`, `--config` and the
+`--out-*` flags), and cannot be combined with `--check`.
+
+ - These changes start a run: a `schema.ts` file or a `.ts` file under the `schema` directory in the
+   `ipcDataDir`, and `package.json`, `tsconfig.json` and the `autoipc.config.*` file (or the one that
+   `--config` names) in the project root. The generated files do not, so a run never starts the next.
+ - Changes that come in a burst, like the ones of a save-all, start one run. Changes that come while a
+   run is going start one more run after it.
+ - A run that fails, such as one with a syntax error in the schema, prints the error and keeps
+   watching; the bindings of the last good run stay in place until a run succeeds. Unlike a plain run,
+   it does not set the exit code.
+ - A change of the config that moves the `ipcDataDir` makes the watcher follow it.
+
 ### Composing the preload script
 
 The generated `preload.ts` exports the API it builds, and a function that exposes it:

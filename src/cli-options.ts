@@ -21,6 +21,7 @@ export interface CliFlags {
    outPreload?: string;
    outTypes?: string;
    check?: boolean;
+   watch?: boolean;
 }
 
 /** The config option that each `--out-*` flag sets. */

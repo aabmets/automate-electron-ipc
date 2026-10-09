@@ -20,6 +20,8 @@ const findStaleOutputs = vi.hoisted(() => vi.fn());
 vi.mock("@src/check.js", () => ({ findStaleOutputs }));
 const getResolvedConfig = vi.hoisted(() => vi.fn());
 vi.mock("@src/config.js", () => ({ default: { getResolvedConfig } }));
+const watchSchema = vi.hoisted(() => vi.fn());
+vi.mock("@src/watch.js", () => ({ watchSchema }));
 
 /** Imports the cli with a fresh commander program, since it registers on a global singleton. */
 async function importFreshCli(): Promise<void> {
@@ -40,6 +42,7 @@ describe("cli", () => {
       ipcAutomation.mockReset();
       findStaleOutputs.mockReset();
       getResolvedConfig.mockReset();
+      watchSchema.mockReset();
       vi.restoreAllMocks();
       vi.doUnmock("commander");
    });
@@ -210,6 +213,57 @@ describe("cli", () => {
          await importFreshCli();
          expect(String(err.mock.calls[0][0])).toContain("Syntax error in schema file");
          expect(process.exitCode).toBe(1);
+      });
+   });
+
+   describe("--watch", () => {
+      it("starts the watcher with --cwd and --config, instead of a single run", async () => {
+         process.argv = [
+            "node",
+            "ipcgen",
+            "--watch",
+            "--cwd",
+            "app",
+            "--config",
+            "ipc.config.json",
+         ];
+         vi.spyOn(process, "once").mockImplementation(() => process);
+         await importFreshCli();
+         expect(watchSchema).toHaveBeenCalledOnce();
+         expect(watchSchema).toHaveBeenCalledWith({ cwd: "app", configFile: "ipc.config.json" });
+         expect(ipcAutomation).not.toHaveBeenCalled();
+      });
+
+      it("refuses --watch together with --check", async () => {
+         process.argv = ["node", "ipcgen", "--watch", "--check"];
+         const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+         vi.spyOn(process, "exit").mockImplementation((() => {
+            throw new Error("exit");
+         }) as never);
+         await expect(importFreshCli()).rejects.toThrowError("exit");
+         expect(String(err.mock.calls[0][0])).toContain("cannot be used with option");
+         expect(watchSchema).not.toHaveBeenCalled();
+         expect(findStaleOutputs).not.toHaveBeenCalled();
+      });
+
+      it.each(["SIGINT", "SIGTERM"])("closes the watchers and exits 0 on %s", async (signal) => {
+         process.argv = ["node", "ipcgen", "--watch"];
+         const stop = vi.fn();
+         watchSchema.mockReturnValue(stop);
+         const handlers = new Map<string, () => void>();
+         vi.spyOn(process, "once").mockImplementation(((event: string, handler: () => void) => {
+            handlers.set(event, handler);
+            return process;
+         }) as never);
+         const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+         await importFreshCli();
+         expect([...handlers.keys()].sort()).toEqual(["SIGINT", "SIGTERM"]);
+         expect(stop).not.toHaveBeenCalled();
+
+         handlers.get(signal)?.();
+
+         expect(stop).toHaveBeenCalledOnce();
+         expect(exit).toHaveBeenCalledWith(0);
       });
    });
 });

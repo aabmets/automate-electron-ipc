@@ -45,4 +45,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `bun --bun` (CI matrix).
 - **README:** document `--watch`.
 - **Follow-up IDs:** T150-T151.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `src/watch.ts` has `watchedPaths` and `watchSchema` as specified, and `ipcgen --watch` in `src/cli.ts` (SIGINT/SIGTERM close the watchers and exit 0), with `logger.watching`. Notes: the first run starts after the watchers exist, so an edit during it is not lost; a directory that does not exist yet (a first run creates `ipcDataDir`) is retried after each run; while the config is broken the watcher falls back to the project root, so fixing the config starts a run; `watchedPaths` takes the config file as an absolute path or relative to the working directory, and `watchSchema` resolves `--config` against `--cwd` the same way the config does; an event without a file name is ignored, since it cannot be told from the output of a run. The e2e runs under Node and `bun --bun`. No follow-up tasks (T150-T151 unused).

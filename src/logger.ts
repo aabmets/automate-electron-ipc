@@ -74,6 +74,11 @@ export function fatalError(err: unknown): void {
    error(["IPC automation failed:", ...message.split("\n")]);
 }
 
+/** Reports the directories that `--watch` waits for changes in. */
+export function watching(paths: string[]): void {
+   success(["Watching for changes in:", ...paths]);
+}
+
 /**
  * Reports the schema files that bindings were generated from. Paths are shown relative to the
  * project root, with `/` separators. A path outside the project, or any path when the root is
@@ -109,4 +114,5 @@ export default {
    fatalError,
    reportSuccess,
    staleFiles,
+   watching,
 };

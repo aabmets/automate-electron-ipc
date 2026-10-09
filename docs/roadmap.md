@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 136 delivered, 14 remaining, 1 dropped.
+**Progress:** 137 delivered, 13 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -177,7 +177,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [x] [T38b: Output path options and `--out-*` flags](./tasks/T38b-output-path-options.md) · depends on: T38a
 - [x] [T38c: Detect NodeNext from `tsconfig.json`](./tasks/T38c-nodenext-detection.md) · depends on: T38a
 - [x] [T39: `ipcgen --check`](./tasks/T39-ipcgen-check.md) · depends on: T06, T38a, T139
-- [ ] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38a
+- [x] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38a
 - [ ] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13, T139
 - [ ] [T42b: Report multiple schema errors together](./tasks/T42b-collect-multiple-errors.md) · depends on: T42a, T139
 - [ ] [T41a: Programmatic API (`automate-electron-ipc/api`)](./tasks/T41a-programmatic-api.md) · depends on: T38a, T39
