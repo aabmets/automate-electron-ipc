@@ -134,8 +134,9 @@ const scenarios: Record<string, Scenario> = {
       return { whilePending, afterwards, sendAfterwards };
    },
 
-   // The child exits before a channel of the bindings first used it (T86). The scenario races the
-   // call with a pause, so that it returns what happened and does not fail with a timeout.
+   // The child exits before a channel of the bindings first used it (T86). It was forked by
+   // forkUtility, so the bindings saw the exit. The scenario races the call with a pause, so that
+   // it returns what happened and does not fail with a timeout.
    exitedBeforeFirstUse: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.double.handle(async (n: number) => n * 2);
@@ -157,6 +158,53 @@ const scenarios: Record<string, Scenario> = {
          send = error.code;
       }
       return { call, send };
+   },
+
+   // A child that the bindings never saw is rejected, instead of leaving the call waiting for a
+   // child that may be gone (T86). attachUtility, called right after the fork, makes it known.
+   notAttached: async (ctx) => {
+      const child = await ctx.fork(
+         () => {
+            ipc.double.handle(async (n: number) => n * 2);
+         },
+         { bindings: false },
+      );
+      const codeOf = (error: any) => error.code;
+      const call = await Promise.race([
+         ctx.ipc.double.invoke(child, 2).then(() => "answered", codeOf),
+         ctx.sleep(1500).then(() => "still pending"),
+      ]);
+      let send = "no error";
+      try {
+         ctx.ipc.start.send(child, 1);
+      } catch (error: any) {
+         send = error.code;
+      }
+      let handle = "no error";
+      try {
+         ctx.ipc.getSetting.handle(child, async () => "x");
+      } catch (error: any) {
+         handle = error.code;
+      }
+      ctx.main.attachUtility(child);
+      const attached = await ctx.ipc.double.invoke(child, 4);
+      return { call, send, handle, attached };
+   },
+
+   // forkUtility forks with the arguments of utilityProcess.fork, and returns the attached child.
+   forkedByForkUtility: async (ctx) => {
+      const child = await ctx.fork(() => {
+         ipc.double.handle(async (n: number) => n * process.pid);
+      });
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      const before = (await ctx.ipc.double.invoke(child, 1)) === child.pid;
+      child.kill();
+      await exited;
+      const after = await ctx.ipc.double.invoke(child, 1).then(
+         () => "answered",
+         (error: any) => error.code,
+      );
+      return { before, after, isUtilityProcess: typeof child.postMessage === "function" };
    },
 
    timeouts: async (ctx) => {
@@ -280,12 +328,27 @@ describeElectron("utility channels in Electron", "electron-utility", scenarios, 
       expect(failed).toStrictEqual([]);
    });
 
-   // T86: the bindings listen for the 'exit' of a child only from its first use, so a child that
-   // exited before is never marked as closed, and Electron drops what is posted to it.
-   it.fails("rejects a call and a send to a child that exited before its first use", () => {
+   it("rejects a call and a send to a child that exited before its first use", () => {
       expect(group.value("exitedBeforeFirstUse")).toStrictEqual({
          call: "IPC_UTILITY_EXITED",
          send: "IPC_UTILITY_EXITED",
+      });
+   });
+
+   it("rejects a child that was never attached with IPC_UTILITY_NOT_ATTACHED, and serves it once attached", () => {
+      expect(group.value("notAttached")).toStrictEqual({
+         call: "IPC_UTILITY_NOT_ATTACHED",
+         send: "IPC_UTILITY_NOT_ATTACHED",
+         handle: "IPC_UTILITY_NOT_ATTACHED",
+         attached: 8,
+      });
+   });
+
+   it("forks a child with forkUtility, which sees its exit", () => {
+      expect(group.value("forkedByForkUtility")).toStrictEqual({
+         before: true,
+         after: "IPC_UTILITY_EXITED",
+         isUtilityProcess: true,
       });
    });
 

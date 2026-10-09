@@ -446,6 +446,15 @@ describe("serializer, the generated files", () => {
       expect(output).not.toContain("IpcSerializationError");
    });
 
+   it("keeps the peers of the children, which brokered channels need for the exit of a child, free of the serializer", async () => {
+      const output = await main([brokeredCall, brokeredStream]);
+
+      expect(output).toContain("export function forkUtility(");
+      expect(output).toContain("call.resolve(outcome.value);");
+      expect(output).not.toContain("decodeValue");
+      expect(output).not.toContain("readSentArguments");
+   });
+
    it("serializes the channels with a utility process in the utility file, with the import of the config", async () => {
       const output = await utilityFile([utility, utilityNotify, callMain]);
 

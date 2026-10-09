@@ -98,6 +98,7 @@ export function createFakeElectron() {
          removeHandler: vi.fn(),
       },
       MessageChannelMain: class {},
+      utilityProcess: { fork: vi.fn() },
    };
 }
 

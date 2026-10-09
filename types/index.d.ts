@@ -485,7 +485,9 @@ export function mainPort<S extends ChannelSignature = never>(
  *
  * The promise is rejected with an `IpcUtilityError` that carries the `name`, `message`, `code`
  * and `data` of what the handler threw. The library itself uses the codes `IPC_UTILITY_EXITED`
- * (the child exited, also while the call was pending), `IPC_UTILITY_NO_HANDLER`,
+ * (the child exited, also while the call was pending, and any later call), `IPC_UTILITY_NOT_ATTACHED`
+ * (the child was neither forked by the generated `forkUtility` nor passed to `attachUtility`),
+ * `IPC_UTILITY_NO_HANDLER`,
  * `IPC_UTILITY_UNSENDABLE`, `IPC_UTILITY_INVALID_REPLY` and `IPC_UTILITY_TIMEOUT` (see `timeoutMs`
  * of `UtilityCallConfig`).
  *

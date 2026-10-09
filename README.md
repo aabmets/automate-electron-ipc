@@ -1040,11 +1040,11 @@ written only when the schema has such a channel. Import it in the entry file of 
 
 ```typescript
 // main process
-import { utilityProcess } from "electron";
-import { attachUtility, ipc } from "./autoipc/main";
+import { forkUtility, ipc } from "./autoipc/main";
 
-const child = utilityProcess.fork(path.join(__dirname, "indexer.js"));
-attachUtility(child); // optional, see below
+// forkUtility takes the arguments of utilityProcess.fork. Do not fork the child with
+// utilityProcess.fork, unless you call attachUtility(child) right after, see below.
+const child = forkUtility(path.join(__dirname, "indexer.js"));
 ipc.getSetting.handle(child, async (key) => settings.get(key));
 ipc.indexed.on(child, (done, total) => console.log(`${done}/${total}`));
 ipc.setLogLevel.send(child, "debug");
@@ -1074,6 +1074,7 @@ real `Error`, since these ends are Node processes: `contextBridge` is not involv
 | Code                       | Meaning                                                                       |
 |----------------------------|-------------------------------------------------------------------------------|
 | `IPC_UTILITY_EXITED`       | the utility process exited, also while the call was pending, and any later call or send |
+| `IPC_UTILITY_NOT_ATTACHED` | the main process was given a child that `forkUtility` or `attachUtility` never saw (main only) |
 | `IPC_UTILITY_NO_HANDLER`   | the other side has no handler for the channel                                 |
 | `IPC_UTILITY_UNSENDABLE`   | the arguments or the result cannot be cloned (a function, for example)       |
 | `IPC_UTILITY_INVALID_REPLY`| the reply had an unknown shape                                                |
@@ -1084,9 +1085,19 @@ A few things to know:
    rejects is reported to `console.error`, and the others still run.
  - The code of the child sets up its listener on `process.parentPort` when a channel is first used, and
    Electron queues the messages until then. A call for a channel without a handler is answered with
-   `IPC_UTILITY_NO_HANDLER`, so register the handlers when the process starts. The main process
-   starts listening to a child when a channel first uses it. A child which calls the main process
-   first would not be answered until then, so `attachUtility(child)` starts it right after `fork`.
+   `IPC_UTILITY_NO_HANDLER`, so register the handlers when the process starts.
+ - **Fork the child with `forkUtility(...)`**, which takes the arguments of `utilityProcess.fork`, calls
+   it and starts listening to the child at once. The main process cannot ask a child whether it has
+   exited (`pid` is `undefined` before the spawn and after the exit, and Electron drops what is posted to a
+   child that is gone without an error), so it has to see the `'exit'` event, and only a listener that was
+   set up before the child could exit does. This is also what answers a child that calls the main process
+   first. For a child that is forked elsewhere, call `attachUtility(child)` right after
+   `utilityProcess.fork`, in the same tick; calling it twice does nothing. It cannot tell that a child exited
+   before it was called.
+ - A child that neither was forked by `forkUtility` nor attached is rejected: `invoke` rejects, and
+   `send`, `handle`, `on`, `once` and `connect` throw an `IpcUtilityError` with `IPC_UTILITY_NOT_ATTACHED`,
+   instead of a call that waits for a child that may be gone. Once a child has exited, `invoke` rejects with
+   `IPC_UTILITY_EXITED`, `send` throws it, and so does `connect`.
  - The errors of `invoke` use the envelope also with `rawErrors`, since there is no Electron behavior
    to leave them to. There are no `allowedOrigins`, `validate` or `timeoutMs` options yet: both
    ends are your own code. A call whose handler never answers waits until the process exits.
@@ -1103,7 +1114,7 @@ traffic afterwards.
 
 ```typescript
 // main process
-const child = utilityProcess.fork(path.join(__dirname, "indexer.js"));
+const child = forkUtility(path.join(__dirname, "indexer.js")); // or attachUtility(child) right after fork
 const win = new BrowserWindow({ webPreferences: { preload } });
 const link = ipc.queryRows.connect(child, win); // a window, a view or contents
 ipc.scanRows.connect(child, win);
@@ -1152,6 +1163,11 @@ A few things to know:
    fresh port. A call made before the port is there waits for it, in order. The connection ends when
    `close()` is called, when the child exits and when the contents are destroyed. After that, calls
    are rejected with `IPC_UTILITY_EXITED` until the main process connects again, such as to a new child.
+ - `connect(child, target)` needs a child that `forkUtility` or `attachUtility` knows, like the other
+   channels. It throws `IPC_UTILITY_NOT_ATTACHED` for one that they never saw, and `IPC_UTILITY_EXITED` for
+   one that exited, since a page connected to either would wait for a port which never comes. The earlier
+   connection of the page stays as it was. A schema with only such channels gets `forkUtility`,
+   `attachUtility` and `IpcUtilityError` in `main.ts` as well.
  - All the calls and streams of a channel share its port and are told apart by an ID. Cancelling a
    stream (`cancel()`, `return()` or a `break`) and closing the connection stop the generator in the
    child. The generator is slowed down for a page that reads slowly, with `highWaterMark` as for

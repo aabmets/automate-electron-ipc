@@ -227,7 +227,10 @@ export class MainBindingsWriter extends BaseWriter {
                  "WeakMap",
                  "utilityPeers",
                  "getUtilityPeer",
+                 "callUtilityChild",
                  "attachUtility",
+                 "forkUtility",
+                 "utilityProcess",
               ]
             : []),
          // The channels to a service worker.
@@ -382,10 +385,16 @@ export class MainBindingsWriter extends BaseWriter {
       if (this.isUtilitySpec(spec)) {
          uses.utility = true;
          uses.envelope = true;
+         values.add("utilityProcess");
          types.add("UtilityProcess");
          return [this.buildUtilityChannel(spec)];
       } else if (this.isBrokeredSpec(spec)) {
+         // The page is connected to a child which the peers know, so that its exit is seen (T86).
+         uses.utility = true;
+         uses.envelope = true;
          uses.brokers = true;
+         values.add("utilityProcess");
+         types.add("UtilityProcess");
          return [this.buildBrokeredChannel(spec, values, types)];
       }
       // The specs left are the ones between the main process and a service worker.
@@ -2278,32 +2287,61 @@ export class MainBindingsWriter extends BaseWriter {
    /**
     * The helpers of the channels between the main process and utility processes: the protocol
     * that `utility.ts` shares (see `buildUtilityPeer`), and one peer per `UtilityProcess`. The peer
-    * is made when a channel first uses the child, and listens for its messages. It is closed when
-    * the child exits, which rejects the pending calls with `IPC_UTILITY_EXITED`. A child which
-    * calls the main process before the main process has used the child once would not be answered,
-    * so `attachUtility(child)` makes the peer right after `utilityProcess.fork`.
+    * listens for the messages of the child, and is closed when the child exits, which rejects the
+    * pending calls with `IPC_UTILITY_EXITED`.
+    *
+    * The exit of a child cannot be read afterwards (`pid` is `undefined` before the spawn and after
+    * the exit, and Electron drops what is posted to a child that is gone), so a child has to be
+    * known from its fork: `forkUtility(...)` forks and attaches it at once, and `attachUtility(child)`
+    * does the same for a child that was forked elsewhere, right after `utilityProcess.fork`. A
+    * channel that is given a child which was never attached fails with
+    * `IPC_UTILITY_NOT_ATTACHED`, since it would otherwise wait for a child that is gone (T86).
+    * A child which calls the main process also needs its peer from the start.
     */
    private buildUtilityHelpers(): string {
       const [i1] = this.indents;
       return [
-         buildUtilityPeer(this.indents, this.usesSerializer()),
+         // The brokered channels are not serialized in main, which keeps the serializer helpers out.
+         buildUtilityPeer(this.indents, this.hasSerializedChannels()),
          "const utilityPeers = new WeakMap<UtilityProcess, UtilityPeer>();",
          "",
-         "function getUtilityPeer(child: UtilityProcess): UtilityPeer {",
+         "function getUtilityPeer(child: UtilityProcess, channel: string): UtilityPeer {",
          `${i1}const known = utilityPeers.get(child);`,
-         `${i1}if (known) {`,
-         `${i1}${i1}return known;`,
+         `${i1}if (!known) {`,
+         `${i1}${i1}throw new IpcUtilityError(channel, \`The utility process of the channel '\${channel}' was not attached. Fork it with forkUtility(), or call attachUtility(child) right after utilityProcess.fork()\`, 'IPC_UTILITY_NOT_ATTACHED');`,
+         `${i1}}`,
+         `${i1}return known;`,
+         "}",
+         "",
+         "/** Rejects, as a promise does, when the child is not attached. */",
+         "function callUtilityChild(child: UtilityProcess, channel: string, args: unknown[], timeoutMs?: number): Promise<unknown> {",
+         `${i1}try {`,
+         `${i1}${i1}return callUtilityPeer(getUtilityPeer(child, channel), channel, args, timeoutMs);`,
+         `${i1}} catch (error) {`,
+         `${i1}${i1}return Promise.reject(error);`,
+         `${i1}}`,
+         "}",
+         "",
+         "/**",
+         " * Starts listening to a child that was forked elsewhere, so that its exit is seen and its calls are",
+         " * answered. Call it right after `utilityProcess.fork`, before the child can exit. It does nothing for a",
+         " * child that is attached already.",
+         " */",
+         "export function attachUtility(child: UtilityProcess): void {",
+         `${i1}if (utilityPeers.has(child)) {`,
+         `${i1}${i1}return;`,
          `${i1}}`,
          `${i1}const peer = createUtilityPeer((message) => child.postMessage(message));`,
          `${i1}utilityPeers.set(child, peer);`,
          `${i1}child.on('message', (message: unknown) => receiveUtilityMessage(peer, message));`,
          `${i1}child.once('exit', () => closeUtilityPeer(peer, 'The utility process exited'));`,
-         `${i1}return peer;`,
          "}",
          "",
-         "/** Starts listening to the child, so that its calls are answered before a channel has used it. */",
-         "export function attachUtility(child: UtilityProcess): void {",
-         `${i1}getUtilityPeer(child);`,
+         "/** `utilityProcess.fork`, which attaches the child at once, so that its exit is seen from the start. */",
+         "export function forkUtility(...args: Parameters<typeof utilityProcess.fork>): UtilityProcess {",
+         `${i1}const child = utilityProcess.fork(...args);`,
+         `${i1}attachUtility(child);`,
+         `${i1}return child;`,
          "}",
          "",
       ].join("\n");
@@ -2320,7 +2358,7 @@ export class MainBindingsWriter extends BaseWriter {
       const childName = this.uniqueName("child", taken);
       const callbackName = this.uniqueName("callback", taken);
       const wire = this.wireName(spec.name);
-      const peer = `getUtilityPeer(${childName})`;
+      const peer = `getUtilityPeer(${childName}, ${wire})`;
       const childParam = `${childName}: UtilityProcess`;
       const typeParams = this.getTypeParams(spec.signature);
       const params = (...generated: string[]) =>
@@ -2345,7 +2383,7 @@ export class MainBindingsWriter extends BaseWriter {
             name: spec.name,
             members: [
                `\n${i1}invoke: ${typeParams}(${params(childParam)}): ${returned} =>`,
-               `\n${i2}callUtilityPeer(${peer}, ${wire}, ${rest}${this.getTimeoutArgument(spec)}) as ${returned},`,
+               `\n${i2}callUtilityChild(${childName}, ${wire}, ${rest}${this.getTimeoutArgument(spec)}) as ${returned},`,
             ],
          };
       }
@@ -2397,6 +2435,10 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}// Contents that are destroyed already would never emit 'destroyed', which leaves the entry behind.`,
          `${i1}if (contents.isDestroyed()) {`,
          `${i2}throw new TypeError('Object has been destroyed');`,
+         `${i1}}`,
+         `${i1}// A child that exited would leave the page waiting for a port which never comes.`,
+         `${i1}if (getUtilityPeer(child, channel).closed) {`,
+         `${i2}throw new IpcUtilityError(channel, \`The utility process of the channel '\${channel}' is gone\`, 'IPC_UTILITY_EXITED');`,
          `${i1}}`,
          `${i1}const linkKey = \`\${channel}:\${contents.id}\`;`,
          `${i1}const key = \`\${++lastUtilityLinkId}:utility\`;`,

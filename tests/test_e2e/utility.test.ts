@@ -23,8 +23,11 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let project: E2EProject | undefined;
+/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
+let attachChild: ((child: unknown) => void) | undefined;
 
 afterEach(async () => {
+   attachChild = undefined;
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
    await project?.cleanup();
@@ -37,9 +40,15 @@ const failed = (error: Record<string, unknown>) => ({ ok: false, error });
 /** Lets the promises that are settled by a message run. */
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. */
-function createChild() {
+/**
+ * A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. It is
+ * attached to the bindings like a child from `forkUtility`, unless `attached` is false.
+ */
+function createChild({ attached = true } = {}) {
    const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
+   if (attached) {
+      attachChild?.(child);
+   }
    /** The messages that the main process posted to the child, with the given tag. */
    const posted = (tag: string, channel?: string) =>
       child.postMessage.mock.calls
@@ -66,6 +75,7 @@ function createParentPort() {
 async function load(fixture = "utility-channels") {
    project = await runFixture(fixture);
    const main = loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
+   attachChild = main.attachUtility;
    const utilitySource = project.generated["utility.ts"];
    const utility = utilitySource ? loadGenerated(utilitySource, {}) : undefined;
    return { main, utility };
@@ -111,6 +121,101 @@ describe("utility channels, files", () => {
       expect(project.generated["preload.ts"]).not.toContain("ipcRenderer");
       expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual([]);
       expect(project.generated["window.d.ts"]).not.toContain("Row");
+   });
+});
+
+describe("utility channels, children which the bindings do not know", () => {
+   const notAttached = {
+      name: "IpcUtilityError",
+      code: "IPC_UTILITY_NOT_ATTACHED",
+      message: expect.stringContaining("forkUtility()"),
+   };
+
+   it("rejects invoke, as a promise does, and posts nothing", async () => {
+      const { main } = await load();
+      const { child } = createChild({ attached: false });
+
+      const call = main.ipc.indexFile.invoke(child, "a");
+
+      await expect(call).rejects.toMatchObject({ ...notAttached, channel: wire("indexFile") });
+      await expect(call).rejects.toThrow("attachUtility(child) right after utilityProcess.fork()");
+      expect(child.postMessage).not.toHaveBeenCalled();
+      expect(child.listenerCount("message")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(0);
+   });
+
+   it("fails send, handle, on and once, and makes no peer for the child", async () => {
+      const { main } = await load();
+      const { child } = createChild({ attached: false });
+
+      expect(() => main.ipc.pause.send(child)).toThrow(expect.objectContaining(notAttached));
+      expect(() => main.ipc.getSetting.handle(child, async () => "x")).toThrow(
+         expect.objectContaining({ ...notAttached, channel: wire("getSetting") }),
+      );
+      expect(() => main.ipc.progress.on(child, () => undefined)).toThrow(
+         expect.objectContaining(notAttached),
+      );
+      expect(() => main.ipc.progress.once(child, () => undefined)).toThrow(
+         expect.objectContaining(notAttached),
+      );
+      expect(child.listenerCount("message")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(0);
+   });
+
+   it("serves a child once attachUtility is called for it", async () => {
+      const { main } = await load();
+      const { child, posted } = createChild({ attached: false });
+      expect(() => main.ipc.pause.send(child)).toThrow();
+
+      main.attachUtility(child);
+      main.ipc.pause.send(child);
+
+      expect(posted("send", "pause")).toHaveLength(1);
+   });
+
+   it("forks with utilityProcess.fork and the same arguments, and attaches the child at once", async () => {
+      project = await runFixture("utility-channels");
+      const electron = createFakeElectron();
+      const { child, posted } = createChild({ attached: false });
+      electron.utilityProcess.fork.mockReturnValue(child);
+      const main = loadGenerated(project.generated["main.ts"], { electron });
+      const options = { serviceName: "indexer" };
+
+      const forked = main.forkUtility("/app/child.js", ["--flag"], options);
+
+      expect(forked).toBe(child);
+      expect(electron.utilityProcess.fork).toHaveBeenCalledTimes(1);
+      expect(electron.utilityProcess.fork).toHaveBeenCalledWith(
+         "/app/child.js",
+         ["--flag"],
+         options,
+      );
+      expect(child.listenerCount("message")).toBe(1);
+      expect(child.listenerCount("exit")).toBe(1);
+
+      // It exits before any channel used it: the later calls are rejected, and nothing is posted.
+      child.emit("exit", 1);
+      await expect(main.ipc.indexFile.invoke(forked, "a")).rejects.toMatchObject({
+         code: "IPC_UTILITY_EXITED",
+      });
+      expect(() => main.ipc.pause.send(forked)).toThrow(
+         expect.objectContaining({ code: "IPC_UTILITY_EXITED" }),
+      );
+      expect(posted("call")).toHaveLength(0);
+   });
+
+   it("answers a child which calls the main process from its start, when it was forked by forkUtility", async () => {
+      project = await runFixture("utility-channels");
+      const electron = createFakeElectron();
+      const { child, posted, emitFromChild } = createChild({ attached: false });
+      electron.utilityProcess.fork.mockReturnValue(child);
+      const main = loadGenerated(project.generated["main.ts"], { electron });
+
+      main.forkUtility("/app/child.js");
+      emitFromChild({ __ipc: "call", channel: wire("getSetting"), id: 7, args: ["k"] });
+      await flush();
+
+      expect(posted("reply")[0]).toMatchObject({ id: 7, envelope: { ok: false } });
    });
 });
 
@@ -314,6 +419,22 @@ describe("utility channels, main process, calling the child", () => {
       expect(child.postMessage).toHaveBeenCalledTimes(2);
    });
 
+   it("rejects a call to a child that exited right after it was attached, and fails the sends", async () => {
+      const { main } = await load();
+      const { child } = createChild();
+      child.emit("exit", 0);
+
+      await expect(main.ipc.indexFile.invoke(child, "a")).rejects.toMatchObject({
+         name: "IpcUtilityError",
+         code: "IPC_UTILITY_EXITED",
+         channel: wire("indexFile"),
+      });
+      expect(() => main.ipc.pause.send(child)).toThrow(
+         expect.objectContaining({ code: "IPC_UTILITY_EXITED" }),
+      );
+      expect(child.postMessage).not.toHaveBeenCalled();
+   });
+
    it("does not answer a call from the child after it exited, and a second exit changes nothing", async () => {
       const { main } = await load();
       const { child, emitFromChild } = createChild();
@@ -456,7 +577,7 @@ describe("utility channels, main process, handling the calls of the child", () =
 
    it("answers a child which calls before any channel has used it, once attached", async () => {
       const { main } = await load();
-      const { child, posted, emitFromChild } = createChild();
+      const { child, posted, emitFromChild } = createChild({ attached: false });
 
       main.attachUtility(child);
       main.attachUtility(child);

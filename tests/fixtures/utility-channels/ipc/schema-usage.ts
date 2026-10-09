@@ -1,7 +1,7 @@
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when the utility channels expose the wrong methods.
 import type { UtilityProcess } from "electron";
-import { attachUtility, IpcUtilityError, ipc as mainIpc } from "./main";
+import { attachUtility, forkUtility, IpcUtilityError, ipc as mainIpc } from "./main";
 import type { Job, Summary } from "./schema";
 import { IpcUtilityError as ChildUtilityError, ipc as utilityIpc } from "./utility";
 
@@ -10,6 +10,12 @@ declare const job: Job;
 
 // Main: calls to the child take the child first, and return a promise of the awaited result.
 attachUtility(child);
+// forkUtility takes the arguments of utilityProcess.fork, and returns the attached child.
+export const forked: UtilityProcess = forkUtility("child.js", ["--flag"], {
+   serviceName: "indexer",
+});
+// @ts-expect-error the path of the module is required
+forkUtility();
 export const indexed: Promise<number> = mainIpc.indexFile.invoke(child, "/tmp");
 export const summary: Promise<Summary> = mainIpc.runJob.invoke(child, job, "a", "b");
 export const resetDone: Promise<void> = mainIpc.reset.invoke(child);

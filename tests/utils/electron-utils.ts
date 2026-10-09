@@ -51,9 +51,11 @@ export interface ScenarioContext {
     * Forks a utility process which runs `entry`, a function that is turned into text. It can use
     * `ipc` and `IpcUtilityError` of the generated `utility.ts`, and `process`, and nothing from the
     * scope of the test file. Resolves with the `UtilityProcess` once it has spawned, and the child
-    * is killed when the scenario ends.
+    * is killed when the scenario ends. `forkUtility` of the generated `main.ts` forks it, so the
+    * bindings know it from the start; with `bindings: false` `utilityProcess.fork` does, and the
+    * bindings do not know the child until the scenario attaches it.
     */
-   fork: (entry: () => unknown) => Promise<any>;
+   fork: (entry: () => unknown, options?: { bindings?: boolean }) => Promise<any>;
    /** Serves `body` at `url`, such as `app://main/index.html`, as HTML unless `type` says otherwise. */
    serve: (url: string, body: string, type?: string) => void;
    /**

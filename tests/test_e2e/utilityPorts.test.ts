@@ -34,6 +34,7 @@ let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];
 
 afterEach(async () => {
+   attachChild = undefined;
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
@@ -70,9 +71,19 @@ function destroy(contents: FakeContents) {
    contents.emit("destroyed");
 }
 
-/** A `UtilityProcess` stand-in, which the main process pairs the page with. */
-function createChild() {
-   return Object.assign(new EventEmitter(), { postMessage: vi.fn() });
+/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
+let attachChild: ((child: unknown) => void) | undefined;
+
+/**
+ * A `UtilityProcess` stand-in, which the main process pairs the page with. It is attached to the
+ * bindings like a child from `forkUtility`, unless `attached` is false.
+ */
+function createChild({ attached = true } = {}) {
+   const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
+   if (attached) {
+      attachChild?.(child);
+   }
+   return child;
 }
 
 /** The ports a `MessageChannelMain` made, in order. */
@@ -93,7 +104,9 @@ async function loadMain(channelClass: unknown = FakeChannelMain) {
    project = await runFixture("utility-ports");
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: channelClass };
-   return loadGenerated(project.generated["main.ts"], { electron }).ipc;
+   const main = loadGenerated(project.generated["main.ts"], { electron });
+   attachChild = main.attachUtility;
+   return main.ipc;
 }
 
 describe("utility ports, files", () => {
@@ -107,7 +120,9 @@ describe("utility ports, files", () => {
       expect(await project.typecheck()).toBe("");
       expect(project.generated["utility.ts"]).toContain("setBrokerCall(");
       expect(project.generated["main.ts"]).toContain("function connectUtilityPort(");
-      expect(project.generated["main.ts"]).not.toContain("function getUtilityPeer(");
+      // The peers of the children come with it, so that the exit of a child is seen (T86).
+      expect(project.generated["main.ts"]).toContain("export function attachUtility(");
+      expect(project.generated["main.ts"]).toContain("export function forkUtility(");
       expect(project.generated["main.ts"]).not.toContain("ipcMain");
       expect(project.generated["main.ts"]).not.toContain("import type { Row");
    });
@@ -247,7 +262,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
       expect(contents.send).toHaveBeenCalledTimes(1);
       expect(contents.send).toHaveBeenCalledWith(closeWire("queryRows"), key);
-      expect(child.listenerCount("exit")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(1); // only that of attachUtility is left
       expect(contents.listenerCount("destroyed")).toBe(0);
       expect(contents.listenerCount("did-finish-load")).toBe(0);
       startLoading(contents);
@@ -277,7 +292,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       destroy(contents);
 
       expect(contents.send).not.toHaveBeenCalled();
-      expect(child.listenerCount("exit")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(1); // only that of attachUtility is left
    });
 
    it("replaces the connection of the same channel and page, which cannot fight for the port on a reload", async () => {
@@ -293,7 +308,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       const newKey = second.postMessage.mock.calls[0][0].key;
       expect(newKey).not.toBe(oldKey);
       expect(contents.send).toHaveBeenCalledWith(closeWire("queryRows"), oldKey);
-      expect(first.listenerCount("exit")).toBe(0);
+      expect(first.listenerCount("exit")).toBe(1); // only that of attachUtility is left
       startLoading(contents);
       finishLoading(contents);
       expect(first.postMessage).toHaveBeenCalledTimes(1);
@@ -329,8 +344,53 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(() => ipc.queryRows.connect(child, contents)).toThrow("Object has been destroyed");
 
       expect(contents.listenerCount("destroyed")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(1); // only that of attachUtility is left
+      expect(child.postMessage).not.toHaveBeenCalled();
+   });
+
+   it("throws IPC_UTILITY_NOT_ATTACHED for a child that was never attached, and registers nothing (T86)", async () => {
+      const ipc = await loadMain();
+      const child = createChild({ attached: false });
+      const contents = createContents();
+
+      expect(() => ipc.queryRows.connect(child, contents)).toThrow(
+         expect.objectContaining({
+            name: "IpcUtilityError",
+            code: "IPC_UTILITY_NOT_ATTACHED",
+            channel: "autoipc:queryRows",
+            message: expect.stringContaining("forkUtility()"),
+         }),
+      );
+
+      expect(contents.listenerCount("destroyed")).toBe(0);
+      expect(contents.listenerCount("did-finish-load")).toBe(0);
       expect(child.listenerCount("exit")).toBe(0);
       expect(child.postMessage).not.toHaveBeenCalled();
+      expect(channelsMade).toHaveLength(0);
+   });
+
+   it("throws IPC_UTILITY_EXITED for a child that exited, registers nothing and keeps the earlier connection of the page (T86)", async () => {
+      const ipc = await loadMain();
+      const other = createChild();
+      const child = createChild();
+      const contents = createContents();
+      ipc.queryRows.connect(other, contents);
+      child.emit("exit", 1);
+      contents.send.mockClear();
+
+      expect(() => ipc.queryRows.connect(child, contents)).toThrow(
+         expect.objectContaining({
+            name: "IpcUtilityError",
+            code: "IPC_UTILITY_EXITED",
+            channel: "autoipc:queryRows",
+         }),
+      );
+
+      // The page keeps the connection it had: it was not closed for a connection that failed.
+      expect(contents.send).not.toHaveBeenCalled();
+      expect(child.postMessage).not.toHaveBeenCalled();
+      expect(channelsMade).toHaveLength(1);
+      expect(child.listenerCount("exit")).toBe(0);
    });
 
    it("undoes the connection and closes both ports when the first pairing fails", async () => {
@@ -346,7 +406,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(channelsMade[0].port1.close).toHaveBeenCalledTimes(1);
       expect(channelsMade[0].port2.close).toHaveBeenCalledTimes(1);
       expect(contents.listenerCount("destroyed")).toBe(0);
-      expect(child.listenerCount("exit")).toBe(0);
+      expect(child.listenerCount("exit")).toBe(1); // only that of attachUtility is left
       expect(contents.listenerCount("did-finish-load")).toBe(0);
    });
 
@@ -1421,7 +1481,9 @@ class RealChannelMain {
 async function loadAll() {
    project = await runFixture("utility-ports");
    const electron = { ...createFakeElectron(), MessageChannelMain: RealChannelMain };
-   const main = loadGenerated(project.generated["main.ts"], { electron }).ipc;
+   const mainModule = loadGenerated(project.generated["main.ts"], { electron });
+   attachChild = mainModule.attachUtility;
+   const main = mainModule.ipc;
    const parent = createParentPort();
    const utility = loadGenerated(project.generated["utility.ts"] ?? "", {}).ipc;
    const fake = createFakePreloadElectron();

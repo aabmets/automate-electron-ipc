@@ -26,6 +26,7 @@ const ok = (value: unknown) => ({ ok: true, value });
 let project: E2EProject | undefined;
 
 afterEach(async () => {
+   attachChild = undefined;
    vi.useRealTimers();
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
@@ -51,9 +52,13 @@ function track(promise: Promise<unknown>) {
    return state;
 }
 
+/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
+let attachChild: ((child: unknown) => void) | undefined;
+
 /** A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. */
 function createChild() {
    const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
+   attachChild?.(child);
    const posted = (channel: string) =>
       child.postMessage.mock.calls
          .map(([message]) => message as Record<string, any>)
@@ -88,9 +93,7 @@ describe("fixture utility-timeouts", () => {
       const utility = project.generated["utility.ts"];
       const preload = project.generated["preload.ts"];
 
-      expect(main).toMatch(
-         /callUtilityPeer\(getUtilityPeer\(child\), 'autoipc:slowIndex'.*, 1000\)/,
-      );
+      expect(main).toMatch(/callUtilityChild\(child, 'autoipc:slowIndex'.*, 1000\)/);
       expect(main).toMatch(/'autoipc:defaultedIndex', \[path\], 5000\)/);
       expect(main).toMatch(/'autoipc:legacyIndex', \[\], 300\)/);
       expect(main).not.toMatch(/'autoipc:patientIndex'.*, \d+\)/);
@@ -120,7 +123,9 @@ describe("fixture utility-timeouts", () => {
 describe("timeouts of callUtility, in the main process", () => {
    async function load() {
       project = await runFixture("utility-timeouts");
-      return loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
+      const main = loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
+      attachChild = main.attachUtility;
+      return main;
    }
 
    it("rejects with IPC_UTILITY_TIMEOUT when the child does not answer in time", async () => {

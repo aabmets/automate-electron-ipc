@@ -181,16 +181,21 @@ function createContext() {
       /**
        * Forks a utility process which runs `entry`: a function, turned into text, that can use
        * `ipc` and `IpcUtilityError` of the generated `utility.ts`, and `process`. It resolves with
-       * the child once it has spawned. The child is killed when the scenario ends.
+       * the child once it has spawned. The child is killed when the scenario ends. It is forked by
+       * `forkUtility` of the generated `main.ts`, so that the bindings know it from the start, unless
+       * `options.bindings` is false: then `utilityProcess.fork` forks it, and the bindings do not know it.
        */
-      async fork(entry) {
+      async fork(entry, options = {}) {
          const file = path.join(__dirname, `child-${++forkCount}.cjs`);
          const utilityPath = path.join(ipcDir, "utility.js");
          fs.writeFileSync(
             file,
             `const { ipc, IpcUtilityError } = require(${JSON.stringify(utilityPath)});\n(${entry.toString()})();\n`,
          );
-         const child = utilityProcess.fork(file, [], { stdio: "pipe" });
+         const child =
+            options.bindings === false
+               ? utilityProcess.fork(file, [], { stdio: "pipe" })
+               : ctx.main.forkUtility(file, [], { stdio: "pipe" });
          children.add(child);
          await new Promise((resolve, reject) => {
             child.once("spawn", resolve);

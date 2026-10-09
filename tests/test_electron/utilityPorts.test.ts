@@ -434,8 +434,9 @@ const scenarios: Record<string, Scenario> = {
       return { before, ...page };
    },
 
-   // The child exits before the main process connects a page to it (T86). The page races the
-   // call with a pause, so that the scenario returns what happened.
+   // The child exits before the main process connects a page to it (T86). It was forked by
+   // forkUtility, so the bindings saw the exit, and connect fails instead of leaving the page
+   // waiting for a port which never comes.
    connectExitedChild: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.whoami.handle(async () => 7);
@@ -444,16 +445,33 @@ const scenarios: Record<string, Scenario> = {
       child.kill();
       await exited;
       const win = await ctx.open();
-      ctx.ipc.whoami.connect(child, win);
-      return await ctx.evaluate(win, () =>
-         Promise.race([
-            ipc.whoami.invoke().then(
-               () => "answered",
-               (error: any) => error.code,
-            ),
-            new Promise((resolve) => setTimeout(() => resolve("still pending"), 1500)),
-         ]),
+      try {
+         ctx.ipc.whoami.connect(child, win);
+         return "connected";
+      } catch (error: any) {
+         return error.code;
+      }
+   },
+
+   // A child that the bindings never saw cannot be connected: they could not tell that it exited.
+   connectUnattachedChild: async (ctx) => {
+      const child = await ctx.fork(
+         () => {
+            ipc.whoami.handle(async () => 7);
+         },
+         { bindings: false },
       );
+      const win = await ctx.open();
+      let unattached = "connected";
+      try {
+         ctx.ipc.whoami.connect(child, win);
+      } catch (error: any) {
+         unattached = error.code;
+      }
+      ctx.main.attachUtility(child);
+      ctx.ipc.whoami.connect(child, win);
+      const attached = await ctx.evaluate(win, () => ipc.whoami.invoke());
+      return { unattached, attached };
    },
 
    twoPages: async (ctx) => {
@@ -516,9 +534,15 @@ describeElectron("utility ports in Electron", "electron-utility-ports", scenario
       });
    });
 
-   // T86: a child that exited before connect is never marked as closed, so the page waits forever.
-   it.fails("fails the calls of a page connected to a child that exited", () => {
+   it("fails connect for a child that exited", () => {
       expect(group.value("connectExitedChild")).toBe("IPC_UTILITY_EXITED");
+   });
+
+   it("fails connect for a child that was never attached, and connects it once attached", () => {
+      expect(group.value("connectUnattachedChild")).toStrictEqual({
+         unattached: "IPC_UTILITY_NOT_ATTACHED",
+         attached: 7,
+      });
    });
 
    it("calls the handlers of a real utility process from a sandboxed page, with no hop through main", () => {

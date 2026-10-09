@@ -73,6 +73,7 @@ async function loadBoth() {
       "./serializer": serializer,
    });
    const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
+   main.attachUtility(child);
    /** What each side posted, which crossed the wire. */
    const toChild: Record<string, any>[] = [];
    const toMain: Record<string, any>[] = [];

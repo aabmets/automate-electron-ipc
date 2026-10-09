@@ -1848,11 +1848,9 @@ describe("MainBindingsWriter, utility channels", () => {
          { timeoutMs: 2500 },
       );
 
-      expect(output).toContain(
-         "callUtilityPeer(getUtilityPeer(child), 'autoipc:indexFile', [path], 1000)",
-      );
+      expect(output).toContain("callUtilityChild(child, 'autoipc:indexFile', [path], 1000)");
       expect(output).toContain("'autoipc:plain', [], 2500)");
-      expect(output).toContain("callUtilityPeer(getUtilityPeer(child), 'autoipc:patient', [])");
+      expect(output).toContain("callUtilityChild(child, 'autoipc:patient', [])");
       expect(output).not.toMatch(/sendUtilityPeer\([^)]*\), \d+\)/);
    });
 
@@ -1903,6 +1901,54 @@ describe("MainBindingsWriter, utility channels", () => {
       expect(output).toContain("export function attachUtility(child: UtilityProcess): void {");
    });
 
+   it("writes forkUtility, which forks with electron and attaches the child at once", async () => {
+      const output = await render([callUtility]);
+
+      expect(output).toContain(
+         "export function forkUtility(...args: Parameters<typeof utilityProcess.fork>): UtilityProcess {",
+      );
+      expect(output).toMatch(
+         /const child = utilityProcess\.fork\(\.\.\.args\);\n\s+attachUtility\(child\);\n\s+return child;/,
+      );
+      expect(output).toContain('import { utilityProcess } from "electron";');
+      expect(output).toContain('import type { UtilityProcess } from "electron";');
+   });
+
+   it("rejects a child that was never attached with IPC_UTILITY_NOT_ATTACHED, and never makes a peer lazily", async () => {
+      const output = await render([callUtility]);
+
+      const start = output.indexOf("function getUtilityPeer(");
+      const getter = output.slice(start, output.indexOf("\n}\n", start));
+      expect(getter).toContain("if (!known) {");
+      expect(getter).toContain("'IPC_UTILITY_NOT_ATTACHED'");
+      expect(getter).toContain("forkUtility()");
+      expect(getter).toContain("attachUtility(child)");
+      expect(getter).not.toContain("utilityPeers.set");
+      expect(getter).not.toContain("createUtilityPeer");
+   });
+
+   it("makes invoke reject, and not throw, for a child that was never attached", async () => {
+      const output = await render([callUtility]);
+
+      const start = output.indexOf("function callUtilityChild(");
+      const helper = output.slice(start, output.indexOf("\n}\n", start));
+      expect(helper).toContain(
+         "callUtilityPeer(getUtilityPeer(child, channel), channel, args, timeoutMs)",
+      );
+      expect(helper).toContain("return Promise.reject(error);");
+   });
+
+   it("attaches a child once", async () => {
+      const output = await render([callUtility]);
+
+      const start = output.indexOf("export function attachUtility(");
+      const attach = output.slice(start, output.indexOf("\n}\n", start));
+      expect(attach).toContain("if (utilityPeers.has(child)) {");
+      expect(attach.indexOf("utilityPeers.has(child)")).toBeLessThan(
+         attach.indexOf("createUtilityPeer("),
+      );
+   });
+
    it("writes invoke for calls to the child, with the child first", async () => {
       const output = await render([
          {
@@ -1917,12 +1963,12 @@ describe("MainBindingsWriter, utility channels", () => {
          [
             "   indexFile: {",
             "      invoke: (child: UtilityProcess, path: string, ...tags: string[]): Promise<number> =>",
-            "         callUtilityPeer(getUtilityPeer(child), 'autoipc:indexFile', [path, ...tags]) as Promise<number>,",
+            "         callUtilityChild(child, 'autoipc:indexFile', [path, ...tags]) as Promise<number>,",
             "   },",
          ].join("\n"),
       );
       expect(output).toContain(
-         "invoke: (child: UtilityProcess): Promise<Awaited<number>> =>\n         callUtilityPeer(getUtilityPeer(child), 'autoipc:plain', []) as Promise<Awaited<number>>,",
+         "invoke: (child: UtilityProcess): Promise<Awaited<number>> =>\n         callUtilityChild(child, 'autoipc:plain', []) as Promise<Awaited<number>>,",
       );
    });
 
@@ -1933,7 +1979,7 @@ describe("MainBindingsWriter, utility channels", () => {
          [
             "   setLevel: {",
             "      send: (child: UtilityProcess, level: string): void =>",
-            "         sendUtilityPeer(getUtilityPeer(child), 'autoipc:setLevel', [level]),",
+            "         sendUtilityPeer(getUtilityPeer(child, 'autoipc:setLevel'), 'autoipc:setLevel', [level]),",
             "   },",
          ].join("\n"),
       );
@@ -1946,7 +1992,7 @@ describe("MainBindingsWriter, utility channels", () => {
          [
             "   getSetting: {",
             "      handle: (child: UtilityProcess, callback: (key: string) => string) =>",
-            "         setUtilityHandler(getUtilityPeer(child), 'autoipc:getSetting', callback),",
+            "         setUtilityHandler(getUtilityPeer(child, 'autoipc:getSetting'), 'autoipc:getSetting', callback),",
             "   },",
          ].join("\n"),
       );
@@ -1959,9 +2005,9 @@ describe("MainBindingsWriter, utility channels", () => {
          [
             "   progress: {",
             "      on: (child: UtilityProcess, callback: (done: number) => void) =>",
-            "         addUtilityListener(getUtilityPeer(child), 'autoipc:progress', callback, false),",
+            "         addUtilityListener(getUtilityPeer(child, 'autoipc:progress'), 'autoipc:progress', callback, false),",
             "      once: (child: UtilityProcess, callback: (done: number) => void) =>",
-            "         addUtilityListener(getUtilityPeer(child), 'autoipc:progress', callback, true),",
+            "         addUtilityListener(getUtilityPeer(child, 'autoipc:progress'), 'autoipc:progress', callback, true),",
             "   },",
          ].join("\n"),
       );
@@ -1974,7 +2020,7 @@ describe("MainBindingsWriter, utility channels", () => {
       ]);
 
       expect(output).toContain("invoke: (_child: UtilityProcess, child: string)");
-      expect(output).toContain("getUtilityPeer(_child), 'autoipc:indexFile', [child]");
+      expect(output).toContain("callUtilityChild(_child, 'autoipc:indexFile', [child]");
       expect(output).toContain(
          "handle: (_child: UtilityProcess, _callback: (callback: string, child: number)",
       );
@@ -1992,6 +2038,9 @@ describe("MainBindingsWriter, utility channels", () => {
          "IpcUtilityError",
          "UtilityPeer",
          "attachUtility",
+         "forkUtility",
+         "callUtilityChild",
+         "utilityProcess",
          "UtilityProcess",
          "WeakMap",
       ]) {
@@ -2046,20 +2095,14 @@ describe("MainBindingsWriter, renderer to utility channels", () => {
       expect(output).not.toContain("sql: string");
    });
 
-   it("imports only what the broker uses, and needs no ipcMain, envelope or peer", async () => {
+   it("imports only what the broker and the peers of the children use, and needs no ipcMain", async () => {
       const output = await render(invokeUtility, streamUtility);
 
-      expect(output).toContain('import { MessageChannelMain } from "electron";');
+      expect(output).toContain('import { utilityProcess, MessageChannelMain } from "electron";');
       expect(output).toContain(
-         'import type { BrowserWindow, WebContents, WebContentsView, UtilityProcess } from "electron";',
+         'import type { UtilityProcess, BrowserWindow, WebContents, WebContentsView } from "electron";',
       );
-      for (const name of [
-         "ipcMain",
-         "toIpcError",
-         "getUtilityPeer",
-         "IpcForbiddenError",
-         "import type { Row",
-      ]) {
+      for (const name of ["ipcMain", "IpcForbiddenError", "import type { Row"]) {
          expect(output).not.toContain(name);
       }
    });
@@ -2102,6 +2145,28 @@ describe("MainBindingsWriter, renderer to utility channels", () => {
          expect(output).not.toContain(name);
       }
       expect(output).toContain("attachUtility");
+   });
+
+   it("writes the peers for a schema with only renderer to utility channels", async () => {
+      const output = await render(invokeUtility);
+
+      expect(output).toContain("export function attachUtility(child: UtilityProcess): void {");
+      expect(output).toContain("export function forkUtility(");
+      expect(output).toContain("export class IpcUtilityError extends Error {");
+      expect(output).toContain('import { utilityProcess, MessageChannelMain } from "electron";');
+   });
+
+   it("makes connect fail for a child that was never attached, or that exited", async () => {
+      const output = await render(invokeUtility);
+
+      const start = output.indexOf("function connectUtilityPort(");
+      const connect = output.slice(start, output.indexOf("\n}\n", start));
+      expect(connect).toContain("if (getUtilityPeer(child, channel).closed) {");
+      expect(connect).toContain("'IPC_UTILITY_EXITED'");
+      // Before the earlier connection is closed and before anything is registered.
+      expect(connect.indexOf("getUtilityPeer(child, channel)")).toBeLessThan(
+         connect.indexOf("utilityLinks.get(linkKey)?.()"),
+      );
    });
 
    it("keeps the peer of the channels between the processes next to the broker", async () => {

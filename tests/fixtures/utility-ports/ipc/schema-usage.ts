@@ -2,7 +2,7 @@
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when the channels expose the wrong methods.
 import type { BrowserWindow, UtilityProcess, WebContents, WebContentsView } from "electron";
-import { ipc as mainIpc } from "./main";
+import { attachUtility, forkUtility, ipc as mainIpc } from "./main";
 import type { QueryError, Row } from "./schema";
 import { ipc as utilityIpc } from "./utility";
 
@@ -10,6 +10,10 @@ declare const child: UtilityProcess;
 declare const win: BrowserWindow;
 declare const contents: WebContents;
 declare const view: WebContentsView;
+
+// Main: a child is forked with forkUtility, or attached right after the fork (T86).
+export const forked: UtilityProcess = forkUtility("child.js", ["--flag"], { serviceName: "db" });
+attachUtility(child);
 
 // Main: the child and the target, a window, a view or contents. It returns the handle to close.
 export const link: { close: () => void } = mainIpc.queryRows.connect(child, win);

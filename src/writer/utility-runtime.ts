@@ -172,7 +172,8 @@ export function buildErrorEnvelope(indents: string[]): string {
  * - A call is rejected with an `IpcUtilityError`. It carries the `name`, `message`, `code` and
  *   `data` of what the handler threw, or one of the codes `IPC_UTILITY_EXITED`,
  *   `IPC_UTILITY_NO_HANDLER`, `IPC_UTILITY_UNSENDABLE`, `IPC_UTILITY_INVALID_REPLY` and
- *   `IPC_UTILITY_TIMEOUT`.
+ *   `IPC_UTILITY_TIMEOUT`. The main process adds `IPC_UTILITY_NOT_ATTACHED` for a child that
+ *   `forkUtility` or `attachUtility` never saw (see `buildUtilityHelpers` of the main bindings).
  * - A call with a `timeoutMs` above zero is rejected with `IPC_UTILITY_TIMEOUT` when no reply has
  *   arrived by then. The handler on the other side is not stopped, and its late reply is dropped.
  *
