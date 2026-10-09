@@ -11,6 +11,7 @@
 
 import type * as t from "@types";
 import { anySpec } from "../channel-kinds.js";
+import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { ChannelEntry, PreloadContext } from "./preload-bindings.js";
 
 /** The property of the exposed object for a channel with one method. */
@@ -157,7 +158,7 @@ function buildTimeoutComponents(indents: string[]): string {
       `${i2}const timer = setTimeout(() => {`,
       `${i3}const message = \`The channel '\${channel}' did not answer within \${timeoutMs} ms\`;`,
       `${i3}reject({ name: 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' });`,
-      `${i2}}, Math.min(timeoutMs, 2147483647));`,
+      `${i2}}, ${CLAMPED_TIMEOUT});`,
       `${i2}call.then(`,
       `${i3}(value) => {`,
       `${i3}${i1}clearTimeout(timer);`,

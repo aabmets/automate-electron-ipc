@@ -9,26 +9,16 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { CLAMPED_TIMEOUT, errorClassLines, replyReaderLines } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
 /** The helpers of the `ask` channels, which the questions to a service worker share. */
 
 /** The `IpcAskError` and `IpcAskOptions` of the `ask` channels, and of the questions to a service worker. */
 export function askErrorLines(indents: string[]): string[] {
-   const [i1, i2] = indents;
+   const [i1] = indents;
    return [
-      "export class IpcAskError extends Error {",
-      `${i1}readonly code: string | number | undefined;`,
-      `${i1}readonly channel: string;`,
-      `${i1}readonly data: unknown;`,
-      `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcAskError', data?: unknown) {`,
-      `${i2}super(message);`,
-      `${i2}this.name = name;`,
-      `${i2}this.channel = channel;`,
-      `${i2}this.code = code;`,
-      `${i2}this.data = data;`,
-      `${i1}}`,
-      "}",
+      ...errorClassLines(indents, "IpcAskError"),
       "",
       "export interface IpcAskOptions {",
       `${i1}/** Rejects with the code 'IPC_ASK_TIMEOUT' when the renderer or the worker has not answered by then. */`,
@@ -40,22 +30,15 @@ export function askErrorLines(indents: string[]): string[] {
 
 /** `readAskReply`, which reads the envelope of the answer to a question. */
 export function readAskReplyLines(indents: string[]): string[] {
-   const [i1, i2] = indents;
    return [
-      "function readAskReply(channel: string, envelope: unknown, who = 'renderer'): { value: unknown } | { error: IpcAskError } {",
-      `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
-      `${i1}if (source && source.ok === true) {`,
-      `${i2}return { value: source.value };`,
-      `${i1}}`,
-      `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
-      `${i1}if (!source || source.ok !== false || !error) {`,
-      `${i2}return { error: new IpcAskError(channel, \`The \${who} sent an unreadable reply\`, 'IPC_ASK_INVALID_REPLY') };`,
-      `${i1}}`,
-      `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
-      `${i1}const message = typeof error.message === 'string' ? error.message : \`The \${who} failed without a message\`;`,
-      `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
-      `${i1}return { error: new IpcAskError(channel, message, code, name, error.data) };`,
-      "}",
+      ...replyReaderLines(indents, {
+         fn: "readAskReply",
+         errorClass: "IpcAskError",
+         invalidCode: "IPC_ASK_INVALID_REPLY",
+         invalidMessage: `\`The \${who} sent an unreadable reply\``,
+         missingMessage: `\`The \${who} failed without a message\``,
+         extraParam: "who = 'renderer'",
+      }),
       "",
    ];
 }
@@ -250,7 +233,7 @@ export function buildAskHelpers(ctx: MainContext): string {
       `${i4}\`The renderer did not answer the channel '\${channel}' within \${timeoutMs} ms\`,`,
       `${i4}'IPC_ASK_TIMEOUT',`,
       `${i3});`,
-      `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
+      `${i3}timer = setTimeout(() => finish(() => reject(error)), ${CLAMPED_TIMEOUT});`,
       `${i2}}`,
       `${i2}try {`,
       `${i3}destination.send(wire, id, ${ctx.usesSerializer ? "encodeValue(channel, args)" : "...args"});`,

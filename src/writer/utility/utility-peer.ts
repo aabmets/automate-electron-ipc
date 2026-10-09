@@ -9,6 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { CLAMPED_TIMEOUT, errorClassLines, replyReaderLines } from "../generated-errors.js";
+
 /**
  * The protocol between the main process and a utility process, which is the same in both
  * directions, so both files get this one text. A "peer" is one end of the connection: it is given
@@ -43,18 +45,7 @@ export function buildUtilityPeer(indents: string[], serialized = false): string 
    const [i1, i2, i3, i4] = indents;
    return [
       "",
-      "export class IpcUtilityError extends Error {",
-      `${i1}readonly code: string | number | undefined;`,
-      `${i1}readonly channel: string;`,
-      `${i1}readonly data: unknown;`,
-      `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcUtilityError', data?: unknown) {`,
-      `${i2}super(message);`,
-      `${i2}this.name = name;`,
-      `${i2}this.channel = channel;`,
-      `${i2}this.code = code;`,
-      `${i2}this.data = data;`,
-      `${i1}}`,
-      "}",
+      ...errorClassLines(indents, "IpcUtilityError"),
       "",
       "interface UtilityPending {",
       `${i1}channel: string;`,
@@ -94,20 +85,13 @@ export function buildUtilityPeer(indents: string[], serialized = false): string 
       `${i1}return new IpcUtilityError(channel, \`A message of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE');`,
       "}",
       "",
-      "function readUtilityReply(channel: string, envelope: unknown): { value: unknown } | { error: IpcUtilityError } {",
-      `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
-      `${i1}if (source && source.ok === true) {`,
-      `${i2}return { value: source.value };`,
-      `${i1}}`,
-      `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
-      `${i1}if (!source || source.ok !== false || !error) {`,
-      `${i2}return { error: new IpcUtilityError(channel, 'The other side sent an unreadable reply', 'IPC_UTILITY_INVALID_REPLY') };`,
-      `${i1}}`,
-      `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
-      `${i1}const message = typeof error.message === 'string' ? error.message : 'The other side failed without a message';`,
-      `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
-      `${i1}return { error: new IpcUtilityError(channel, message, code, name, error.data) };`,
-      "}",
+      ...replyReaderLines(indents, {
+         fn: "readUtilityReply",
+         errorClass: "IpcUtilityError",
+         invalidCode: "IPC_UTILITY_INVALID_REPLY",
+         invalidMessage: "'The other side sent an unreadable reply'",
+         missingMessage: "'The other side failed without a message'",
+      }),
       "",
       "function sendUtilityReply(peer: UtilityPeer, channel: string, id: number, envelope: IpcEnvelope): void {",
       `${i1}if (peer.closed) {`,
@@ -228,7 +212,7 @@ export function buildUtilityPeer(indents: string[], serialized = false): string 
       `${i4}// The handler goes on, and its late reply finds no pending call and is dropped.`,
       `${i4}peer.pending.delete(id);`,
       `${i4}reject(new IpcUtilityError(channel, \`The channel '\${channel}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT'));`,
-      `${i3}}, Math.min(timeoutMs, 2147483647));`,
+      `${i3}}, ${CLAMPED_TIMEOUT});`,
       `${i2}}`,
       `${i1}});`,
       "}",

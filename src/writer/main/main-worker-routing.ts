@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
 /** The routes that a hub gives each service worker, and the questions of the main process to a worker. */
@@ -102,7 +103,7 @@ export function buildWorkerAskLines(ctx: MainContext): string[] {
       `${i2}};`,
       `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
       `${i3}const error = new IpcAskError(channel, \`The service worker did not answer the channel '\${channel}' within \${timeoutMs} ms\`, 'IPC_ASK_TIMEOUT');`,
-      `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
+      `${i3}timer = setTimeout(() => finish(() => reject(error)), ${CLAMPED_TIMEOUT});`,
       `${i2}}`,
       `${i2}try {`,
       ...(ctx.usesSerializer ? [`${i3}const question = encodeValue(channel, args);`] : []),

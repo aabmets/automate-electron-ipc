@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
 /** The calls and sends of a service worker to the main process, and their timeouts. */
@@ -32,7 +33,7 @@ export function buildWorkerTimer(indents: string[]): string[] {
       `${i2}const timer = setTimeout(() => {`,
       `${i3}const message = \`The channel '\${info.channel}' did not answer within \${timeoutMs} ms\`;`,
       `${i3}reject(Object.assign(new Error(message), { name: 'IpcTimeoutError', code: 'IPC_TIMEOUT' }));`,
-      `${i2}}, Math.min(timeoutMs, 2147483647));`,
+      `${i2}}, ${CLAMPED_TIMEOUT});`,
       `${i2}(result as Promise<unknown>).then(`,
       `${i3}(value) => {`,
       `${i3}${i1}clearTimeout(timer);`,

@@ -13,4 +13,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   classes differ in shape; leave them.
 - **Tests:** The generated output of every fixture is byte-identical (`diff -r`), so no
   exact-output test changes.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `errorClassLines`, `replyReaderLines` and `CLAMPED_TIMEOUT` (with `MAX_TIMER_DELAY`) are in the new `src/writer/generated-errors.ts`; `main-asks.ts`, `utility-peer.ts` and the six other clamp sites use them. The generated output of all fixtures is byte-identical (`diff -r`), no assertion changed. 3294 tests (4 new, for the helpers).

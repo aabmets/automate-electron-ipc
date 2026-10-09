@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { PreloadContext } from "./preload-bindings.js";
 
 /**
@@ -64,7 +65,7 @@ export function buildUtilityCalls(ctx: PreloadContext, streams: boolean): string
       `${i3}timer = setTimeout(() => {`,
       `${i4}client.calls.delete(id);`,
       `${i4}settle(() => reject(utilityError(\`The channel '\${client.name}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT')));`,
-      `${i3}}, Math.min(timeoutMs, 2147483647));`,
+      `${i3}}, ${CLAMPED_TIMEOUT});`,
       `${i2}}`,
       `${i2}if (client.port) {`,
       `${i3}start();`,
@@ -136,7 +137,7 @@ export function buildUtilityCalls(ctx: PreloadContext, streams: boolean): string
               `${i4}// The port is gone, which stops the stream in the child as well.`,
               `${i3}}`,
               `${i3}reader.finish({ error: utilityError(\`The channel '\${client.name}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT') });`,
-              `${i2}}, Math.min(timeoutMs, 2147483647));`,
+              `${i2}}, ${CLAMPED_TIMEOUT});`,
               `${i1}}`,
               `${i1}if (client.closed) {`,
               `${i2}reader.finish({ error: utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED') });`,
