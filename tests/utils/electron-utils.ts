@@ -54,8 +54,25 @@ export interface ScenarioContext {
     * is killed when the scenario ends.
     */
    fork: (entry: () => unknown) => Promise<any>;
-   /** Serves `html` at `url`, such as `app://main/index.html`. */
-   serve: (url: string, html: string) => void;
+   /** Serves `body` at `url`, such as `app://main/index.html`, as HTML unless `type` says otherwise. */
+   serve: (url: string, body: string, type?: string) => void;
+   /**
+    * A session of its own, with the pages of the `app` scheme and the generated preload script for
+    * service workers, so that each scenario has fresh workers.
+    */
+   workerSession: () => any;
+   /**
+    * Opens a window on the session, registers the service worker of the runner (`app://main/sw.js`)
+    * from its page, and resolves with the window and the `ServiceWorkerMain` once the worker
+    * controls the page. Call `attachServiceWorkers` of the bindings first.
+    */
+   startWorker: (session: any, options?: OpenOptions) => Promise<{ win: any; worker: any }>;
+   /**
+    * Runs `fn(...args)` in the service worker that controls the page of `win`, and returns what it
+    * returns. `fn` is turned into text, so it can use the globals of the worker, such as `ipc`.
+    * A failure is thrown with the `name`, `message`, `code` and `data` of what the code threw.
+    */
+   inWorker: (win: any, fn: (...args: any[]) => unknown, ...args: unknown[]) => Promise<any>;
    /** Opens a hidden window with the generated preload script, and waits until it loaded. */
    open: (options?: OpenOptions) => Promise<any>;
    /** Creates a hidden window which has not loaded anything. */

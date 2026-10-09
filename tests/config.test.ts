@@ -85,6 +85,8 @@ describe("getResolvedConfig", () => {
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
          utilityBindingsFilePath: `${DEFAULT_DIR}/utility.ts`,
+         serviceWorkerPreloadFilePath: `${DEFAULT_DIR}/service-worker-preload.ts`,
+         serviceWorkerTypesFilePath: `${DEFAULT_DIR}/service-worker.d.ts`,
          ipcSchema: {
             path: `${DEFAULT_DIR}/schema.ts`,
          },
@@ -186,6 +188,55 @@ describe("getResolvedConfig", () => {
             );
          },
       );
+   });
+
+   describe("paths of the service worker files", () => {
+      const resolve = async (autoipc: Record<string, unknown>) => {
+         mocks.mockFspStatsByPath({});
+         mocks.mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it("are next to the other generated files unless the config says otherwise", async () => {
+         const config = await resolve({ ipcDataDir: "src/ipc" });
+         expect(config.serviceWorkerPreloadFilePath).toBe(
+            "/home/user/project/src/ipc/service-worker-preload.ts",
+         );
+         expect(config.serviceWorkerTypesFilePath).toBe(
+            "/home/user/project/src/ipc/service-worker.d.ts",
+         );
+      });
+
+      it("put the typings next to the preload script that the config names", async () => {
+         const config = await resolve({ serviceWorkerPreloadPath: "src/sw/generated/preload.ts" });
+         expect(config.serviceWorkerPreloadFilePath).toBe(
+            "/home/user/project/src/sw/generated/preload.ts",
+         );
+         expect(config.serviceWorkerTypesFilePath).toBe(
+            "/home/user/project/src/sw/generated/service-worker.d.ts",
+         );
+      });
+
+      it.each(["main.ts", "preload.ts", "utility.ts"])(
+         "refuse the path of the generated file %s for the preload script",
+         async (name) => {
+            const path = `src/autoipc/${name}`;
+            await expect(resolve({ serviceWorkerPreloadPath: path })).rejects.toThrowError(
+               `The config 'serviceWorkerPreloadPath' ('${path}') is the path of another generated file.`,
+            );
+         },
+      );
+
+      it("refuse the path of the utility bindings, wherever the config puts them", async () => {
+         await expect(
+            resolve({
+               utilityBindingsPath: "src/sw/utility.ts",
+               serviceWorkerPreloadPath: "src/sw/utility.ts",
+            }),
+         ).rejects.toThrowError(
+            /'serviceWorkerPreloadPath' .* is the path of another generated file/,
+         );
+      });
    });
 
    describe("choice of the schema path", () => {

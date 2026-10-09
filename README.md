@@ -33,6 +33,8 @@ Node library for generating IPC components for Electron apps.
 10) Typed calls and streams from a renderer straight to a `utilityProcess`, over a port that the main
     process brokers
 11) Scopes, which give each kind of window its own API and keep the others out in the main process
+12) Typed channels between the main process and a service worker (Electron 35 or later, experimental),
+    with a generated preload script and typings for the worker
 
 
 ### Installation
@@ -62,6 +64,7 @@ If no configuration is provided, IPC automation will use the default values as s
          "channelPrefix": "autoipc:",
          "timeoutMs": 0,
          "utilityBindingsPath": "src/autoipc/utility.ts",
+         "serviceWorkerPreloadPath": "src/autoipc/service-worker-preload.ts",
          "exposeAs": "ipc",
          "autoExpose": true,
          "getPathForFile": false
@@ -87,6 +90,11 @@ Config explanation:
    `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
    file is written only when the schema has a channel to a utility process. See
    [Utility processes](#utility-processes).
+ - `serviceWorkerPreloadPath` - Relative path of the generated preload script for service workers,
+   `service-worker-preload.ts` in `ipcDataDir` by default. The typings of the worker are written next to
+   it, as `service-worker.d.ts`. It must be a `.ts` file, and not the path of another generated file. Both
+   files are written only when the schema has a channel to or from a service worker. See
+   [Service workers](#service-workers).
  - `exposeAs` - The name that the API of the page is exposed as, `ipc` by default: `window.ipc`. The
    generated `window.d.ts` declares the global variable under the same name. It must be an identifier
    that is not a reserved word or a global of the page (`name`, `status`, `close`, `open`, `Promise`, ...),
@@ -220,6 +228,7 @@ Each verb declares one kind of channel in one direction:
 import {
    defineChannels, invoke, send, emit, ask, stream, port, mainPort,
    callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility,
+   invokeFromWorker, sendFromWorker, askWorker, emitToWorker,
 } from "automate-electron-ipc";
 
 export default defineChannels({
@@ -263,6 +272,18 @@ export default defineChannels({
 
    // Request from a renderer process to a utility process with a stream of results
    scanRows: streamUtility<(table: string) => AsyncIterable<Row>>(),
+
+   // Request from a service worker to the main process with return data
+   getToken: invokeFromWorker<(scope: string) => Promise<Token>>(),
+
+   // Message from a service worker to the main process without return data
+   syncDone: sendFromWorker<(pending: number) => void>(),
+
+   // Request from the main process to a service worker with return data
+   flushQueue: askWorker<(force: boolean) => number>(),
+
+   // Message from the main process to a service worker without return data
+   configChanged: emitToWorker<(key: string) => void>(),
 });
 ```
 
@@ -281,9 +302,14 @@ export default defineChannels({
 | `notifyMain` | UtilityToMain  | `void` or `Promise<void>`    |
 | `invokeUtility` | RendererToUtility | any value or promise      |
 | `streamUtility` | RendererToUtility | `AsyncIterable<Chunk>`, `AsyncIterableIterator<Chunk>` or `AsyncGenerator<Chunk>` |
+| `invokeFromWorker` | ServiceWorkerToMain | any value or promise    |
+| `sendFromWorker` | ServiceWorkerToMain | `void` or `Promise<void>`  |
+| `askWorker` | MainToServiceWorker | any value or promise            |
+| `emitToWorker` | MainToServiceWorker | `void` or `Promise<void>`    |
 
-The verbs for utility processes take no options. The only option of the others that is not described in
-its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
+The verbs for utility processes take no options, and neither do `askWorker` and `emitToWorker`. The
+channels that a service worker calls have `allowedOrigins` only. The only option of the others that is
+not described in its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
 The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
 With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
 It registers one listener for the event, calls `provider` each time the event fires, sends the
@@ -324,6 +350,10 @@ on the verb of the channel and on the process that uses it:
 | `notifyMain` | `ipc.<name>.on(child, callback)`, `once(child, callback)` | none: the utility process has `ipc.<name>.send(...args)` |
 | `invokeUtility` | `ipc.<name>.connect(child, target)` | `ipc.<name>.invoke(...args)`; the utility process has `ipc.<name>.handle(callback)` |
 | `streamUtility` | `ipc.<name>.connect(child, target)` | `ipc.<name>.stream(...args)`; the utility process has `ipc.<name>.handle(callback)` |
+| `invokeFromWorker` | `ipc.<name>.handle(session, callback)`, `handleOnce(session, callback)` | none: the service worker has `ipc.<name>.invoke(...args)` |
+| `sendFromWorker` | `ipc.<name>.on(session, callback)`, `once(session, callback)` | none: the service worker has `ipc.<name>.send(...args)` |
+| `askWorker` | `ipc.<name>.invoke(worker, ...args)`, `invokeWith(worker, options, ...args)` | none: the service worker has `ipc.<name>.handle(callback)` |
+| `emitToWorker` | `ipc.<name>.send(worker, ...args)`, `broadcast(session, ...args)` | none: the service worker has `ipc.<name>.on(callback)` and `once(callback)` |
 
 In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
 listener, so a component can unsubscribe when it unmounts:
@@ -1074,6 +1104,101 @@ A few things to know:
    call for a channel without a handler is answered with `IPC_UTILITY_NO_HANDLER`.
  - There are no `allowedOrigins`, `validate` or `timeoutMs` options yet. The main process decides which
    pages are connected, and a call whose handler never answers waits until the connection closes.
+
+#### Service workers
+
+A service worker can need the main process for what it cannot do itself, such as a token that only the
+main process holds. Electron 35 added the IPC for it (`ServiceWorkerMain`, `session.serviceWorkers` and a
+preload script of the type `service-worker`), and marks it experimental. Four verbs type it:
+
+| Verb               | Who calls                       | Main process                                 | Service worker                    |
+|--------------------|---------------------------------|----------------------------------------------|-----------------------------------|
+| `invokeFromWorker` | the worker, main answers        | `handle(session, callback)`, `handleOnce`    | `invoke(...args)`                 |
+| `sendFromWorker`   | the worker, one way             | `on(session, callback)`, `once`              | `send(...args)`                   |
+| `askWorker`        | main, the worker answers        | `invoke(worker, ...args)`, `invokeWith`      | `handle(callback)`                |
+| `emitToWorker`     | main, one way                   | `send(worker, ...args)`, `broadcast(session, ...args)` | `on(callback)`, `once(callback)` |
+
+Besides `main.ts`, the generator writes the preload script of the worker, `service-worker-preload.ts`,
+and its typings, `service-worker.d.ts` (see `serviceWorkerPreloadPath`). They are written only when the
+schema has such a channel. The preload script is the one of a page for these channels: it is sandboxed
+and context isolated, and exposes the API to the code of the worker through `contextBridge`, under the
+name `exposeAs`. The page files leave these channels out. Register the script with the session, and
+include the typings in the project that compiles the worker, which has its own `tsconfig.json`: the
+typings declare the same global variable as `window.d.ts` does, so a project includes only one of them.
+
+```typescript
+// main process
+import { app, session } from "electron";
+import { attachServiceWorkers, ipc } from "./autoipc/main";
+
+app.whenReady().then(() => {
+   const ses = session.defaultSession;
+   // The compiled service-worker-preload.ts, as an absolute path.
+   ses.registerPreloadScript({ type: "service-worker", filePath: path.join(__dirname, "sw-preload.js") });
+   attachServiceWorkers(ses); // optional, see below
+
+   ipc.getToken.handle(ses, async (event, scope) => tokens.get(scope));
+   ipc.syncDone.on(ses, (event, pending) => console.log(event.versionId, pending));
+});
+
+// Later, to talk to a worker:
+const worker = ses.serviceWorkers.getWorkerFromVersionID(versionId); // a ServiceWorkerMain
+ipc.configChanged.send(worker, "theme");
+ipc.configChanged.broadcast(ses, "theme"); // all the workers of the session that run
+const flushed = await ipc.flushQueue.invoke(worker, true); // a number
+```
+
+```typescript
+// sw.ts, the service worker (compiled with service-worker.d.ts)
+const token = await ipc.getToken.invoke("app");
+ipc.syncDone.send(0);
+ipc.flushQueue.handle(async (force) => queue.flush(force));
+ipc.configChanged.on((key) => reloadConfig(key));
+```
+
+A worker starts and stops on its own, and its messages go to the `ipc` of its `ServiceWorkerMain`, never
+to `ipcMain`. So the generated code keeps one hub per `Session`. It watches `session.serviceWorkers`, and routes every channel
+that a worker calls to the callbacks of the session as each worker starts, before the worker can send from
+its preload script. `handle` and `on` take the `Session` instead of a worker for that reason: a callback
+is there for every worker of the session, also for one that starts later, and its disposer removes only
+that registration. A channel has one handler, and a new `handle` replaces it, as for `invoke`.
+`attachServiceWorkers(session)` starts the hub without a registration. Call it before the first worker
+starts if the main process only asks (`askWorker`) or sends to workers, since `invoke(worker, ...)` needs
+the hub to know the worker. Otherwise it rejects with `IPC_ASK_NOT_ATTACHED`.
+
+What the worker sends is as untrusted as what a page sends, and the events of a worker are not those of
+a frame: `IpcMainServiceWorkerEvent` and `IpcMainServiceWorkerInvokeEvent` have `versionId`,
+`serviceWorker` (with `scope` and `scriptURL`) and `session`, and no `senderFrame`. So:
+ - `allowedOrigins` of `invokeFromWorker` and `sendFromWorker` is compared for equality with the origin of
+   the scope of the worker (`app://main` for the scope `app://main/`, `http://localhost:5173`). Pages
+   register workers of their own origin only, so this is the origin that may use the channel.
+ - `configureServiceWorkerIpc({ validateSender, onRejected })` is the hook of the workers, like
+   `configureIpc` is for pages. `validateSender(event, channel)` sees the event with `versionId` and
+   `serviceWorker.scope`, and only `true` allows the call. The hooks of pages are not changed.
+ - A call that is rejected throws an `IpcWorkerError` with the code `IPC_WORKER_FORBIDDEN`, which reaches
+   the worker as the plain object `{ name, message, code }`. A message that is rejected is dropped. A call
+   for a channel without a handler is answered with `IPC_WORKER_NO_HANDLER`.
+
+Errors and answers work as they do for the other channels:
+ - The handler of `invokeFromWorker` answers with the envelope of `invoke`: a value, or the `name`,
+   `message`, `code` and `data` of what it threw, as a plain object, since `contextBridge` does not keep
+   the fields of an `Error`. The optional second type argument lists the error types, which the
+   typings declare as `IpcError`. With `rawErrors` the errors stay Electron's.
+ - `askWorker` is an `ask` channel with a worker as the target. The question carries an ID, the worker
+   answers on a reply channel, and the promise is rejected with an `IpcAskError`: with the error of the
+   responder, `IPC_ASK_TIMEOUT` (`invokeWith(worker, { timeoutMs }, ...args)`, as for `ask`),
+   `IPC_ASK_NO_HANDLER`, `IPC_ASK_INVALID_REPLY`, and `IPC_ASK_DESTROYED` when the worker stops. A
+   responder that wants its `code` and `data` to arrive rejects with a plain object, as for `ask`. A
+   question keeps the worker alive with `startTask` until it is answered, so an idle worker does not stop
+   while it is asked. Only the worker that was asked can answer.
+ - `send(worker, ...args)` throws an `IpcWorkerError` with `IPC_WORKER_DESTROYED` for a worker that is
+   gone. `broadcast(session, ...args)` sends to the workers of the session that run and skips the others.
+   Listeners of `sendFromWorker` that throw are reported to `console.error`, and the others still run.
+ - A stopped worker loses its state with the next start: register the responders and listeners of the
+   worker at the top of its script, as it runs on every start.
+ - There are no `validate`, `timeoutMs` or `scopes` options yet: a worker is not a window, and a call
+   whose handler never answers waits for ever. The signature is checked for what structured clone cannot
+   send, like the others.
 
 #### Migrating from 0.2
 

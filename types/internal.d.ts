@@ -40,6 +40,13 @@ export interface IPCOptionalConfig {
     */
    utilityBindingsPath?: string;
    /**
+    * The path of the generated preload script for service workers, relative to the project root.
+    * Defaults to `service-worker-preload.ts` in `ipcDataDir`. The typings of the API of the worker
+    * go to `service-worker.d.ts` next to it. Both files are written only if the schema has a
+    * channel to or from a service worker.
+    */
+   serviceWorkerPreloadPath?: string;
+   /**
     * The name that the API is exposed as in the page, and that `window.d.ts` declares it as.
     * Defaults to `"ipc"`. It must be an identifier that is not a reserved word or a global of the
     * page, such as `name` or `status`.
@@ -71,6 +78,8 @@ export interface IPCResolvedConfig {
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
    utilityBindingsFilePath: string;
+   serviceWorkerPreloadFilePath: string;
+   serviceWorkerTypesFilePath: string;
    projectUsesNodeNext: boolean;
    ipcDataDir: string;
    codeIndent: number;
@@ -180,7 +189,8 @@ export type ChannelKind = "Broadcast" | "Unicast" | "Port" | "Stream";
 /**
  * `RendererToUtility` is a call or a stream from a page to a utility process, over a port that
  * the main process brokers. `MainToUtility` and `UtilityToMain` are the channels of the main
- * process itself with a utility process.
+ * process itself with a utility process, and `ServiceWorkerToMain` and `MainToServiceWorker` those
+ * with a service worker.
  */
 export type ChannelDirection =
    | "RendererToRenderer"
@@ -188,7 +198,9 @@ export type ChannelDirection =
    | "MainToRenderer"
    | "MainToUtility"
    | "UtilityToMain"
-   | "RendererToUtility";
+   | "RendererToUtility"
+   | "ServiceWorkerToMain"
+   | "MainToServiceWorker";
 
 /** An identifier of the schema file which is a value import, such as `userArgs` in `{ userArgs }`. */
 export interface ValidatorRef {
@@ -208,7 +220,10 @@ export interface ChannelSpec {
    /** The error types that a RendererToMain or RendererToUtility Unicast or Stream channel may fail with. An `ask` has none. */
    errors?: ErrorsSpec;
    trigger?: string;
-   /** The origins that may call a RendererToMain channel, compared with `senderFrame.origin`. */
+   /**
+    * The origins that may call a RendererToMain channel, compared with `senderFrame.origin`, or a
+    * ServiceWorkerToMain channel, compared with the origin of the scope of the worker.
+    */
    allowedOrigins?: string[];
    /** A Standard Schema for the arguments of a RendererToMain channel, run before the handler. */
    validate?: ValidatorRef;

@@ -1292,3 +1292,149 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
       );
    });
 });
+
+describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+
+   it.each([
+      "sw-preload.ts",
+      "src/worker/preload.ts",
+      "worker/preload.mts",
+      "worker/preload.cts",
+      undefined,
+   ])("accepts %s", (serviceWorkerPreloadPath) => {
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
+      ).not.toThrowError();
+   });
+
+   it("rejects an absolute path", () => {
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath: "/srv/sw.ts" }),
+      ).toThrowError("serviceWorkerPreloadPath must be relative to the project root");
+   });
+
+   it.each(["worker/preload", "worker/preload.js", "worker/preload.d.ts", ""])(
+      "rejects %j, since it is not the path of a .ts file",
+      (serviceWorkerPreloadPath) => {
+         expect(() =>
+            vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
+         ).toThrowError("serviceWorkerPreloadPath must be the path of a .ts file");
+      },
+   );
+
+   it("rejects a value which is not a string", () => {
+      const value = 5 as unknown as string;
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath: value }),
+      ).toThrowError(/serviceWorkerPreloadPath/);
+   });
+});
+
+describe("validateChannelSpecs, service worker channels", () => {
+   const generate = (direction: t.ChannelDirection, kind: t.ChannelKind, returnType = "void") =>
+      new ChannelSpecGenerator().generate(direction, kind, returnType);
+
+   it.each(["ServiceWorkerToMain", "MainToServiceWorker"] as const)(
+      "accepts a Unicast channel %s with any return type, and a Broadcast one which returns void",
+      (direction) => {
+         for (const returnType of ["void", "number", "Promise<string>"]) {
+            expect(() =>
+               vld.validateChannelSpecs([generate(direction, "Unicast", returnType)]),
+            ).not.toThrowError();
+         }
+         for (const returnType of ["void", "Promise<void>"]) {
+            expect(() =>
+               vld.validateChannelSpecs([generate(direction, "Broadcast", returnType)]),
+            ).not.toThrowError();
+         }
+      },
+   );
+
+   it("rejects a Broadcast channel of a worker which returns a value", () => {
+      expect(() =>
+         vld.validateChannelSpecs([generate("ServiceWorkerToMain", "Broadcast", "string")]),
+      ).toThrowError("Channel return type 'string' not allowed when channel kind is 'Broadcast'");
+   });
+
+   it.each(["Port", "Stream"] as const)("rejects a %s channel with a worker direction", (kind) => {
+      for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
+         const spec = generate(direction, kind);
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `Channel kind '${kind}' is not allowed when channel direction is '${direction}'.`,
+         );
+      }
+   });
+
+   it("accepts allowedOrigins and error types for the channels that a worker calls only", () => {
+      const errors = { definition: "Error", customTypes: [] };
+      const allowedOrigins = ["app://main"];
+      for (const kind of ["Unicast", "Broadcast"] as const) {
+         expect(() =>
+            vld.validateChannelSpecs([
+               { ...generate("ServiceWorkerToMain", kind), allowedOrigins },
+            ]),
+         ).not.toThrowError();
+         expect(() =>
+            vld.validateChannelSpecs([
+               { ...generate("MainToServiceWorker", kind), allowedOrigins },
+            ]),
+         ).toThrowError(/allowedOrigins/);
+      }
+      expect(() =>
+         vld.validateChannelSpecs([{ ...generate("ServiceWorkerToMain", "Unicast"), errors }]),
+      ).not.toThrowError();
+      for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
+         expect(() =>
+            vld.validateChannelSpecs([{ ...generate(direction, "Broadcast"), errors }]),
+         ).toThrowError(/errors/);
+      }
+      expect(() =>
+         vld.validateChannelSpecs([{ ...generate("MainToServiceWorker", "Unicast"), errors }]),
+      ).toThrowError(/errors/);
+   });
+
+   it("rejects an allowedOrigins list that holds no origin", () => {
+      const spec = generate("ServiceWorkerToMain", "Unicast");
+      expect(() => vld.validateChannelSpecs([{ ...spec, allowedOrigins: [] }])).toThrowError(
+         /at least one origin/,
+      );
+      expect(() =>
+         vld.validateChannelSpecs([{ ...spec, allowedOrigins: ["app://main/path"] }]),
+      ).toThrowError(/is not an origin/);
+   });
+
+   it("rejects the other options", () => {
+      const ref = { name: "args", exported: "args", fromPath: "./v" };
+      for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
+         for (const kind of ["Unicast", "Broadcast"] as const) {
+            for (const extra of [
+               { validate: ref },
+               { trigger: "focus" },
+               { maxQueue: 5 },
+               { timeoutMs: 5 },
+               { scopes: ["a"] },
+            ]) {
+               const [key] = Object.keys(extra);
+               const spec = { ...generate(direction, kind), ...extra };
+               expect(() => vld.validateChannelSpecs([spec])).toThrowError(new RegExp(key));
+            }
+         }
+      }
+   });
+
+   it("rejects a direction that no worker verb has", () => {
+      const wrong = { ...generate("MainToServiceWorker", "Unicast"), direction: "ToServiceWorker" };
+      expect(() => vld.validateChannelSpecs([wrong as unknown as t.ChannelSpec])).toThrowError(
+         /direction/,
+      );
+   });
+
+   it("keeps the names of the worker channels unique among all channels", () => {
+      const spec = generate("MainToServiceWorker", "Unicast");
+      const clash = { ...generate("RendererToMain", "Broadcast"), name: spec.name };
+      expect(() => vld.validateChannelSpecs([spec, clash])).toThrowError(
+         `Channel name '${spec.name}' is not unique across application.`,
+      );
+   });
+});

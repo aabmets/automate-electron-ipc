@@ -171,9 +171,36 @@ export class BaseWriter {
       );
    }
 
+   /** Whether the channel is between the main process and a service worker. */
+   protected isWorkerSpec(spec: t.ChannelSpec): boolean {
+      return spec.direction === "ServiceWorkerToMain" || spec.direction === "MainToServiceWorker";
+   }
+
+   /** Whether any schema file declares a channel that a service worker takes part in. */
+   protected hasWorkerChannels(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some((spec) => this.isWorkerSpec(spec)),
+      );
+   }
+
+   /**
+    * The channel as the page writers see it: the API of a service worker is that of a page, so its
+    * channels are written like the ones with the same shape between the main process and a renderer.
+    * A worker channel has no timeout.
+    */
+   protected asRendererSpec(spec: t.ChannelSpec): t.ChannelSpec {
+      return {
+         ...spec,
+         direction: spec.direction === "ServiceWorkerToMain" ? "RendererToMain" : "MainToRenderer",
+         timeoutMs: 0,
+      };
+   }
+
    /** The channels of a schema file that a renderer takes part in. */
    protected getRendererSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
-      return parsedFileSpecs.specs.channelSpecArray.filter((spec) => !this.isUtilitySpec(spec));
+      return parsedFileSpecs.specs.channelSpecArray.filter(
+         (spec) => !(this.isUtilitySpec(spec) || this.isWorkerSpec(spec)),
+      );
    }
 
    /** Whether any schema file declares a channel that a renderer takes part in. */

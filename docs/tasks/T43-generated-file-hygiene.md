@@ -13,5 +13,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     left behind when the last such channel is removed.
   - Found in T33: the same for `preload.<scope>.ts` and `window.<scope>.d.ts` of a scope that the
     schema no longer lists.
+  - Found in T36: the same for `service-worker-preload.ts` and `service-worker.d.ts`, which are written
+    only when the schema has a channel to or from a service worker.
 - **Tests:** writer tests; e2e runs Biome on the output.
 - **Delivered:**

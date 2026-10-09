@@ -34,3 +34,7 @@ export const callMain: typeof api.callMain = verb;
 export const notifyMain: typeof api.notifyMain = verb;
 export const invokeUtility: typeof api.invokeUtility = verb;
 export const streamUtility: typeof api.streamUtility = verb;
+export const invokeFromWorker: typeof api.invokeFromWorker = verb;
+export const sendFromWorker: typeof api.sendFromWorker = verb;
+export const askWorker: typeof api.askWorker = verb;
+export const emitToWorker: typeof api.emitToWorker = verb;

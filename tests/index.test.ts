@@ -11,13 +11,17 @@
 
 import {
    ask,
+   askWorker,
    defineChannels,
    emit,
+   emitToWorker,
    invoke,
+   invokeFromWorker,
    invokeUtility,
    mainPort,
    port,
    send,
+   sendFromWorker,
    stream,
    streamUtility,
 } from "@src/index.js";
@@ -46,9 +50,13 @@ describe("runtime stubs", () => {
          mainPort,
          invokeUtility,
          streamUtility,
+         invokeFromWorker,
+         sendFromWorker,
+         askWorker,
+         emitToWorker,
       ]) {
          expect(verb()).toBeUndefined();
       }
-      expect(spy).toHaveBeenCalledTimes(9);
+      expect(spy).toHaveBeenCalledTimes(13);
    });
 });

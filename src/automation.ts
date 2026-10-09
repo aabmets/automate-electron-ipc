@@ -22,17 +22,24 @@ import writer from "./writer/index.js";
 
 /**
  * Throws if the file of a scope would overwrite another generated file. The files of the scopes
- * are named after them, so only the path of the utility bindings, which is configurable, can clash.
+ * are named after them, so only the paths that the config sets, which are the ones of the utility
+ * bindings and of the service worker preload script, can clash.
  */
 function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): void {
+   const configured: [string, string][] = [
+      ["utilityBindingsPath", config.utilityBindingsFilePath],
+      ["serviceWorkerPreloadPath", config.serviceWorkerPreloadFilePath],
+   ];
    for (const scope of scopes) {
       for (const base of [config.preloadBindingsFilePath, config.rendererTypesFilePath]) {
          const file = scopeUtils.scopedFilePath(base, scope);
-         if (file === config.utilityBindingsFilePath) {
-            throw new Error(
-               `The config 'utilityBindingsPath' ('${path.relative(config.projectRoot, file).replaceAll("\\", "/")}') ` +
-                  `is the file that the scope '${scope}' is generated to. Choose a different path.`,
-            );
+         for (const [option, taken] of configured) {
+            if (file === taken) {
+               throw new Error(
+                  `The config '${option}' ('${path.relative(config.projectRoot, file).replaceAll("\\", "/")}') ` +
+                     `is the file that the scope '${scope}' is generated to. Choose a different path.`,
+               );
+            }
          }
       }
    }
@@ -103,6 +110,11 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
    );
    // The file for utility processes exists only for a schema that has channels to them.
    const utilityWriter = new writer.UtilityBindingsWriter(config, pfsArray);
+   // The files for service workers exist only for a schema that has channels to or from them.
+   const workerWriters = [
+      new writer.ServiceWorkerPreloadWriter(config, pfsArray),
+      new writer.ServiceWorkerTypesWriter(config, pfsArray),
+   ];
    // The files of a page hold the surface of one scope. The surface of no scope has the channels
    // that are open to all windows, and each scope adds its own channels to that.
    const scopes = scopeUtils.collectScopes(pfsArray);
@@ -121,6 +133,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
          new writer.RendererTypesWriter(config, surface, scope).write(),
       ]),
       ...(utilityWriter.hasChannels() ? [utilityWriter.write()] : []),
+      ...workerWriters.filter((worker) => worker.hasChannels()).map((worker) => worker.write()),
    ]);
    if (pfsArray.length === 0) {
       logger.noChannelExpressions(config.ipcSchema.path);

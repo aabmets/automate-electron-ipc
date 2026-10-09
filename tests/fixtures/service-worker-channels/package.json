@@ -1,0 +1,9 @@
+{
+   "name": "fixture-service-worker-channels",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

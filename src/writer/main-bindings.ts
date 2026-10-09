@@ -24,6 +24,58 @@ interface ChannelEntry {
 /** The electron types that the helpers of the channels between a renderer and a utility process use. */
 const BROKER_TYPES = ["BrowserWindow", "WebContents", "WebContentsView", "UtilityProcess"];
 
+/**
+ * The names that the helpers of the channels to a service worker declare, import or use, which a
+ * schema type of the same name must not shadow.
+ */
+const WORKER_RESERVED_NAMES = [
+   "IpcWorkerError",
+   "IpcWorkerConfig",
+   "workerConfig",
+   "configureServiceWorkerIpc",
+   "WorkerChannelInfo",
+   "WorkerListener",
+   "PendingWorkerAsk",
+   "WorkerHub",
+   "sessionHubs",
+   "workerHubs",
+   "workerCalls",
+   "workerSends",
+   "workerAsks",
+   "lastWorkerAskId",
+   "attachServiceWorkers",
+   "getWorkerHub",
+   "routeWorker",
+   "getWorkerOrigin",
+   "isWorkerAllowed",
+   "callWorkerHandler",
+   "dispatchWorkerSend",
+   "answerWorkerAsk",
+   "failWorkerAsks",
+   "registerWorkerHandler",
+   "addWorkerListener",
+   "sendToWorker",
+   "broadcastToWorkers",
+   "askServiceWorker",
+   "Session",
+   "ServiceWorkerMain",
+   "IpcMainServiceWorkerEvent",
+   "IpcMainServiceWorkerInvokeEvent",
+   "WeakMap",
+   "URL",
+   "Object",
+   "Number",
+   "console",
+];
+
+/** What the channels that are not between the main process and a renderer need. */
+interface OffPageUse {
+   utility: boolean;
+   brokers: boolean;
+   envelope: boolean;
+   workers: t.ChannelSpec[];
+}
+
 /** The names that a generated listener uses, which differ from the names of its signature. */
 interface ListenerNames {
    event: string;
@@ -153,6 +205,8 @@ export class MainBindingsWriter extends BaseWriter {
                  "attachUtility",
               ]
             : []),
+         // The channels to a service worker.
+         ...(this.hasWorkerChannels() ? WORKER_RESERVED_NAMES : []),
       ];
    }
    protected renderEmptyFileContents(): string {
@@ -169,8 +223,7 @@ export class MainBindingsWriter extends BaseWriter {
       let usesEnvelope = false;
       let usesSenders = false;
       let usesStreams = false;
-      let usesUtility = false;
-      let usesBrokers = false;
+      const offPage: OffPageUse = { utility: false, brokers: false, envelope: false, workers: [] };
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -199,15 +252,14 @@ export class MainBindingsWriter extends BaseWriter {
                   electronTypeImportsSet.add(type);
                }
                channels.push(this.buildMainToRendererChannel(spec));
-            } else if (this.isUtilitySpec(spec)) {
-               usesUtility = true;
-               usesEnvelope = true;
-               electronTypeImportsSet.add("UtilityProcess");
-               channels.push(this.buildUtilityChannel(spec));
-            } else if (this.isBrokeredSpec(spec)) {
-               usesBrokers = true;
+            } else {
                channels.push(
-                  this.buildBrokeredChannel(spec, electronImportsSet, electronTypeImportsSet),
+                  ...this.buildOffPageChannels(
+                     spec,
+                     electronImportsSet,
+                     electronTypeImportsSet,
+                     offPage,
+                  ),
                );
             }
             const specCustomTypes = new Set(this.getImportedTypes(spec));
@@ -215,6 +267,8 @@ export class MainBindingsWriter extends BaseWriter {
          }
          this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
       }
+      usesEnvelope ||= offPage.envelope;
+      this.addWorkerImports(offPage.workers, electronTypeImportsSet);
       this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
       this.addTargetImports(usesIpcMain, electronTypeImportsSet);
       const scopes = this.getScopes();
@@ -242,8 +296,9 @@ export class MainBindingsWriter extends BaseWriter {
             usesRendererPorts,
             usesMainPorts,
             usesStreams,
-            usesUtility,
-            usesBrokers,
+            usesUtility: offPage.utility,
+            usesBrokers: offPage.brokers,
+            workerSpecs: offPage.workers,
             scopes,
             usesScopedGuards: this.hasScopedGuards(),
          },
@@ -257,6 +312,31 @@ export class MainBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+   /**
+    * Builds the channel of a spec between the main process and a utility process, between a page
+    * and a utility process or between the main process and a service worker, and notes what it
+    * needs. The specs of the pages are built by the caller.
+    */
+   private buildOffPageChannels(
+      spec: t.ChannelSpec,
+      values: Set<string>,
+      types: Set<string>,
+      uses: OffPageUse,
+   ): ChannelEntry[] {
+      if (this.isUtilitySpec(spec)) {
+         uses.utility = true;
+         uses.envelope = true;
+         types.add("UtilityProcess");
+         return [this.buildUtilityChannel(spec)];
+      } else if (this.isBrokeredSpec(spec)) {
+         uses.brokers = true;
+         return [this.buildBrokeredChannel(spec, values, types)];
+      }
+      // The specs left are the ones between the main process and a service worker.
+      uses.workers.push(spec);
+      uses.envelope ||= this.usesWorkerEnvelope(spec);
+      return [this.buildWorkerChannel(spec)];
    }
    /** The import of `ipcMain`, if the generated code registers a listener or a handler. */
    private getIpcMainImport(used: boolean): string[] {
@@ -374,6 +454,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesStreams: boolean;
          usesUtility: boolean;
          usesBrokers: boolean;
+         workerSpecs: t.ChannelSpec[];
          scopes: string[];
          usesScopedGuards: boolean;
       },
@@ -400,6 +481,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesAsks) {
          support.push(this.buildAskHelpers());
+      }
+      if (uses.workerSpecs.length > 0) {
+         support.push(this.buildWorkerHelpers(uses.workerSpecs, uses.usesAsks));
       }
       if (uses.usesStreams) {
          support.push(this.buildStreamHelpers());
@@ -1074,6 +1158,51 @@ export class MainBindingsWriter extends BaseWriter {
       }
       return { name: spec.name, members };
    }
+   /** The `IpcAskError` and `IpcAskOptions` of the `ask` channels, and of the questions to a service worker. */
+   private askErrorLines(): string[] {
+      const [i1, i2] = this.indents;
+      return [
+         "export class IpcAskError extends Error {",
+         `${i1}readonly code: string | number | undefined;`,
+         `${i1}readonly channel: string;`,
+         `${i1}readonly data: unknown;`,
+         `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcAskError', data?: unknown) {`,
+         `${i2}super(message);`,
+         `${i2}this.name = name;`,
+         `${i2}this.channel = channel;`,
+         `${i2}this.code = code;`,
+         `${i2}this.data = data;`,
+         `${i1}}`,
+         "}",
+         "",
+         "export interface IpcAskOptions {",
+         `${i1}/** Rejects with the code 'IPC_ASK_TIMEOUT' when the renderer or the worker has not answered by then. */`,
+         `${i1}timeoutMs?: number;`,
+         "}",
+         "",
+      ];
+   }
+   /** `readAskReply`, which reads the envelope of the answer to a question. */
+   private readAskReplyLines(): string[] {
+      const [i1, i2] = this.indents;
+      return [
+         "function readAskReply(channel: string, envelope: unknown, who = 'renderer'): { value: unknown } | { error: IpcAskError } {",
+         `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
+         `${i1}if (source && source.ok === true) {`,
+         `${i2}return { value: source.value };`,
+         `${i1}}`,
+         `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
+         `${i1}if (!source || source.ok !== false || !error) {`,
+         `${i2}return { error: new IpcAskError(channel, \`The \${who} sent an unreadable reply\`, 'IPC_ASK_INVALID_REPLY') };`,
+         `${i1}}`,
+         `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
+         `${i1}const message = typeof error.message === 'string' ? error.message : \`The \${who} failed without a message\`;`,
+         `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
+         `${i1}return { error: new IpcAskError(channel, message, code, name, error.data) };`,
+         "}",
+         "",
+      ];
+   }
    /**
     * The helpers of the `ask` channels. Electron has no invoke from the main process to a
     * renderer, so `askRenderer` sends the question with a correlation ID as its first argument,
@@ -1094,24 +1223,7 @@ export class MainBindingsWriter extends BaseWriter {
       const [i1, i2, i3, i4] = this.indents;
       return [
          "",
-         "export class IpcAskError extends Error {",
-         `${i1}readonly code: string | number | undefined;`,
-         `${i1}readonly channel: string;`,
-         `${i1}readonly data: unknown;`,
-         `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcAskError', data?: unknown) {`,
-         `${i2}super(message);`,
-         `${i2}this.name = name;`,
-         `${i2}this.channel = channel;`,
-         `${i2}this.code = code;`,
-         `${i2}this.data = data;`,
-         `${i1}}`,
-         "}",
-         "",
-         "export interface IpcAskOptions {",
-         `${i1}/** Rejects with the code 'IPC_ASK_TIMEOUT' when the renderer has not answered by then. */`,
-         `${i1}timeoutMs?: number;`,
-         "}",
-         "",
+         ...this.askErrorLines(),
          "interface PendingAsk {",
          `${i1}reply: string;`,
          `${i1}contents: WebContents | undefined;`,
@@ -1156,21 +1268,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}});`,
          "}",
          "",
-         "function readAskReply(channel: string, envelope: unknown): { value: unknown } | { error: IpcAskError } {",
-         `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
-         `${i1}if (source && source.ok === true) {`,
-         `${i2}return { value: source.value };`,
-         `${i1}}`,
-         `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
-         `${i1}if (!source || source.ok !== false || !error) {`,
-         `${i2}return { error: new IpcAskError(channel, 'The renderer sent an unreadable reply', 'IPC_ASK_INVALID_REPLY') };`,
-         `${i1}}`,
-         `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
-         `${i1}const message = typeof error.message === 'string' ? error.message : 'The renderer failed without a message';`,
-         `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
-         `${i1}return { error: new IpcAskError(channel, message, code, name, error.data) };`,
-         "}",
-         "",
+         ...this.readAskReplyLines(),
          "function askRenderer(",
          `${i1}channel: string,`,
          `${i1}wire: string,`,
@@ -2083,5 +2181,599 @@ export class MainBindingsWriter extends BaseWriter {
          ` connectUtilityPort(${this.wireName(spec.name)}, child, target),`,
       ].join("");
       return { name: spec.name, members: [connector] };
+   }
+
+   /** Whether the results and errors of the handler of a channel that a worker calls are an envelope. */
+   private usesWorkerEnvelope(spec: t.ChannelSpec): boolean {
+      return (
+         spec.direction === "ServiceWorkerToMain" &&
+         spec.kind === "Unicast" &&
+         !this.config.rawErrors
+      );
+   }
+   /** Adds the electron types that the helpers of the channels to a service worker use. */
+   private addWorkerImports(specs: t.ChannelSpec[], types: Set<string>): void {
+      if (specs.length === 0) {
+         return;
+      }
+      types.add("Session");
+      types.add("ServiceWorkerMain");
+      for (const spec of specs) {
+         if (spec.direction === "ServiceWorkerToMain") {
+            types.add(this.getWorkerEventType(spec));
+         }
+      }
+   }
+   /**
+    * Electron passes an `IpcMainServiceWorkerInvokeEvent` to `handle` listeners and an
+    * `IpcMainServiceWorkerEvent` to `on` listeners. Neither has a `senderFrame`.
+    */
+   private getWorkerEventType(spec: t.ChannelSpec): string {
+      return spec.kind === "Broadcast"
+         ? "IpcMainServiceWorkerEvent"
+         : "IpcMainServiceWorkerInvokeEvent";
+   }
+   /**
+    * The helpers of the channels between the main process and service workers.
+    *
+    * The messages of a service worker do not reach `ipcMain`: they go to the `ipc` of its
+    * `ServiceWorkerMain`, and a worker can send from its preload script, before the app could
+    * register anything on the object. So the main process keeps one hub per `Session`. It watches the
+    * `running-status-changed` event of `session.serviceWorkers`, and routes every channel that a
+    * worker calls on the `ipc` of each worker as it starts, to the callbacks that the hub holds. A
+    * callback is registered per session, so it is there for every worker, also for one that starts
+    * later. `attachServiceWorkers(session)` makes the hub, and `handle` and `on` do so as well.
+    *
+    * What a worker sends is untrusted. The event has no `senderFrame`, so a channel with
+    * `allowedOrigins` compares them with the origin of the scope of the worker, and the
+    * `validateSender` hook of `configureServiceWorkerIpc` sees the event, with `versionId` and
+    * `serviceWorker.scope`. A call from a worker that is rejected throws an `IpcWorkerError`, and a
+    * message is dropped. A reply to a question counts only when it comes from the worker that was
+    * asked, on the reply channel of the channel, with an ID that is pending.
+    *
+    * A question keeps its worker alive with `startTask` until it is settled, and is rejected with the
+    * code `IPC_ASK_DESTROYED` when the worker stops, or `IPC_ASK_NOT_ATTACHED` when no hub knows it.
+    * `IpcMainServiceWorker` has no `off`, so a worker is only ever given routes, which look their
+    * callbacks up when a message arrives.
+    */
+   private buildWorkerHelpers(specs: t.ChannelSpec[], hasRendererAsks: boolean): string {
+      const [i1, i2, i3, i4] = this.indents;
+      const info = (spec: t.ChannelSpec, wire: string) => {
+         const origins = spec.allowedOrigins
+            ? `, allowedOrigins: [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
+            : "";
+         return `${i1}{ channel: '${spec.name}', wire: ${wire}${origins} },`;
+      };
+      const pick = (direction: t.ChannelDirection, kind: t.ChannelKind) =>
+         specs
+            .filter((spec) => spec.direction === direction && spec.kind === kind)
+            .sort((a, b) => utils.compareStrings(a.name, b.name));
+      const calls = pick("ServiceWorkerToMain", "Unicast");
+      const sends = pick("ServiceWorkerToMain", "Broadcast");
+      const asks = pick("MainToServiceWorker", "Unicast");
+      const inbound = calls.length > 0 || sends.length > 0;
+      const events = [
+         ...(calls.length > 0 ? ["IpcMainServiceWorkerInvokeEvent"] : []),
+         ...(sends.length > 0 ? ["IpcMainServiceWorkerEvent"] : []),
+      ].join(" | ");
+      const out: string[] = [""];
+      if (asks.length > 0 && !hasRendererAsks) {
+         out.push(...this.askErrorLines(), ...this.readAskReplyLines());
+      }
+      out.push(
+         "export class IpcWorkerError extends Error {",
+         `${i1}readonly code: string;`,
+         `${i1}readonly channel: string;`,
+         `${i1}constructor(channel: string, message: string, code: string) {`,
+         `${i2}super(message);`,
+         `${i2}this.name = 'IpcWorkerError';`,
+         `${i2}this.channel = channel;`,
+         `${i2}this.code = code;`,
+         `${i1}}`,
+         "}",
+         "",
+      );
+      if (inbound) {
+         out.push(
+            "export interface IpcWorkerConfig {",
+            `${i1}validateSender?: (event: ${events}, channel: string) => boolean;`,
+            `${i1}onRejected?: (event: ${events}, channel: string) => void;`,
+            "}",
+            "",
+            "let workerConfig: IpcWorkerConfig = {};",
+            "",
+            "export function configureServiceWorkerIpc(config: IpcWorkerConfig): void {",
+            `${i1}workerConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
+            "}",
+            "",
+            "interface WorkerChannelInfo {",
+            `${i1}channel: string;`,
+            `${i1}wire: string;`,
+            `${i1}allowedOrigins?: string[];`,
+            "}",
+            "",
+         );
+      } else if (asks.length > 0) {
+         out.push(
+            "interface WorkerChannelInfo {",
+            `${i1}channel: string;`,
+            `${i1}wire: string;`,
+            "}",
+            "",
+         );
+      }
+      const table = (
+         name: string,
+         list: t.ChannelSpec[],
+         wire: (spec: t.ChannelSpec) => string,
+      ) => [
+         `const ${name}: WorkerChannelInfo[] = [`,
+         ...list.map((spec) => info(spec, wire(spec))),
+         "];",
+         "",
+      ];
+      if (calls.length > 0) {
+         out.push(...table("workerCalls", calls, (spec) => this.wireName(spec.name)));
+      }
+      if (sends.length > 0) {
+         out.push(...table("workerSends", sends, (spec) => this.wireName(spec.name)));
+      }
+      if (asks.length > 0) {
+         out.push(...table("workerAsks", asks, (spec) => this.wireName(spec.name, ":reply")));
+      }
+      out.push(
+         ...(sends.length > 0
+            ? [
+                 "interface WorkerListener {",
+                 `${i1}callback: unknown;`,
+                 `${i1}once: boolean;`,
+                 "}",
+                 "",
+              ]
+            : []),
+         ...(asks.length > 0
+            ? [
+                 "interface PendingWorkerAsk {",
+                 `${i1}channel: string;`,
+                 `${i1}versionId: number;`,
+                 `${i1}answer: (envelope: unknown) => void;`,
+                 `${i1}fail: (error: IpcAskError) => void;`,
+                 "}",
+                 "",
+              ]
+            : []),
+         "interface WorkerHub {",
+         ...(calls.length > 0 ? [`${i1}handlers: { [channel: string]: unknown };`] : []),
+         ...(sends.length > 0
+            ? [`${i1}listeners: { [channel: string]: WorkerListener[] | undefined };`]
+            : []),
+         ...(asks.length > 0 ? [`${i1}asks: { [id: string]: PendingWorkerAsk | undefined };`] : []),
+         "}",
+         "",
+         "const sessionHubs = new WeakMap<Session, WorkerHub>();",
+         "const workerHubs = new WeakMap<ServiceWorkerMain, WorkerHub>();",
+         ...(asks.length > 0 ? ["let lastWorkerAskId = 0;"] : []),
+         "",
+      );
+      if (inbound) {
+         out.push(
+            "function getWorkerOrigin(scope: string): string | null {",
+            `${i1}try {`,
+            `${i2}const url = new URL(scope);`,
+            `${i2}// The origin of a scheme that is not special is "null", while a frame reports scheme://host.`,
+            `${i2}return url.origin !== 'null' ? url.origin : \`\${url.protocol}//\${url.host}\`;`,
+            `${i1}} catch {`,
+            `${i2}return null;`,
+            `${i1}}`,
+            "}",
+            "",
+            `function isWorkerAllowed(worker: ServiceWorkerMain, event: ${events}, channel: string, allowedOrigins?: string[]): boolean {`,
+            `${i1}const validateSender = workerConfig.validateSender;`,
+            `${i1}if (!allowedOrigins && !validateSender) {`,
+            `${i2}return true;`,
+            `${i1}}`,
+            `${i1}let allowed = false;`,
+            `${i1}try {`,
+            `${i2}const origin = getWorkerOrigin(worker.scope);`,
+            `${i2}allowed =`,
+            `${i3}(!allowedOrigins || (origin !== null && allowedOrigins.includes(origin))) &&`,
+            `${i3}(!validateSender || validateSender(event, channel) === true);`,
+            `${i1}} catch {`,
+            `${i2}allowed = false;`,
+            `${i1}}`,
+            `${i1}if (!allowed && workerConfig.onRejected) {`,
+            `${i2}try {`,
+            `${i3}workerConfig.onRejected(event, channel);`,
+            `${i2}} catch {`,
+            `${i3}// A failing hook must not decide whether the call is rejected.`,
+            `${i2}}`,
+            `${i1}}`,
+            `${i1}return allowed;`,
+            "}",
+            "",
+         );
+      }
+      if (calls.length > 0) {
+         out.push(
+            "function callWorkerHandler(",
+            `${i1}hub: WorkerHub,`,
+            `${i1}worker: ServiceWorkerMain,`,
+            `${i1}event: IpcMainServiceWorkerInvokeEvent,`,
+            `${i1}info: WorkerChannelInfo,`,
+            `${i1}args: unknown[],`,
+            "): unknown {",
+            `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
+            `${i2}throw new IpcWorkerError(info.channel, \`The service worker is not allowed to use the channel '\${info.channel}'\`, 'IPC_WORKER_FORBIDDEN');`,
+            `${i1}}`,
+            `${i1}const handler = hub.handlers[info.channel] as ((...handlerArgs: unknown[]) => unknown) | undefined;`,
+            `${i1}if (!handler) {`,
+            `${i2}throw new IpcWorkerError(info.channel, \`No handler is registered for the channel '\${info.channel}'\`, 'IPC_WORKER_NO_HANDLER');`,
+            `${i1}}`,
+            `${i1}return handler(event, ...args);`,
+            "}",
+            "",
+            "function registerWorkerHandler(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
+            `${i1}const hub = getWorkerHub(session);`,
+            `${i1}const handler = once`,
+            `${i2}? (event: unknown, ...args: unknown[]) => {`,
+            `${i3}remove();`,
+            `${i3}return (callback as (...handlerArgs: unknown[]) => unknown)(event, ...args);`,
+            `${i2}}`,
+            `${i2}: callback;`,
+            `${i1}const remove = (): void => {`,
+            `${i2}if (hub.handlers[channel] === handler) {`,
+            `${i3}delete hub.handlers[channel];`,
+            `${i2}}`,
+            `${i1}};`,
+            `${i1}hub.handlers[channel] = handler;`,
+            `${i1}return remove;`,
+            "}",
+            "",
+         );
+      }
+      if (sends.length > 0) {
+         out.push(
+            "function dispatchWorkerSend(",
+            `${i1}hub: WorkerHub,`,
+            `${i1}worker: ServiceWorkerMain,`,
+            `${i1}event: IpcMainServiceWorkerEvent,`,
+            `${i1}info: WorkerChannelInfo,`,
+            `${i1}args: unknown[],`,
+            "): void {",
+            `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
+            `${i2}return;`,
+            `${i1}}`,
+            `${i1}const listeners = hub.listeners[info.channel];`,
+            `${i1}if (!listeners) {`,
+            `${i2}return;`,
+            `${i1}}`,
+            `${i1}for (const entry of listeners.slice()) {`,
+            `${i2}if (entry.once) {`,
+            `${i3}const at = listeners.indexOf(entry);`,
+            `${i3}if (at < 0) {`,
+            `${i4}continue;`,
+            `${i3}}`,
+            `${i3}listeners.splice(at, 1);`,
+            `${i2}}`,
+            `${i2}try {`,
+            `${i3}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...args);`,
+            `${i2}} catch (error) {`,
+            `${i3}console.error(error);`,
+            `${i2}}`,
+            `${i1}}`,
+            "}",
+            "",
+            "function addWorkerListener(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
+            `${i1}const hub = getWorkerHub(session);`,
+            `${i1}const entry: WorkerListener = { callback, once };`,
+            `${i1}const listeners = hub.listeners[channel] ?? [];`,
+            `${i1}listeners.push(entry);`,
+            `${i1}hub.listeners[channel] = listeners;`,
+            `${i1}return () => {`,
+            `${i2}const at = listeners.indexOf(entry);`,
+            `${i2}if (at >= 0) {`,
+            `${i3}listeners.splice(at, 1);`,
+            `${i2}}`,
+            `${i1}};`,
+            "}",
+            "",
+         );
+      }
+      if (asks.length > 0) {
+         out.push(
+            "function answerWorkerAsk(hub: WorkerHub, versionId: number, info: WorkerChannelInfo, id: unknown, envelope: unknown): void {",
+            `${i1}const pending = typeof id === 'number' ? hub.asks[id] : undefined;`,
+            `${i1}if (pending && pending.channel === info.channel && pending.versionId === versionId) {`,
+            `${i2}pending.answer(envelope);`,
+            `${i1}}`,
+            "}",
+            "",
+            "function failWorkerAsks(hub: WorkerHub, versionId: number): void {",
+            `${i1}for (const pending of Object.values(hub.asks)) {`,
+            `${i2}if (pending && pending.versionId === versionId) {`,
+            `${i3}pending.fail(new IpcAskError(pending.channel, \`The service worker that was asked on the channel '\${pending.channel}' has stopped\`, 'IPC_ASK_DESTROYED'));`,
+            `${i2}}`,
+            `${i1}}`,
+            "}",
+            "",
+            "function askServiceWorker(",
+            `${i1}channel: string,`,
+            `${i1}wire: string,`,
+            `${i1}worker: ServiceWorkerMain,`,
+            `${i1}args: unknown[],`,
+            `${i1}options?: IpcAskOptions,`,
+            "): Promise<unknown> {",
+            `${i1}return new Promise<unknown>((resolve, reject) => {`,
+            `${i2}const timeoutMs = options?.timeoutMs;`,
+            `${i2}if (timeoutMs !== undefined && !(typeof timeoutMs === 'number' && timeoutMs >= 0)) {`,
+            `${i3}throw new TypeError('timeoutMs must be a number which is not negative');`,
+            `${i2}}`,
+            `${i2}const hub = workerHubs.get(worker);`,
+            `${i2}if (!hub) {`,
+            `${i3}reject(new IpcAskError(channel, 'The service worker is not known to the bindings. Call attachServiceWorkers(session) for its session first', 'IPC_ASK_NOT_ATTACHED'));`,
+            `${i3}return;`,
+            `${i2}}`,
+            `${i2}const destroyed = new IpcAskError(channel, \`The service worker that was asked on the channel '\${channel}' is gone\`, 'IPC_ASK_DESTROYED');`,
+            `${i2}let versionId = 0;`,
+            `${i2}let isGone = false;`,
+            `${i2}try {`,
+            `${i3}isGone = worker.isDestroyed();`,
+            `${i3}versionId = worker.versionId;`,
+            `${i2}} catch {`,
+            `${i3}isGone = true;`,
+            `${i2}}`,
+            `${i2}if (isGone) {`,
+            `${i3}reject(destroyed);`,
+            `${i3}return;`,
+            `${i2}}`,
+            `${i2}const id = ++lastWorkerAskId;`,
+            `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
+            `${i2}let task: { end: () => void } | undefined;`,
+            `${i2}const finish = (settle: () => void): void => {`,
+            `${i3}clearTimeout(timer);`,
+            `${i3}delete hub.asks[id];`,
+            `${i3}try {`,
+            `${i4}task?.end();`,
+            `${i3}} catch {`,
+            `${i4}// The worker is gone, and so is its task.`,
+            `${i3}}`,
+            `${i3}settle();`,
+            `${i2}};`,
+            `${i2}hub.asks[id] = {`,
+            `${i3}channel,`,
+            `${i3}versionId,`,
+            `${i3}answer: (envelope) => {`,
+            `${i4}const outcome = readAskReply(channel, envelope, 'service worker');`,
+            `${i4}finish(() => ('error' in outcome ? reject(outcome.error) : resolve(outcome.value)));`,
+            `${i3}},`,
+            `${i3}fail: (error) => finish(() => reject(error)),`,
+            `${i2}};`,
+            `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
+            `${i3}const error = new IpcAskError(channel, \`The service worker did not answer the channel '\${channel}' within \${timeoutMs} ms\`, 'IPC_ASK_TIMEOUT');`,
+            `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
+            `${i2}}`,
+            `${i2}try {`,
+            `${i3}// Keeps the worker from stopping while it is asked.`,
+            `${i3}task = worker.startTask();`,
+            `${i3}worker.send(wire, id, ...args);`,
+            `${i2}} catch (error) {`,
+            `${i3}finish(() => reject(error));`,
+            `${i2}}`,
+            `${i1}});`,
+            "}",
+            "",
+         );
+      }
+      out.push(this.buildWorkerRouting(calls, sends, asks));
+      out.push(...this.buildWorkerSenders(specs));
+      return out.join("\n");
+   }
+   /** `routeWorker`, `getWorkerHub` and `attachServiceWorkers`, which connect the hubs to the workers. */
+   private buildWorkerRouting(
+      calls: t.ChannelSpec[],
+      sends: t.ChannelSpec[],
+      asks: t.ChannelSpec[],
+   ): string {
+      const [i1, i2, i3, i4] = this.indents;
+      const route: string[] = [];
+      if (calls.length > 0) {
+         route.push(
+            `${i1}for (const info of workerCalls) {`,
+            `${i2}worker.ipc.handle(info.wire, (event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]) =>`,
+            this.config.rawErrors
+               ? `${i3}callWorkerHandler(hub, worker, event, info, args),`
+               : `${i3}settleInvoke(() => callWorkerHandler(hub, worker, event, info, args)),`,
+            `${i2});`,
+            `${i1}}`,
+         );
+      }
+      if (sends.length > 0) {
+         route.push(
+            `${i1}for (const info of workerSends) {`,
+            `${i2}worker.ipc.on(info.wire, (event: IpcMainServiceWorkerEvent, ...args: unknown[]) =>`,
+            `${i3}dispatchWorkerSend(hub, worker, event, info, args),`,
+            `${i2});`,
+            `${i1}}`,
+         );
+      }
+      if (asks.length > 0) {
+         route.push(
+            `${i1}const versionId = worker.versionId;`,
+            `${i1}for (const info of workerAsks) {`,
+            `${i2}worker.ipc.on(info.wire, (_event: unknown, id: unknown, envelope: unknown) =>`,
+            `${i3}answerWorkerAsk(hub, versionId, info, id, envelope),`,
+            `${i2});`,
+            `${i1}}`,
+         );
+      }
+      return [
+         "function routeWorker(hub: WorkerHub, worker: ServiceWorkerMain): void {",
+         `${i1}if (workerHubs.has(worker)) {`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}workerHubs.set(worker, hub);`,
+         ...route,
+         "}",
+         "",
+         "function getWorkerHub(session: Session): WorkerHub {",
+         `${i1}const known = sessionHubs.get(session);`,
+         `${i1}if (known) {`,
+         `${i2}return known;`,
+         `${i1}}`,
+         `${i1}const hub: WorkerHub = {`,
+         ...(calls.length > 0
+            ? [`${i2}handlers: { __proto__: null } as unknown as WorkerHub['handlers'],`]
+            : []),
+         ...(sends.length > 0
+            ? [`${i2}listeners: { __proto__: null } as unknown as WorkerHub['listeners'],`]
+            : []),
+         ...(asks.length > 0
+            ? [`${i2}asks: { __proto__: null } as unknown as WorkerHub['asks'],`]
+            : []),
+         `${i1}};`,
+         `${i1}sessionHubs.set(session, hub);`,
+         `${i1}const serviceWorkers = session.serviceWorkers;`,
+         `${i1}const route = (versionId: number): void => {`,
+         `${i2}try {`,
+         `${i3}const worker = serviceWorkers.getWorkerFromVersionID(versionId);`,
+         `${i3}if (worker) {`,
+         `${i4}routeWorker(hub, worker);`,
+         `${i3}}`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}serviceWorkers.on('running-status-changed', (details) => {`,
+         `${i2}if (details.runningStatus === 'starting' || details.runningStatus === 'running') {`,
+         `${i3}route(details.versionId);`,
+         ...(asks.length > 0
+            ? [
+                 `${i2}} else {`,
+                 `${i3}// A worker that is stopping cannot answer any more.`,
+                 `${i3}failWorkerAsks(hub, details.versionId);`,
+              ]
+            : []),
+         `${i2}}`,
+         `${i1}});`,
+         `${i1}for (const id of Object.keys(serviceWorkers.getAllRunning())) {`,
+         `${i2}route(Number(id));`,
+         `${i1}}`,
+         `${i1}return hub;`,
+         "}",
+         "",
+         "/**",
+         " * Starts watching the service workers of the session, so that the messages of a worker are",
+         " * routed from its first line on. `handle` and `on` do this as well, and a question to a worker",
+         " * (`invoke`) needs it. Call it with `session.defaultSession`, or the session of the window.",
+         " */",
+         "export function attachServiceWorkers(session: Session): void {",
+         `${i1}getWorkerHub(session);`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /** `sendToWorker` and `broadcastToWorkers`, which the `send` and `broadcast` of the channels to a worker call. */
+   private buildWorkerSenders(specs: t.ChannelSpec[]): string[] {
+      const [i1, i2, i3] = this.indents;
+      if (
+         !specs.some(
+            (spec) => spec.direction === "MainToServiceWorker" && spec.kind === "Broadcast",
+         )
+      ) {
+         return [];
+      }
+      return [
+         "function sendToWorker(channel: string, wire: string, worker: ServiceWorkerMain, args: unknown[]): void {",
+         `${i1}if (worker.isDestroyed()) {`,
+         `${i2}throw new IpcWorkerError(channel, \`The service worker that the channel '\${channel}' was sent to is gone\`, 'IPC_WORKER_DESTROYED');`,
+         `${i1}}`,
+         `${i1}worker.send(wire, ...args);`,
+         "}",
+         "",
+         "function broadcastToWorkers(wire: string, session: Session, args: unknown[]): void {",
+         `${i1}const serviceWorkers = session.serviceWorkers;`,
+         `${i1}for (const id of Object.keys(serviceWorkers.getAllRunning())) {`,
+         `${i2}try {`,
+         `${i3}const worker = serviceWorkers.getWorkerFromVersionID(Number(id));`,
+         `${i3}if (worker && !worker.isDestroyed()) {`,
+         `${i3}${i1}worker.send(wire, ...args);`,
+         `${i3}}`,
+         `${i2}} catch (error) {`,
+         `${i3}console.error(error);`,
+         `${i2}}`,
+         `${i1}}`,
+         "}",
+         "",
+      ];
+   }
+   /**
+    * `handle(session, callback)` and `handleOnce` of an `invokeFromWorker` channel, `on(session,
+    * callback)` and `once` of a `sendFromWorker` channel, `send(worker, ...args)` and
+    * `broadcast(session, ...args)` of an `emitToWorker` channel, and `invoke(worker, ...args)` and
+    * `invokeWith(worker, { timeoutMs }, ...args)` of an `askWorker` channel.
+    */
+   private buildWorkerChannel(spec: t.ChannelSpec): ChannelEntry {
+      const [, i1, i2] = this.indents;
+      // The names of the generated parameters must not shadow a parameter of the signature.
+      const taken = this.collectIdentifiers([spec.signature.definition]);
+      const sessionName = this.uniqueName("session", taken);
+      const workerName = this.uniqueName("worker", taken);
+      const callbackName = this.uniqueName("callback", taken);
+      const optionsName = this.uniqueName("options", taken);
+      const eventName = this.uniqueName("event", taken);
+      const channel = `'${spec.name}'`;
+      const wire = this.wireName(spec.name);
+      const typeParams = this.getTypeParams(spec.signature);
+      const params = (...generated: string[]) =>
+         [...generated, this.getOriginalParams(spec, false)].filter(Boolean).join(", ");
+      const senderParams = this.getOriginalParams(spec, true);
+      const rest = senderParams ? `[${senderParams}]` : "[]";
+      if (spec.direction === "ServiceWorkerToMain") {
+         const eventType = this.getWorkerEventType(spec);
+         const signature = this.injectEventTypehint(spec.signature, eventType, eventName);
+         const callback = `${callbackName}: ${signature}`;
+         const methods =
+            spec.kind === "Broadcast"
+               ? [
+                    ["on", "addWorkerListener", false],
+                    ["once", "addWorkerListener", true],
+                 ]
+               : [
+                    ["handle", "registerWorkerHandler", false],
+                    ["handleOnce", "registerWorkerHandler", true],
+                 ];
+         return {
+            name: spec.name,
+            members: methods.flatMap(([method, helper, once]) => [
+               `\n${i1}${method}: (${sessionName}: Session, ${callback}): (() => void) =>`,
+               `\n${i2}${helper}(${sessionName}, ${channel}, ${callbackName}, ${once}),`,
+            ]),
+         };
+      }
+      if (spec.kind === "Broadcast") {
+         return {
+            name: spec.name,
+            members: [
+               `\n${i1}send: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`)}): void =>`,
+               `\n${i2}sendToWorker(${channel}, ${wire}, ${workerName}, ${rest}),`,
+               `\n${i1}broadcast: ${typeParams}(${params(`${sessionName}: Session`)}): void =>`,
+               `\n${i2}broadcastToWorkers(${wire}, ${sessionName}, ${rest}),`,
+            ],
+         };
+      }
+      const returned = spec.signature.async
+         ? spec.signature.returnType
+         : `Promise<Awaited<${spec.signature.returnType}>>`;
+      const ask = (options: string) =>
+         `askServiceWorker(${channel}, ${wire}, ${workerName}, ${rest}${options}) as ${returned}`;
+      return {
+         name: spec.name,
+         members: [
+            `\n${i1}invoke: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`)}): ${returned} =>`,
+            `\n${i2}${ask("")},`,
+            `\n${i1}invokeWith: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`, `${optionsName}: IpcAskOptions`)}): ${returned} =>`,
+            `\n${i2}${ask(`, ${optionsName}`)},`,
+         ],
+      };
    }
 }

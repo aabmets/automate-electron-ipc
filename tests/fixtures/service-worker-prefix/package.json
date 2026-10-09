@@ -1,0 +1,10 @@
+{
+   "name": "fixture-service-worker-prefix",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "channelPrefix": "worker/"
+      }
+   }
+}

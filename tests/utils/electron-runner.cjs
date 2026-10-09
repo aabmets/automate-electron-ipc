@@ -20,7 +20,15 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, protocol, utilityProcess, webContents } = require("electron");
+const {
+   app,
+   BrowserWindow,
+   ipcMain,
+   protocol,
+   session,
+   utilityProcess,
+   webContents,
+} = require("electron");
 
 const RESULT_MARK = "@@ELECTRON-RESULT@@";
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
@@ -47,18 +55,52 @@ app.commandLine.appendSwitch("disable-dev-shm-usage");
 
 // Pages are served from a custom scheme, so that their origins are known and can be told apart.
 protocol.registerSchemesAsPrivileged([
-   { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+   {
+      scheme: "app",
+      privileges: {
+         standard: true,
+         secure: true,
+         supportFetchAPI: true,
+         allowServiceWorkers: true,
+      },
+   },
 ]);
 
-/** The pages that a scenario served with `ctx.serve`, by URL. */
+/** The pages that a scenario served with `ctx.serve`, by URL: `{ body, type }`. */
 let routes = new Map();
 
-function pageFor(request) {
+/** The script of the service workers of the scenarios: it runs the functions that `ctx.inWorker` sends. */
+const WORKER_SCRIPT = `
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("message", (event) => {
+   const { id, source, args } = event.data;
+   event.waitUntil((async () => {
+      let reply;
+      try {
+         const value = await (0, eval)("(" + source + ")")(...args);
+         reply = { id, ok: true, value };
+      } catch (error) {
+         reply = { id, ok: false, error: { name: error?.name, message: String(error?.message ?? error), code: error?.code, data: error?.data } };
+      }
+      event.source.postMessage(reply);
+   })());
+});
+`;
+
+function respond(request) {
    const url = new URL(request.url);
    // `url.origin` is "null" for a scheme which is not special in the URL standard, as `app` is.
-   const html = routes.get(`${url.protocol}//${url.host}${url.pathname}`);
-   return (
-      html ?? `<!doctype html><meta charset="utf-8"><title>${url.host}</title><p>${url.host}</p>`
+   const route = routes.get(`${url.protocol}//${url.host}${url.pathname}`);
+   if (route) {
+      return new Response(route.body, { headers: { "content-type": route.type } });
+   }
+   if (url.pathname === "/sw.js") {
+      return new Response(WORKER_SCRIPT, { headers: { "content-type": "text/javascript" } });
+   }
+   return new Response(
+      `<!doctype html><meta charset="utf-8"><title>${url.host}</title><p>${url.host}</p>`,
+      { headers: { "content-type": "text/html" } },
    );
 }
 
@@ -73,6 +115,7 @@ ipcMain.handle = (channel, listener) => {
 /** The utility processes which the scenarios forked, so that none outlives its scenario. */
 const children = new Set();
 let forkCount = 0;
+let sessionCount = 0;
 
 /** Forgets the modules of the generated bindings, so that each scenario gets fresh state. */
 function evictGeneratedModules() {
@@ -151,9 +194,83 @@ function createContext() {
          return child;
       },
 
-      /** Serves `html` at `url`, such as "app://main/index.html". */
-      serve(url, html) {
-         routes.set(url, html);
+      /** Serves `body` at `url`, such as "app://main/index.html", as HTML unless `type` says otherwise. */
+      serve(url, body, type = "text/html") {
+         routes.set(url, { body, type });
+      },
+
+      /**
+       * A session of its own, which serves the pages of the `app` scheme and runs the generated
+       * service worker preload script in its workers. Each scenario gets fresh workers this way.
+       */
+      workerSession() {
+         const ses = session.fromPartition(`service-workers-${++sessionCount}`);
+         ses.protocol.handle("app", respond);
+         ses.registerPreloadScript({
+            type: "service-worker",
+            filePath: path.join(ipcDir, "service-worker-preload.js"),
+         });
+         return ses;
+      },
+
+      /**
+       * Opens a window on the session, registers the service worker of the runner (`/sw.js`) from
+       * its page, and resolves once the worker controls the page. Resolves with the window and the
+       * `ServiceWorkerMain` of the worker. `attachServiceWorkers` of the bindings should come first,
+       * so that the worker is routed from the start.
+       */
+      async startWorker(ses, options = {}) {
+         const win = await ctx.open({ ...options, webPreferences: { session: ses } });
+         await ctx.evaluate(win, () =>
+            navigator.serviceWorker
+               .register("/sw.js")
+               .then(() => navigator.serviceWorker.ready)
+               .then(
+                  () =>
+                     navigator.serviceWorker.controller ||
+                     new Promise((resolve) =>
+                        navigator.serviceWorker.addEventListener("controllerchange", resolve),
+                     ),
+               )
+               .then(() => true),
+         );
+         const worker = await ctx.waitFor(() => {
+            const running = ses.serviceWorkers.getAllRunning();
+            const id = Object.keys(running).find((key) => running[key].scope.startsWith("app://"));
+            return id === undefined
+               ? undefined
+               : ses.serviceWorkers.getWorkerFromVersionID(Number(id));
+         }, "the service worker to run");
+         return { win, worker };
+      },
+
+      /**
+       * Runs `fn(...args)` in the service worker that controls the page of `win`, and returns what
+       * it returns. `fn` is turned into text, so it can use the globals of the worker, such as `ipc`.
+       * A failure comes back as an error with the `name`, `message`, `code` and `data` of what it threw.
+       */
+      async inWorker(win, fn, ...args) {
+         const reply = await ctx.evaluate(
+            win,
+            (source, callArgs) =>
+               new Promise((resolve) => {
+                  const id = Math.random();
+                  const listener = (event) => {
+                     if (event.data && event.data.id === id) {
+                        navigator.serviceWorker.removeEventListener("message", listener);
+                        resolve(event.data);
+                     }
+                  };
+                  navigator.serviceWorker.addEventListener("message", listener);
+                  navigator.serviceWorker.controller.postMessage({ id, source, args: callArgs });
+               }),
+            fn.toString(),
+            args,
+         );
+         if (reply.ok) {
+            return reply.value;
+         }
+         throw Object.assign(new Error(reply.error.message), reply.error);
       },
 
       /**
@@ -248,10 +365,7 @@ async function runScenario(name) {
 
 async function main() {
    await app.whenReady();
-   protocol.handle(
-      "app",
-      (request) => new Response(pageFor(request), { headers: { "content-type": "text/html" } }),
-   );
+   protocol.handle("app", respond);
    const results = {};
    for (const name of Object.keys(scenarios)) {
       // The scenarios share one process, so they run one after another.

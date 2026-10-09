@@ -13,14 +13,14 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
-interface ChannelEntry {
+export interface ChannelEntry {
    name: string;
    /** The property of the exposed object, starting with a newline. */
    property: string;
 }
 
 /** The channels of the page, by the components that they need. */
-interface ChannelGroups {
+export interface ChannelGroups {
    portSpecs: t.ChannelSpec[];
    askNames: string[];
    streamSpecs: t.ChannelSpec[];
@@ -79,7 +79,7 @@ export class PreloadBindingsWriter extends BaseWriter {
     */
    private buildExpose(): string[] {
       const [i1] = this.indents;
-      const worldId = this.config.isolatedWorldId;
+      const worldId = this.getWorldId();
       const call =
          worldId === undefined
             ? "contextBridge.exposeInMainWorld(key, api);"
@@ -95,8 +95,13 @@ export class PreloadBindingsWriter extends BaseWriter {
       return out;
    }
 
+   /** The isolated world that the API is exposed in, or `undefined` for the main world. */
+   protected getWorldId(): number | undefined {
+      return this.config.isolatedWorldId;
+   }
+
    /** Sorts the channels of the page into the groups that need components of their own. */
-   private groupChannels(): ChannelGroups {
+   protected groupChannels(): ChannelGroups {
       const groups: ChannelGroups = {
          portSpecs: [],
          askNames: [],
@@ -112,7 +117,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       return groups;
    }
 
-   private groupChannel(spec: t.ChannelSpec, groups: ChannelGroups): void {
+   protected groupChannel(spec: t.ChannelSpec, groups: ChannelGroups): void {
       const { portSpecs, askNames, streamSpecs, brokeredSpecs, channels } = groups;
       if (spec.kind === "Port") {
          // The page has the same API for both peers: another page, or the main process.

@@ -95,6 +95,24 @@ export class VitestUtilityBindingsWriter extends writer.UtilityBindingsWriter {
    }
 }
 
+export class VitestServiceWorkerPreloadWriter extends writer.ServiceWorkerPreloadWriter {
+   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
+   }
+   public getTargetFilePath(): string {
+      return "";
+   }
+}
+
+export class VitestServiceWorkerTypesWriter extends writer.ServiceWorkerTypesWriter {
+   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
+   }
+   public getTargetFilePath(): string {
+      return "";
+   }
+}
+
 /**
  * Builds the file specs of one channel, with a signature that the parser produces from
  * `(arg1: T, arg2: T) => R`, where the second parameter may be rest or optional.
@@ -194,6 +212,8 @@ export default {
    VitestPreloadBindingsWriter,
    VitestRendererTypesWriter,
    VitestUtilityBindingsWriter,
+   VitestServiceWorkerPreloadWriter,
+   VitestServiceWorkerTypesWriter,
    vitestChannelSpecs: {
       Unicast_RendererToMain: getParsedFileSpecsArray({
          channelKind: "Unicast",

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-service-worker-only-sendFromWorker",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

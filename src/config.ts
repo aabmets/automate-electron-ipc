@@ -59,11 +59,27 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
          ? path.join(ipcDataDir, "utility.ts")
          : utils.resolveUserProjectPath(mergedConfig.utilityBindingsPath, cwd)
    ).replace(/\\/g, "/");
+   const serviceWorkerPreloadFilePath = (
+      mergedConfig.serviceWorkerPreloadPath === undefined
+         ? path.join(ipcDataDir, "service-worker-preload.ts")
+         : utils.resolveUserProjectPath(mergedConfig.serviceWorkerPreloadPath, cwd)
+   ).replace(/\\/g, "/");
+   // The typings of the worker are written next to its preload script.
+   const serviceWorkerTypesFilePath = path
+      .join(path.dirname(serviceWorkerPreloadFilePath), "service-worker.d.ts")
+      .replace(/\\/g, "/");
    const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath];
    if (taken.includes(utilityBindingsFilePath)) {
       throw new Error(
          `The config 'utilityBindingsPath' ('${mergedConfig.utilityBindingsPath}') is the path of ` +
             "another generated file. Choose a different path.",
+      );
+   }
+   taken.push(utilityBindingsFilePath);
+   if (taken.includes(serviceWorkerPreloadFilePath)) {
+      throw new Error(
+         `The config 'serviceWorkerPreloadPath' ('${mergedConfig.serviceWorkerPreloadPath}') is the ` +
+            "path of another generated file. Choose a different path.",
       );
    }
    return {
@@ -73,6 +89,8 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       preloadBindingsFilePath,
       rendererTypesFilePath,
       utilityBindingsFilePath,
+      serviceWorkerPreloadFilePath,
+      serviceWorkerTypesFilePath,
       ipcSchema: {
          path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,

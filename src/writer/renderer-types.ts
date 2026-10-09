@@ -13,7 +13,7 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 
-interface ChannelEntry {
+export interface ChannelEntry {
    name: string;
    /** Whether the promise of the channel can be rejected with an `IpcError`. */
    throws?: boolean;
@@ -91,9 +91,13 @@ export class RendererTypesWriter extends BaseWriter {
       out.push(this.renderDeclaration(channels));
       return out.join("\n");
    }
+   /** The isolated world that the API is exposed in, or `undefined` for the main world. */
+   protected getWorldId(): number | undefined {
+      return this.config.isolatedWorldId;
+   }
    /** The entry of a channel of the page, or `null` for the channels that the page has no part in. */
-   private buildChannelEntry(spec: t.ChannelSpec): ChannelEntry | null {
-      if (this.isUtilitySpec(spec)) {
+   protected buildChannelEntry(spec: t.ChannelSpec): ChannelEntry | null {
+      if (this.isUtilitySpec(spec) || this.isWorkerSpec(spec)) {
          return null;
       } else if (spec.kind === "Port") {
          // The page has the same API for both peers: another page, or the main process.
@@ -116,7 +120,7 @@ export class RendererTypesWriter extends BaseWriter {
       const i0 = this.indents[0];
       const [, i1, i2] = this.indents;
       const exposeAs = this.getExposeAs();
-      const worldId = this.config.isolatedWorldId;
+      const worldId = this.getWorldId();
       const members = this.sortChannels([
          ...channels.map((channel) => ({
             name: channel.name,

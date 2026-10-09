@@ -153,6 +153,47 @@ describe("public types", () => {
       }
    });
 
+   it("accepts the verbs of the service worker channels, with their own options", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import { askWorker, emitToWorker, invokeFromWorker, sendFromWorker } from "automate-electron-ipc";
+
+            export default defineChannels({
+               getToken: invokeFromWorker<(scope: string) => Promise<string>, Error>(),
+               saveBlob: invokeFromWorker<(name: string) => number>({ allowedOrigins: ["app://."] }),
+               syncDone: sendFromWorker<(n: number) => void>({ allowedOrigins: ["app://."] }),
+               flush: askWorker<(force: boolean) => number>(),
+               changed: emitToWorker<(key: string) => void>(),
+               asForm: invokeFromWorker() as (id: number) => Promise<string>,
+            });
+         `,
+      });
+      expect(diagnostics).toBe("");
+   });
+
+   it("rejects the options that the service worker verbs do not have", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import { askWorker, emitToWorker, invokeFromWorker, sendFromWorker } from "automate-electron-ipc";
+
+            export default defineChannels({
+               a: invokeFromWorker<() => void>({ timeoutMs: 5 }),
+               b: invokeFromWorker<() => void>({ scopes: ["a"] }),
+               c: sendFromWorker<() => void>({ validate: undefined as never, scopes: ["a"] }),
+               d: askWorker<() => void>({ allowedOrigins: ["app://."] }),
+               e: emitToWorker<() => void>({ trigger: "focus" }),
+               f: sendFromWorker<() => void, Error>(),
+               g: askWorker<() => void, Error>(),
+            });
+         `,
+      });
+      for (const line of [6, 7, 8, 9, 10, 11, 12]) {
+         expect(diagnostics).toContain(`schema.ts(${line},`);
+      }
+   });
+
    it("keeps the signature of each channel in the type of the map", async () => {
       const diagnostics = await typecheck({
          "schema.ts": `

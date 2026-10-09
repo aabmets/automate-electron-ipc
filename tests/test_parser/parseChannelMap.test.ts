@@ -14,7 +14,7 @@ import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 const IMPORT =
-   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility } from "automate-electron-ipc";';
+   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility, invokeFromWorker, sendFromWorker, askWorker, emitToWorker } from "automate-electron-ipc";';
 
 function parseMap(code: string, imports = IMPORT) {
    const { module, src } = parser.parseModule(`${imports}\n${code}`);
@@ -1198,4 +1198,87 @@ describe("parseChannelMapModule, scopes", () => {
          expect(msg).toContain(`option 'scopes' is not supported by '${verb}'`);
       },
    );
+});
+
+describe("service worker channels", () => {
+   const verbs = [
+      ["invokeFromWorker", "Unicast", "ServiceWorkerToMain"],
+      ["sendFromWorker", "Broadcast", "ServiceWorkerToMain"],
+      ["askWorker", "Unicast", "MainToServiceWorker"],
+      ["emitToWorker", "Broadcast", "MainToServiceWorker"],
+   ] as const;
+
+   it.each(verbs)("reads %s as a %s channel with the direction %s", (verb, kind, direction) => {
+      const spec = parseOne(
+         `a: ${verb}<(id: number) => ${kind === "Broadcast" ? "void" : "string"}>()`,
+      );
+      expect(spec).toMatchObject({ name: "a", kind, direction });
+      expect(spec.signature?.params).toHaveLength(1);
+   });
+
+   it("reads allowedOrigins of the channels that a worker calls", () => {
+      for (const verb of ["invokeFromWorker", "sendFromWorker"]) {
+         const returns = verb === "sendFromWorker" ? "void" : "string";
+         const spec = parseOne(
+            `a: ${verb}<() => ${returns}>({ allowedOrigins: ["app://main", "http://localhost:5173"] })`,
+         );
+         expect(spec.allowedOrigins).toStrictEqual(["app://main", "http://localhost:5173"]);
+      }
+   });
+
+   it.each([
+      ["invokeFromWorker", "timeoutMs: 5"],
+      ["invokeFromWorker", "validate: v"],
+      ["invokeFromWorker", 'scopes: ["a"]'],
+      ["sendFromWorker", "validate: v"],
+      ["askWorker", 'allowedOrigins: ["app://."]'],
+      ["askWorker", "timeoutMs: 5"],
+      ["emitToWorker", 'scopes: ["a"]'],
+      ["emitToWorker", 'trigger: "focus"'],
+   ])("rejects the option of another verb: %s with %s", (verb, option) => {
+      expect(
+         parseError(`export default defineChannels({ a: ${verb}<() => void>({ ${option} }) });`),
+      ).toContain(`option '${option.split(":")[0]}' is not supported by '${verb}'.`);
+   });
+
+   it("takes the error types of invokeFromWorker as a second type argument", () => {
+      const spec = parseOne(
+         "a: invokeFromWorker<(id: number) => Promise<Token>, NotSignedIn | Denied>()",
+      );
+      expect(spec.errors).toMatchObject({ definition: "NotSignedIn | Denied" });
+      expect(spec.errors?.customTypes).toStrictEqual(["NotSignedIn", "Denied"]);
+      expect(spec.signature?.customTypes).toStrictEqual(["Token"]);
+   });
+
+   it.each(["sendFromWorker", "askWorker", "emitToWorker"])(
+      "rejects the error types of %s, which has one type argument",
+      (verb) => {
+         expect(
+            parseError(`export default defineChannels({ a: ${verb}<() => void, Error>() });`),
+         ).toBe(
+            `Schema file 'schema.ts': channel 'a': '${verb}' takes exactly one type argument, the signature.`,
+         );
+      },
+   );
+
+   it("accepts the as form of the verbs", () => {
+      const spec = parseOne("a: invokeFromWorker() as (id: number) => Promise<Token>");
+      expect(spec).toMatchObject({ kind: "Unicast", direction: "ServiceWorkerToMain" });
+      expect(spec.signature?.customTypes).toStrictEqual(["Token"]);
+   });
+
+   it("keeps the channels of a worker next to the other channels of the map", () => {
+      const { channelSpecs } = parseMap(`export default defineChannels({
+         a: invoke<() => void>(),
+         b: invokeFromWorker<() => void>(),
+         c: emitToWorker<() => void>(),
+         d: callUtility<() => void>(),
+      });`);
+      expect(channelSpecs.map((spec) => spec.direction)).toStrictEqual([
+         "RendererToMain",
+         "ServiceWorkerToMain",
+         "MainToServiceWorker",
+         "MainToUtility",
+      ]);
+   });
 });

@@ -46,6 +46,16 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
                : "utilityBindingsPath must be the path of a .ts file";
          }),
       ),
+      serviceWorkerPreloadPath: optional(
+         refine(string(), "relative", (value) => {
+            if (path.isAbsolute(value)) {
+               return "serviceWorkerPreloadPath must be relative to the project root";
+            }
+            return /\.[cm]?ts$/.test(value) && !value.endsWith(".d.ts")
+               ? true
+               : "serviceWorkerPreloadPath must be the path of a .ts file";
+         }),
+      ),
       channelPrefix: optional(
          refine(string(), "prefix", (value) => {
             if (value.length > 64) {
@@ -183,6 +193,10 @@ interface SpecStructFlags {
    brokered?: boolean;
    /** A `scopes` option (the channels that a page takes part in). */
    scoped?: boolean;
+   /** A channel that a service worker calls in the main process. */
+   workerCall?: boolean;
+   /** A channel from the main process to a service worker. */
+   workerNotify?: boolean;
 }
 
 function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}): Struct<any, any> {
@@ -195,6 +209,8 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
       utility = false,
       brokered = false,
       scoped = false,
+      workerCall = false,
+      workerNotify = false,
    } = flags;
    return object({
       name: refine(string(), "identifier", (value) =>
@@ -212,6 +228,10 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
          const choices = [];
          if (brokered) {
             choices.push("RendererToUtility");
+         } else if (workerCall) {
+            choices.push("ServiceWorkerToMain");
+         } else if (workerNotify) {
+            choices.push("MainToServiceWorker");
          } else if (utility) {
             choices.push("MainToUtility", "UtilityToMain");
          } else if (kind === "Broadcast") {
@@ -262,7 +282,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
          ),
       }),
       errors:
-         (kind === "Unicast" && !asking && !utility) || streaming
+         (kind === "Unicast" && !asking && !utility && !workerNotify) || streaming
             ? optional(
                  object({
                     definition: string(),
@@ -274,12 +294,13 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
               )
             : optional(never()),
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
-      allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
+      allowedOrigins:
+         restrictable || workerCall ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
       scopes: scoped ? optional(ScopesStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
       timeoutMs:
-         kind === "Unicast" && !asking && !utility && !brokered
+         kind === "Unicast" && !asking && !utility && !brokered && !workerCall && !workerNotify
             ? optional(number())
             : optional(never()),
    });
@@ -302,6 +323,10 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
       }),
       UtilityBroadcastStruct: getChannelSpecStruct("Broadcast", { utility: true }),
       UtilityUnicastStruct: getChannelSpecStruct("Unicast", { utility: true }),
+      WorkerCallBroadcastStruct: getChannelSpecStruct("Broadcast", { workerCall: true }),
+      WorkerCallUnicastStruct: getChannelSpecStruct("Unicast", { workerCall: true }),
+      WorkerNotifyBroadcastStruct: getChannelSpecStruct("Broadcast", { workerNotify: true }),
+      WorkerNotifyUnicastStruct: getChannelSpecStruct("Unicast", { workerNotify: true }),
       BrokeredUnicastStruct: getChannelSpecStruct("Unicast", { brokered: true, scoped: true }),
       BrokeredStreamStruct: getChannelSpecStruct("Stream", {
          streaming: true,
@@ -309,17 +334,35 @@ export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): voi
          scoped: true,
       }),
    };
-   const brokered = spec?.direction === ("RendererToUtility" as t.ChannelDirection);
-   const toUtility = spec?.direction === ("MainToUtility" as t.ChannelDirection);
-   const fromUtility = spec?.direction === ("UtilityToMain" as t.ChannelDirection);
-   if (brokered && spec?.kind === ("Unicast" as t.ChannelKind)) {
-      assert(spec, structMap.BrokeredUnicastStruct);
-   } else if (brokered && spec?.kind === ("Stream" as t.ChannelKind)) {
-      assert(spec, structMap.BrokeredStreamStruct);
-   } else if ((toUtility || fromUtility) && spec?.kind === ("Broadcast" as t.ChannelKind)) {
-      assert(spec, structMap.UtilityBroadcastStruct);
-   } else if ((toUtility || fromUtility) && spec?.kind === ("Unicast" as t.ChannelKind)) {
-      assert(spec, structMap.UtilityUnicastStruct);
+   // The channels of the utility processes and of the service workers have a struct of their own
+   // for each direction. A spec of another direction is checked against its kind, and rejected
+   // there when the kind is not allowed with the direction.
+   const byDirection: Record<string, Partial<Record<string, Struct<any, any>>>> = {
+      RendererToUtility: {
+         Unicast: structMap.BrokeredUnicastStruct,
+         Stream: structMap.BrokeredStreamStruct,
+      },
+      MainToUtility: {
+         Broadcast: structMap.UtilityBroadcastStruct,
+         Unicast: structMap.UtilityUnicastStruct,
+      },
+      UtilityToMain: {
+         Broadcast: structMap.UtilityBroadcastStruct,
+         Unicast: structMap.UtilityUnicastStruct,
+      },
+      ServiceWorkerToMain: {
+         Broadcast: structMap.WorkerCallBroadcastStruct,
+         Unicast: structMap.WorkerCallUnicastStruct,
+      },
+      MainToServiceWorker: {
+         Broadcast: structMap.WorkerNotifyBroadcastStruct,
+         Unicast: structMap.WorkerNotifyUnicastStruct,
+      },
+   };
+   const direction = spec?.direction as string | undefined;
+   const known = direction === undefined ? undefined : byDirection[direction]?.[spec?.kind ?? ""];
+   if (known) {
+      assert(spec, known);
    } else if (spec?.kind === ("Broadcast" as t.ChannelKind)) {
       if (spec?.direction === ("MainToRenderer" as t.ChannelDirection)) {
          assert(spec, structMap.TriggerableBroadcastStruct);

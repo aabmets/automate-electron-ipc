@@ -12,11 +12,15 @@
 import { MainBindingsWriter } from "./main-bindings.js";
 import { PreloadBindingsWriter } from "./preload-bindings.js";
 import { RendererTypesWriter } from "./renderer-types.js";
+import { ServiceWorkerPreloadWriter } from "./service-worker-preload.js";
+import { ServiceWorkerTypesWriter } from "./service-worker-types.js";
 import { UtilityBindingsWriter } from "./utility-bindings.js";
 
 export default {
    MainBindingsWriter,
    PreloadBindingsWriter,
    RendererTypesWriter,
+   ServiceWorkerPreloadWriter,
+   ServiceWorkerTypesWriter,
    UtilityBindingsWriter,
 };

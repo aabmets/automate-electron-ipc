@@ -331,6 +331,21 @@ const VERBS = new Map<string, VerbInfo>([
       "streamUtility",
       { kind: "Stream", direction: "RendererToUtility", options: ["scopes"], errors: true },
    ],
+   [
+      "invokeFromWorker",
+      {
+         kind: "Unicast",
+         direction: "ServiceWorkerToMain",
+         options: ["allowedOrigins"],
+         errors: true,
+      },
+   ],
+   [
+      "sendFromWorker",
+      { kind: "Broadcast", direction: "ServiceWorkerToMain", options: ["allowedOrigins"] },
+   ],
+   ["askWorker", { kind: "Unicast", direction: "MainToServiceWorker", options: [] }],
+   ["emitToWorker", { kind: "Broadcast", direction: "MainToServiceWorker", options: [] }],
 ]);
 
 /** The options whose value is an array of string literals. The others are string literals. */
