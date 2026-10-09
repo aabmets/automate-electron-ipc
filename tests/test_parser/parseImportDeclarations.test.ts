@@ -10,7 +10,7 @@
  */
 
 import { forEachChild, parseModule } from "@src/ast.js";
-import parser from "@src/parser.js";
+import { parseImportDeclarations as parseNode } from "@src/import-specs.js";
 import type { ImportDeclaration } from "@swc/core";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ function parseImportDeclarations(code: string): t.ImportSpec[] {
    const specs: t.ImportSpec[] = [];
    forEachChild(module, (node) => {
       if (node.type === "ImportDeclaration") {
-         parser.parseImportDeclarations(node as ImportDeclaration, src, specs);
+         parseNode(node as ImportDeclaration, src, specs);
       }
    });
    return specs;

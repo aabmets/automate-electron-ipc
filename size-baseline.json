@@ -1,5 +1,4 @@
 {
-   "src/parser.ts": 850,
    "src/validators.ts": 688,
    "src/writer/base-writer.ts": 463,
    "src/writer/imports-generator.ts": 441,

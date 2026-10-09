@@ -10,7 +10,7 @@
  */
 
 import { parseModule } from "@src/ast.js";
-import parser from "@src/parser.js";
+import { parseChannelMapModule } from "@src/channel-map.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +19,7 @@ const IMPORT =
 
 function parseMap(code: string, imports = IMPORT) {
    const { module, src } = parseModule(`${imports}\n${code}`);
-   return parser.parseChannelMapModule(module, src, "schema.ts");
+   return parseChannelMapModule(module, src, "schema.ts");
 }
 
 function parseOne(entry: string): Partial<t.ChannelSpec> {

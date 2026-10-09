@@ -10,7 +10,7 @@
  */
 
 import { forEachChild, parseModule, type TypeDefinitionNode } from "@src/ast.js";
-import parser from "@src/parser.js";
+import { parseTypeDefinitions as parseNodes } from "@src/type-definitions.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
 
@@ -20,7 +20,7 @@ function parseTypeDefinitions(code: string): t.TypeSpec[] {
    forEachChild(module, (node) => {
       const inner = node.declaration ?? node.decl ?? node;
       if (inner.type === "TsInterfaceDeclaration" || inner.type === "TsTypeAliasDeclaration") {
-         parser.parseTypeDefinitions(node as TypeDefinitionNode, src, specs);
+         parseNodes(node as TypeDefinitionNode, src, specs);
       }
    });
    return specs;
