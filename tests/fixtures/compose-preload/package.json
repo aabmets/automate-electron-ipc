@@ -1,0 +1,10 @@
+{
+   "name": "fixture-compose-preload",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "autoExpose": false
+      }
+   }
+}

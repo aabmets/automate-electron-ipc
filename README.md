@@ -61,7 +61,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "channelPrefix": "autoipc:",
          "timeoutMs": 0,
          "utilityBindingsPath": "src/autoipc/utility.ts",
-         "exposeAs": "ipc"
+         "exposeAs": "ipc",
+         "autoExpose": true
       }
    }
 }
@@ -93,7 +94,38 @@ Config explanation:
    more, since Electron keeps the lower IDs for itself. Only the scripts that run in that world see the
    API, so the world needs to be created for the page, for example with `webFrame.setIsolatedWorldInfo`.
    Without it, the API is exposed in the main world.
+ - `autoExpose` - Whether the generated `preload.ts` exposes the API as soon as it loads, `true` by
+   default. Set it to `false` to expose the API from your own preload code. See
+   [Composing the preload script](#composing-the-preload-script).
 
+
+### Composing the preload script
+
+The generated `preload.ts` exports the API it builds, and a function that exposes it:
+
+```ts
+export const api = { /* one object per channel */ };
+export function expose(key = "ipc"): void { /* contextBridge.exposeInMainWorld(key, api) */ }
+expose();   // only with "autoExpose": true, the default
+```
+
+By default the file calls `expose()` itself, so using it as the preload script of a window works as
+before. With `"autoExpose": false` nothing is exposed while the file loads, and your own preload code
+decides what happens:
+
+```ts
+// src/preload.ts
+import { api, expose } from "./autoipc/preload";
+
+expose();                // under the configured key, `exposeAs`
+expose("legacyIpc");     // under another key
+doSomethingBefore(api);  // or use the API in the preload script itself
+```
+
+The default key of `expose` is `exposeAs`, and with `isolatedWorldId` it exposes in that isolated
+world. Every call exposes the same `api` object, so the state of the channels (listeners, ports,
+streams) is shared between the keys. Only the key that `window.d.ts` declares (`exposeAs`) is typed
+for the page.
 
 ### Getting Started
 

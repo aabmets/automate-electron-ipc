@@ -33,44 +33,94 @@ describe("PreloadBindingsWriter", () => {
          await obj.write(false);
          return (await fsp.readFile(obj.getTargetFilePath())).toString();
       };
+      const EXPOSE = (key: string) =>
+         `export function expose(key = '${key}'): void {\n   contextBridge.exposeInMainWorld(key, api);\n}`;
 
-      it("exposes the API in the main world as 'ipc' when the config says nothing", async () => {
+      it("exports the API as `api`, and exposes it in the main world as 'ipc' by default", async () => {
          const output = await render(channels, {});
-         expect(output).toContain("contextBridge.exposeInMainWorld('ipc', {\n   getIt: {");
+         expect(output).toContain("export const api = {\n   getIt: {");
+         expect(output).toContain(EXPOSE("ipc"));
+         expect(output.endsWith("}\n\nexpose();\n")).toBe(true);
          expect(output).not.toContain("exposeInIsolatedWorld");
       });
 
       it("exposes the API under the key of `exposeAs`", async () => {
          const output = await render(channels, { exposeAs: "api" });
-         expect(output).toContain("contextBridge.exposeInMainWorld('api', {\n   getIt: {");
+         expect(output).toContain(EXPOSE("api"));
          expect(output).not.toContain("'ipc'");
       });
 
       it("exposes the API in the isolated world of `isolatedWorldId`", async () => {
          const output = await render(channels, { exposeAs: "bridge", isolatedWorldId: 1004 });
          expect(output).toContain(
-            "contextBridge.exposeInIsolatedWorld(1004, 'bridge', {\n   getIt: {",
+            "export function expose(key = 'bridge'): void {\n   contextBridge.exposeInIsolatedWorld(1004, key, api);\n}",
          );
          expect(output).not.toContain("exposeInMainWorld");
       });
 
+      it("calls `expose()` once, after the declaration of `expose`", async () => {
+         const output = await render(channels, {});
+         expect(output.match(/^expose\(\);$/gm)).toHaveLength(1);
+         expect(output.indexOf("expose();")).toBeGreaterThan(
+            output.indexOf("export function expose"),
+         );
+      });
+
+      it("leaves the call out when `autoExpose` is false, and still exports `api` and `expose`", async () => {
+         const output = await render(channels, { autoExpose: false, exposeAs: "bridge" });
+         expect(output).toContain("export const api = {\n   getIt: {");
+         expect(output).toContain(EXPOSE("bridge"));
+         expect(output).not.toMatch(/^expose\(\);$/m);
+         expect(output.endsWith("}\n")).toBe(true);
+      });
+
+      it("exposes with `autoExpose` true as it does without the option", async () => {
+         expect(await render(channels, { autoExpose: true })).toBe(await render(channels, {}));
+      });
+
+      it("keeps the world of the config when `autoExpose` is false", async () => {
+         const output = await render(channels, { autoExpose: false, isolatedWorldId: 2000 });
+         expect(output).toContain("contextBridge.exposeInIsolatedWorld(2000, key, api);");
+         expect(output).not.toMatch(/^expose\(\);$/m);
+      });
+
       it("exposes the empty API the same way", async () => {
          expect(await render([], { exposeAs: "api" })).toBe(
-            "import { contextBridge } from \"electron\";\n\ncontextBridge.exposeInMainWorld('api', {});",
+            [
+               'import { contextBridge } from "electron";',
+               "",
+               "export const api = {};",
+               "",
+               EXPOSE("api"),
+               "",
+               "expose();",
+            ].join("\n"),
          );
-         expect(await render([], { isolatedWorldId: 2000 })).toBe(
-            "import { contextBridge } from \"electron\";\n\ncontextBridge.exposeInIsolatedWorld(2000, 'ipc', {});",
+         expect(await render([], { isolatedWorldId: 2000, autoExpose: false })).toBe(
+            [
+               'import { contextBridge } from "electron";',
+               "",
+               "export const api = {};",
+               "",
+               "export function expose(key = 'ipc'): void {",
+               "   contextBridge.exposeInIsolatedWorld(2000, key, api);",
+               "}",
+            ].join("\n"),
          );
       });
    });
 
-   it("should write empty ipc object into exposeInMainWorld when pfsArray is empty", async () => {
+   it("should write an empty api object that is exposed when pfsArray is empty", async () => {
       const obj = new shared.VitestPreloadBindingsWriter([]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { contextBridge } from "electron";\n
-         contextBridge.exposeInMainWorld('ipc', {});
+         export const api = {};\n
+         export function expose(key = 'ipc'): void {
+            contextBridge.exposeInMainWorld(key, api);
+         }\n
+         expose();
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trim());
    });
@@ -83,7 +133,7 @@ describe("PreloadBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
-         contextBridge.exposeInMainWorld('ipc', {
+         export const api = {
             vitestChannel: {
                invoke: async (...args: any[]) => {
                   const result = await ipcRenderer.invoke('vitestChannel', ...args);
@@ -93,7 +143,13 @@ describe("PreloadBindingsWriter", () => {
                   throw result.error;
                },
             },
-         });
+         };
+
+         export function expose(key = 'ipc'): void {
+            contextBridge.exposeInMainWorld(key, api);
+         }
+
+         expose();
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
@@ -106,11 +162,17 @@ describe("PreloadBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
-         contextBridge.exposeInMainWorld('ipc', {
+         export const api = {
             vitestChannel: {
                send: (...args: any[]) => ipcRenderer.send('vitestChannel', ...args),
             },
-         });
+         };
+
+         export function expose(key = 'ipc'): void {
+            contextBridge.exposeInMainWorld(key, api);
+         }
+
+         expose();
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
@@ -123,7 +185,7 @@ describe("PreloadBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
-         contextBridge.exposeInMainWorld('ipc', {
+         export const api = {
             vitestChannel: {
                on: (callback: Function) => {
                   const listener = (_event: any, ...args: any[]) => callback(...args);
@@ -140,7 +202,13 @@ describe("PreloadBindingsWriter", () => {
                   };
                },
             },
-         });
+         };
+
+         export function expose(key = 'ipc'): void {
+            contextBridge.exposeInMainWorld(key, api);
+         }
+
+         expose();
       `);
       expect(buffer.toString()).toStrictEqual(expectedOutput.trimStart());
    });
@@ -163,7 +231,7 @@ describe("PreloadBindingsWriter", () => {
          "ipcRenderer.on('vitestChannel:close', (_event: IpcRendererEvent, key: unknown) => {\n   ports['vitestChannel'].end(key);\n});",
       );
       expect(output).toContain(
-         "contextBridge.exposeInMainWorld('ipc', {\n   vitestChannel: ports['vitestChannel'].api,\n});",
+         "export const api = {\n   vitestChannel: ports['vitestChannel'].api,\n};",
       );
       for (const member of ["send", "on", "onReady", "onClose", "onOverflow", "onConnection"]) {
          expect(output).toMatch(new RegExp(`^ {6}${member}: `, "m"));
@@ -254,7 +322,7 @@ describe("PreloadBindingsWriter", () => {
       await obj.write(false);
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
-      const exposed = output.slice(output.indexOf("exposeInMainWorld"));
+      const exposed = output.slice(output.indexOf("export const api"));
       expect([...exposed.matchAll(/^ {3}(\w+): /gm)].map((match) => match[1])).toStrictEqual([
          "Beta",
          "alpha",

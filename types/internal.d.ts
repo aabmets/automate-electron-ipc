@@ -51,6 +51,12 @@ export interface IPCOptionalConfig {
     * lower IDs for itself. Without it, the API is exposed in the main world.
     */
    isolatedWorldId?: number;
+   /**
+    * Whether the generated `preload.ts` exposes the API as soon as it loads. On by default. Turn it
+    * off to import `api` and `expose` from the preload file and expose the API from your own preload
+    * code, under any number of keys.
+    */
+   autoExpose?: boolean;
 }
 
 export interface IPCResolvedConfig {
@@ -68,6 +74,7 @@ export interface IPCResolvedConfig {
    timeoutMs: number;
    exposeAs: string;
    isolatedWorldId?: number;
+   autoExpose: boolean;
    ipcSchema: {
       path: string;
       stats: Stats | null;

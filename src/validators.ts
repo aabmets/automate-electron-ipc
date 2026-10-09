@@ -80,6 +80,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
                : "isolatedWorldId must be an integer of 1000 or more, up to 2147483647",
          ),
       ),
+      autoExpose: optional(boolean()),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";

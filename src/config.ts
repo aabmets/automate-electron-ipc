@@ -36,6 +36,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       channelPrefix: "autoipc:",
       timeoutMs: 0,
       exposeAs: "ipc",
+      autoExpose: true,
       ...userConfig,
    };
    valid.validateOptionalConfig(mergedConfig);

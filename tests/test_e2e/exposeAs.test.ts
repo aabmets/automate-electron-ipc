@@ -98,3 +98,97 @@ describe("fixture isolated-world, with the key 'api' in the world 1004", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("fixture compose-preload, with `autoExpose` off", () => {
+   const load = async () => {
+      project = await runFixture("compose-preload");
+      const fake = createFakePreloadElectron();
+      const generated = loadGenerated(project.generated["preload.ts"], {
+         electron: fake.electron,
+      });
+      return { ...fake, generated };
+   };
+
+   it("exposes nothing while the preload script loads", async () => {
+      const { electron, exposed, exposedInWorld } = await load();
+
+      expect(electron.contextBridge.exposeInMainWorld).not.toHaveBeenCalled();
+      expect(electron.contextBridge.exposeInIsolatedWorld).not.toHaveBeenCalled();
+      expect(exposed).toStrictEqual({});
+      expect(exposedInWorld).toStrictEqual({});
+   });
+
+   it("exports `api` with the members of the channels, and `expose`", async () => {
+      const { generated } = await load();
+
+      expect(Object.keys(generated.api).sort()).toStrictEqual([
+         "chat",
+         "getUser",
+         "logLine",
+         "progress",
+      ]);
+      expect(typeof generated.expose).toBe("function");
+   });
+
+   it("exposes the API under the key of `exposeAs` when `expose()` is called", async () => {
+      const { generated, electron, exposed } = await load();
+      generated.expose();
+
+      expect(electron.contextBridge.exposeInMainWorld).toHaveBeenCalledTimes(1);
+      expect(Object.keys(exposed)).toStrictEqual(["ipc"]);
+      expect(exposed.ipc).toBe(generated.api);
+   });
+
+   it("exposes the same API under any number of keys", async () => {
+      const { generated, exposed } = await load();
+      generated.expose("first");
+      generated.expose("second");
+
+      expect(Object.keys(exposed)).toStrictEqual(["first", "second"]);
+      expect(exposed.first).toBe(generated.api);
+      expect(exposed.second).toBe(generated.api);
+   });
+
+   it("generates a preload script that app code can import and use, and type-checks", async () => {
+      project = await runFixture("compose-preload");
+
+      expect(project.generated["preload.ts"]).not.toMatch(/^expose\(\);$/m);
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("fails the type-check when the usage imports something that is not exported", async () => {
+      project = await runFixture("compose-preload");
+      const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
+      const text = await fsp.readFile(usage, "utf8");
+      await fsp.writeFile(usage, text.replace("{ api, expose }", "{ api, exposeAll }"));
+
+      expect(await project.typecheck()).toContain("schema-usage.ts");
+   });
+});
+
+describe("generated preload script, with `autoExpose` on", () => {
+   it("exposes the API as it loads, and again under another key on request", async () => {
+      project = await runFixture("expose-as");
+      const fake = createFakePreloadElectron();
+      const generated = loadGenerated(project.generated["preload.ts"], {
+         electron: fake.electron,
+      });
+
+      expect(Object.keys(fake.exposed)).toStrictEqual(["bridge"]);
+      generated.expose("other");
+      expect(Object.keys(fake.exposed)).toStrictEqual(["bridge", "other"]);
+      expect(fake.exposed.other).toBe(generated.api);
+   });
+
+   it("keeps the isolated world when the key is passed to `expose`", async () => {
+      project = await runFixture("isolated-world");
+      const fake = createFakePreloadElectron();
+      const generated = loadGenerated(project.generated["preload.ts"], {
+         electron: fake.electron,
+      });
+      generated.expose("again");
+
+      expect(Object.keys(fake.exposedInWorld[1004])).toStrictEqual(["api", "again"]);
+      expect(fake.electron.contextBridge.exposeInMainWorld).not.toHaveBeenCalled();
+   });
+});

@@ -338,6 +338,20 @@ describe("validateOptionalConfig, isolatedWorldId", () => {
    );
 });
 
+describe("validateOptionalConfig, autoExpose", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (autoExpose: unknown) =>
+      vld.validateOptionalConfig({ ...config, autoExpose: autoExpose as boolean });
+
+   it.each([true, false])("accepts %s", (value) => {
+      expect(() => check(value)).not.toThrowError();
+   });
+
+   it.each(["false", 0, 1, null, []])("rejects %j, since it is not a boolean", (value) => {
+      expect(() => check(value)).toThrowError(/autoExpose/);
+   });
+});
+
 describe("validateChannelSpecs, errors", () => {
    const errors = { definition: "NotFoundError | AuthError", customTypes: ["NotFoundError"] };
    const make = (

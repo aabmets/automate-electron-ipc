@@ -79,6 +79,7 @@ describe("getResolvedConfig", () => {
          channelPrefix: "autoipc:",
          timeoutMs: 0,
          exposeAs: "ipc",
+         autoExpose: true,
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -103,6 +104,7 @@ describe("getResolvedConfig", () => {
                timeoutMs: 15000,
                exposeAs: "api",
                isolatedWorldId: 1004,
+               autoExpose: false,
             },
          },
       });
@@ -119,6 +121,7 @@ describe("getResolvedConfig", () => {
          timeoutMs: 15000,
          exposeAs: "api",
          isolatedWorldId: 1004,
+         autoExpose: false,
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,
@@ -137,6 +140,10 @@ describe("getResolvedConfig", () => {
 
       it.each(["name", "my-app", "Promise"])("refuses the key '%s'", async (exposeAs) => {
          await expect(resolve({ exposeAs })).rejects.toThrowError(/exposeAs/);
+      });
+
+      it.each(["no", 0])("refuses the autoExpose %j", async (autoExpose) => {
+         await expect(resolve({ autoExpose })).rejects.toThrowError(/autoExpose/);
       });
 
       it.each([999, 0, 1000.5])("refuses the world %d", async (isolatedWorldId) => {

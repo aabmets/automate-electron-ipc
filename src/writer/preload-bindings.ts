@@ -36,33 +36,45 @@ export class PreloadBindingsWriter extends BaseWriter {
       return !this.hasRendererChannels();
    }
    protected renderEmptyFileContents(): string {
-      return ['import { contextBridge } from "electron";\n', `${this.getExposeCall()}{});`].join(
-         "\n",
-      );
+      return ['import { contextBridge } from "electron";\n', "export const api = {};", ""]
+         .concat(this.buildExpose())
+         .join("\n");
    }
    protected renderFileContents(): string {
       const groups = this.groupChannels();
       const out = this.buildComponents(groups);
-      const bindingsExpression = [`\n${this.getExposeCall()}{`];
+      const bindingsExpression = ["\nexport const api = {"];
       for (const channel of this.sortChannels(groups.channels)) {
          bindingsExpression.push(channel.property);
       }
-      bindingsExpression.push("\n});\n");
+      bindingsExpression.push("\n};\n");
 
-      out.push(bindingsExpression.join(""));
+      out.push(bindingsExpression.join(""), ...this.buildExpose(), "");
       return out.join("\n");
    }
 
    /**
-    * The start of the call that exposes the API, up to the opening of its argument: in the main
-    * world by default, or in the isolated world of the config.
+    * `expose(key)`, which exposes `api` under the key: in the main world by default, or in the
+    * isolated world of the config. The key defaults to `exposeAs`. The call of `expose()` that
+    * follows is left out when `autoExpose` is off, so that the app's own preload code can decide
+    * when and under which keys to expose the API.
     */
-   private getExposeCall(): string {
-      const key = this.getExposeAs();
+   private buildExpose(): string[] {
+      const [i1] = this.indents;
       const worldId = this.config.isolatedWorldId;
-      return worldId === undefined
-         ? `contextBridge.exposeInMainWorld('${key}', `
-         : `contextBridge.exposeInIsolatedWorld(${worldId}, '${key}', `;
+      const call =
+         worldId === undefined
+            ? "contextBridge.exposeInMainWorld(key, api);"
+            : `contextBridge.exposeInIsolatedWorld(${worldId}, key, api);`;
+      const out = [
+         `export function expose(key = '${this.getExposeAs()}'): void {`,
+         `${i1}${call}`,
+         "}",
+      ];
+      if (this.getAutoExpose()) {
+         out.push("", "expose();");
+      }
+      return out;
    }
 
    /** Sorts the channels of the page into the groups that need components of their own. */
