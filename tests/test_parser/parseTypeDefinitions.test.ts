@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser, { type TypeDefinitionNode } from "@src/parser.js";
+import { forEachChild, parseModule, type TypeDefinitionNode } from "@src/ast.js";
+import parser from "@src/parser.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 function parseTypeDefinitions(code: string): t.TypeSpec[] {
-   const { module, src } = parser.parseModule(code);
+   const { module, src } = parseModule(code);
    const specs: t.TypeSpec[] = [];
-   parser.forEachChild(module, (node) => {
+   forEachChild(module, (node) => {
       const inner = node.declaration ?? node.decl ?? node;
       if (inner.type === "TsInterfaceDeclaration" || inner.type === "TsTypeAliasDeclaration") {
          parser.parseTypeDefinitions(node as TypeDefinitionNode, src, specs);
@@ -209,8 +210,7 @@ describe("parseTypeDefinitions", () => {
 
    describe("Edge Cases", () => {
       it("should return an empty array for empty source code", () => {
-         const result = parseTypeDefinitions("");
-         expect(result).toStrictEqual([]);
+         expect(parseTypeDefinitions("")).toStrictEqual([]);
       });
 
       it("should return an empty array when there are no type definitions", () => {

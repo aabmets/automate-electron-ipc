@@ -9,15 +9,16 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { forEachChild, parseModule } from "@src/ast.js";
 import parser from "@src/parser.js";
 import type { ImportDeclaration } from "@swc/core";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 function parseImportDeclarations(code: string): t.ImportSpec[] {
-   const { module, src } = parser.parseModule(code);
+   const { module, src } = parseModule(code);
    const specs: t.ImportSpec[] = [];
-   parser.forEachChild(module, (node) => {
+   forEachChild(module, (node) => {
       if (node.type === "ImportDeclaration") {
          parser.parseImportDeclarations(node as ImportDeclaration, src, specs);
       }
@@ -29,8 +30,7 @@ describe("parseImportDeclarations", () => {
    describe("Namespace Imports", () => {
       it("should correctly parse a namespace import", () => {
          const code = `import * as fs from 'fs';`;
-         const result = parseImportDeclarations(code);
-         expect(result).toStrictEqual([
+         expect(parseImportDeclarations(code)).toStrictEqual([
             {
                fromPath: "fs",
                customTypes: [],

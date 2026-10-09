@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser.js";
+import { parseModule } from "@src/ast.js";
+import { parseSignature as parseSig } from "@src/signature.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 function parseSignature(definition: string, locals: string[] = []): t.CallableSignature {
-   const { module, src } = parser.parseModule(`type T = ${definition};`);
+   const { module, src } = parseModule(`type T = ${definition};`);
    const alias = module.body[0] as any;
-   return parser.parseSignature(alias.typeAnnotation, src, new Set(locals));
+   return parseSig(alias.typeAnnotation, src, new Set(locals));
 }
 
 describe("parseSignature, async detection", () => {

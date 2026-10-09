@@ -9,13 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser.js";
+import { parseModule } from "@src/ast.js";
+import { parseSignature } from "@src/signature.js";
 import { describe, expect, it } from "vitest";
 
 const BOM = "﻿";
 
 function firstAlias(code: string) {
-   const { module, src } = parser.parseModule(code);
+   const { module, src } = parseModule(code);
    const alias = module.body.find((item) => item.type === "TsTypeAliasDeclaration") as any;
    return { alias, src };
 }
@@ -38,7 +39,7 @@ describe("parseModule, non-ASCII source", () => {
       const { alias, src } = firstAlias(
          'type T = /* é */ <X extends "ü"> (a: "é", b: Üser) => Promise<Üser>;',
       );
-      const sig = parser.parseSignature(alias.typeAnnotation, src);
+      const sig = parseSignature(alias.typeAnnotation, src);
       expect(sig.definition).toBe('<X extends "ü"> (a: "é", b: Üser) => Promise<Üser>');
       expect(sig.params.map((param) => [param.name, param.type])).toStrictEqual([
          ["a", '"é"'],
@@ -53,7 +54,7 @@ describe("parseModule, non-ASCII source", () => {
       const { alias, src } = firstAlias(
          'type T = <X extends "ü" /* 日本 ( */ = "ü"> /* é ( */ (a: X) => void;',
       );
-      const sig = parser.parseSignature(alias.typeAnnotation, src);
+      const sig = parseSignature(alias.typeAnnotation, src);
       expect(sig.definition.slice(sig.paramsStart)).toBe("a: X) => void");
    });
 

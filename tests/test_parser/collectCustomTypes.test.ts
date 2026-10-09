@@ -9,14 +9,16 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser.js";
+import { forEachChild, parseModule } from "@src/ast.js";
+import { isBuiltinType } from "@src/builtin-types.js";
+import { collectCustomTypes as collectTypes } from "@src/type-references.js";
 import { describe, expect, it } from "vitest";
 
 function collectCustomTypes(code: string, locals: string[] = []): Set<string> {
-   const { module, src } = parser.parseModule(code);
+   const { module, src } = parseModule(code);
    const set = new Set<string>();
-   parser.forEachChild(module, (node) => {
-      parser.collectCustomTypes(node, src, set, new Set(), new Set(locals));
+   forEachChild(module, (node) => {
+      collectTypes(node, src, set, new Set(), new Set(locals));
    });
    return set;
 }
@@ -43,7 +45,7 @@ describe("collectCustomTypes", () => {
          "object",
          "Function",
       ].forEach((typeName) => {
-         expect(parser.isBuiltinType(typeName)).toStrictEqual(true);
+         expect(isBuiltinType(typeName)).toStrictEqual(true);
          const customTypes = collectCustomTypes(`
             const x = type as (arg: ${typeName}) => ${typeName};
          `);

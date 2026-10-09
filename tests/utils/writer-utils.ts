@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser.js";
+import { parseModule } from "@src/ast.js";
+import { parseSignature } from "@src/signature.js";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import writer from "@src/writer/index.js";
 import type * as t from "@types";
@@ -150,9 +151,9 @@ export function parseTestSignature(
    locals: string[] = [],
    streaming = false,
 ): t.CallableSignature {
-   const { module, src } = parser.parseModule(`type T = ${definition};`);
+   const { module, src } = parseModule(`type T = ${definition};`);
    const alias = (module.body[0] as any).typeAnnotation;
-   return parser.parseSignature(alias, src, new Set(locals), new Map(), streaming);
+   return parseSignature(alias, src, new Set(locals), new Map(), streaming);
 }
 
 export interface SimpleChannel {
@@ -184,18 +185,12 @@ export interface SimpleChannel {
 export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[] {
    const channelSpecArray = channels.map((channel) => {
       const definition = `(${(channel.params ?? []).join(", ")}) => ${channel.returnType ?? "void"}`;
-      const { module, src } = parser.parseModule(`type T = ${definition};`);
+      const { module, src } = parseModule(`type T = ${definition};`);
       const alias = (module.body[0] as any).typeAnnotation;
       const { trigger, errors, params: _params, returnType: _returnType, ...rest } = channel;
       return {
          ...rest,
-         signature: parser.parseSignature(
-            alias,
-            src,
-            new Set(),
-            new Map(),
-            channel.kind === "Stream",
-         ),
+         signature: parseSignature(alias, src, new Set(), new Map(), channel.kind === "Stream"),
          ...(trigger && { trigger }),
          ...(errors && { errors: { definition: errors, customTypes: [] } }),
       };

@@ -9,19 +9,23 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseModule } from "@src/ast.js";
+import { collectModuleBindings, collectTypeDeclarations } from "@src/module-bindings.js";
 import parser from "@src/parser.js";
+import { parseSignature } from "@src/signature.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 /** Parses the signature of `type Sig = ...` in a module that also contains `declarations`. */
-function issuesOf(definition: string, declarations = ""): t.CloneIssue[] {
-   const { module, src } = parser.parseModule(`${declarations}\ntype Sig = ${definition};`);
+function issuesOf(definition: string, declarations = "", streaming = false): t.CloneIssue[] {
+   const { module, src } = parseModule(`${declarations}\ntype Sig = ${definition};`);
    const alias = module.body.at(-1) as any;
-   const signature = parser.parseSignature(
+   const signature = parseSignature(
       alias.typeAnnotation,
       src,
-      parser.collectModuleBindings(module),
-      parser.collectTypeDeclarations(module),
+      collectModuleBindings(module),
+      collectTypeDeclarations(module),
+      streaming,
    );
    return signature.cloneIssues ?? [];
 }
@@ -287,17 +291,7 @@ describe("cloneIssues, return types", () => {
    });
 
    it("reports a Promise in the chunks of a stream", () => {
-      const { module, src } = parser.parseModule(
-         "type Sig = () => AsyncIterable<Promise<string>>;",
-      );
-      const signature = parser.parseSignature(
-         (module.body[0] as any).typeAnnotation,
-         src,
-         parser.collectModuleBindings(module),
-         parser.collectTypeDeclarations(module),
-         true,
-      );
-      expect(signature.cloneIssues).toStrictEqual([
+      expect(issuesOf("() => AsyncIterable<Promise<string>>", "", true)).toStrictEqual([
          {
             level: "error",
             where: "chunk type",
@@ -443,8 +437,8 @@ describe("cloneIssues, types that are fine", () => {
    });
 
    it("leaves out the field when there is nothing to report", () => {
-      const { module, src } = parser.parseModule("type Sig = (a: string) => void;");
-      const signature = parser.parseSignature((module.body[0] as any).typeAnnotation, src);
+      const { module, src } = parseModule("type Sig = (a: string) => void;");
+      const signature = parseSignature((module.body[0] as any).typeAnnotation, src);
       expect(signature).not.toHaveProperty("cloneIssues");
    });
 });

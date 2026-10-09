@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseModule } from "@src/ast.js";
 import parser from "@src/parser.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
@@ -17,7 +18,7 @@ const IMPORT =
    'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort, callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility, invokeFromWorker, sendFromWorker, askWorker, emitToWorker } from "automate-electron-ipc";';
 
 function parseMap(code: string, imports = IMPORT) {
-   const { module, src } = parser.parseModule(`${imports}\n${code}`);
+   const { module, src } = parseModule(`${imports}\n${code}`);
    return parser.parseChannelMapModule(module, src, "schema.ts");
 }
 
@@ -65,8 +66,7 @@ describe("parseChannelMapModule", () => {
             });
 
             it("parses the generic form with an empty config", () => {
-               const spec = parseOne(`chan: ${verb}<(a: string) => void>({})`);
-               expect(spec).toMatchObject(expected);
+               expect(parseOne(`chan: ${verb}<(a: string) => void>({})`)).toMatchObject(expected);
             });
 
             it("parses the as form", () => {
