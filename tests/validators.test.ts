@@ -338,6 +338,20 @@ describe("validateOptionalConfig, isolatedWorldId", () => {
    );
 });
 
+describe("validateOptionalConfig, getPathForFile", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (getPathForFile: unknown) =>
+      vld.validateOptionalConfig({ ...config, getPathForFile: getPathForFile as boolean });
+
+   it.each([true, false])("accepts %s", (value) => {
+      expect(() => check(value)).not.toThrowError();
+   });
+
+   it.each(["true", 1, null, []])("rejects %j, since it is not a boolean", (value) => {
+      expect(() => check(value)).toThrowError(/getPathForFile/);
+   });
+});
+
 describe("validateOptionalConfig, autoExpose", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (autoExpose: unknown) =>
@@ -793,6 +807,44 @@ describe("validateGlobalChannelSpecs", () => {
       const nested = [file("dir\\z.ts", [spec("getUser")]), file("dir-a/x.ts", [spec("getUser")])];
       expect(() => vld.validateGlobalChannelSpecs(nested)).toThrowError(
          "Channel name 'getUser' is declared in both 'dir-a/x.ts' and 'dir\\z.ts'",
+      );
+   });
+});
+
+describe("validateReservedApiNames", () => {
+   const file = (relativePath: string, names: string[]): t.ParsedFileSpecs => ({
+      fullPath: `/project/ipc/${relativePath}`,
+      relativePath,
+      specs: {
+         channelSpecArray: names.map((name) => ({
+            ...new ChannelSpecGenerator().generate("RendererToMain", "Broadcast"),
+            name,
+         })),
+         channelMapExport: { kind: "default" },
+         importSpecArray: [],
+         typeSpecArray: [],
+      },
+   });
+
+   it("accepts a channel named getPathForFile while the config is off", () => {
+      const files = [file("a.ts", ["getPathForFile"])];
+      expect(() => vld.validateReservedApiNames(files, {})).not.toThrowError();
+      expect(() =>
+         vld.validateReservedApiNames(files, { getPathForFile: false }),
+      ).not.toThrowError();
+   });
+
+   it("accepts other channels while the config is on", () => {
+      const files = [file("a.ts", ["getPath", "getPathForFiles"])];
+      expect(() =>
+         vld.validateReservedApiNames(files, { getPathForFile: true }),
+      ).not.toThrowError();
+   });
+
+   it("rejects a channel named getPathForFile while the config is on, and names its file", () => {
+      const files = [file("a.ts", ["ok"]), file("b.ts", ["getPathForFile"])];
+      expect(() => vld.validateReservedApiNames(files, { getPathForFile: true })).toThrowError(
+         /Schema file 'b\.ts': Channel name 'getPathForFile' is reserved/,
       );
    });
 });

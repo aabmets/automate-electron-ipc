@@ -107,6 +107,9 @@ export function createFakePreloadElectron() {
             once: vi.fn(),
             removeListener: vi.fn(),
          },
+         webUtils: {
+            getPathForFile: vi.fn((file: { path?: string }) => file.path ?? ""),
+         },
       },
    };
 }

@@ -78,6 +78,93 @@ describe("PreloadBindingsWriter", () => {
       });
    });
 
+   describe("getPathForFile", () => {
+      const channels = shared.buildFileSpecs(
+         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+         { name: "zed", kind: "Broadcast", direction: "RendererToMain" },
+      );
+      const render = async (
+         pfsArray: t.ParsedFileSpecs[],
+         config: Partial<t.IPCResolvedConfig>,
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, config);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+      const HELPER = "getPathForFile: (file: File): string => webUtils.getPathForFile(file),";
+
+      it("adds nothing when the config says nothing, or says false", async () => {
+         const output = await render(channels, {});
+         expect(output).not.toContain("getPathForFile");
+         expect(output).not.toContain("webUtils");
+         expect(output).toContain('import { contextBridge, ipcRenderer } from "electron";');
+         expect(await render(channels, { getPathForFile: false })).toBe(output);
+      });
+
+      it("imports webUtils, and puts the helper among the members, in name order", async () => {
+         const output = await render(channels, { getPathForFile: true });
+         expect(output).toContain(
+            'import { contextBridge, ipcRenderer, webUtils } from "electron";',
+         );
+         const exposed = output.slice(output.indexOf("export const api"));
+         expect([...exposed.matchAll(/^ {3}(\w+): /gm)].map((match) => match[1])).toStrictEqual([
+            "getIt",
+            "getPathForFile",
+            "zed",
+         ]);
+         expect(output).toContain(`\n   ${HELPER}\n`);
+         expect(output.match(/webUtils\.getPathForFile/g)).toHaveLength(1);
+      });
+
+      it("adds the helper to the empty API as well", async () => {
+         expect(await render([], { getPathForFile: true, autoExpose: false })).toBe(
+            [
+               'import { contextBridge, webUtils } from "electron";',
+               "",
+               "export const api = {",
+               `   ${HELPER}`,
+               "};",
+               "",
+               "export function expose(key = 'ipc'): void {",
+               "   contextBridge.exposeInMainWorld(key, api);",
+               "}",
+            ].join("\n"),
+         );
+      });
+
+      it("adds the helper to the empty API of a schema that has only utility channels", async () => {
+         const utilityOnly = shared.buildFileSpecs({
+            name: "work",
+            kind: "Unicast",
+            direction: "MainToUtility",
+         });
+         const output = await render(utilityOnly, { getPathForFile: true });
+         expect(output).toContain("export const api = {\n   getPathForFile:");
+         expect(output).toContain('import { contextBridge, webUtils } from "electron";');
+      });
+
+      it("adds the helper to the file of every scope", async () => {
+         const scoped = shared.buildFileSpecs({
+            name: "sendIt",
+            kind: "Broadcast",
+            direction: "RendererToMain",
+            scopes: ["settings"],
+         });
+         const obj = new shared.VitestPreloadBindingsWriter(
+            scoped,
+            { getPathForFile: true },
+            "settings",
+         );
+         await obj.write(false);
+         expect((await fsp.readFile(obj.getTargetFilePath())).toString()).toContain(HELPER);
+      });
+
+      it("uses nothing of this library at runtime", async () => {
+         const output = await render(channels, { getPathForFile: true });
+         expect(output).not.toContain("automate-electron-ipc");
+      });
+   });
+
    describe("exposure of the API", () => {
       const channels = shared.buildFileSpecs({
          name: "getIt",

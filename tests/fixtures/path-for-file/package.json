@@ -1,0 +1,10 @@
+{
+   "name": "fixture-path-for-file",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "getPathForFile": true
+      }
+   }
+}

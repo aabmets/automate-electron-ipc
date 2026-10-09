@@ -63,7 +63,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "timeoutMs": 0,
          "utilityBindingsPath": "src/autoipc/utility.ts",
          "exposeAs": "ipc",
-         "autoExpose": true
+         "autoExpose": true,
+         "getPathForFile": false
       }
    }
 }
@@ -98,6 +99,13 @@ Config explanation:
  - `autoExpose` - Whether the generated `preload.ts` exposes the API as soon as it loads, `true` by
    default. Set it to `false` to expose the API from your own preload code. See
    [Composing the preload script](#composing-the-preload-script).
+ - `getPathForFile` - Adds `getPathForFile(file: File): string` to the exposed API, `false` by default.
+   `File.path` was removed in Electron 32, so a page that handles dropped or picked files can get their
+   path only from the preload script, through `webUtils.getPathForFile`. The helper wraps that call, and
+   is typed in `window.d.ts`. It returns an empty string for a `File` that is not on the disk, and
+   throws for a value that is not a `File`. A channel cannot be named `getPathForFile` while this is on.
+   It is in the API of every scope, and in the empty API of a schema without channels for the page.
+   Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
 
 
 ### Composing the preload script

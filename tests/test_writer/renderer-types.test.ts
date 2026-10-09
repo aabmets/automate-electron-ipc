@@ -476,6 +476,47 @@ describe("RendererTypesWriter", () => {
       });
    });
 
+   describe("getPathForFile", () => {
+      const channels = shared.buildFileSpecs(
+         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+         { name: "zed", kind: "Broadcast", direction: "RendererToMain" },
+      );
+      const render = async (
+         pfsArray: t.ParsedFileSpecs[],
+         config: Partial<t.IPCResolvedConfig>,
+      ) => {
+         const obj = new shared.VitestRendererTypesWriter(pfsArray, config);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("declares nothing when the config says nothing, or says false", async () => {
+         const output = await render(channels, {});
+         expect(output).not.toContain("getPathForFile");
+         expect(await render(channels, { getPathForFile: false })).toBe(output);
+      });
+
+      it("declares the helper among the members of IpcApi, in name order", async () => {
+         const output = await render(channels, { getPathForFile: true });
+         const api = output.slice(
+            output.indexOf("interface IpcApi"),
+            output.indexOf("declare global"),
+         );
+         expect([...api.matchAll(/^ {3}(\w+): /gm)].map((match) => match[1])).toStrictEqual([
+            "getIt",
+            "getPathForFile",
+            "zed",
+         ]);
+         expect(output).toContain("   getPathForFile: (file: File) => string;\n");
+      });
+
+      it("declares the helper in the empty API as well", async () => {
+         const output = await render([], { getPathForFile: true });
+         expect(output).toContain("interface IpcApi {\n");
+         expect(output).toContain("   getPathForFile: (file: File) => string;\n}");
+      });
+   });
+
    describe("scopes", () => {
       const config = {
          codeIndent: 3,

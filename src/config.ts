@@ -37,6 +37,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       timeoutMs: 0,
       exposeAs: "ipc",
       autoExpose: true,
+      getPathForFile: false,
       ...userConfig,
    };
    valid.validateOptionalConfig(mergedConfig);

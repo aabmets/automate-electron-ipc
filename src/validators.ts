@@ -81,6 +81,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          ),
       ),
       autoExpose: optional(boolean()),
+      getPathForFile: optional(boolean()),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";
@@ -497,6 +498,31 @@ export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
 }
 
 /**
+ * Checks that no channel takes the name of a member that the library adds to the API of the page.
+ * That is `getPathForFile`, while the config asks for it: a channel of that name would be
+ * overwritten by the helper, or the other way round.
+ */
+export function validateReservedApiNames(
+   files: t.ParsedFileSpecs[],
+   config: Pick<t.IPCOptionalConfig, "getPathForFile">,
+): void {
+   if (!config.getPathForFile) {
+      return;
+   }
+   for (const file of files) {
+      for (const spec of file.specs.channelSpecArray) {
+         if (spec.name === "getPathForFile") {
+            throw new Error(
+               `Schema file '${file.relativePath}': Channel name 'getPathForFile' is reserved, ` +
+                  "since the config 'getPathForFile' adds a member of that name to the API. " +
+                  "Rename the channel, or turn the config off.",
+            );
+         }
+      }
+   }
+}
+
+/**
  * Validates the types and values declared in a schema file. Only the ones that a channel
  * signature refers to must be exported, since the generated files import them from the schema file.
  */
@@ -540,6 +566,7 @@ export default {
    validateOptionalConfig,
    validateChannelSpecs,
    validateGlobalChannelSpecs,
+   validateReservedApiNames,
    validateTypeSpecs,
    getCloneWarnings,
 };

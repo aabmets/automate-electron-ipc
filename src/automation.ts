@@ -97,6 +97,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       }
    }
    vld.validateGlobalChannelSpecs(pfsArray);
+   vld.validateReservedApiNames(pfsArray, config);
    logger.cloneWarnings(
       pfsArray.flatMap((pfs) => vld.getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );

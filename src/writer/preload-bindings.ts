@@ -28,6 +28,13 @@ interface ChannelGroups {
    channels: ChannelEntry[];
 }
 
+/**
+ * The `getPathForFile` helper of the API. `File.path` is gone since Electron 32, and the path of a
+ * file that the page holds is known only to the preload script. `webUtils` is available in a
+ * sandboxed preload, and contextBridge hands the `File` of the page over as it is.
+ */
+const PATH_FOR_FILE = "(file: File): string => webUtils.getPathForFile(file)";
+
 export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.getScopedFilePath(this.config.preloadBindingsFilePath);
@@ -36,13 +43,24 @@ export class PreloadBindingsWriter extends BaseWriter {
       return !this.hasRendererChannels();
    }
    protected renderEmptyFileContents(): string {
-      return ['import { contextBridge } from "electron";\n', "export const api = {};", ""]
+      const [i0] = this.indents;
+      const bridge = this.getPathForFileEnabled() ? "contextBridge, webUtils" : "contextBridge";
+      const api = this.getPathForFileEnabled()
+         ? `export const api = {\n${i0}getPathForFile: ${PATH_FOR_FILE},\n};`
+         : "export const api = {};";
+      return [`import { ${bridge} } from "electron";\n`, api, ""]
          .concat(this.buildExpose())
          .join("\n");
    }
    protected renderFileContents(): string {
       const groups = this.groupChannels();
       const out = this.buildComponents(groups);
+      if (this.getPathForFileEnabled()) {
+         groups.channels.push({
+            name: "getPathForFile",
+            property: `\n${this.indents[0]}getPathForFile: ${PATH_FOR_FILE},`,
+         });
+      }
       const bindingsExpression = ["\nexport const api = {"];
       for (const channel of this.sortChannels(groups.channels)) {
          bindingsExpression.push(channel.property);
@@ -122,7 +140,10 @@ export class PreloadBindingsWriter extends BaseWriter {
    /** The code above the exposed object: the imports, and the components that the channels use. */
    private buildComponents(groups: ChannelGroups): string[] {
       const { portSpecs, askNames, streamSpecs, brokeredSpecs } = groups;
-      const out: string[] = ['import { contextBridge, ipcRenderer } from "electron";'];
+      const imports = this.getPathForFileEnabled()
+         ? "contextBridge, ipcRenderer, webUtils"
+         : "contextBridge, ipcRenderer";
+      const out: string[] = [`import { ${imports} } from "electron";`];
       if (portSpecs.length > 0) {
          out.push(
             'import type { IpcRendererEvent } from "electron";',

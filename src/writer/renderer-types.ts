@@ -117,11 +117,23 @@ export class RendererTypesWriter extends BaseWriter {
       const [, i1, i2] = this.indents;
       const exposeAs = this.getExposeAs();
       const worldId = this.config.isolatedWorldId;
-      const members = this.sortChannels(channels).flatMap((channel) => [
-         `\n${i0}${channel.name}: {`,
-         ...channel.methods,
-         `\n${i0}};`,
-      ]);
+      const members = this.sortChannels([
+         ...channels.map((channel) => ({
+            name: channel.name,
+            lines: [`\n${i0}${channel.name}: {`, ...channel.methods, `\n${i0}};`],
+         })),
+         ...(this.getPathForFileEnabled()
+            ? [
+                 {
+                    name: "getPathForFile",
+                    lines: [
+                       `\n${i0}/** The path of a file that the user dropped or picked. It is empty for a file that is not on the disk. */`,
+                       `\n${i0}getPathForFile: (file: File) => string;`,
+                    ],
+                 },
+              ]
+            : []),
+      ]).flatMap((member) => member.lines);
       const body = members.length > 0 ? `${members.join("")}\n` : "";
       // The error type is declared only if a rejected invoke can carry one.
       const errorType = channels.some((channel) => channel.throws)

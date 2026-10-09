@@ -57,6 +57,11 @@ export interface IPCOptionalConfig {
     * code, under any number of keys.
     */
    autoExpose?: boolean;
+   /**
+    * Adds `getPathForFile(file: File): string` to the exposed API, which returns the path of a file
+    * that the user dropped or picked, through `webUtils.getPathForFile`. Off by default.
+    */
+   getPathForFile?: boolean;
 }
 
 export interface IPCResolvedConfig {
@@ -75,6 +80,7 @@ export interface IPCResolvedConfig {
    exposeAs: string;
    isolatedWorldId?: number;
    autoExpose: boolean;
+   getPathForFile: boolean;
    ipcSchema: {
       path: string;
       stats: Stats | null;
