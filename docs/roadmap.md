@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 85 delivered, 10 remaining, 1 dropped.
+**Progress:** 85 delivered, 16 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -71,6 +71,12 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T91: A Promise nested in a result is not reported](./tasks/T91-promise-nested-in-a-result.md) · depends on: T19
 - [x] [T92: Diagnostics which name the wrong path, or none](./tasks/T92-diagnostics-that-name-the-wrong-path.md) · depends on: T71
 - [x] [T93: Review of the source and the tests](./tasks/T93-review-of-the-source-and-the-tests.md) · depends on: T83
+- [ ] [T94: The preload adds one `ipcRenderer` listener per subscription](./tasks/T94-preload-listeners-per-subscription.md) · depends on: T87
+- [ ] [T95: Edge cases of the page-load watch left after T85](./tasks/T95-page-load-watch-edge-cases.md) · depends on: T85, T87
+- [ ] [T96: `Awaited`, `PromiseLike` and a sync result of `Promise<X> | X`](./tasks/T96-clone-check-awaited-and-promise-unions.md) · depends on: T91
+- [ ] [T97: Import paths and schema syntax left after T89 and T90](./tasks/T97-import-path-and-schema-syntax-leftovers.md) · depends on: T89, T90
+- [ ] [T98: Config values left after T88 and T92](./tasks/T98-config-robustness-leftovers.md) · depends on: T88, T92
+- [ ] [T99: The README denies options that utility channels have](./tasks/T99-readme-options-of-utility-channels.md) · depends on: T79, T86
 
 ## Phase 2: Core API, listener lifecycle and security
 
