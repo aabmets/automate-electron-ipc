@@ -3,7 +3,6 @@
    "src/validators.ts": 688,
    "src/writer/base-writer.ts": 463,
    "src/writer/imports-generator.ts": 441,
-   "src/writer/preload-bindings.ts": 1486,
    "src/writer/renderer-types.ts": 336,
    "src/writer/utility-bindings.ts": 488,
    "src/writer/utility-runtime.ts": 419,
