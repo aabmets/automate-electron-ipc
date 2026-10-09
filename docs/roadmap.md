@@ -75,7 +75,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T95: Edge cases of the page-load watch left after T85](./tasks/T95-page-load-watch-edge-cases.md) · depends on: T85, T87
 - [x] [T96: `Awaited`, `PromiseLike` and a sync result of `Promise<X> | X`](./tasks/T96-clone-check-awaited-and-promise-unions.md) · depends on: T91
 - [ ] [T97: Import paths and schema syntax left after T89 and T90](./tasks/T97-import-path-and-schema-syntax-leftovers.md) · depends on: T89, T90
-- [ ] [T98: Config values left after T88 and T92](./tasks/T98-config-robustness-leftovers.md) · depends on: T88, T92
+- [x] [T98: Config values left after T88 and T92](./tasks/T98-config-robustness-leftovers.md) · depends on: T88, T92
 - [x] [T99: The README denies options that utility channels have](./tasks/T99-readme-options-of-utility-channels.md) · depends on: T79, T86
 
 ## Phase 2: Core API, listener lifecycle and security

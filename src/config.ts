@@ -44,43 +44,81 @@ function serializerSourceFiles(serializerFilePath: string): string[] {
  * Tells which input of the run the file of an output path is, or `null` if it is none: the
  * schema file, a schema source file in the schema directory, or the serializer module. The
  * run writes the output over the user's file, or parses the output as a schema on the next run.
+ * `fold` maps a path to the form in which the file system compares it.
  */
 function describeSourceFile(
    file: string,
    schemaFile: string,
    schemaDir: string | null,
    serializerFilePath: string | undefined,
+   fold: (file: string) => string,
 ): string | null {
-   if (path.posix.normalize(file) === path.posix.normalize(schemaFile)) {
+   if (fold(path.posix.normalize(file)) === fold(path.posix.normalize(schemaFile))) {
       return "the schema file";
    } else if (
       schemaDir !== null &&
-      utils.isPathInside(file, schemaDir) &&
+      utils.isPathInside(fold(file), fold(schemaDir)) &&
       utils.isSchemaSourceFile(file)
    ) {
       return "a schema file";
    } else if (
       serializerFilePath !== undefined &&
-      serializerSourceFiles(path.posix.normalize(serializerFilePath)).includes(
-         path.posix.normalize(file),
-      )
+      serializerSourceFiles(path.posix.normalize(serializerFilePath))
+         .map(fold)
+         .includes(fold(path.posix.normalize(file)))
    ) {
       return "the serializer module";
    }
    return null;
 }
 
+/** Names the kind of a JSON value for an error message. */
+function describeJsonValue(value: unknown): string {
+   if (value === null) {
+      return "null";
+   }
+   return Array.isArray(value) ? "an array" : `of type ${typeof value}`;
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export async function getConfigFromUserPackage(cwd?: string): Promise<t.IPCOptionalConfig> {
    const filePath = utils.resolveUserProjectPath("package.json", cwd);
    const fileContents = await fsp.readFile(filePath);
-   let data: { config?: { autoipc?: t.IPCOptionalConfig } } | null;
+   let data: unknown;
    try {
       data = JSON.parse(fileContents.toString());
    } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Cannot parse '${filePath}': it is not valid JSON. ${reason}`);
    }
-   return data?.config?.autoipc || {};
+   if (!isJsonObject(data)) {
+      throw new Error(
+         `Cannot read '${filePath}': the manifest must hold a JSON object, ` +
+            `but it holds ${describeJsonValue(data)}.`,
+      );
+   }
+   if (data.config === undefined) {
+      return {};
+   }
+   if (!isJsonObject(data.config)) {
+      throw new Error(
+         `Cannot read '${filePath}': 'config' must be an object, ` +
+            `but it is ${describeJsonValue(data.config)}.`,
+      );
+   }
+   if (data.config.autoipc === undefined) {
+      return {};
+   }
+   if (!isJsonObject(data.config.autoipc)) {
+      throw new Error(
+         `Cannot read '${filePath}': 'config.autoipc' must be an object, ` +
+            `but it is ${describeJsonValue(data.config.autoipc)}.`,
+      );
+   }
+   return data.config.autoipc as t.IPCOptionalConfig;
 }
 
 /**
@@ -141,9 +179,13 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
          serviceWorkerPreloadFilePath,
       ],
    ];
-   const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath];
+   // A file system that ignores case holds `ipc/Main.ts` and `ipc/main.ts` in one file.
+   const fold = (await utils.isCaseInsensitiveFileSystem(ipcDataDir))
+      ? (file: string) => file.toLowerCase()
+      : (file: string) => file;
+   const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath].map(fold);
    for (const [option, value, file] of outputs) {
-      if (taken.includes(file)) {
+      if (taken.includes(fold(file))) {
          throw new Error(
             `The config '${option}' ('${value}') is the path of another generated file. ` +
                "Choose a different path.",
@@ -154,6 +196,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
          schemaFile,
          onlySchemaDir ? schemaDir : null,
          serializerFilePath,
+         fold,
       );
       if (source !== null) {
          throw new Error(
@@ -161,7 +204,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
                "Choose a different path.",
          );
       }
-      taken.push(file);
+      taken.push(fold(file));
    }
    return {
       ...mergedConfig,

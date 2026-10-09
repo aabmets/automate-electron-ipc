@@ -736,6 +736,9 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "http://localhost:5173?x=1",
       "http://localhost:5173#x",
       "http://user:pass@example.com",
+      "http://localhost:-1",
+      "http://localhost:+80",
+      "http://localhost:80:80",
       "HTTP://example.com",
       "http://EXAMPLE.com",
       "http://exa mple.com",
@@ -764,6 +767,44 @@ describe("validateChannelSpecs, allowedOrigins", () => {
          );
       },
    );
+
+   it.each([
+      "https://example.com:443x",
+      "http://localhost:80a",
+      "http://localhost:",
+      "http://localhost:1e3",
+      "http://localhost:0x50",
+      "http://localhost:65536",
+      "http://localhost:123456",
+      "http://localhost:port",
+      "http://[::1]:80x",
+      "app://.:abc",
+   ])("rejects '%s', whose port is not a number from 0 to 65535", (origin) => {
+      // Regression for T98: the pattern let a malformed port through.
+      const specs = make("RendererToMain", "Unicast", ["app://.", origin]);
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+         /which is not a number from 0 to 65535/,
+      );
+   });
+
+   it("names the port that it refuses", () => {
+      const specs = make("RendererToMain", "Unicast", ["https://example.com:443x"]);
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+         "'https://example.com:443x' has the port '443x'",
+      );
+   });
+
+   it.each([
+      "http://localhost:0",
+      "http://localhost:65535",
+      "http://[::1]:5173",
+      "http://[::1]",
+      "http://127.0.0.1:3000",
+      "app://main",
+   ])("accepts the origin '%s'", (origin) => {
+      const specs = make("RendererToMain", "Unicast", [origin]);
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
 
    it("names the origin without the port in the message", () => {
       const specs = make("RendererToMain", "Unicast", ["https://example.com:443"]);

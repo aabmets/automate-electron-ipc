@@ -125,8 +125,12 @@ const TriggerStruct = refine(string(), "event", (value) => {
    );
 });
 
-/** `scheme://host[:port]` in lower case, as Chromium serializes the origin of a frame. */
-const ORIGIN_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[a-z0-9._~%[\]:-]*$/;
+/**
+ * `scheme://host[:port]` in lower case, as Chromium serializes the origin of a frame. The
+ * port is matched loosely, so that a malformed one gets its own message.
+ */
+const ORIGIN_PATTERN =
+   /^([a-z][a-z0-9+.-]*:)\/\/(\[[0-9a-f:.]+\]|[a-z0-9._~%-]*)(?::([a-z0-9]*))?$/;
 
 /** The ports that Chromium leaves out of the origin of a URL, by scheme. */
 const DEFAULT_PORTS: Record<string, string> = {
@@ -137,13 +141,9 @@ const DEFAULT_PORTS: Record<string, string> = {
    "ftp:": "21",
 };
 
-/** Returns the origin without its default port, or `null` if the origin has none. */
-function withoutDefaultPort(origin: string): string | null {
-   const match = /^([a-z][a-z0-9+.-]*:)\/\/(.*):(\d+)$/.exec(origin);
-   if (match && Number(DEFAULT_PORTS[match[1] as string]) === Number(match[3])) {
-      return `${match[1]}//${match[2]}`;
-   }
-   return null;
+/** A port is a number from 0 to 65535 in decimal digits. */
+function isPortNumber(port: string): boolean {
+   return /^\d{1,5}$/.test(port) && Number(port) <= 65535;
 }
 
 const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
@@ -151,18 +151,28 @@ const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
       return "allowedOrigins must list at least one origin, since an empty list allows no caller";
    }
    for (const value of values) {
-      if (!ORIGIN_PATTERN.test(value)) {
+      const match = ORIGIN_PATTERN.exec(value);
+      if (match === null) {
          return (
             `'${value}' is not an origin. Write the scheme, the host and an optional port, ` +
             "in lower case and without a path, wildcard or credentials, " +
             "such as 'app://.' or 'http://localhost:5173'"
          );
       }
-      const portless = withoutDefaultPort(value);
-      if (portless !== null) {
+      const [, scheme, host, port] = match as unknown as [string, string, string, string?];
+      if (port === undefined) {
+         continue;
+      }
+      if (!isPortNumber(port)) {
+         return (
+            `'${value}' has the port '${port}', which is not a number from 0 to 65535. ` +
+            "Write the port in digits, such as 'http://localhost:5173'"
+         );
+      }
+      if (Number(DEFAULT_PORTS[scheme]) === Number(port)) {
          return (
             `'${value}' has the default port of its scheme, which no origin has, so it never ` +
-            `matches a caller. Write '${portless}'`
+            `matches a caller. Write '${scheme}//${host}'`
          );
       }
    }

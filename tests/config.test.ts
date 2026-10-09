@@ -68,6 +68,74 @@ describe("getConfigFromUserPackage with a manifest that is not valid JSON", () =
    });
 });
 
+describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
+   beforeEach(mocks.mockResolveUserProjectPath);
+   afterEach(vi.restoreAllMocks);
+
+   // Regression for T98: these fell through to the validation of the config, with a message
+   // that names neither the manifest nor the entry.
+   it.each([
+      ["null", null, "null"],
+      ["an array", [], "an array"],
+      ["a string", "app", "of type string"],
+      ["a number", 5, "of type number"],
+   ])("names the manifest when it holds %s", async (_label, data, described) => {
+      mocks.mockFspReadFile(data);
+      const resolved = utils.resolveUserProjectPath("package.json");
+
+      await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
+         `Cannot read '${resolved}': the manifest must hold a JSON object, but it holds ${described}.`,
+      );
+   });
+
+   it.each([
+      ["null", null, "null"],
+      ["an array", [], "an array"],
+      ["a string", "x", "of type string"],
+      ["a boolean", false, "of type boolean"],
+   ])("names the 'config' entry when it is %s", async (_label, value, described) => {
+      mocks.mockFspReadFile({ config: value });
+
+      await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
+         `'config' must be an object, but it is ${described}.`,
+      );
+   });
+
+   it.each([
+      ["null", null, "null"],
+      ["an array", [], "an array"],
+      ["a string", "src/ipc", "of type string"],
+      ["zero", 0, "of type number"],
+      ["false", false, "of type boolean"],
+      ["an empty string", "", "of type string"],
+   ])("names the 'config.autoipc' entry when it is %s", async (_label, value, described) => {
+      mocks.mockFspReadFile({ config: { autoipc: value } });
+      const resolved = utils.resolveUserProjectPath("package.json");
+
+      await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
+         `Cannot read '${resolved}': 'config.autoipc' must be an object, but it is ${described}.`,
+      );
+   });
+
+   it("fails the resolution of the config with that message", async () => {
+      mocks.mockFspReadFile({ config: { autoipc: "src/ipc" } });
+
+      await expect(cfg.getResolvedConfig()).rejects.toThrowError(
+         /'config\.autoipc' must be an object/,
+      );
+   });
+
+   it("accepts an empty autoipc object and a config without autoipc", async () => {
+      mocks.mockFspReadFile({ config: { autoipc: {} } });
+      await expect(cfg.getConfigFromUserPackage()).resolves.toStrictEqual({});
+      vi.restoreAllMocks();
+
+      mocks.mockResolveUserProjectPath();
+      mocks.mockFspReadFile({ name: "app", config: { other: 1 } });
+      await expect(cfg.getConfigFromUserPackage()).resolves.toStrictEqual({});
+   });
+});
+
 describe("getResolvedConfig", () => {
    beforeEach(mocks.mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
@@ -402,6 +470,88 @@ describe("getResolvedConfig", () => {
             const config = await resolve({ serializer, utilityBindingsPath: output });
             expect(config.utilityBindingsFilePath).toBe(`/home/user/project/${output}`);
          });
+      });
+   });
+
+   describe("output paths on a file system that ignores case", () => {
+      const DIR = "/home/user/project/src/autoipc";
+      const resolve = async (
+         autoipc: Record<string, unknown>,
+         insensitive: boolean,
+         entries: Record<string, "directory" | "file"> = {},
+      ) => {
+         vi.spyOn(utils, "isCaseInsensitiveFileSystem").mockResolvedValue(insensitive);
+         mocks.mockFspStatsByPath(entries);
+         mocks.mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it("probes the data directory of the project", async () => {
+         await resolve({}, false);
+         expect(utils.isCaseInsensitiveFileSystem).toHaveBeenCalledWith(DIR);
+      });
+
+      it.each([
+         ["utilityBindingsPath", "Main.ts"],
+         ["utilityBindingsPath", "PRELOAD.ts"],
+         ["utilityBindingsPath", "Window.D.ts"],
+         ["serviceWorkerPreloadPath", "MAIN.ts"],
+      ])("refuses %s as %s, a generated file under another case", async (option, name) => {
+         const path = `src/autoipc/${name}`;
+         await expect(resolve({ [option]: path }, true)).rejects.toThrowError(
+            `The config '${option}' ('${path}') is the path of another generated file.`,
+         );
+      });
+
+      it("accepts the same paths on a file system that tells cases apart", async () => {
+         const config = await resolve(
+            {
+               utilityBindingsPath: "src/autoipc/Main.ts",
+               serviceWorkerPreloadPath: "src/autoipc/MAIN.ts",
+            },
+            false,
+         );
+         expect(config.utilityBindingsFilePath).toBe(`${DIR}/Main.ts`);
+         expect(config.serviceWorkerPreloadFilePath).toBe(`${DIR}/MAIN.ts`);
+      });
+
+      it("refuses the service worker preload as the utility bindings under another case", async () => {
+         const autoipc = {
+            utilityBindingsPath: "src/sw/Utility.ts",
+            serviceWorkerPreloadPath: "src/sw/utility.ts",
+         };
+         await expect(resolve(autoipc, true)).rejects.toThrowError(
+            /'serviceWorkerPreloadPath' .* is the path of another generated file/,
+         );
+         await expect(resolve(autoipc, false)).resolves.toBeDefined();
+      });
+
+      it("refuses the schema file under another case", async () => {
+         await expect(
+            resolve({ utilityBindingsPath: "src/autoipc/SCHEMA.ts" }, true),
+         ).rejects.toThrowError(/is the schema file/);
+         await expect(
+            resolve({ utilityBindingsPath: "src/autoipc/Schema.ts" }, false),
+         ).resolves.toBeDefined();
+      });
+
+      it("refuses a file under the schema directory under another case", async () => {
+         const entries = { [`${DIR}/schema`]: "directory" as const };
+         await expect(
+            resolve({ utilityBindingsPath: "src/autoipc/SCHEMA/out.ts" }, true, entries),
+         ).rejects.toThrowError(/is a schema file/);
+         await expect(
+            resolve({ utilityBindingsPath: "src/autoipc/SCHEMA/out.ts" }, false, entries),
+         ).resolves.toBeDefined();
+      });
+
+      it("refuses the serializer module under another case", async () => {
+         const autoipc = {
+            serializer: "./src/autoipc/serializer",
+            utilityBindingsPath: "src/autoipc/Serializer.ts",
+         };
+         await expect(resolve(autoipc, true)).rejects.toThrowError(/is the serializer module/);
+         await expect(resolve(autoipc, false)).resolves.toBeDefined();
       });
    });
 

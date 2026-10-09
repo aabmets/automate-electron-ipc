@@ -170,6 +170,70 @@ describe("concatRegex", () => {
    });
 });
 
+describe("isCaseInsensitiveFileSystem", () => {
+   afterEach(vi.restoreAllMocks);
+
+   const stats = (ino: number, dev = 1) => ({ ino: BigInt(ino), dev: BigInt(dev) });
+
+   /** Mocks `fsp.stat` so that only the given paths exist, each with its identity. */
+   function mockStat(entries: Record<string, ReturnType<typeof stats>>) {
+      return vi.spyOn(fsp, "stat").mockImplementation(((target: string) => {
+         const found = entries[String(target).replaceAll("\\", "/")];
+         return found === undefined
+            ? Promise.reject(Object.assign(new Error(`ENOENT: ${target}`), { code: "ENOENT" }))
+            : Promise.resolve(found);
+      }) as never);
+   }
+
+   it("is true when the name with swapped case finds the same directory", async () => {
+      mockStat({ "/proj/src/ipc": stats(7), "/proj/src/IPC": stats(7) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/ipc")).resolves.toBe(true);
+   });
+
+   it("is false when the name with swapped case finds nothing", async () => {
+      mockStat({ "/proj/src/ipc": stats(7) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/ipc")).resolves.toBe(false);
+   });
+
+   it("is false when the name with swapped case finds another directory", async () => {
+      mockStat({ "/proj/src/ipc": stats(7), "/proj/src/IPC": stats(8) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/ipc")).resolves.toBe(false);
+      vi.restoreAllMocks();
+      mockStat({ "/proj/src/ipc": stats(7, 1), "/proj/src/IPC": stats(7, 2) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/ipc")).resolves.toBe(false);
+   });
+
+   it("probes the nearest existing ancestor of a directory that does not exist", async () => {
+      const spy = mockStat({ "/proj/src": stats(3), "/proj/SRC": stats(3) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/ipc/deeper")).resolves.toBe(true);
+      expect(spy).toHaveBeenCalledWith("/proj/SRC", { bigint: true });
+   });
+
+   it("skips a name without letters", async () => {
+      mockStat({ "/proj/src/1234": stats(9), "/proj/src": stats(3), "/proj/SRC": stats(3) });
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src/1234")).resolves.toBe(true);
+   });
+
+   it("is false when no directory of the path exists", async () => {
+      mockStat({});
+      await expect(utils.isCaseInsensitiveFileSystem("/proj/src")).resolves.toBe(false);
+   });
+
+   it("writes nothing", async () => {
+      const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-utils-case-"));
+      try {
+         await fsp.mkdir(path.join(root, "ipc"));
+         const before = await fsp.readdir(root);
+         const result = await utils.isCaseInsensitiveFileSystem(path.join(root, "ipc"));
+         expect(typeof result).toBe("boolean");
+         expect(await fsp.readdir(root)).toStrictEqual(before);
+         expect(await fsp.readdir(path.join(root, "ipc"))).toStrictEqual([]);
+      } finally {
+         await fsp.rm(root, { recursive: true, force: true });
+      }
+   });
+});
+
 describe("isPathInside", () => {
    it("should return true when childPath is directly inside parentPath", () => {
       const parentPath = "/home/user";
