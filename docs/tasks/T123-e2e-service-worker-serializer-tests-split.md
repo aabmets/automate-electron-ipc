@@ -16,4 +16,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `serviceWorkers`, `serializer`, `serviceWorkerGuards`, `serializerUtility`,
+  `serializerWorkers`, `serializerPorts`, `signatures`, `senders` and `errors` of `tests/test_e2e` are now
+  24 files of at most 272 lines (with header), split along their describe blocks, with the shared fakes
+  in `tests/utils` (`service-worker-utils.ts` extended; new `service-worker-guard-utils.ts`,
+  `serializer-runtime-utils.ts`, `serializer-wire-utils.ts`, `serializer-brokered-utils.ts`,
+  `serializer-worker-utils.ts`, `sender-utils.ts`, `errors-main-utils.ts`). 305 tests before and after
+  with identical titles, none skipped, no assertion changed. The nine baseline entries are removed, so
+  `size-baseline.json` is empty.

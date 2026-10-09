@@ -1,11 +1,1 @@
-{
-   "tests/test_e2e/errors.test.ts": 345,
-   "tests/test_e2e/senders.test.ts": 349,
-   "tests/test_e2e/serializer.test.ts": 716,
-   "tests/test_e2e/serializerPorts.test.ts": 429,
-   "tests/test_e2e/serializerUtility.test.ts": 594,
-   "tests/test_e2e/serializerWorkers.test.ts": 458,
-   "tests/test_e2e/serviceWorkerGuards.test.ts": 638,
-   "tests/test_e2e/serviceWorkers.test.ts": 1007,
-   "tests/test_e2e/signatures.test.ts": 356
-}
+{}

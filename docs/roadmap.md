@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 114 delivered, 11 remaining, 1 dropped.
+**Progress:** 115 delivered, 10 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -148,7 +148,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T120: Split the e2e tests, part 1: ports](./tasks/T120-e2e-port-tests-split.md) · depends on: T102
 - [x] [T121: Split the e2e tests, part 2: streams, asks and runtime](./tasks/T121-e2e-stream-ask-runtime-tests-split.md) · depends on: T102
 - [x] [T122: Split the e2e tests, part 3: automation, utility, scopes and handlers](./tasks/T122-e2e-automation-utility-scopes-tests-split.md) · depends on: T102
-- [ ] [T123: Split the e2e tests, part 4: service workers, serializers and the rest](./tasks/T123-e2e-service-worker-serializer-tests-split.md) · depends on: T102
+- [x] [T123: Split the e2e tests, part 4: service workers, serializers and the rest](./tasks/T123-e2e-service-worker-serializer-tests-split.md) · depends on: T102
 
 ## Phase 4: Developer experience
 
