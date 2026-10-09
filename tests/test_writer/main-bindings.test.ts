@@ -1508,6 +1508,20 @@ describe("MainBindingsWriter", () => {
          expect(output.match(/^function askRenderer\(/gm)).toHaveLength(1);
       });
 
+      it("watches the commit of a navigation and the crash state to settle a question", async () => {
+         const output = await render([ask]);
+
+         expect(output).toContain("contents.isDestroyed() || contents.isCrashed()");
+         expect(output).toContain("contents?.on('did-navigate', onGone);");
+         expect(output).toContain("contents?.on('did-frame-navigate', onFrameNavigate);");
+         expect(output).toContain("contents?.removeListener('did-navigate', onGone);");
+         expect(output).toContain(
+            "contents?.removeListener('did-frame-navigate', onFrameNavigate);",
+         );
+         expect(output).not.toContain("did-start-navigation");
+         expect(output).not.toContain("will-navigate");
+      });
+
       it("does not wrap the promise of an async signature again", async () => {
          const output = await render([askAsync]);
 

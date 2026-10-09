@@ -23,4 +23,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** the `it.fails` scenarios `askedPageGoesAway` and `askCrashedRenderer` of
   `tests/test_electron/asks.test.ts` turn into passing tests, and runtime tests with fakes cover
   the same paths, with fakes that keep the contents alive across a navigation.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `askRenderer` now watches the commit of a navigation: `did-navigate` for a
+  contents target, and `did-frame-navigate` for a frame target (that frame by process and routing ID, or
+  because the old frame is destroyed or detached by then, which covers a new frame ID after a navigation;
+  or any main-frame navigation, since it replaces every subframe). Both reject with `IPC_ASK_DESTROYED`
+  (no new code), and `finish` removes the listeners. The up-front check also treats `isCrashed()` as gone.
+  The two `it.fails` scenarios of `tests/test_electron/asks.test.ts` pass in real Electron. Each question
+  adds one more listener on the contents, which T87 has to count into its fix (shared listeners per contents).
+  README and T23's note on frames are updated.

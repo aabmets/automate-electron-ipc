@@ -486,7 +486,7 @@ The promise rejects with an `IpcAskError`, which has the `channel` and a `code`:
 | `code`                | When                                                                       |
 |-----------------------|----------------------------------------------------------------------------|
 | `IPC_ASK_TIMEOUT`     | the renderer has not answered within `timeoutMs`                           |
-| `IPC_ASK_DESTROYED`   | the target is destroyed, its renderer process is gone, or the frame is detached |
+| `IPC_ASK_DESTROYED`   | the target is destroyed, its renderer process is gone or crashed, the page that was asked is replaced by a reload or a navigation, or the frame is detached |
 | `IPC_ASK_NO_HANDLER`  | the renderer has no responder registered, such as before the page has loaded it |
 | `IPC_ASK_INVALID_REPLY` | the reply is not an answer or an error                                   |
 
@@ -500,6 +500,16 @@ a `BrowserWindow` that was destroyed before the question, whose `webContents` ge
 Electron: it rejects with `IPC_ASK_DESTROYED` too. Only `ask` promises this; the verbs that return
 nothing (`send` of an `emit` channel, and `connect` of the port verbs) throw Electron's own error
 for such a window, since the caller handed over a target that is gone.
+
+A question belongs to the document that it was sent to. If that document is replaced before it
+answers, the promise rejects with `IPC_ASK_DESTROYED` at once, and does not wait for a timeout: for
+contents (or a window, or a view), when a navigation of the main frame commits (`did-navigate`,
+which a reload also emits, but a navigation inside the page, such as a change of the hash, does
+not); for a frame, when that frame navigates, or when the main frame does, since that replaces every
+frame below it (`did-frame-navigate`). The commit is what counts, not the start, so the old page can
+still answer while a navigation is pending, and a navigation that `beforeunload` cancels changes
+nothing. A question to contents whose renderer has crashed, or to a frame that is destroyed or
+detached, rejects at once, without being sent.
 
 There is no timeout unless one is given. To bound the wait, use
 `invokeWith(target, { timeoutMs }, ...args)`:

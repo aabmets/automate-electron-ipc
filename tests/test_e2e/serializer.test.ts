@@ -98,6 +98,7 @@ async function connect(fixture = "serializer", options: { validateSender?: boole
       id: 1,
       getURL: () => "app://.",
       isDestroyed: () => false,
+      isCrashed: () => false,
       send: vi.fn(toPage),
    });
    Object.assign(main, {
@@ -120,6 +121,7 @@ async function connect(fixture = "serializer", options: { validateSender?: boole
       origin: "app://.",
       detached: false,
       isDestroyed: () => false,
+      isCrashed: () => false,
       send: vi.fn(toPage),
       postMessage: vi.fn(),
    };
@@ -485,6 +487,7 @@ describe("generated serializer, ask", () => {
          id: 2,
          getURL: () => "app://.",
          isDestroyed: () => false,
+         isCrashed: () => false,
          send: vi.fn(),
       });
       const asked = ipc.askClock.invoke({ webContents: silent }, "UTC");

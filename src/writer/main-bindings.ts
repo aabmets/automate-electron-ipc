@@ -1405,9 +1405,16 @@ export class MainBindingsWriter extends BaseWriter {
     * the envelope has a known shape. Another renderer cannot answer for the one that was asked.
     *
     * The promise is settled once: by the answer, by the timeout, or because the contents are
-    * destroyed or their renderer process is gone, whichever comes first. A frame is also checked
-    * when the question is sent, but has no event of its own, so a frame that goes away
-    * afterwards is caught by the destruction of its contents or by the timeout.
+    * destroyed, their renderer process is gone, or the document that was asked is replaced,
+    * whichever comes first. The target is checked when the question is sent: contents that are
+    * destroyed or crashed, and a frame that is destroyed or detached, are gone. Afterwards a reload
+    * or navigation of the contents (`did-navigate`, which is not emitted for in-page navigations)
+    * replaces the document that was asked. A frame has no event of its own, so for a frame the
+    * `did-frame-navigate` of its contents counts: of that frame (by process and routing ID, or
+    * because the frame is destroyed or detached by then), or of the main frame, which replaces
+    * every frame below it. The commit is watched and not the start, so the old document can still
+    * answer while a navigation is pending, and a navigation that `beforeunload` cancels changes
+    * nothing.
     * `IpcAskError` carries the `name`, `message`, `code` and `data` of an error of the responder,
     * and the code `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` or
     * `IPC_ASK_INVALID_REPLY` for the failures of the library itself.
@@ -1485,6 +1492,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}let destination: WebContents | WebFrameMain | undefined;`,
          `${i2}let frame: WebFrameMain | undefined;`,
          `${i2}let contents: WebContents | undefined;`,
+         `${i2}let frameIds: { processId: number; routingId: number } | undefined;`,
          `${i2}let isGone = false;`,
          `${i2}try {`,
          `${i3}isGone = !!(target as { isDestroyed?: () => boolean }).isDestroyed?.();`,
@@ -1492,7 +1500,12 @@ export class MainBindingsWriter extends BaseWriter {
          `${i4}destination = resolveSendTarget(target);`,
          `${i4}frame = 'getURL' in destination ? undefined : destination;`,
          `${i4}contents = 'getURL' in destination ? destination : electronWebContents.fromFrame(destination);`,
-         `${i4}isGone = !!(contents && contents.isDestroyed()) || !!(frame && (frame.isDestroyed?.() || frame.detached));`,
+         `${i4}isGone =`,
+         `${i4}${i1}!!(contents && (contents.isDestroyed() || contents.isCrashed())) ||`,
+         `${i4}${i1}!!(frame && (frame.isDestroyed?.() || frame.detached));`,
+         `${i4}if (frame) {`,
+         `${i4}${i1}frameIds = { processId: frame.processId, routingId: frame.routingId };`,
+         `${i4}}`,
          `${i3}}`,
          `${i2}} catch {`,
          `${i3}isGone = true;`,
@@ -1505,14 +1518,34 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}const id = ++lastAskId;`,
          `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
          `${i2}let onGone = (): void => undefined;`,
+         `${i2}let onFrameNavigate = (..._details: unknown[]): void => undefined;`,
          `${i2}const finish = (settle: () => void): void => {`,
          `${i3}clearTimeout(timer);`,
          `${i3}delete pendingAsks[id];`,
          `${i3}contents?.removeListener('destroyed', onGone);`,
          `${i3}contents?.removeListener('render-process-gone', onGone);`,
+         `${i3}contents?.removeListener('did-navigate', onGone);`,
+         `${i3}contents?.removeListener('did-frame-navigate', onFrameNavigate);`,
          `${i3}settle();`,
          `${i2}};`,
          `${i2}onGone = () => finish(() => reject(destroyed));`,
+         `${i2}// A navigation of the frame that was asked, or of the main frame, replaces its document.`,
+         `${i2}onFrameNavigate = (...details: unknown[]): void => {`,
+         `${i3}let replaced = details[4] === true;`,
+         `${i3}try {`,
+         `${i4}replaced =`,
+         `${i4}${i1}replaced ||`,
+         `${i4}${i1}(frameIds !== undefined &&`,
+         `${i4}${i2}details[5] === frameIds.processId &&`,
+         `${i4}${i2}details[6] === frameIds.routingId) ||`,
+         `${i4}${i1}!!(frame && (frame.isDestroyed?.() || frame.detached));`,
+         `${i3}} catch {`,
+         `${i4}replaced = true;`,
+         `${i3}}`,
+         `${i3}if (replaced) {`,
+         `${i4}onGone();`,
+         `${i3}}`,
+         `${i2}};`,
          `${i2}const pending: PendingAsk = {`,
          `${i3}reply,`,
          `${i3}contents,`,
@@ -1537,6 +1570,11 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}pendingAsks[id] = pending;`,
          `${i2}contents?.once('destroyed', onGone);`,
          `${i2}contents?.once('render-process-gone', onGone);`,
+         `${i2}if (frame) {`,
+         `${i3}contents?.on('did-frame-navigate', onFrameNavigate);`,
+         `${i2}} else {`,
+         `${i3}contents?.on('did-navigate', onGone);`,
+         `${i2}}`,
          `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
          `${i3}const error = new IpcAskError(`,
          `${i4}channel,`,

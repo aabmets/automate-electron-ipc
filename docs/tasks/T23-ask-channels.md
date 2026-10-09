@@ -30,7 +30,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `event.senderFrame`, compared by object or by process and routing ID) is who was asked.
   - Targets are those of `emit`'s `send`. A frame target is also tied to its contents through
     `webContents.fromFrame`, when Electron knows them. A frame has no destroy event of its own, so a
-    frame that goes away after the question is caught by the destruction of its contents or the timeout.
+    frame that goes away after the question is caught by the destruction of its contents, by a
+    `did-frame-navigate` of that frame or of the main frame (T84), or by the timeout.
   - Rejection is always an `IpcAskError` (`channel`, `code`, `data`, and the `name` of the renderer's
     error), with the codes `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` and
     `IPC_ASK_INVALID_REPLY`. The preload script also answers `IPC_ASK_UNSENDABLE` for an answer that

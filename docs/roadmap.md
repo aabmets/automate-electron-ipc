@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 81 delivered, 14 remaining, 1 dropped.
+**Progress:** 82 delivered, 13 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -61,7 +61,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T77: `ask` on a destroyed `BrowserWindow` throws a TypeError](./tasks/T77-ask-on-destroyed-browser-window.md) · depends on: T75
 - [x] [T78: `connect` leaves an entry behind when the second window is destroyed](./tasks/T78-connect-leaks-first-end-on-destroyed-window.md) · depends on: T76
 - [x] [T82: A synchronous error of the preload script loses its fields across `contextBridge`](./tasks/T82-synchronous-errors-lose-fields-across-contextbridge.md) · depends on: T81a
-- [ ] [T84: An `ask` never settles when the asked page reloads, navigates or crashed](./tasks/T84-ask-hangs-when-the-page-goes-away.md) · depends on: T77
+- [x] [T84: An `ask` never settles when the asked page reloads, navigates or crashed](./tasks/T84-ask-hangs-when-the-page-goes-away.md) · depends on: T77
 - [ ] [T85: The page-load watch takes error pages and aborted navigations for loads](./tasks/T85-page-load-watch-error-pages-and-aborted-navigations.md) · depends on: T76, T30
 - [ ] [T86: Calls to a utility process that exited before the bindings saw it hang forever](./tasks/T86-calls-to-a-utility-child-that-already-exited.md) · depends on: T30 · **Decision needed**
 - [ ] [T87: Listeners that grow with each call, stream, connection or registration](./tasks/T87-listeners-that-grow-per-call-or-registration.md) · depends on: T84, T85

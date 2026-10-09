@@ -33,13 +33,15 @@ const replyOf = (name: string) => `autoipc:${name}:reply`;
 const ok = (value: unknown) => ({ ok: true, value });
 
 /** A WebContents stand-in: an emitter which announces its end, as the real one does. */
-function createContents(id: number, state: { destroyed?: boolean } = {}) {
+function createContents(id: number, state: { destroyed?: boolean; crashed?: boolean } = {}) {
    const contents = Object.assign(new EventEmitter(), {
       id,
       destroyed: state.destroyed ?? false,
+      crashed: state.crashed ?? false,
       getURL: () => "app://.",
       send: vi.fn(),
       isDestroyed: () => contents.destroyed,
+      isCrashed: () => contents.crashed,
    });
    return contents;
 }
@@ -410,18 +412,57 @@ describe("ask, main process, a target that is gone", () => {
       },
    );
 
+   it("rejects at once for contents whose renderer crashed before the question", async () => {
+      const { ipc, electron } = await loadMain();
+      const contents = createContents(1, { crashed: true });
+
+      await expect(ipc.hasUnsavedChanges.invoke(contents, 7)).rejects.toMatchObject(
+         gone("hasUnsavedChanges"),
+      );
+      await expect(
+         ipc.hasUnsavedChanges.invoke({ webContents: contents }, 7),
+      ).rejects.toMatchObject(gone("hasUnsavedChanges"));
+      expect(contents.send).not.toHaveBeenCalled();
+      expect(electron.ipcMain.on).not.toHaveBeenCalled();
+   });
+
+   it("rejects at once for a frame of contents whose renderer crashed", async () => {
+      const contents = createContents(1, { crashed: true });
+      const { ipc } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+
+      await expect(ipc.hasUnsavedChanges.invoke(frame, 7)).rejects.toMatchObject(
+         gone("hasUnsavedChanges"),
+      );
+      expect(frame.send).not.toHaveBeenCalled();
+   });
+
+   it("asks contents which are alive again after a crash", async () => {
+      const { ipc, reply } = await loadMain();
+      const contents = createContents(1, { crashed: true });
+      contents.crashed = false;
+
+      const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
+      const [[id]] = questions(contents.send, "hasUnsavedChanges");
+      reply("hasUnsavedChanges", contents, id, ok(true));
+
+      await expect(answer).resolves.toBe(true);
+   });
+
    it("lets go of the contents once the question is answered", async () => {
       const { ipc, reply } = await loadMain();
       const contents = createContents(1);
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       expect(contents.listenerCount("destroyed")).toBe(1);
+      expect(contents.listenerCount("did-navigate")).toBe(1);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
       reply("hasUnsavedChanges", contents, id, ok(true));
 
       await answer;
       expect(contents.listenerCount("destroyed")).toBe(0);
       expect(contents.listenerCount("render-process-gone")).toBe(0);
+      expect(contents.listenerCount("did-navigate")).toBe(0);
    });
 
    it("rejects with the error of the send, and leaves nothing behind", async () => {
@@ -439,6 +480,173 @@ describe("ask, main process, a target that is gone", () => {
       expect(contents.listenerCount("destroyed")).toBe(0);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
       expect(() => reply("hasUnsavedChanges", contents, id, ok(true))).not.toThrow();
+   });
+});
+
+describe("ask, main process, a page which is replaced", () => {
+   const gone = { name: "IpcAskError", code: "IPC_ASK_DESTROYED" };
+   // The contents live on across a navigation, so no 'destroyed' and no 'render-process-gone'.
+   const navigate = (contents: FakeContents) =>
+      contents.emit("did-navigate", {}, "app://main/other.html", 200, "OK");
+   const frameNavigate = (
+      contents: FakeContents,
+      isMainFrame: boolean,
+      frameProcessId: number,
+      frameRoutingId: number,
+   ) =>
+      contents.emit(
+         "did-frame-navigate",
+         {},
+         "app://main/other.html",
+         200,
+         "OK",
+         isMainFrame,
+         frameProcessId,
+         frameRoutingId,
+      );
+
+   it("rejects the question of contents when a navigation commits, and leaves nothing behind", async () => {
+      const { ipc, reply } = await loadMain();
+      vi.useFakeTimers();
+      const contents = createContents(1);
+      const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 5000 }, 7);
+      const second = ipc.describe.invoke(contents);
+      const rejected = [
+         expect(answer).rejects.toMatchObject({ ...gone, channel: "hasUnsavedChanges" }),
+         expect(second).rejects.toMatchObject({ ...gone, channel: "describe" }),
+      ];
+      const [[id]] = questions(contents.send, "hasUnsavedChanges");
+
+      navigate(contents);
+
+      await Promise.all(rejected);
+      expect(vi.getTimerCount()).toBe(0);
+      for (const event of ["destroyed", "render-process-gone", "did-navigate"]) {
+         expect(contents.listenerCount(event)).toBe(0);
+      }
+      expect(contents.listenerCount("did-frame-navigate")).toBe(0);
+      expect(() => reply("hasUnsavedChanges", contents, id, ok(true))).not.toThrow();
+   });
+
+   it("rejects the question of a window, which asks its contents", async () => {
+      const { ipc } = await loadMain();
+      const contents = createContents(1);
+
+      const answer = ipc.hasUnsavedChanges.invoke({ webContents: contents }, 7);
+      navigate(contents);
+
+      await expect(answer).rejects.toMatchObject(gone);
+   });
+
+   it("keeps the question of contents for a navigation inside the page, or of a frame", async () => {
+      const { ipc, reply } = await loadMain();
+      const contents = createContents(1);
+      const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
+      const [[id]] = questions(contents.send, "hasUnsavedChanges");
+      const settled = vi.fn();
+      answer.then(settled, settled);
+
+      contents.emit("did-navigate-in-page", {}, "app://main/#top", true, 4, 1);
+      contents.emit("did-start-navigation", {});
+      contents.emit("did-frame-navigate", {}, "app://main/f", 200, "OK", false, 4, 10);
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+
+      reply("hasUnsavedChanges", contents, id, ok("still here"));
+      await expect(answer).resolves.toBe("still here");
+   });
+
+   it("lets the old page answer while a navigation is still pending", async () => {
+      const { ipc, reply } = await loadMain();
+      const contents = createContents(1);
+      const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
+      const [[id]] = questions(contents.send, "hasUnsavedChanges");
+
+      // The start of a navigation, and one which beforeunload cancelled, never commit.
+      contents.emit("did-start-navigation", {});
+      contents.emit("did-start-loading");
+      contents.emit("did-fail-load", {}, -3, "ERR_ABORTED");
+      reply("hasUnsavedChanges", contents, id, ok("old page"));
+
+      await expect(answer).resolves.toBe("old page");
+   });
+
+   it("rejects the question of a frame when that frame navigates", async () => {
+      const contents = createContents(1);
+      const { ipc } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+      const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
+
+      frameNavigate(contents, false, 4, 10);
+
+      await expect(answer).rejects.toMatchObject(gone);
+      expect(contents.listenerCount("did-frame-navigate")).toBe(0);
+      expect(contents.listenerCount("destroyed")).toBe(0);
+   });
+
+   it("keeps the question of a frame while another frame navigates", async () => {
+      const contents = createContents(1);
+      const { ipc, reply } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+      const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
+      const [[id]] = questions(frame.send, "hasUnsavedChanges");
+
+      frameNavigate(contents, false, 4, 11);
+      frameNavigate(contents, false, 5, 10);
+      navigate(contents);
+      reply("hasUnsavedChanges", contents, id, ok("frame"), frame);
+
+      await expect(answer).resolves.toBe("frame");
+      expect(contents.listenerCount("did-frame-navigate")).toBe(0);
+   });
+
+   it("rejects the question of a subframe when the main frame navigates away", async () => {
+      const contents = createContents(1);
+      const { ipc } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+      const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
+
+      frameNavigate(contents, true, 4, 1);
+
+      await expect(answer).rejects.toMatchObject(gone);
+   });
+
+   it("rejects the question of a frame which is replaced by a new one when it navigates", async () => {
+      const contents = createContents(1);
+      const { ipc } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+      const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
+
+      // The new document has IDs of its own, and the old frame is gone by then.
+      frame.detached = true;
+      frameNavigate(contents, false, 4, 12);
+
+      await expect(answer).rejects.toMatchObject(gone);
+   });
+
+   it("rejects the question of a frame whose state cannot be read on a navigation", async () => {
+      const contents = createContents(1);
+      const { ipc } = await loadMain("ask-channels", () => contents);
+      const frame = createFrame({ processId: 4, routingId: 10 });
+      const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
+      frame.isDestroyed = () => {
+         throw new Error("Render frame was disposed");
+      };
+
+      frameNavigate(contents, false, 4, 12);
+
+      await expect(answer).rejects.toMatchObject(gone);
+   });
+
+   it("settles only once when a navigation follows the destruction", async () => {
+      const { ipc } = await loadMain();
+      const contents = createContents(1);
+      const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
+
+      contents.emit("destroyed");
+      navigate(contents);
+
+      await expect(answer).rejects.toMatchObject(gone);
    });
 });
 

@@ -159,7 +159,7 @@ const scenarios: Record<string, Scenario> = {
       return { plain: await attempt(), error: await attempt() };
    },
 
-   // The scenarios below find T84 and T87. They read the state of the question after a pause, and
+   // The scenarios below cover T84 and find T87. They read the state of the question after a pause, and
    // do not await it, so that they return what happened and do not fail with a timeout.
 
    // The page that was asked goes away, but its contents stay: a reload of the window, or a
@@ -249,18 +249,14 @@ describeElectron("ask channels in Electron", "electron-asks", scenarios, (group)
       expect(group.run().uncaught).toStrictEqual([]);
    });
 
-   // T84: only 'destroyed' and 'render-process-gone' settle a question, and a question to the old
-   // document of contents that live on waits forever without a timeout.
-   it.fails("rejects a question whose page reloads or whose frame navigates away", () => {
+   it("rejects a question whose page reloads or whose frame navigates away", () => {
       expect(group.value("askedPageGoesAway")).toStrictEqual({
          reload: "rejected IPC_ASK_DESTROYED",
          navigate: "rejected IPC_ASK_DESTROYED",
       });
    });
 
-   // T84: the check of a target that is gone looks at isDestroyed() only, and the
-   // 'render-process-gone' of a crash fired before the question was asked.
-   it.fails("rejects a question to a renderer that crashed", () => {
+   it("rejects a question to a renderer that crashed", () => {
       expect(group.value("askCrashedRenderer")).toStrictEqual({
          state: "rejected IPC_ASK_DESTROYED",
          destroyed: false,
