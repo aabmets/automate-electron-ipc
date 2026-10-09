@@ -21,7 +21,6 @@ const REJECTED = new Set([
    "declaration-output-paths",
    "default-port-origins",
    "duplicate-channels",
-   "export-equals",
    "output-over-schema",
    "schema-file-reserved-name",
    "syntax-error",
