@@ -9,15 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
-import fs from "node:fs";
+import type { ChildProcess } from "node:child_process";
 import fsp from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { transformSync } from "@swc/core";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { type E2EProject, runFixture } from "./e2e-utils.js";
+import { compileGenerated } from "./electron-compile.js";
+import { reap, startElectron, waitForExit } from "./electron-process.js";
+import { detectElectron, electronGate } from "./electron-support.js";
 
 const RESULT_MARK = "@@ELECTRON-RESULT@@";
 
@@ -25,8 +25,6 @@ const RESULT_MARK = "@@ELECTRON-RESULT@@";
 const SCENARIO_TIMEOUT_MS = 20_000;
 /** How long the Electron process may run before it is killed. */
 const PROCESS_TIMEOUT_MS = 120_000;
-/** The time that a stopped process gets to clean up before it is killed. */
-const KILL_GRACE_MS = 3_000;
 /** The timeout of the hook which runs a group, which is more than the process may take. */
 export const GROUP_HOOK_TIMEOUT_MS = PROCESS_TIMEOUT_MS + 30_000;
 
@@ -127,223 +125,6 @@ export interface RunOptions {
    onSpawn?: (info: { child: ChildProcess; appDir: string }) => void;
 }
 
-export type ElectronSupport = { ok: true; binary: string } | { ok: false; reason: string };
-
-export interface SupportProbe {
-   env?: NodeJS.ProcessEnv;
-   platform?: NodeJS.Platform;
-   /** Returns the path of the Electron binary, or throws. */
-   resolveBinary?: () => string;
-   /** Whether `file` is an executable which can be found in the PATH. */
-   hasExecutable?: (file: string) => boolean;
-}
-
-function defaultResolveBinary(): string {
-   return createRequire(import.meta.url)("electron") as string;
-}
-
-function defaultHasExecutable(file: string): boolean {
-   return (process.env.PATH ?? "").split(path.delimiter).some((dir) => {
-      try {
-         fs.accessSync(path.join(dir, file), fs.constants.X_OK);
-         return true;
-      } catch {
-         return false;
-      }
-   });
-}
-
-/** Tells whether the Electron binary can be started here, and if not, why. */
-export function detectElectron(probe: SupportProbe = {}): ElectronSupport {
-   const env = probe.env ?? process.env;
-   const platform = probe.platform ?? process.platform;
-   let binary: string;
-   try {
-      binary = (probe.resolveBinary ?? defaultResolveBinary)();
-      if (typeof binary !== "string" || !fs.existsSync(binary)) {
-         throw new Error(`there is no file at '${binary}'`);
-      }
-   } catch (error) {
-      const cause = error instanceof Error ? error.message : String(error);
-      return {
-         ok: false,
-         reason: `the Electron binary is not installed (run 'node node_modules/electron/install.js'): ${cause}`,
-      };
-   }
-   if (platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY) {
-      if (!(probe.hasExecutable ?? defaultHasExecutable)("xvfb-run")) {
-         return {
-            ok: false,
-            reason: "there is no display ($DISPLAY is not set) and 'xvfb-run' is not installed",
-         };
-      }
-   }
-   return { ok: true, binary };
-}
-
-/** `run` runs the tests, `skip` skips them, and `fail` makes them fail. */
-export function electronGate(support: ElectronSupport, env = process.env): "run" | "skip" | "fail" {
-   if (support.ok) {
-      return "run";
-   }
-   return env.REQUIRE_ELECTRON === "1" ? "fail" : "skip";
-}
-
-/** Compiles a TypeScript file to CommonJS the way the runner does. */
-async function compileFile(source: string): Promise<string> {
-   return transformSync(await fsp.readFile(source, "utf8"), {
-      jsc: { parser: { syntax: "typescript" }, target: "es2022" },
-      module: { type: "commonjs" },
-   }).code;
-}
-
-/**
- * Inlines the modules of the project that a script requires, as a bundler does for the preload
- * script of an app or of a service worker: a sandboxed preload can require `electron` and nothing else. The generated
- * script requires a module only for the serializer of the config.
- */
-async function inlineLocalRequires(code: string, sourceFile: string): Promise<string> {
-   const pattern = /require\("(\.{1,2}\/[^"]+)"\)/g;
-   let result = code;
-   for (const match of code.matchAll(pattern)) {
-      const file = path.resolve(path.dirname(sourceFile), `${match[1]}.ts`);
-      const inner = await inlineLocalRequires(await compileFile(file), file);
-      const module = `(() => { const module = { exports: {} }; const exports = module.exports; ${inner}\n return module.exports; })()`;
-      result = result.replace(match[0], () => module);
-   }
-   return result;
-}
-
-async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
-   const entries = await fsp.readdir(ipcDir, { recursive: true, withFileTypes: true });
-   for (const entry of entries) {
-      if (!(entry.isFile() && entry.name.endsWith(".ts")) || entry.name.endsWith(".d.ts")) {
-         continue;
-      }
-      const source = path.join(entry.parentPath, entry.name);
-      let code = await compileFile(source);
-      if (/^(service-worker-)?preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
-         code = await inlineLocalRequires(code, source);
-      }
-      if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
-         // The preload script is one file which only requires `electron`, as a sandboxed one must.
-         // This tells the tests that it really runs sandboxed and in an isolated context.
-         code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;
-      }
-      const target = path.join(outDir, path.relative(ipcDir, source)).replace(/\.ts$/, ".js");
-      await fsp.mkdir(path.dirname(target), { recursive: true });
-      await fsp.writeFile(target, code);
-   }
-}
-
-function startElectron(binary: string, appDir: string): ChildProcess {
-   const args = [appDir];
-   // Chromium refuses to start as root without this, and CI images whose kernel does not allow
-   // the sandbox helper need it as well (ELECTRON_NO_SANDBOX=1). It turns off the sandbox helper
-   // of Chromium only: the windows still use `sandbox: true`, which the tests check in the preload.
-   if (process.getuid?.() === 0 || process.env.ELECTRON_NO_SANDBOX === "1") {
-      args.unshift("--no-sandbox");
-   }
-   const needsDisplay =
-      process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
-   const [command, commandArgs] = needsDisplay
-      ? ["xvfb-run", ["-a", binary, ...args]]
-      : [binary, args];
-   const env = { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" };
-   // biome-ignore lint/performance/noDelete: an env var which exists must not be set to "undefined"
-   delete env.ELECTRON_RUN_AS_NODE;
-   return spawn(command, commandArgs, {
-      cwd: appDir,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      // A group of its own, so that xvfb-run, Xvfb and Electron are stopped together.
-      detached: process.platform !== "win32",
-   });
-}
-
-function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-   try {
-      if (process.platform !== "win32" && child.pid !== undefined) {
-         process.kill(-child.pid, signal);
-      } else {
-         child.kill(signal);
-      }
-   } catch {
-      // The process is already gone.
-   }
-}
-
-/** Whether any process of the group of `child` is still alive. */
-export function isGroupAlive(child: ChildProcess): boolean {
-   if (child.pid === undefined || process.platform === "win32") {
-      return child.exitCode === null && child.signalCode === null;
-   }
-   try {
-      process.kill(-child.pid, 0);
-      return true;
-   } catch {
-      return false;
-   }
-}
-
-interface Outcome {
-   timedOut: boolean;
-   code: number | null;
-   signal: NodeJS.Signals | null;
-}
-
-function waitForExit(
-   child: ChildProcess,
-   timeoutMs: number,
-   output: () => string,
-): Promise<Outcome> {
-   return new Promise((resolve, reject) => {
-      let timedOut = false;
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
-      const timer = setTimeout(() => {
-         timedOut = true;
-         // SIGTERM lets xvfb-run remove its files, SIGKILL stops what does not listen.
-         signalGroup(child, "SIGTERM");
-         killTimer = setTimeout(() => signalGroup(child, "SIGKILL"), KILL_GRACE_MS);
-      }, timeoutMs);
-      child.once("error", (error) => {
-         clearTimeout(timer);
-         clearTimeout(killTimer);
-         reject(new Error(`Electron could not be started: ${error.message}\n${output()}`));
-      });
-      child.once("close", (code, signal) => {
-         clearTimeout(timer);
-         clearTimeout(killTimer);
-         resolve({ timedOut, code, signal });
-      });
-   });
-}
-
-/** Waits until the group of `child` is gone, for at most `timeoutMs`. */
-async function waitForGroup(child: ChildProcess, timeoutMs: number): Promise<void> {
-   const deadline = Date.now() + timeoutMs;
-   while (isGroupAlive(child) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-   }
-}
-
-/**
- * Stops whatever is left of the group of `child`, once its main process ended. xvfb-run takes a
- * moment to stop Xvfb, and an Xvfb which is killed before that leaves its lock file behind, so
- * the group gets time to end by itself before it is signalled.
- */
-async function reap(child: ChildProcess): Promise<void> {
-   await waitForGroup(child, KILL_GRACE_MS);
-   if (isGroupAlive(child)) {
-      signalGroup(child, "SIGTERM");
-      await waitForGroup(child, KILL_GRACE_MS);
-   }
-   if (isGroupAlive(child)) {
-      signalGroup(child, "SIGKILL");
-      await waitForGroup(child, KILL_GRACE_MS);
-   }
-}
-
 /**
  * Runs the scenarios against the generated bindings of a fixture in the Electron binary of this
  * repo, in one process, and returns what they returned.
@@ -364,6 +145,10 @@ export async function runElectronGroup(options: RunOptions): Promise<ElectronRun
          path.join(import.meta.dirname, "electron-runner.cjs"),
          path.join(appDir, "runner.cjs"),
       );
+      // The modules that the runner requires, which sit next to it.
+      for (const name of ["electron-context.cjs", "electron-pages.cjs"]) {
+         await fsp.copyFile(path.join(import.meta.dirname, name), path.join(appDir, name));
+      }
       await fsp.writeFile(
          path.join(appDir, "package.json"),
          JSON.stringify({ name: "electron-test-app", main: "runner.cjs" }),

@@ -11,7 +11,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     several files.
 - **Scope:** Decide how to split the published types (see the question), then split both files,
   keeping every exported name and the package's public types unchanged.
-- **Tests:** `tests/packaging.test.ts` and `tests/types.test.ts` pass, the e2e type-check of the
+- **Tests:** `tests/packaging.test.ts` and `tests/test_types/` pass, the e2e type-check of the
   generated files passes, and the exported names of the published entry are the same before and
   after. `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
 - **Decision needed:** How should the published types be split, given that Biome forbids re-exports?

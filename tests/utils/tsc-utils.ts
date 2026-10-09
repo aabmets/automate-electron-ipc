@@ -18,6 +18,10 @@ const root = path.resolve(import.meta.dirname, "../..");
 
 const defaultTsc = path.join(root, "node_modules/.bin/tsc");
 
+/** The import of every verb that the schemas of the type tests use from the public types. */
+export const SCHEMA_IMPORT =
+   'import { defineChannels, invoke, send, emit, ask, stream, port, mainPort } from "automate-electron-ipc";';
+
 /**
  * Runs tsc on the project in `dir` and returns its diagnostics, which are empty for a clean run.
  * Throws if tsc does not run to completion: it could not start, it was killed, or it failed

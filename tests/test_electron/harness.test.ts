@@ -17,12 +17,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-   detectElectron,
-   electronGate,
-   isGroupAlive,
-   runElectronGroup,
-} from "@testutils/electron-utils.js";
+import { isGroupAlive } from "@testutils/electron-process.js";
+import { detectElectron, electronGate } from "@testutils/electron-support.js";
+import { runElectronGroup } from "@testutils/electron-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "../..");

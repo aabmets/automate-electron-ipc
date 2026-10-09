@@ -1,6 +1,4 @@
 {
-   "tests/automation.test.ts": 631,
-   "tests/config.test.ts": 581,
    "tests/test_e2e/asks.test.ts": 1333,
    "tests/test_e2e/contentsHandlers.test.ts": 509,
    "tests/test_e2e/errors.test.ts": 345,
@@ -29,9 +27,5 @@
    "tests/test_electron/serviceWorkers.test.ts": 484,
    "tests/test_electron/streams.test.ts": 413,
    "tests/test_electron/utility.test.ts": 452,
-   "tests/test_electron/utilityPorts.test.ts": 655,
-   "tests/types.test.ts": 345,
-   "tests/utils.test.ts": 332,
-   "tests/utils/electron-runner.cjs": 382,
-   "tests/utils/electron-utils.ts": 471
+   "tests/test_electron/utilityPorts.test.ts": 655
 }
