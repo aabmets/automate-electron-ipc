@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseModule } from "@src/ast.js";
-import { describeSyntaxError } from "@src/diagnostics.js";
+import { parseModule } from "@src/parser/ast.js";
+import { describeSyntaxError } from "@src/parser/diagnostics.js";
 import { describe, expect, it } from "vitest";
 
 describe("describeSyntaxError", () => {

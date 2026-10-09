@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseModule } from "@src/ast.js";
-import { parseSignature } from "@src/signature.js";
+import { parseModule } from "@src/parser/ast.js";
+import { parseSignature } from "@src/parser/type/signature.js";
 import { describe, expect, it } from "vitest";
 
 const BOM = "﻿";

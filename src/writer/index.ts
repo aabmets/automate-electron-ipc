@@ -9,12 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { MainBindingsWriter } from "./main-bindings.js";
-import { PreloadBindingsWriter } from "./preload-bindings.js";
-import { RendererTypesWriter } from "./renderer-types.js";
-import { ServiceWorkerPreloadWriter } from "./service-worker-preload.js";
-import { ServiceWorkerTypesWriter } from "./service-worker-types.js";
-import { UtilityBindingsWriter } from "./utility-bindings.js";
+import { MainBindingsWriter } from "./main/main-bindings.js";
+import { PreloadBindingsWriter } from "./preload/preload-bindings.js";
+import { ServiceWorkerPreloadWriter } from "./preload/service-worker-preload.js";
+import { RendererTypesWriter } from "./renderer/renderer-types.js";
+import { ServiceWorkerTypesWriter } from "./renderer/service-worker-types.js";
+import { UtilityBindingsWriter } from "./utility/utility-bindings.js";
 
 export default {
    MainBindingsWriter,

@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { validateChannelSpecs } from "@src/channel-validation.js";
-import { validateTypeSpecs } from "@src/global-validation.js";
+import { validateChannelSpecs } from "@src/validation/channel-validation.js";
+import { validateTypeSpecs } from "@src/validation/global-validation.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";

@@ -10,7 +10,7 @@
  */
 
 import scopes from "@src/scopes.js";
-import shared from "@testutils/writer-utils.js";
+import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 

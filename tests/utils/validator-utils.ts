@@ -10,7 +10,7 @@
  */
 
 import type * as t from "@types";
-import { parseTestSignature } from "./writer-utils.js";
+import { parseTestSignature } from "./writer/writer-utils.js";
 
 export class ChannelSpecGenerator {
    private index: number;

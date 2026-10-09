@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { detectElectron, electronGate } from "@testutils/electron-support.js";
+import { detectElectron, electronGate } from "@testutils/electron/electron-support.js";
 import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -111,7 +111,7 @@ function runWithoutElectron(requireElectron: boolean) {
          [
             path.join(root, "node_modules/vitest/vitest.mjs"),
             "run",
-            "tests/test_electron/prefix.test.ts",
+            "tests/test_electron/options/prefix.test.ts",
             "--coverage.enabled=false",
             "--reporter=json",
             `--outputFile=${outputFile}`,

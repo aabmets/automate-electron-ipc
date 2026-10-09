@@ -4,12 +4,19 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 `<ipcDataDir>/schema.ts` (or `schema/**`) into typed Electron IPC bindings:
 `main.ts`, `preload.ts` and `window.d.ts`.
 
-- `src/parser.ts` parses schema files with swc and collects channel, type and import specs.
-- Validation (superstruct): `src/config-validation.ts` (config), `src/channel-validation.ts` with
-  `src/channel-spec-structs.ts`, `src/option-structs.ts` and `src/clone-issues.ts` (one file's
-  channel specs), `src/global-validation.ts` (across files, and type specs).
-- `src/writer/*` emits the three generated files.
-- `src/automation.ts` orchestrates a run; `src/cli.ts` is the bin entry.
+- `src/parser/` parses schema files with swc and collects channel, type and import specs
+  (`parser.ts`); `channel/` reads the `defineChannels` map, `type/` reads signatures and type
+  declarations.
+- `src/validation/` (superstruct): `config-validation.ts` (config), `channel-validation.ts` with
+  `channel-spec-structs.ts`, `option-structs.ts` and `clone-issues.ts` (one file's channel specs),
+  `global-validation.ts` (across files, and type specs).
+- `src/writer/` emits the generated files: one directory per output (`main/`, `preload/`,
+  `renderer/`, `utility/`), with the shared writer base and import handling at its root.
+- `src/automation.ts` orchestrates a run; `src/cli.ts` is the bin entry. Shared helpers (`config`,
+  `logger`, `scopes`, `utils`, `cache`) sit at the root of `src/`.
+- Tests mirror that layout (`tests/test_parser/channel/`, `tests/test_writer/main/`, ...);
+  `tests/test_e2e/` and `tests/test_electron/` group by feature area, and `tests/utils/` groups the
+  helpers by their users (`electron/`, `e2e/`, `parser/`, `writer/`).
 - Public types live in `types/index.d.ts`; internal types in `types/internal.d.ts` (alias `@types`).
   Both are thin entries that `export *` from the other files in `types/`; Biome allows that in these
   two files only. Add new declarations to the matching themed file, not to the entry.

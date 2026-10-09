@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { validateOptionalConfig } from "@src/config-validation.js";
+import { validateOptionalConfig } from "@src/validation/config-validation.js";
 import { describe, expect, it } from "vitest";
 
 describe("validateOptionalConfig, serializer", () => {

@@ -20,9 +20,9 @@ import {
    preload,
    send,
    stream,
-} from "@testutils/serializer-utils.js";
-import mocks from "@testutils/shared-mocks.js";
-import shared from "@testutils/writer-utils.js";
+} from "@testutils/writer/serializer-utils.js";
+import mocks from "@testutils/writer/shared-mocks.js";
+import shared from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("serializer, the page and main", () => {

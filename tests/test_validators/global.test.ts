@@ -13,7 +13,7 @@ import {
    validateGlobalChannelSpecs,
    validateReservedApiNames,
    validateTypeSpecs,
-} from "@src/global-validation.js";
+} from "@src/validation/global-validation.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";

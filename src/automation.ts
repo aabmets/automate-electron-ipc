@@ -12,13 +12,16 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
-import { getCloneWarnings } from "./clone-issues.js";
 import cfg from "./config.js";
-import { validateGlobalChannelSpecs, validateReservedApiNames } from "./global-validation.js";
 import logger from "./logger.js";
-import parser from "./parser.js";
+import parser from "./parser/parser.js";
 import scopeUtils from "./scopes.js";
 import utils from "./utils.js";
+import { getCloneWarnings } from "./validation/clone-issues.js";
+import {
+   validateGlobalChannelSpecs,
+   validateReservedApiNames,
+} from "./validation/global-validation.js";
 import writer from "./writer/index.js";
 
 /**

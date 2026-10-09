@@ -11,7 +11,7 @@
 
 import cfg from "@src/config.js";
 import utils from "@src/utils.js";
-import mocks from "@testutils/shared-mocks.js";
+import mocks from "@testutils/writer/shared-mocks.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getResolvedConfig", () => {

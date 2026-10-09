@@ -11,8 +11,8 @@
 
 import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
-import mocks from "@testutils/shared-mocks.js";
-import shared from "@testutils/writer-utils.js";
+import mocks from "@testutils/writer/shared-mocks.js";
+import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it, vi } from "vitest";
 

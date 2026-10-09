@@ -9,8 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import mocks from "@testutils/shared-mocks.js";
-import shared from "@testutils/writer-utils.js";
+import mocks from "@testutils/writer/shared-mocks.js";
+import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 

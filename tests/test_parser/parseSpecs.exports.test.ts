@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseModule } from "@src/ast.js";
-import { collectModuleBindings } from "@src/module-bindings.js";
-import parser from "@src/parser.js";
+import { parseModule } from "@src/parser/ast.js";
+import { collectModuleBindings } from "@src/parser/module-bindings.js";
+import parser from "@src/parser/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseSpecs, export specifiers and default classes", () => {

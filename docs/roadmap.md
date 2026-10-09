@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 115 delivered, 10 remaining, 1 dropped.
+**Progress:** 116 delivered, 24 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -149,6 +149,21 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T121: Split the e2e tests, part 2: streams, asks and runtime](./tasks/T121-e2e-stream-ask-runtime-tests-split.md) · depends on: T102
 - [x] [T122: Split the e2e tests, part 3: automation, utility, scopes and handlers](./tasks/T122-e2e-automation-utility-scopes-tests-split.md) · depends on: T102
 - [x] [T123: Split the e2e tests, part 4: service workers, serializers and the rest](./tasks/T123-e2e-service-worker-serializer-tests-split.md) · depends on: T102
+- [x] [T124: Group the source and test modules into directories](./tasks/T124-group-modules-into-directories.md) · depends on: T123
+- [ ] [T125: Named imports instead of default export objects, and dead exports](./tasks/T125-named-imports-and-dead-exports.md) · depends on: T124
+- [ ] [T126: Split `src/utils.ts`, and one helper for posix paths](./tasks/T126-split-utils-and-posix-paths.md) · depends on: T124
+- [ ] [T127: Extract the channel collection of `MainBindingsWriter`, and an `anySpec` helper](./tasks/T127-main-writer-channel-collection.md) · depends on: T124
+- [ ] [T128: Duplication in config resolution and validation](./tasks/T128-config-resolution-duplication.md) · depends on: T126
+- [ ] [T129: One schema source loop in `ipcAutomation`](./tasks/T129-one-schema-source-loop.md) · depends on: T126
+- [ ] [T130: One prefix for errors that name a schema file](./tasks/T130-schema-file-error-prefix.md) · depends on: T124
+- [ ] [T131: Share the generated error classes and reply readers](./tasks/T131-shared-generated-error-classes.md) · depends on: T124
+- [ ] [T132: One test module for wire names, results and settling](./tasks/T132-shared-wire-and-settle-test-helpers.md) · depends on: T124
+- [ ] [T133: One fixture tracker for the e2e tests](./tasks/T133-e2e-fixture-tracker.md) · depends on: T132
+- [ ] [T134: Shared fakes for ports and web contents in the e2e tests](./tasks/T134-shared-fake-ports-and-contents.md) · depends on: T132
+- [ ] [T135: Shared fakes for utility processes and service workers in the e2e tests](./tasks/T135-shared-fake-utility-and-service-worker.md) · depends on: T134
+- [ ] [T136: One `render` helper for the writer tests](./tasks/T136-writer-test-render-helper.md) · depends on: T124
+- [ ] [T137: Shared preambles of the automation and config validator tests](./tasks/T137-automation-and-validator-test-preambles.md) · depends on: T124
+- [ ] [T138: Fixed sleeps, weak assertions and needless exports in the tests](./tasks/T138-test-sleeps-weak-assertions-and-exports.md) · depends on: T133, T134, T135
 
 ## Phase 4: Developer experience
 

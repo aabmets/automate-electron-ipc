@@ -157,7 +157,7 @@
          }
       },
       {
-         "includes": ["tests/test_electron/**", "tests/utils/electron-*"],
+         "includes": ["tests/test_electron/**", "tests/utils/electron/**"],
          "linter": {
             "rules": {
                "performance": {
@@ -173,8 +173,8 @@
       {
          "includes": [
             "tests/fixtures/stream-channels/**",
-            "tests/test_e2e/streams.*.test.ts",
-            "tests/utils/stream-*"
+            "tests/test_e2e/streams/**",
+            "tests/utils/e2e/stream-*"
          ],
          "linter": {
             "rules": {

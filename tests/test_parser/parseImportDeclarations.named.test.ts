@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseImportDeclarations } from "@testutils/import-specs-utils.js";
+import { parseImportDeclarations } from "@testutils/parser/import-specs-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseImportDeclarations", () => {

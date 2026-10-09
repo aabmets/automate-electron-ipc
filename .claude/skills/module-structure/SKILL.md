@@ -94,13 +94,35 @@ brokered channels, service workers. One module per group; the writer calls them 
 - Mirror the layout of the source modules when their split has landed. When it has not, follow the
   describe blocks.
 
+## Where files go
+
+`src/` is grouped by dependency, at most two directory levels deep (T124):
+
+| Directory | Holds |
+|:--|:--|
+| `src/` root | Entries (`index`, `cli`), `automation`, and helpers that every layer uses (`config`, `logger`, `scopes`, `utils`, `cache`) |
+| `src/parser/` | `parseSpecs` and the AST basics; `channel/` reads the `defineChannels` map, `type/` reads signatures, type references and declarations |
+| `src/validation/` | The superstruct validators of config, channel specs and type specs |
+| `src/writer/` | `BaseWriter`, imports and names; one directory per output: `main/`, `preload/`, `renderer/`, `utility/` |
+
+- A new module goes into the directory of the code it serves. A module that two directories use goes
+  to their common parent, never into one of them for the other to reach into.
+- File names keep their prefix inside a directory (`writer/main/main-ports.ts`, not `ports.ts`), so a
+  name stays unique and searchable across the tree.
+- Tests mirror `src/` (`tests/test_writer/main/`, `tests/test_parser/type/`). `tests/test_e2e/` and
+  `tests/test_electron/` group by feature area. `tests/utils/` groups helpers by their users:
+  `electron/`, `e2e/`, `parser/`, `writer/`, and the root for helpers that several areas share.
+- A new source directory needs more than a handful of files that belong together; two or three
+  files stay in the parent. A test directory that mirrors a source directory may hold fewer. No
+  directory goes deeper than two levels below `src/`, `tests/` or `types/`.
+- Biome overrides in `biome.json` match some test paths; update them when you move a file they name.
+
 ## Anti-patterns
 
 - A base class with one subclass, an interface-only module, a directory that only re-exports.
 - A file under ~30 lines that one caller uses, made only to get another file under the limit.
 - A pass-through wrapper whose only job is to rename another function.
-- A new directory for a handful of files. Stay flat until a directory would hold more files than the
-  eye takes in; `src/writer/` is the one existing grouping.
+- A new directory for a handful of files (see "Where files go").
 - Duplicating a helper in two new modules because sharing it needs a third. Put it where both can
   import it.
 

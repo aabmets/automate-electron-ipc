@@ -50,8 +50,8 @@ the validators or the writers; the whole value of the suite is that they run for
 ## Time and ordering
 
 - **No fixed sleeps to wait for delivery.** A 20 ms settle was a flaky wait for `MessagePort`
-  messages in nine e2e files (T93). Use `settlePorts` from `tests/utils/runtime-utils.ts`, or wait on
-  the event itself.
+  messages in nine e2e files (T93). Use `settlePorts` from `tests/utils/e2e/runtime-utils.ts`, or
+  wait on the event itself.
 - A test that needs a long type-check says so with its own timeout, as the e2e tests that run tsc
   more than once do. Do not raise the global timeout.
 

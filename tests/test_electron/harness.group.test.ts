@@ -14,9 +14,9 @@
 
 import type { ChildProcess } from "node:child_process";
 import fsp from "node:fs/promises";
-import { isGroupAlive } from "@testutils/electron-process.js";
-import { detectElectron } from "@testutils/electron-support.js";
-import { runElectronGroup } from "@testutils/electron-utils.js";
+import { isGroupAlive } from "@testutils/electron/electron-process.js";
+import { detectElectron } from "@testutils/electron/electron-support.js";
+import { runElectronGroup } from "@testutils/electron/electron-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const supported = detectElectron().ok;
