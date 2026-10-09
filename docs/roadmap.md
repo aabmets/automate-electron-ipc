@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 107 delivered, 18 remaining, 1 dropped.
+**Progress:** 108 delivered, 17 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -141,7 +141,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T113: Split `tests/test_writer/main-bindings.test.ts`](./tasks/T113-main-bindings-tests-split.md) · depends on: T102
 - [x] [T114: Split the writer tests, part 1: preload, imports and base writer](./tasks/T114-writer-tests-split-a.md) · depends on: T102
 - [x] [T115: Split the writer tests, part 2: renderer types, service workers, serializer, utility](./tasks/T115-writer-tests-split-b.md) · depends on: T102
-- [ ] [T116: Split the parser tests](./tasks/T116-parser-tests-split.md) · depends on: T102
+- [x] [T116: Split the parser tests](./tasks/T116-parser-tests-split.md) · depends on: T102
 - [ ] [T117: Split `tests/validators.test.ts`](./tasks/T117-validators-tests-split.md) · depends on: T102
 - [ ] [T118: Split the root tests and the test utilities](./tasks/T118-root-tests-and-test-utils-split.md) · depends on: T102
 - [ ] [T119: Split the real-Electron tests](./tasks/T119-electron-tests-split.md) · depends on: T102

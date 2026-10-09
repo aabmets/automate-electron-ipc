@@ -16,4 +16,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The five files became 19 test files of at most 280 lines (641 tests before and after, no
+  `it.fails` or `it.skip` in this directory, no assertion changed). Helpers moved to
+  `tests/utils/{channel-map,clone-issues,import-specs,type-definitions}-utils.ts`. `parseImportDeclarations.test.ts` and
+  `parseTypeDefinitions.test.ts` kept their names for the remaining blocks. The five baseline entries were removed.
