@@ -20,9 +20,9 @@ import {
 import { closeWire, disconnectWire, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupMainPorts();
+   cleanupMainPorts();
 });
 
 describe("ipc.<name>.connect of a mainPort channel", () => {

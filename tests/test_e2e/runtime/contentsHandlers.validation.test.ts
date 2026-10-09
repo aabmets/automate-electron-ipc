@@ -13,23 +13,10 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import {
-   createContents,
-   disposeContentsFixture,
-   eventFrom,
-   loadMain,
-} from "@testutils/e2e/contents-handlers-utils.js";
+import { createContents, eventFrom, loadMain } from "@testutils/e2e/contents-handlers-utils.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await disposeContentsFixture();
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("the webContents option of listeners and handlers", () => {
    describe("sender validation", () => {
@@ -85,7 +72,7 @@ describe("the webContents option of listeners and handlers", () => {
    });
 
    it("generates none of it for a schema which has no channel from a renderer to the main process", async () => {
-      project = await runFixture("port-only");
+      const project = await fixtures.run("port-only");
       const main = project.generated["main.ts"];
 
       expect(main).not.toContain("IpcListenOptions");
@@ -95,14 +82,14 @@ describe("the webContents option of listeners and handlers", () => {
 
 describe("fixture contents-handlers, the types of the webContents option", () => {
    it("accepts the option on handle, handleOnce, on, once and the handle of a stream", async () => {
-      project = await runFixture("contents-handlers");
+      const project = await fixtures.run("contents-handlers");
 
       expect(project.generated["main.ts"]).toContain("export interface IpcListenOptions {");
       expect(await project.typecheck()).toBe("");
    });
 
    it("rejects a value which is not WebContents, and an option which does not exist", async () => {
-      project = await runFixture("contents-handlers");
+      const project = await fixtures.run("contents-handlers");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
       const valid = "disposers.push(ipc.log.on(() => undefined, {}));";

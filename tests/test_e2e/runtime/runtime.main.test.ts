@@ -9,11 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupRuntime,
-   generateFixture,
-   loadMainWithEmitter,
-} from "@testutils/e2e/runtime-main-utils.js";
+import { loadMainWithEmitter } from "@testutils/e2e/runtime-main-utils.js";
 import {
    callablePaths,
    createFakeElectron,
@@ -21,13 +17,12 @@ import {
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(cleanupRuntime);
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("generated main process bindings", () => {
    it("exports one object per channel, with only the methods of its verb", async () => {
-      const project = await generateFixture("all-kinds");
+      const project = await fixtures.run("all-kinds");
       const { ipc } = loadGenerated(project.generated["main.ts"], {
          electron: createFakeElectron(),
       });
@@ -53,7 +48,7 @@ describe("generated main process bindings", () => {
    });
 
    async function loadMain() {
-      const project = await generateFixture("all-kinds");
+      const project = await fixtures.run("all-kinds");
       class FakeChannel {
          port1 = { name: "port1" };
          port2 = { name: "port2" };

@@ -10,28 +10,19 @@
  */
 
 import { errorsMainLoader } from "@testutils/e2e/errors-main-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
-const loadMain = errorsMainLoader((created) => {
-   project = created;
-});
+const loadMain = errorsMainLoader(fixtures.run);
 
 describe("fixture error-envelope", () => {
    it("generates files that type-check, including the declared error types", async () => {
-      project = await runFixture("error-envelope");
+      const project = await fixtures.run("error-envelope");
       expect(await project.typecheck()).toBe("");
    });
 
    it("documents the declared error types of each invoke in window.d.ts", async () => {
-      project = await runFixture("error-envelope");
+      const project = await fixtures.run("error-envelope");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain('import type { AuthError } from "./schema";');
@@ -51,7 +42,7 @@ describe("fixture error-envelope", () => {
    });
 
    it("fails the type-check when the declared errors do not match how they are used", async () => {
-      project = await runFixture("error-envelope");
+      const project = await fixtures.run("error-envelope");
       const fsp = await import("node:fs/promises");
       const path = await import("node:path");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
@@ -64,7 +55,7 @@ describe("fixture error-envelope", () => {
 
 describe("fixture raw-errors", () => {
    it("leaves the errors of the handlers to Electron when rawErrors is set", async () => {
-      project = await runFixture("raw-errors");
+      const project = await fixtures.run("raw-errors");
       const { "main.ts": main, "preload.ts": preload, "window.d.ts": types } = project.generated;
 
       expect(main).not.toContain("settleInvoke");
@@ -86,7 +77,7 @@ describe("fixture raw-errors", () => {
    });
 
    it("declares no error type, and ignores the errors of a send", async () => {
-      project = await runFixture("raw-errors");
+      const project = await fixtures.run("raw-errors");
       const { "main.ts": main, "window.d.ts": types } = project.generated;
       expect(main).not.toContain("toIpcError");
       expect(types).not.toContain("@throws");
@@ -97,7 +88,7 @@ describe("fixture raw-errors", () => {
 
 describe("fixture error-collisions", () => {
    it("imports the error types of every channel under names that do not clash", async () => {
-      project = await runFixture("error-collisions");
+      const project = await fixtures.run("error-collisions");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain('import type { Conflict } from "./errors/one";');
@@ -109,7 +100,7 @@ describe("fixture error-collisions", () => {
    });
 
    it("renames a schema type which would shadow the Error of the generated error type", async () => {
-      project = await runFixture("error-collisions");
+      const project = await fixtures.run("error-collisions");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain('import type { Error as Error_2 } from "./schema/c";');

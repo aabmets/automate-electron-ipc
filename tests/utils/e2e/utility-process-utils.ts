@@ -11,11 +11,10 @@
 
 import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { wire } from "./wire-utils.js";
 
-let project: E2EProject | undefined;
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
 
@@ -52,7 +51,7 @@ export function createParentPort() {
 }
 
 export async function load(fixture = "utility-channels") {
-   project = await runFixture(fixture);
+   const project = await fixtures.run(fixture);
    const main = loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
    attachChild = main.attachUtility;
    const utilitySource = project.generated["utility.ts"];
@@ -61,10 +60,8 @@ export async function load(fixture = "utility-channels") {
 }
 
 /** Undoes what `load`, `createChild` and `createParentPort` set up. Call it from `afterEach`. */
-export async function resetUtilityFakes() {
+export function resetUtilityFakes() {
    attachChild = undefined;
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 }

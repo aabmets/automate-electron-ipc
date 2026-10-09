@@ -11,12 +11,9 @@
 
 import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { expect } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { wire } from "./wire-utils.js";
-
-/** The fixture project that `loadMain` made, which `disposeScopesFixture` cleans up. */
-let project: E2EProject | undefined;
 
 /** A WebContents stand-in: an emitter with an ID, which can be destroyed. */
 export function createContents(id: number) {
@@ -42,7 +39,7 @@ export const callFrom = (sender: Contents | null, origin: string | null = "app:/
 
 /** Loads the main bindings with an `ipcMain` which keeps the listeners and the handlers. */
 export async function loadMain(fixture = "scoped-windows") {
-   project = await runFixture(fixture);
+   const project = await fixtures.run(fixture);
    const handlers = new Map<string, (...args: any[]) => any>();
    const emitter = new EventEmitter();
    const electron = createFakeElectron();
@@ -57,12 +54,6 @@ export async function loadMain(fixture = "scoped-windows") {
    const call = (channel: string, event: unknown, ...args: unknown[]) =>
       handlers.get(wire(channel))?.(event, ...args);
    return { generated, ipc: generated.ipc, emitter, call, project };
-}
-
-/** Cleans up the project of `loadMain`. Call it from `afterEach`. */
-export async function disposeScopesFixture() {
-   await project?.cleanup();
-   project = undefined;
 }
 
 export const forbidden = (channel: string) => ({

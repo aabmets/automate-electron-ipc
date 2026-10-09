@@ -9,15 +9,13 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanupRuntime, generateFixture } from "@testutils/e2e/runtime-main-utils.js";
 import {
    getSecret,
    loadSenderFixture,
    senderFrame,
 } from "@testutils/e2e/runtime-validation-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(cleanupRuntime);
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("generated main process bindings", () => {
    describe("sender validation", () => {
@@ -171,7 +169,7 @@ describe("generated main process bindings", () => {
       });
 
       it("generates files that type-check", async () => {
-         const project = await generateFixture("sender-validation");
+         const project = await fixtures.run("sender-validation");
          expect(await project.typecheck()).toBe("");
       });
    });

@@ -11,25 +11,15 @@
 
 import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
-
-let project: E2EProject | undefined;
+import { fixtures } from "../fixture-tracker.js";
 
 /** The project that the last helper generated, for a test which reads its files. */
-export const currentProject = () => project;
+export const currentProject = fixtures.current;
 
-/** Generates a fixture, and keeps it so that `cleanupAsks` removes it. */
-export async function generateFixture(name: string) {
-   project = await runFixture(name);
-   return project;
-}
-
-/** Restores the real timers and removes the generated project. */
-export async function cleanupAsks() {
+/** Restores the real timers. */
+export function cleanupAsks() {
    vi.useRealTimers();
-   await project?.cleanup();
-   project = undefined;
 }
 
 export const request = (name: string) => `autoipc:${name}`;
@@ -73,7 +63,7 @@ export function questions(send: ReturnType<typeof vi.fn>, name: string): [number
 }
 
 export async function loadMain(fixture = "ask-channels", fromFrame?: (frame: unknown) => unknown) {
-   const project = await generateFixture(fixture);
+   const project = await fixtures.run(fixture);
    const electron = createFakeElectron();
    Object.assign(electron, {
       webContents: { getAllWebContents: vi.fn(() => []), fromFrame: fromFrame ?? vi.fn() },

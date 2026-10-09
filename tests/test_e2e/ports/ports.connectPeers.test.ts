@@ -24,9 +24,9 @@ import { createFakeElectron } from "@testutils/e2e/runtime-utils.js";
 import { closeWire, disconnectWire, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupPortConnect();
+   cleanupPortConnect();
 });
 
 /** A window like the one of Electron: once it is destroyed, its `webContents` getter throws. */

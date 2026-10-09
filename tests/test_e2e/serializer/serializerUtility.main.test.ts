@@ -15,25 +15,22 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { AT, date, loadSerializer, settled } from "@testutils/e2e/serializer-wire-utils.js";
 import { settle, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];
 
-afterEach(async () => {
+afterEach(() => {
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 });
 
 /** The main process and the utility process of the fixture, wired to each other as Electron does. */
 async function loadBoth() {
-   project = await runFixture("serializer-utility");
+   const project = await fixtures.run("serializer-utility");
    const serializer = await loadSerializer(project);
    const main = loadGenerated(project.generated["main.ts"], {
       electron: createFakeElectron(),
@@ -62,13 +59,13 @@ async function loadBoth() {
 
 describe("the generated files of a schema with serialized utility channels", () => {
    it("type-checks the usage of the three sides, with the types of the signatures", async () => {
-      project = await runFixture("serializer-utility");
+      const project = await fixtures.run("serializer-utility");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("imports the serializer where the messages are seen: the utility file and the page, and main for its own channels", async () => {
-      project = await runFixture("serializer-utility");
+      const project = await fixtures.run("serializer-utility");
       const line =
          'import { serialize as ipcSerialize, deserialize as ipcDeserialize } from "./serializer";';
 
@@ -79,7 +76,7 @@ describe("the generated files of a schema with serialized utility channels", () 
    });
 
    it("leaves the serializer out of main.ts and the page when only the pages talk to the child", async () => {
-      project = await runFixture("utility-ports-only");
+      const project = await fixtures.run("utility-ports-only");
 
       expect(project.generated["main.ts"]).not.toContain("serializ");
       expect(project.generated["utility.ts"]).not.toContain("serializ");

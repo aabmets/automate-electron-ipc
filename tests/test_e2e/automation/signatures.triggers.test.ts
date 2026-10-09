@@ -15,19 +15,12 @@ import {
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
 import { flush } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
 
 describe("ipcAutomation, triggers", () => {
    it("generates a binder for triggered channels only, and a sender for all", async () => {
-      project = await runFixture("triggers");
+      const project = await fixtures.run("triggers");
       const main = project.generated["main.ts"];
 
       expect(main).toContain("bind: (browserWindow: BrowserWindow, provider: ");
@@ -43,13 +36,13 @@ describe("ipcAutomation, triggers", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("triggers");
+      const project = await fixtures.run("triggers");
       expect(await project.typecheck()).toBe("");
    });
 
    describe("generated main process bindings", () => {
       const load = async () => {
-         project = await runFixture("triggers");
+         const project = await fixtures.run("triggers");
          return loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() }).ipc;
       };
 

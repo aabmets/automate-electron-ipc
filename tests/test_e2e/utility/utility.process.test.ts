@@ -13,8 +13,8 @@ import { createParentPort, load, resetUtilityFakes } from "@testutils/e2e/utilit
 import { failed, flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
-   await resetUtilityFakes();
+afterEach(() => {
+   resetUtilityFakes();
 });
 
 describe("utility channels, utility process, handling the calls of the main process", () => {

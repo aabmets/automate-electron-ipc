@@ -23,9 +23,9 @@ import {
 import { closeWire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupUtilityPorts();
+   cleanupUtilityPorts();
 });
 
 type FakeContents = ReturnType<typeof createContents>;

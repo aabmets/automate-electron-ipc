@@ -15,12 +15,11 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { closeWire, wire } from "./wire-utils.js";
 
 const channels: MessageChannel[] = [];
-let project: E2EProject | undefined;
 
 /** A window which is loaded unless told otherwise, and whose contents are an emitter. */
 export function createWindow(state: { loading?: boolean; url?: string; destroyed?: boolean } = {}) {
@@ -71,7 +70,7 @@ export async function loadMain() {
 
 /** Loads the generated main process, and returns the fake `electron` it was given as well. */
 export async function loadMainWithElectron(channelClass?: unknown) {
-   project = await runFixture("port-only");
+   const project = await fixtures.run("port-only");
    let created = 0;
    class FakeChannel {
       id = ++created;
@@ -84,7 +83,7 @@ export async function loadMainWithElectron(channelClass?: unknown) {
 
 /** Loads the generated preload script, and returns what it exposes and listens to. */
 export async function loadPreload() {
-   project = await runFixture("port-only");
+   const project = await fixtures.run("port-only");
    const fake = createFakePreloadElectron();
    loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
    const listener = (name: string) => {
@@ -122,12 +121,10 @@ export async function loadHub(count: number) {
    return { ...loaded, connections, peers };
 }
 
-/** Closes what the helpers of this module opened, and removes their project. */
-export async function cleanupPortConnect() {
+/** Closes what the helpers of this module opened */
+export function cleanupPortConnect() {
    for (const channel of channels.splice(0)) {
       channel.port1.close();
       channel.port2.close();
    }
-   await project?.cleanup();
-   project = undefined;
 }

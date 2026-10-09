@@ -10,19 +10,10 @@
  */
 
 import { createContents, mainLoader } from "@testutils/e2e/sender-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
-const loadMain = mainLoader((created) => {
-   project = created;
-});
+const loadMain = mainLoader(fixtures.run);
 
 describe("broadcast", () => {
    it("sends to every contents, with the arguments of the signature", async () => {
@@ -146,19 +137,18 @@ describe("broadcastTo", () => {
 
 describe("fixture all-kinds", () => {
    it("generates files that type-check, including the targets of send", async () => {
-      project = await runFixture("all-kinds");
+      const project = await fixtures.run("all-kinds");
       expect(await project.typecheck()).toBe("");
    });
 
    it("imports the web contents of Electron only for emit channels", async () => {
-      project = await runFixture("all-kinds");
-      expect(project.generated["main.ts"]).toMatch(
+      const allKinds = await fixtures.run("all-kinds");
+      expect(allKinds.generated["main.ts"]).toMatch(
          /import \{[^}]*webContents as electronWebContents[^}]*\} from "electron";/,
       );
-      await project.cleanup();
 
-      project = await runFixture("handler-types");
-      expect(project.generated["main.ts"]).not.toContain("electronWebContents");
-      expect(project.generated["main.ts"]).not.toContain("broadcastMessage");
+      const handlerTypes = await fixtures.run("handler-types");
+      expect(handlerTypes.generated["main.ts"]).not.toContain("electronWebContents");
+      expect(handlerTypes.generated["main.ts"]).not.toContain("broadcastMessage");
    });
 });

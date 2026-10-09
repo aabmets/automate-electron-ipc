@@ -19,26 +19,22 @@ import {
    windowIpcPaths,
 } from "@testutils/e2e/runtime-utils.js";
 import { cleanupUtilityPorts, loadMain } from "@testutils/e2e/utility-port-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
-   await cleanupUtilityPorts();
+   cleanupUtilityPorts();
 });
 
 describe("utility ports, files", () => {
    it("type-checks main.ts, utility.ts, the preload script and window.d.ts, and the code which uses them", async () => {
-      project = await runFixture("utility-ports");
+      const project = await fixtures.run("utility-ports");
       expect(await project.typecheck()).toBe("");
    });
 
    it("type-checks a schema which has only a channel from a page to a utility process", async () => {
-      project = await runFixture("utility-ports-only");
+      const project = await fixtures.run("utility-ports-only");
       expect(await project.typecheck()).toBe("");
       expect(project.generated["utility.ts"]).toContain("setBrokerCall(");
       expect(project.generated["main.ts"]).toContain("function connectUtilityPort(");
@@ -50,7 +46,7 @@ describe("utility ports, files", () => {
    });
 
    it("exposes the calls to the page, and the connect to the main process only", async () => {
-      project = await runFixture("utility-ports");
+      const project = await fixtures.run("utility-ports");
       const preload = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: preload.electron });
       const paths = [
@@ -78,11 +74,10 @@ describe("utility ports, files", () => {
    });
 
    it("declares IpcUtilityError for the page only when a channel to a utility process exists", async () => {
-      project = await runFixture("utility-ports");
-      expect(project.generated["window.d.ts"]).toContain("type IpcUtilityError = Error & {");
-      await project.cleanup();
+      const withUtility = await fixtures.run("utility-ports");
+      expect(withUtility.generated["window.d.ts"]).toContain("type IpcUtilityError = Error & {");
 
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       expect(project.generated["window.d.ts"]).not.toContain("IpcUtilityError");
    });
 });

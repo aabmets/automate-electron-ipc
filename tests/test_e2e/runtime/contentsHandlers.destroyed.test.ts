@@ -13,18 +13,9 @@
 
 import v8 from "node:v8";
 import { runInNewContext } from "node:vm";
-import {
-   type Contents,
-   createContents,
-   disposeContentsFixture,
-   loadMain,
-} from "@testutils/e2e/contents-handlers-utils.js";
+import { type Contents, createContents, loadMain } from "@testutils/e2e/contents-handlers-utils.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(async () => {
-   await disposeContentsFixture();
-});
+import { describe, expect, it, vi } from "vitest";
 
 describe("the webContents option of listeners and handlers", () => {
    describe("when the contents are destroyed", () => {

@@ -10,26 +10,22 @@
  */
 
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("the generated files of a mainPort channel", () => {
    it("type-checks the usage of both sides", async () => {
-      project = await runFixture("main-port");
+      const project = await fixtures.run("main-port");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("gives the page the API of a port channel, whichever peer the channel has", async () => {
-      project = await runFixture("main-port");
+      const project = await fixtures.run("main-port");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
@@ -50,7 +46,7 @@ describe("the generated files of a mainPort channel", () => {
    });
 
    it("has only the main-process helpers that its channels use", async () => {
-      project = await runFixture("main-port");
+      const project = await fixtures.run("main-port");
       const main = project.generated["main.ts"];
 
       expect(main).toContain("function connectMainPort(");

@@ -9,15 +9,13 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanupRuntime, generateFixture } from "@testutils/e2e/runtime-main-utils.js";
 import {
    getSecret,
    loadSenderFixture,
    senderFrame,
 } from "@testutils/e2e/runtime-validation-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(cleanupRuntime);
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("generated main process bindings", () => {
    describe("sender validation", () => {
@@ -26,10 +24,8 @@ describe("generated main process bindings", () => {
          expect(typeof generated.configureIpc).toBe("function");
          expect(new generated.IpcForbiddenError("x")).toBeInstanceOf(Error);
 
-         let project = await generateFixture("port-only");
+         const project = await fixtures.run("port-only");
          expect(project.generated["main.ts"]).not.toContain("configureIpc");
-         await project.cleanup();
-         project = undefined;
       });
 
       it("describes the rejected channel in an IpcForbiddenError", async () => {

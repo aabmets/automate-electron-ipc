@@ -11,8 +11,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { type E2EProject, type RunFixtureOptions, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { type RunFixtureOptions } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../../fixtures");
 
@@ -37,13 +38,6 @@ const FIXTURES = fs
    .filter((name) => !REJECTED.has(name))
    .sort();
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
 /** The paths of the files under `dir`, relative to it, with `/` as the separator. */
 function listFiles(dir: string): string[] {
    return fs
@@ -58,7 +52,7 @@ describe("generated files, blank lines", () => {
    // could leave two blank lines in a row between them.
    it.each(FIXTURES)("has no two blank lines in a row in the files of '%s'", async (fixture) => {
       const fixtureFiles = new Set(listFiles(path.join(fixturesDir, fixture)));
-      project = await runFixture(fixture, OPTIONS[fixture]);
+      const project = await fixtures.run(fixture, OPTIONS[fixture]);
       const generatedFiles = listFiles(project.root).filter((file) => !fixtureFiles.has(file));
       expect(generatedFiles).not.toStrictEqual([]);
       for (const file of generatedFiles) {

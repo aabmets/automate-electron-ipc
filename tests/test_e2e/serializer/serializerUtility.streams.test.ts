@@ -14,25 +14,20 @@
 import { brokeredLoader } from "@testutils/e2e/serializer-brokered-utils.js";
 import { AT, date, settled } from "@testutils/e2e/serializer-wire-utils.js";
 import { settle, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];
 
-afterEach(async () => {
+afterEach(() => {
    Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 });
 
-const loadBrokered = brokeredLoader((created) => {
-   project = created;
-}, rawPorts);
+const loadBrokered = brokeredLoader(fixtures.run, rawPorts);
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
 

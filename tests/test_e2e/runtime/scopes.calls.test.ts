@@ -9,23 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   callFrom,
-   createContents,
-   disposeScopesFixture,
-   forbidden,
-   loadMain,
-} from "@testutils/e2e/scopes-main-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await disposeScopesFixture();
-   await project?.cleanup();
-   project = undefined;
-});
+import { callFrom, createContents, forbidden, loadMain } from "@testutils/e2e/scopes-main-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("registerScope, and the channels with scopes in the main process", () => {
    it("declares the scopes of the schema as the type IpcScope, and the function registerScope", async () => {
@@ -38,7 +24,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
    });
 
    it("leaves the registry out of a schema without scopes", async () => {
-      project = await runFixture("sender-validation");
+      const project = await fixtures.run("sender-validation");
       const main = project.generated["main.ts"];
 
       expect(main).not.toMatch(/registerScope|scopeRegistry|IpcScope/);

@@ -9,21 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { NODE_NEXT_OPTIONS } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, type definition edge cases", () => {
    // Regression for T09: a non-exported helper type threw, a default exported interface was
    // imported by name, type parameters and globals were imported as custom types.
    it("imports only the user-defined types that channels use", async () => {
-      project = await runFixture("type-edge-cases");
+      const project = await fixtures.run("type-edge-cases");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -38,7 +32,7 @@ describe("ipcAutomation, type definition edge cases", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("type-edge-cases");
+      const project = await fixtures.run("type-edge-cases");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -46,7 +40,7 @@ describe("ipcAutomation, type definition edge cases", () => {
 describe("ipcAutomation, types exported by specifiers and default classes", () => {
    // Regression for T61: `export { X }` failed validation, `export default class` got no import.
    it("imports the types under the names that the schema exports", async () => {
-      project = await runFixture("export-specifiers");
+      const project = await fixtures.run("export-specifiers");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -62,7 +56,7 @@ describe("ipcAutomation, types exported by specifiers and default classes", () =
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("export-specifiers");
+      const project = await fixtures.run("export-specifiers");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -72,7 +66,7 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
    // a destructured param is covered by the collectCustomTypes unit tests, since TypeScript
    // rejects such a binding in a function type.
    it("imports the heads of qualified names and typeof queries", async () => {
-      project = await runFixture("qualified-names");
+      const project = await fixtures.run("qualified-names");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -86,7 +80,7 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("qualified-names");
+      const project = await fixtures.run("qualified-names");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -95,7 +89,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    // Regression for T90: swc parsed without `decorators: true`, so a decorated class was a
    // syntax error.
    it("parses a schema file with a decorated class", async () => {
-      project = await runFixture("decorators");
+      const project = await fixtures.run("decorators");
       expect(project.generated["main.ts"]).toContain("getUser");
       expect(await project.typecheck({ experimentalDecorators: false })).toBe("");
    });
@@ -103,7 +97,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    // Regression for T90: `export import User = Models.User` bound a name that no generated file
    // imported.
    it("imports the name of an exported import-equals alias from the schema file", async () => {
-      project = await runFixture("import-equals");
+      const project = await fixtures.run("import-equals");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          expect(project.generated[file]).toContain('import type { User } from "./schema";');
       }
@@ -111,7 +105,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    });
 
    it("resolves an alias that is not exported to its target", async () => {
-      project = await runFixture("import-equals-local");
+      const project = await fixtures.run("import-equals-local");
       const { generated } = project;
       expect(generated["main.ts"]).toContain("Promise<Models.User>");
       expect(generated["main.ts"]).toContain("point: Models.Shapes.Point");
@@ -122,7 +116,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    });
 
    it("keeps the aliases of two schema files apart when their targets share a name", async () => {
-      project = await runFixture("import-equals-local");
+      const project = await fixtures.run("import-equals-local");
       const { generated } = project;
       expect(generated["main.ts"]).toContain('import type * as Models from "./types/models";');
       expect(generated["main.ts"]).toContain('import type * as Models_2 from "./types/other";');
@@ -131,7 +125,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    });
 
    it("imports the module of an import-equals require alias", async () => {
-      project = await runFixture("import-equals-require");
+      const project = await fixtures.run("import-equals-require");
       const { generated } = project;
       expect(generated["main.ts"]).toContain('import type * as Models from "./models.js";');
       expect(generated["main.ts"]).toContain('import type { Exported } from "./schema.js";');
@@ -143,7 +137,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
 describe("ipcAutomation, typeof of values declared in the schema file", () => {
    // Regression for T62: `typeof config` of a value in the schema file got no import (TS2304).
    it("imports the exported values under the names that the schema exports", async () => {
-      project = await runFixture("typeof-local-values");
+      const project = await fixtures.run("typeof-local-values");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -159,7 +153,7 @@ describe("ipcAutomation, typeof of values declared in the schema file", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("typeof-local-values");
+      const project = await fixtures.run("typeof-local-values");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -173,7 +167,7 @@ describe("ipcAutomation, schema types named like globals", () => {
       )?.[0];
 
    it("imports the declared and the imported types in main.ts", async () => {
-      project = await runFixture("shadowed-globals");
+      const project = await fixtures.run("shadowed-globals");
       const main = project.generated["main.ts"];
 
       // The generated `IpcForbiddenError` extends the global `Error`, so the schema type is aliased.
@@ -191,7 +185,7 @@ describe("ipcAutomation, schema types named like globals", () => {
    });
 
    it("keeps a declared Promise apart from the one that the generated code uses", async () => {
-      project = await runFixture("shadowed-globals");
+      const project = await fixtures.run("shadowed-globals");
       const types = project.generated["window.d.ts"];
 
       expect(importLine(types, "Promise", "./schema")).toBe(
@@ -202,7 +196,7 @@ describe("ipcAutomation, schema types named like globals", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("shadowed-globals");
+      const project = await fixtures.run("shadowed-globals");
       expect(await project.typecheck()).toBe("");
    });
 });

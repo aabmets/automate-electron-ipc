@@ -17,9 +17,9 @@ import { cleanupUtilityPorts, loadAll, settled } from "@testutils/e2e/utility-po
 import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupUtilityPorts();
+   cleanupUtilityPorts();
 });
 
 describe("utility ports, the three scripts together over real ports", () => {

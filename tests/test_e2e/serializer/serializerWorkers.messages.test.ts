@@ -15,20 +15,14 @@ import { settlePorts } from "@testutils/e2e/runtime-utils.js";
 import { AT, date, settled } from "@testutils/e2e/serializer-wire-utils.js";
 import { workerConnector } from "@testutils/e2e/serializer-worker-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
-import type { E2EProject } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
-const connect = workerConnector((created) => {
-   project = created;
-});
+const connect = workerConnector(fixtures.run);
 
 /** Lets the promises and the messages run. */
 const flush = () => settlePorts(10);

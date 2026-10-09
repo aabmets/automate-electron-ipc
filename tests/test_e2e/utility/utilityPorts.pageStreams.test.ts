@@ -16,9 +16,9 @@ import { cleanupUtilityPorts, loadPage, settled } from "@testutils/e2e/utility-p
 import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupUtilityPorts();
+   cleanupUtilityPorts();
 });
 
 describe("utility ports, the page, streams", () => {

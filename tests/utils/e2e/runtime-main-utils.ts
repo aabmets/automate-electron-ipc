@@ -14,29 +14,15 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "../fixture-tracker.js";
 import { WIRE_PREFIX } from "./wire-utils.js";
 
-let project: E2EProject | undefined;
-
 /** The project that the last helper generated. */
-export const currentProject = () => project;
-
-/** Generates a fixture, and keeps it so that `cleanupRuntime` removes it. */
-export async function generateFixture(name: string) {
-   project = await runFixture(name);
-   return project;
-}
-
-/** Removes the generated project of the test. */
-export async function cleanupRuntime() {
-   await project?.cleanup();
-   project = undefined;
-}
+export const currentProject = fixtures.current;
 
 /** Runs the generated preload script against a fake contextBridge and ipcRenderer. */
 export async function loadPreload(fixture: string) {
-   const project = await generateFixture(fixture);
+   const project = await fixtures.run(fixture);
    const fake = createFakePreloadElectron();
    loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
    return { ...fake, project };
@@ -101,7 +87,7 @@ export async function loadMainWithEmitter(
          envelopes.delete(bare(rawChannel));
       },
    });
-   const project = await generateFixture(fixture);
+   const project = await fixtures.run(fixture);
    const generated = loadGenerated(project.generated["main.ts"], { electron, ...modules });
    return { emitter, handlers, envelopes, ipc: generated.ipc, generated };
 }

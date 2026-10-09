@@ -15,20 +15,16 @@ import {
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
 import { failed, flush, ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("service worker channels, preload script", () => {
    async function loadPreload(fixture = "service-worker-channels") {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const fakeElectron = createFakePreloadElectron();
       const ipcRenderer = fakeElectron.electron.ipcRenderer as Record<
          string,
@@ -207,7 +203,7 @@ describe("service worker channels, preload script", () => {
    });
 
    it("uses the channel prefix of the config on every wire name", async () => {
-      project = await runFixture("service-worker-prefix");
+      const project = await fixtures.run("service-worker-prefix");
       const source = project.generated["service-worker-preload.ts"] as string;
       expect(source).toContain("'worker/getToken'");
       expect(source).toContain("'worker/flushQueue:reply'");

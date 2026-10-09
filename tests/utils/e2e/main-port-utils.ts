@@ -15,12 +15,11 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { disconnectWire } from "./wire-utils.js";
 
 const rawPorts: MessagePort[] = [];
-let project: E2EProject | undefined;
 
 /** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
 export function createContents(state: { loading?: boolean; url?: string } = {}) {
@@ -63,7 +62,7 @@ export class FakeChannelMain {
 }
 
 export async function loadMainWithElectron(channelClass: unknown = FakeChannelMain) {
-   project = await runFixture("main-port");
+   const project = await fixtures.run("main-port");
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: channelClass };
    return { electron, ipc: loadGenerated(project.generated["main.ts"], { electron }).ipc };
@@ -126,6 +125,7 @@ export class RealChannelMain {
 export async function loadBoth() {
    const { electron, ipc: mainIpc } = await loadMainWithElectron(RealChannelMain);
    const fake = createFakePreloadElectron();
+   const project = fixtures.current();
    if (!project) {
       throw new Error("The fixture was not generated");
    }
@@ -151,11 +151,9 @@ export async function loadBoth() {
    return { mainIpc, contents, page: fake.exposed.ipc.logTail };
 }
 
-/** Closes what the helpers of this module opened, and removes their project. */
-export async function cleanupMainPorts() {
+/** Closes what the helpers of this module opened */
+export function cleanupMainPorts() {
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 }

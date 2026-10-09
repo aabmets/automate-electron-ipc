@@ -11,16 +11,19 @@
 
 import { EventEmitter } from "node:events";
 import { vi } from "vitest";
-import { type E2EProject, runFixture } from "../e2e-utils.js";
+import type { E2EProject } from "../e2e-utils.js";
 import { createFakePreloadElectron, loadGenerated } from "./runtime-utils.js";
 import { loadSerializer } from "./serializer-wire-utils.js";
 import { wire } from "./wire-utils.js";
 
 /**
- * Makes the `loadBrokered` function of one test file. `track` gets the project of each run, and
- * `rawPorts` collects the real ports, so that the file can close them in its own `afterEach`.
+ * Makes the `loadBrokered` function of one test file. `run` is the `run` of the tracker of the file,
+ * and `rawPorts` collects the real ports, so that the file can close them in its own `afterEach`.
  */
-export function brokeredLoader(track: (project: E2EProject) => void, rawPorts: MessagePort[]) {
+export function brokeredLoader(
+   run: (fixture: string) => Promise<E2EProject>,
+   rawPorts: MessagePort[],
+) {
    /** A `MessagePortMain` of the child, over a real `MessagePort`. */
    class RealPortMain extends EventEmitter {
       private readonly raw: MessagePort;
@@ -44,8 +47,7 @@ export function brokeredLoader(track: (project: E2EProject) => void, rawPorts: M
 
    /** A page, the child, and the real port between them, which the test can also read and write. */
    async function loadBrokered() {
-      const project = await runFixture("serializer-utility");
-      track(project);
+      const project = await run("serializer-utility");
       const serializer = await loadSerializer(project);
       const parentPort = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
       (process as unknown as { parentPort: unknown }).parentPort = parentPort;

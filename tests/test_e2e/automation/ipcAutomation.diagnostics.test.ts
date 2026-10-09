@@ -13,15 +13,9 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, schema with a syntax error", () => {
    // Regression for T08: the parse error was swallowed and reported as "no channels found".
@@ -36,7 +30,7 @@ describe("ipcAutomation, config values that would break the output", () => {
    /** Runs the fixture, and returns the message of the error that the run failed with. */
    async function failureOf(fixture: string): Promise<string> {
       try {
-         project = await runFixture(fixture);
+         await fixtures.run(fixture);
       } catch (error) {
          return error instanceof Error ? error.message : String(error);
       }
@@ -81,11 +75,8 @@ describe("ipcAutomation, config values that would break the output", () => {
 describe("ipcAutomation, diagnostics that name a path", () => {
    it("names the schema file, and not its directory, in an error about one of its channels", async () => {
       // Regression for T92: the single schema file was reported as its directory, 'ipc'.
-      const failure = await runFixture("schema-file-reserved-name").then(
-         (fixture) => {
-            project = fixture;
-            return "the run did not fail";
-         },
+      const failure = await fixtures.run("schema-file-reserved-name").then(
+         () => "the run did not fail",
          (error: Error) => error.message,
       );
 

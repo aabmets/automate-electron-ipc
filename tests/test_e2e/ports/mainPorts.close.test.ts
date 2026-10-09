@@ -21,9 +21,9 @@ import { finishLoading } from "@testutils/e2e/runtime-utils.js";
 import { closeWire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupMainPorts();
+   cleanupMainPorts();
 });
 
 describe("ipc.<name>.connect of a mainPort channel", () => {

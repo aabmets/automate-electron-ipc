@@ -9,26 +9,21 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupAsks,
-   currentProject,
-   generateFixture,
-   replyOf,
-   request,
-} from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks, currentProject, replyOf, request } from "@testutils/e2e/ask-utils.js";
 import {
    callablePaths,
    createFakePreloadElectron,
    loadGenerated,
    windowIpcPaths,
 } from "@testutils/e2e/runtime-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupAsks);
 
 describe("ask, preload script", () => {
    async function loadPreload() {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
       /** Delivers a question, as the main process sends it, and returns the reply that follows. */

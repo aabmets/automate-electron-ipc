@@ -12,30 +12,24 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { appointment, serializerConnector } from "@testutils/e2e/serializer-runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
-const connect = serializerConnector((created) => {
-   project = created;
-});
+const connect = serializerConnector(fixtures.run);
 
 describe("fixture serializer, with a module in the project", () => {
    it("generates files that type-check, with the types the page and the main process see", async () => {
-      project = await runFixture("serializer");
+      const project = await fixtures.run("serializer");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("fails the type-check when a Date is sent where the signature says it is a number", async () => {
-      project = await runFixture("serializer");
+      const project = await fixtures.run("serializer");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
       await fsp.writeFile(usage, text.replace("// @ts-expect-error the page sends a Date", "//"));
@@ -44,7 +38,7 @@ describe("fixture serializer, with a module in the project", () => {
    });
 
    it("imports the module in main.ts and in preload.ts, and leaves window.d.ts alone", async () => {
-      project = await runFixture("serializer");
+      const project = await fixtures.run("serializer");
       const line =
          'import { serialize as ipcSerialize, deserialize as ipcDeserialize } from "./serializer";';
 
@@ -214,7 +208,7 @@ describe("generated serializer, invoke", () => {
 
 describe("fixture serializer-raw-errors, with rawErrors on", () => {
    it("generates files that type-check", async () => {
-      project = await runFixture("serializer-raw-errors");
+      const project = await fixtures.run("serializer-raw-errors");
 
       expect(await project.typecheck()).toBe("");
    });
@@ -252,7 +246,7 @@ describe("fixture serializer-raw-errors, with rawErrors on", () => {
 
 describe("a schema in which the main process sees no message", () => {
    it("imports the serializer in the preload script only, since the main process just pairs the pages", async () => {
-      project = await runFixture("serializer-no-pages");
+      const project = await fixtures.run("serializer-no-pages");
 
       expect(project.generated["main.ts"]).not.toContain("serializer");
       expect(project.generated["main.ts"]).not.toContain("ipcSerialize");

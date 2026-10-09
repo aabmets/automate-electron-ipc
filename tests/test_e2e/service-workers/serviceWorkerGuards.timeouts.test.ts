@@ -18,16 +18,13 @@ import {
    schema,
 } from "@testutils/e2e/service-worker-guard-utils.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { type E2EProject } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.useRealTimers();
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("timeouts of the calls of a worker, in the main process", () => {
@@ -36,7 +33,7 @@ describe("timeouts of the calls of a worker, in the main process", () => {
    let session: any;
 
    beforeEach(async () => {
-      project = await runFixture("service-worker-guards");
+      const project = await fixtures.run("service-worker-guards");
       main = loadGuardMain(project, {
          __esModule: true,
          scopeArgs: schema(oneString),
@@ -163,7 +160,7 @@ describe("timeouts of the calls of a worker, in the main process", () => {
    it("covers the time that the schema takes, since the call has begun", async () => {
       vi.useFakeTimers();
       const slow = schema(oneString, true);
-      const loaded = loadGuardMain(project as E2EProject, {
+      const loaded = loadGuardMain(fixtures.current() as E2EProject, {
          scopeArgs: schema(oneString),
          stateArgs: schema(oneNumber),
          slowArgs: slow,

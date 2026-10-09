@@ -18,8 +18,8 @@ import {
    loadGenerated,
    windowIpcPaths,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 /** The paths of the API that each scope of the fixture `scoped-windows` gets. */
 const SURFACES: Record<string, string[]> = {
@@ -56,16 +56,9 @@ const FILES: Record<string, { preload: string; types: string }> = {
    editor: { preload: "preload.editor.ts", types: "window.editor.d.ts" },
 };
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
 describe("fixture scoped-windows, the files of the scopes", () => {
    it("writes a preload script and a .d.ts file for each scope, next to the default ones", async () => {
-      project = await runFixture("scoped-windows");
+      const project = await fixtures.run("scoped-windows");
       const names = await fsp.readdir(path.join(project.dir, project.ipcDataDir));
 
       expect(names.filter((name) => /^(preload|window)/.test(name)).sort()).toStrictEqual([
@@ -81,7 +74,7 @@ describe("fixture scoped-windows, the files of the scopes", () => {
    it.each(Object.keys(SURFACES))(
       "exposes only the channels of the scope '%s', and declares the same ones",
       async (scope) => {
-         project = await runFixture("scoped-windows");
+         const project = await fixtures.run("scoped-windows");
          const fake = createFakePreloadElectron();
          loadGenerated(await project.read(FILES[scope].preload), { electron: fake.electron });
 
@@ -92,7 +85,7 @@ describe("fixture scoped-windows, the files of the scopes", () => {
    );
 
    it("generates the preload script of a scope like any other, with the channels of the scope only", async () => {
-      project = await runFixture("scoped-windows");
+      const project = await fixtures.run("scoped-windows");
       const settings = await project.read("preload.settings.ts");
 
       expect(settings).toContain("export function expose(key = 'ipc'): void {");
@@ -103,14 +96,14 @@ describe("fixture scoped-windows, the files of the scopes", () => {
    it.each(Object.keys(SURFACES))(
       "generates files that type-check for the scope '%s'",
       async (scope) => {
-         project = await runFixture("scoped-windows");
+         const project = await fixtures.run("scoped-windows");
 
          expect(await project.typecheckScope(scope)).toBe("");
       },
    );
 
    it("imports only the types that the channels of a scope use", async () => {
-      project = await runFixture("scoped-windows");
+      const project = await fixtures.run("scoped-windows");
 
       expect(await project.read("window.settings.d.ts")).toContain(
          'import type { Settings } from "./schema";',
@@ -124,7 +117,7 @@ describe("fixture scoped-windows, the files of the scopes", () => {
    });
 
    it("gives the main bindings every channel, in the one file", async () => {
-      project = await runFixture("scoped-windows");
+      const project = await fixtures.run("scoped-windows");
       const { ipc } = loadGenerated(project.generated["main.ts"], {
          electron: createFakeElectron(),
       });

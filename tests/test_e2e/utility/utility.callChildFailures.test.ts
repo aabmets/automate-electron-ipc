@@ -13,8 +13,8 @@ import { createChild, load, resetUtilityFakes } from "@testutils/e2e/utility-pro
 import { flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
-afterEach(async () => {
-   await resetUtilityFakes();
+afterEach(() => {
+   resetUtilityFakes();
 });
 
 describe("utility channels, main process, calling the child", () => {

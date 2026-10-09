@@ -10,7 +10,8 @@
  */
 
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { generateFixture, portWire } from "@testutils/e2e/stream-main-utils.js";
+import { portWire } from "@testutils/e2e/stream-main-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { vi } from "vitest";
 
 /** A `MessagePort` of the page: records what is posted, and delivers what the test says. */
@@ -35,7 +36,7 @@ export class FakePagePort {
 }
 
 export async function loadPreload() {
-   const project = await generateFixture("stream-channels");
+   const project = await fixtures.run("stream-channels");
    const fake = createFakePreloadElectron();
    loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
    const invoke = fake.electron.ipcRenderer.invoke;

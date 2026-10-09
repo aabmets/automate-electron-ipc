@@ -18,19 +18,11 @@ import {
    sendMany,
 } from "@testutils/e2e/port-queue-utils.js";
 import { finishLoading } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject } from "@testutils/e2e-utils.js";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject;
 let error: ReturnType<typeof vi.spyOn>;
 
-beforeAll(async () => {
-   project = await loadBoundedProject();
-});
-
-afterAll(async () => {
-   await project.cleanup();
-});
+beforeAll(loadBoundedProject);
 
 beforeEach(() => {
    error = vi.spyOn(console, "error").mockImplementation(() => undefined);

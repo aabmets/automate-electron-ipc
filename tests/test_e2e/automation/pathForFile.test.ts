@@ -12,19 +12,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("fixture path-for-file, with `getPathForFile` on", () => {
    const load = async () => {
-      project = await runFixture("path-for-file");
+      const project = await fixtures.run("path-for-file");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
       return fake;
@@ -63,14 +56,14 @@ describe("fixture path-for-file, with `getPathForFile` on", () => {
    });
 
    it("generates files that type-check, with the helper used from the page", async () => {
-      project = await runFixture("path-for-file");
+      const project = await fixtures.run("path-for-file");
 
       expect(project.generated["window.d.ts"]).toContain("getPathForFile: (file: File) => string;");
       expect(await project.typecheck()).toBe("");
    });
 
    it("fails the type-check when the helper gets something that is not a File", async () => {
-      project = await runFixture("path-for-file");
+      const project = await fixtures.run("path-for-file");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
       await fsp.writeFile(usage, text.replace("getPathForFile(file)", "getPathForFile(file.name)"));
@@ -81,7 +74,7 @@ describe("fixture path-for-file, with `getPathForFile` on", () => {
 
 describe("fixture expose-as, with `getPathForFile` off", () => {
    it("exposes no helper, and declares none", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 

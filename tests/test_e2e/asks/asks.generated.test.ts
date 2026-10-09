@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanupAsks, generateFixture } from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks } from "@testutils/e2e/ask-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanupAsks);
 
 describe("ask, generated files", () => {
    it("declares only the handle method of an ask in window.d.ts", async () => {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain(
@@ -36,7 +37,7 @@ describe("ask, generated files", () => {
    });
 
    it("types the answer as a promise of the awaited return type of the signature", async () => {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -52,7 +53,7 @@ describe("ask, generated files", () => {
    });
 
    it("uses the wire names with the prefix, and a reply channel that no other channel can have", async () => {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       const { "main.ts": main, "preload.ts": preload } = project.generated;
 
       expect(main).toContain(
@@ -63,12 +64,12 @@ describe("ask, generated files", () => {
    });
 
    it("generates files that type-check", async () => {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       expect(await project.typecheck()).toBe("");
    });
 
    it("generates files that type-check when the schema has only asks", async () => {
-      const project = await generateFixture("ask-only");
+      const project = await fixtures.run("ask-only");
       expect(await project.typecheck()).toBe("");
       const main = project.generated["main.ts"];
       expect(main).toContain(

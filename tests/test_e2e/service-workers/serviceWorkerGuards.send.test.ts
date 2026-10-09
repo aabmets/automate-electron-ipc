@@ -18,27 +18,23 @@ import {
    schema,
 } from "@testutils/e2e/service-worker-guard-utils.js";
 import { flush } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.useRealTimers();
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("fixture service-worker-guards", () => {
    it("type-checks the files of the page project and of the worker project", async () => {
-      project = await runFixture("service-worker-guards");
+      const project = await fixtures.run("service-worker-guards");
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
    }, 60_000);
 
    it("times the calls in the main process, since the preload script of a worker has no timers", async () => {
-      project = await runFixture("service-worker-guards");
+      const project = await fixtures.run("service-worker-guards");
       const main = project.generated["main.ts"] as string;
       const preload = project.generated["service-worker-preload.ts"] as string;
 
@@ -57,7 +53,7 @@ describe("fixture service-worker-guards", () => {
    });
 
    it("declares the timeout error for the worker, and validation only in the main process", async () => {
-      project = await runFixture("service-worker-guards");
+      const project = await fixtures.run("service-worker-guards");
 
       expect(project.generated["service-worker.d.ts"]).toContain("type IpcTimeoutError =");
       expect(project.generated["service-worker-preload.ts"]).not.toContain("validate");
@@ -76,7 +72,7 @@ describe("validation of the calls of a worker, in the main process", () => {
    const slowArgs = schema(oneString, true);
 
    beforeEach(async () => {
-      project = await runFixture("service-worker-guards");
+      const project = await fixtures.run("service-worker-guards");
       main = loadGuardMain(project, { __esModule: true, scopeArgs, stateArgs, slowArgs });
       one = createWorker();
       fake = createSession(one);

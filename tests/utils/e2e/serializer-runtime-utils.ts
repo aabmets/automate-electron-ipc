@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { vi } from "vitest";
-import { type E2EProject, runFixture } from "../e2e-utils.js";
+import type { E2EProject } from "../e2e-utils.js";
 import { createFakeElectron, createFakePreloadElectron, loadGenerated } from "./runtime-utils.js";
 
 /** The `Appointment` of the fixture, with the types that structured clone cannot tell apart. */
@@ -39,20 +39,19 @@ function createRegistry() {
 }
 
 /**
- * Makes the `connect` function of one test file. `track` gets the project of each run, so that the
- * file can delete it in its own `afterEach`.
+ * Makes the `connect` function of one test file. `run` is the `run` of the tracker of the file,
+ * which deletes the project of each run after the test.
  *
  * `connect` loads the generated main bindings and preload script of a fixture next to each other,
  * with the serializer of the fixture, and connects them the way Electron does: whatever crosses is
  * cloned.
  */
-export function serializerConnector(track: (project: E2EProject) => void) {
+export function serializerConnector(run: (fixture: string) => Promise<E2EProject>) {
    return async function connect(
       fixture = "serializer",
       options: { validateSender?: boolean } = {},
    ) {
-      const project = await runFixture(fixture);
-      track(project);
+      const project = await run(fixture);
       const read = (name: string) => fsp.readFile(path.join(project.dir, "ipc", name), "utf8");
       const serializer = loadGenerated(await read("serializer.ts"), {});
       const spied = {

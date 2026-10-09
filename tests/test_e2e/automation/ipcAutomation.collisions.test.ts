@@ -10,15 +10,8 @@
  */
 
 import { methodLine } from "@testutils/e2e/generated-text-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, type names that collide across schema files", () => {
    // Regression for T53: imports were deduped by local name only, so two `User` types were
@@ -37,7 +30,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       return match[1] ?? exported;
    };
    it("imports types of the same name that are declared in two schema files under distinct names", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -52,7 +45,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 
    it("keeps an imported type and a declared type of the same name apart", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -74,7 +67,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 
    it("imports namespaces of the same alias from different modules under distinct aliases", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -96,7 +89,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    it("injects the event and repeats type params after a renamed type param bound", async () => {
       // Regression for the T53/T57 combination: renaming `User` to `User_3` lengthened the
       // text before the parameter list, so `paramsStart` pointed into the wrong place.
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       const main = project.generated["main.ts"];
       const userC = importedAs(main, "User", "./schema/c");
       expect(userC).not.toBe("User");
@@ -113,7 +106,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
 
    // Regression for T69: a type inside `${...}` kept its old name, and a member name was renamed.
    it("renames types inside template literal types, but not member names", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       const main = project.generated["main.ts"];
       const userC = importedAs(main, "User", "./schema/c");
       expect(userC).not.toBe("User");
@@ -128,14 +121,14 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 
    it("accepts a Promise< void > return type for a send channel", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       expect(methodLine(project.generated["main.ts"], "notifyC", "on")).toContain(
          "Promise< void >",
       );
    });
 
    it("imports a type that two schema files import once", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          const imports = project.generated[file].match(/^import type .*"\.\/types\/shared";$/gm);
          expect(imports).toStrictEqual(['import type { Shared } from "./types/shared";']);
@@ -143,7 +136,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("name-collisions");
+      const project = await fixtures.run("name-collisions");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -157,7 +150,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
       )?.[0];
 
    it("imports the schema types under aliases in main.ts", async () => {
-      project = await runFixture("reserved-names");
+      const project = await fixtures.run("reserved-names");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -225,7 +218,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
    });
 
    it("imports the schema types that are named like the helpers of scoped registration under aliases", async () => {
-      project = await runFixture("reserved-names");
+      const project = await fixtures.run("reserved-names");
       const main = project.generated["main.ts"];
 
       for (const name of [
@@ -246,7 +239,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
    });
 
    it("imports the schema types under aliases in window.d.ts", async () => {
-      project = await runFixture("reserved-names");
+      const project = await fixtures.run("reserved-names");
       const types = project.generated["window.d.ts"];
 
       expect(importLine(types, "IpcApi", "./schema")).toBe(
@@ -270,7 +263,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("reserved-names");
+      const project = await fixtures.run("reserved-names");
       expect(await project.typecheck()).toBe("");
    });
 });

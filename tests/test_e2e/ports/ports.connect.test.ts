@@ -20,9 +20,9 @@ import { commitNavigation, finishLoading, startLoading } from "@testutils/e2e/ru
 import { closeWire, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupPortConnect();
+   cleanupPortConnect();
 });
 
 describe("ipc.<name>.connect", () => {

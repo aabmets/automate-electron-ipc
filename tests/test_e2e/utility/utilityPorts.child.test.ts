@@ -21,16 +21,12 @@ import {
    startStream,
 } from "@testutils/e2e/utility-port-utils.js";
 import { flush, ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
-   await cleanupUtilityPorts();
+   cleanupUtilityPorts();
 });
 
 describe("utility ports, the utility process, accepting ports", () => {
@@ -89,7 +85,7 @@ describe("utility ports, the utility process, accepting ports", () => {
    });
 
    it("fails outside a utility process, like the other channels", async () => {
-      project = await runFixture("utility-ports");
+      const project = await fixtures.run("utility-ports");
       const utility = loadGenerated(project.generated["utility.ts"] ?? "", {});
 
       expect(() => utility.ipc.queryRows.handle(async () => [])).toThrow(TypeError);

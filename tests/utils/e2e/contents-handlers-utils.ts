@@ -11,17 +11,14 @@
 
 import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { wire } from "./wire-utils.js";
 
 // T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }` and register
 // on `webContents.ipc` instead of the global `ipcMain`. The fake contents here follow the dispatch
 // of Electron: a message goes to `webContents.ipc` first and then to `ipcMain`. An `invoke` goes
 // to the first of the two that has a handler, and a `send` goes to the listeners of both.
-
-/** The fixture project that `loadMain` made, which `disposeContentsFixture` cleans up. */
-let project: E2EProject | undefined;
 
 /** An `IpcMain` stand-in: real listeners, and handlers which refuse a second one like Electron's. */
 export function createFakeIpc() {
@@ -73,7 +70,7 @@ export const eventFrom = (sender: Contents, origin = "app://.") => ({
 });
 
 export async function loadMain(fixture = "all-kinds") {
-   project = await runFixture(fixture);
+   const project = await fixtures.run(fixture);
    const globalIpc = createFakeIpc();
    const electron = { ...createFakeElectron(), ipcMain: globalIpc };
    // The fixture of the streams imports a validator, which the stream never calls here.
@@ -98,10 +95,4 @@ export async function loadMain(fixture = "all-kinds") {
       globalIpc.emitter.emit(wire(channel), event, ...args);
    };
    return { generated, ipc: generated.ipc, globalIpc, invoke, send };
-}
-
-/** Cleans up the project of `loadMain`. Call it from `afterEach`. */
-export async function disposeContentsFixture() {
-   await project?.cleanup();
-   project = undefined;
 }

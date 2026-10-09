@@ -16,26 +16,23 @@ import {
    loadWorkerMain,
 } from "@testutils/e2e/service-worker-utils.js";
 import { ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("service worker channels, files", () => {
    it("type-checks main.ts, the preload script of the worker and the code which uses them", async () => {
-      project = await runFixture("service-worker-channels");
+      const project = await fixtures.run("service-worker-channels");
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
    }, 60_000);
 
    it("writes the files of the worker next to the others, and leaves the page its own channels", async () => {
-      project = await runFixture("service-worker-channels");
+      const project = await fixtures.run("service-worker-channels");
       const { generated } = project;
       expect(Object.keys(generated).sort()).toStrictEqual([
          "main.ts",
@@ -68,7 +65,7 @@ describe("service worker channels, one verb alone", () => {
    it.each(["emitToWorker", "sendFromWorker", "askWorker", "invokeFromWorker"])(
       "type-checks the files of a schema with only %s, also with unused locals refused",
       async (verb) => {
-         project = await runFixture(`service-worker-only-${verb}`);
+         const project = await fixtures.run(`service-worker-only-${verb}`);
          const strict = { noUnusedLocals: true, noUnusedParameters: true };
          expect(await project.typecheck(strict)).toBe("");
          expect(await project.typecheckWorker(strict)).toBe("");
@@ -82,7 +79,7 @@ describe("service worker channels, main process", () => {
    let fake: ReturnType<typeof createSession>;
 
    beforeEach(async () => {
-      project = await runFixture("service-worker-channels");
+      const project = await fixtures.run("service-worker-channels");
       main = loadWorkerMain(project);
       fake = createSession();
    }, 60_000);
@@ -158,7 +155,7 @@ describe("service worker channels, main process", () => {
 
 describe("service worker channels, with rawErrors", () => {
    it("leaves the result and the errors of the handler to Electron", async () => {
-      project = await runFixture("service-worker-channels");
+      const project = await fixtures.run("service-worker-channels");
       const source = project.generated["main.ts"];
       expect(source).toContain("settleInvoke(");
       // The same schema with the config turned on has no envelope around the handler.

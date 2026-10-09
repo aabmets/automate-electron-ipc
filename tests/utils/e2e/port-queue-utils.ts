@@ -15,15 +15,24 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import type { E2EProject } from "@testutils/e2e-utils.js";
+import { trackFixtures } from "@testutils/fixture-tracker.js";
 import { vi } from "vitest";
 import { closeWire, wire } from "./wire-utils.js";
 
-let project: E2EProject;
+const bounded = trackFixtures("file");
 
 /** Generates the fixture of a test file, which the loaders of the page and of the main process read. */
-export async function loadBoundedProject() {
-   project = await runFixture("bounded-ports");
+export function loadBoundedProject() {
+   return bounded.run("bounded-ports");
+}
+
+/** The project that `loadBoundedProject` made, which is removed when the test file is done. */
+function boundedProject(): E2EProject {
+   const project = bounded.current();
+   if (!project) {
+      throw new Error("loadBoundedProject must run first, from a beforeAll");
+   }
    return project;
 }
 
@@ -65,7 +74,7 @@ export class FakePagePort {
 /** Loads the generated preload script, and returns what it exposes and how to feed it ports. */
 export function loadPage() {
    const fake = createFakePreloadElectron();
-   loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
+   loadGenerated(boundedProject().generated["preload.ts"], { electron: fake.electron });
    const listener = (name: string) => {
       const call = fake.electron.ipcRenderer.on.mock.calls.find(
          ([channel]: [string]) => channel === name,
@@ -118,7 +127,7 @@ export class FakeChannelMain {
 export function loadMain() {
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: FakeChannelMain };
-   return loadGenerated(project.generated["main.ts"], { electron });
+   return loadGenerated(boundedProject().generated["main.ts"], { electron });
 }
 
 export const lastPort = () => channelsMade[channelsMade.length - 1].port1;

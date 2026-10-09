@@ -11,33 +11,24 @@
 
 import { EventEmitter } from "node:events";
 import { createFakeElectron, createSource, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { wire } from "./wire-utils.js";
 
 export const portWire = (name: string) => `autoipc:${name}:port`;
 
-let project: E2EProject | undefined;
 /** The raw ports that a test made, which the cleanup closes. */
 export const rawPorts: MessagePort[] = [];
 
 /** The project that the last helper generated, for a test which reads its files. */
-export const currentProject = () => project;
+export const currentProject = fixtures.current;
 
-/** Generates a fixture, and keeps it so that `cleanupStreams` removes it. */
-export async function generateFixture(name: string) {
-   project = await runFixture(name);
-   return project;
-}
-
-/** Restores the mocks, closes the raw ports and removes the generated project. */
-export async function cleanupStreams() {
+/** Restores the mocks and closes the raw ports. */
+export function cleanupStreams() {
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 }
 
 /** A WebContents stand-in: an emitter that announces its end, as the real one does. */
@@ -87,7 +78,7 @@ export class FakeChannelMain {
 }
 
 export async function loadMainWith(channelClass: unknown, fixture = "stream-channels") {
-   const project = await generateFixture(fixture);
+   const project = await fixtures.run(fixture);
    channelsMade.length = 0;
    const electron = {
       ...createFakeElectron(),

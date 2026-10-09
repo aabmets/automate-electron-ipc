@@ -11,7 +11,6 @@
 
 import { vi } from "vitest";
 import type { E2EProject } from "../e2e-utils.js";
-import { runFixture } from "../e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "./runtime-utils.js";
 
 /** A WebContents stand-in: it is destroyed when `destroyed` is set, and sending then throws. */
@@ -30,13 +29,12 @@ export function createContents(id: number, destroyed = false) {
 }
 
 /**
- * Makes the `loadMain` function of one test file. `track` gets the project of each run, so that
- * the file can delete it in its own `afterEach`.
+ * Makes the `loadMain` function of one test file. `run` is the `run` of the tracker of the file,
+ * which deletes the project of each run after the test.
  */
-export function mainLoader(track: (project: E2EProject) => void) {
+export function mainLoader(run: (fixture: string) => Promise<E2EProject>) {
    return async function loadMain(open: ReturnType<typeof createContents>[] = []) {
-      const project = await runFixture("all-kinds");
-      track(project);
+      const project = await run("all-kinds");
       const electron = createFakeElectron();
       const getAllWebContents = vi.fn(() => open);
       Object.assign(electron, { webContents: { getAllWebContents } });

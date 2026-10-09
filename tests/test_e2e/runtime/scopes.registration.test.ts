@@ -13,20 +13,11 @@ import {
    type Contents,
    callFrom,
    createContents,
-   disposeScopesFixture,
    forbidden,
    loadMain,
 } from "@testutils/e2e/scopes-main-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await disposeScopesFixture();
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("registerScope, and the channels with scopes in the main process", () => {
    describe("the registration", () => {
@@ -129,7 +120,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
 describe("a schema where the scopes only name channels that the main process does not guard", () => {
    it("still exports registerScope, with the guard of the sender unchanged", async () => {
-      project = await runFixture("scoped-emit-only");
+      const project = await fixtures.run("scoped-emit-only");
       const main = project.generated["main.ts"];
 
       expect(main).toContain("export function registerScope(");

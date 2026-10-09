@@ -1,18 +1,12 @@
-import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { NODE_NEXT_OPTIONS } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, value imports used as types", () => {
    // Regression for B3: only `import type` names were recorded, so a class, enum, default or
    // aliased import that a signature referenced was missing from the generated files.
    it("imports every named, aliased, default and package import that a signature uses", async () => {
-      project = await runFixture("value-imports");
+      const project = await fixtures.run("value-imports");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -29,7 +23,7 @@ describe("ipcAutomation, value imports used as types", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("value-imports");
+      const project = await fixtures.run("value-imports");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -37,7 +31,7 @@ describe("ipcAutomation, value imports used as types", () => {
 describe("ipcAutomation, namespace imports", () => {
    // Regression for T49: the second type from a namespace generated a bogus named import.
    it("imports the namespace once, however many of its types are used", async () => {
-      project = await runFixture("namespace-imports");
+      const project = await fixtures.run("namespace-imports");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -47,7 +41,7 @@ describe("ipcAutomation, namespace imports", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("namespace-imports");
+      const project = await fixtures.run("namespace-imports");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -56,7 +50,7 @@ describe("ipcAutomation, import order", () => {
    // Regression for T06: import lines followed the order of the schema files, so it depended
    // on the order that the files were read in.
    it("sorts the type imports of main.ts and window.d.ts", async () => {
-      project = await runFixture("import-order");
+      const project = await fixtures.run("import-order");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -69,7 +63,7 @@ describe("ipcAutomation, import order", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("import-order");
+      const project = await fixtures.run("import-order");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -77,7 +71,7 @@ describe("ipcAutomation, import order", () => {
 describe("ipcAutomation, import paths with dots in the file name", () => {
    // Regression for T55: "./types/user.model" was imported as "./types/user" (TS2307).
    it("keeps the dotted file names, and maps script extensions for NodeNext", async () => {
-      project = await runFixture("dotted-imports");
+      const project = await fixtures.run("dotted-imports");
       const { generated } = project;
 
       for (const file of ["main.ts", "window.d.ts"] as const) {
@@ -88,12 +82,12 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("dotted-imports");
+      const project = await fixtures.run("dotted-imports");
       expect(await project.typecheck()).toBe("");
    });
 
    it("generates files that resolve under NodeNext, which needs the script extensions", async () => {
-      project = await runFixture("dotted-imports");
+      const project = await fixtures.run("dotted-imports");
       expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 });
@@ -101,7 +95,7 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
 describe("ipcAutomation, import paths of script extensions, JSON modules and import types", () => {
    // Regression for T89: the extension of `api.mts` and of `./models.mjs` was dropped (TS2307).
    it("keeps .mjs for the .mts schema files and the .mjs specifiers", async () => {
-      project = await runFixture("script-extensions");
+      const project = await fixtures.run("script-extensions");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./schema/api.mjs";');
@@ -110,18 +104,18 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
    });
 
    it("type-checks imports of .mts schema files and .mjs modules", async () => {
-      project = await runFixture("script-extensions");
+      const project = await fixtures.run("script-extensions");
       expect(await project.typecheck()).toBe("");
    });
 
    it("resolves imports of .mts schema files and .mjs modules under NodeNext", async () => {
-      project = await runFixture("script-extensions");
+      const project = await fixtures.run("script-extensions");
       expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 
    // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
    it("keeps the specifier of a JSON module under NodeNext, without a script extension", async () => {
-      project = await runFixture("json-import-node-next");
+      const project = await fixtures.run("json-import-node-next");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          expect(project.generated[file]).toContain('from "./settings.json";');
          expect(project.generated[file]).not.toContain("settings.json.js");
@@ -132,7 +126,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
    // Regression for T89: the path of `import("./models")` is relative to the schema file, and it
    // was copied as it is into the generated files, which are in another directory.
    it("rebases the path of an import type to the generated files", async () => {
-      project = await runFixture("inline-import-types");
+      const project = await fixtures.run("inline-import-types");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          expect(project.generated[file]).not.toContain('import("./models")');
          expect(project.generated[file]).toContain('import("./schema/models").User');
@@ -145,7 +139,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // Regression for T97: "./models" became "./models.js" under NodeNext, which does not resolve
    // to "./models/index.ts".
    it("names the index file of a directory import under NodeNext", async () => {
-      project = await runFixture("directory-imports");
+      const project = await fixtures.run("directory-imports");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./models/index.js";');
@@ -162,7 +156,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // Regression for T101: "./models" became "./models.js", or named the index file, although the
    // package.json of the directory comes before it. Path mappings are kept as they are written.
    it("keeps package directories and path mappings under NodeNext", async () => {
-      project = await runFixture("directory-packages");
+      const project = await fixtures.run("directory-packages");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./models";');
@@ -180,7 +174,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // The import-equals declarations of a namespace body are resolved by the compiler inside
    // the schema file, so a signature reaches them through the exported namespace.
    it("uses an import-equals alias that a namespace body declares", async () => {
-      project = await runFixture("import-equals-namespace");
+      const project = await fixtures.run("import-equals-namespace");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          expect(project.generated[file]).toContain('import type { Api } from "./schema";');
          expect(project.generated[file]).toContain("Promise<Api.User>");
@@ -191,7 +185,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    });
 
    it("imports a module that has 'export =' with its namespace import", async () => {
-      project = await runFixture("export-equals");
+      const project = await fixtures.run("export-equals");
       for (const file of ["main.ts", "window.d.ts"] as const) {
          const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
          expect(imports).toContain('import type * as Models from "./models.js";');

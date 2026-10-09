@@ -17,20 +17,16 @@ import {
    track,
 } from "@testutils/e2e/utility-timeout-utils.js";
 import { ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    resetTimeoutFakes();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("timeouts of invokeUtility and streamUtility, in the page", () => {
    async function load() {
-      project = await runFixture("utility-timeouts");
+      const project = await fixtures.run("utility-timeouts");
       return loadPageBindings(project.generated["preload.ts"]);
    }
 

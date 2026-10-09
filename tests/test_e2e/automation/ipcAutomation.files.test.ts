@@ -11,19 +11,13 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, single schema file", () => {
    it("generates the three files from the channels of schema.ts", async () => {
-      project = await runFixture("single-file");
+      const project = await fixtures.run("single-file");
       const { generated } = project;
 
       expect(generated["main.ts"]).toContain("getUser");
@@ -38,7 +32,7 @@ describe("ipcAutomation, single schema file", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("single-file");
+      const project = await fixtures.run("single-file");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -46,7 +40,7 @@ describe("ipcAutomation, single schema file", () => {
 describe("e2e harness", () => {
    // Regression for T50: `skipLibCheck` hid every error in the generated `window.d.ts`.
    it("reports errors in the generated window.d.ts", async () => {
-      project = await runFixture("single-file");
+      const project = await fixtures.run("single-file");
       const windowTypes = path.join(project.dir, project.ipcDataDir, "window.d.ts");
       await fsp.appendFile(windowTypes, '\nimport type { Missing } from "./does-not-exist";\n');
 
@@ -56,7 +50,7 @@ describe("e2e harness", () => {
    });
 
    it("leaves no helper file behind", async () => {
-      project = await runFixture("single-file");
+      const project = await fixtures.run("single-file");
       await project.typecheck();
       const files = await fsp.readdir(path.join(project.dir, project.ipcDataDir));
       expect(files).not.toContain("window.dts-check.ts");
@@ -73,15 +67,13 @@ describe("ipcAutomation, schema directory", () => {
             throw new TypeError("fsp.exists is not a function");
          },
       });
-      try {
-         project = await runFixture("schema-dir");
-      } finally {
+      const project = await fixtures.run("schema-dir").finally(() => {
          if (original) {
             Object.defineProperty(fsp, "exists", original);
          } else {
             Reflect.deleteProperty(fsp, "exists");
          }
-      }
+      });
       const { generated } = project;
 
       expect(generated["main.ts"]).toContain("getUser");
@@ -94,12 +86,12 @@ describe("ipcAutomation, schema directory", () => {
    // Regression for T08: a README, a JSON file and a `.d.ts` that repeats a channel name used
    // to be read from the schema directory.
    it("ignores files that are not schema sources", async () => {
-      project = await runFixture("schema-dir");
+      const project = await fixtures.run("schema-dir");
       expect(project.generated["main.ts"].match(/getUser: \{/g)).toHaveLength(1);
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("schema-dir");
+      const project = await fixtures.run("schema-dir");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -117,7 +109,7 @@ describe("ipcAutomation, workspace", () => {
    // Regression for T07: the project root was the first .git above the library, which is the
    // repo root of a workspace. The root package.json here points at a different, wrong dir.
    it("generates into the app package when run from one of its sub-directories", async () => {
-      project = await runFixture("workspace", {
+      const project = await fixtures.run("workspace", {
          project: "packages/app",
          cwd: "packages/app/src/main",
       });
@@ -134,7 +126,7 @@ describe("ipcAutomation, workspace", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("workspace", { project: "packages/app" });
+      const project = await fixtures.run("workspace", { project: "packages/app" });
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -142,13 +134,13 @@ describe("ipcAutomation, workspace", () => {
 describe("ipcAutomation, wrapped channel map export", () => {
    // Regression for T58: `export default defineChannels({...}) satisfies X` was rejected.
    it("generates bindings for a map followed by satisfies", async () => {
-      project = await runFixture("export-forms");
+      const project = await fixtures.run("export-forms");
       expect(project.generated["main.ts"]).toContain("getUser");
       expect(project.generated["preload.ts"]).toContain("echoUserName: {\n      send:");
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("export-forms");
+      const project = await fixtures.run("export-forms");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -158,7 +150,7 @@ describe("ipcAutomation, generated file start", () => {
    it.each(["single-file", "no-channels", "port-only"])(
       "starts every generated file of '%s' with the notice",
       async (fixture) => {
-         project = await runFixture(fixture);
+         const project = await fixtures.run(fixture);
          for (const contents of Object.values(project.generated)) {
             expect(contents.startsWith("// NOTICE: THIS FILE WAS GENERATED")).toBe(true);
             expect(contents).not.toMatch(/\n\n\n/);
@@ -171,13 +163,13 @@ describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669.
    it("generates an empty window.d.ts that is a module", async () => {
-      project = await runFixture("no-channels");
+      const project = await fixtures.run("no-channels");
       expect(project.generated["window.d.ts"]).toContain("export {};");
       expect(project.generated["window.d.ts"]).toContain("interface IpcApi {}");
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("no-channels");
+      const project = await fixtures.run("no-channels");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -185,7 +177,7 @@ describe("ipcAutomation, schema without channels", () => {
 describe("ipcAutomation, schema with only port channels", () => {
    // Regression for T52: the empty callables line left a lone comma in main.ts and preload.ts.
    it("generates bindings without a dangling comma", async () => {
-      project = await runFixture("port-only");
+      const project = await fixtures.run("port-only");
       const { generated } = project;
 
       expect(generated["main.ts"]).toContain("export const ipc = {\n   chat: {\n      connect:");
@@ -198,14 +190,14 @@ describe("ipcAutomation, schema with only port channels", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("port-only");
+      const project = await fixtures.run("port-only");
       expect(await project.typecheck()).toBe("");
    });
 
    // Regression for T65: main.ts imported `ipcMain` without using it. T25 uses it, to hear a page
    // end a connection.
    it("imports nothing unused, so the files type-check under noUnusedLocals", async () => {
-      project = await runFixture("port-only");
+      const project = await fixtures.run("port-only");
       expect(project.generated["main.ts"]).toContain(
          'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
       );

@@ -11,17 +11,9 @@
 
 // T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }`.
 
-import {
-   createContents,
-   disposeContentsFixture,
-   loadMain,
-} from "@testutils/e2e/contents-handlers-utils.js";
+import { createContents, loadMain } from "@testutils/e2e/contents-handlers-utils.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(async () => {
-   await disposeContentsFixture();
-});
+import { describe, expect, it, vi } from "vitest";
 
 describe("the webContents option of listeners and handlers", () => {
    it("registers on the ipc of the contents, and leaves the global ipcMain alone", async () => {

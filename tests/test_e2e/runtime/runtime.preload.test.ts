@@ -9,16 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanupRuntime, generateFixture, loadPreload } from "@testutils/e2e/runtime-main-utils.js";
+import { loadPreload } from "@testutils/e2e/runtime-main-utils.js";
 import { callablePaths, windowIpcPaths } from "@testutils/e2e/runtime-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(cleanupRuntime);
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("fixture all-kinds", () => {
    it("generates files that type-check", async () => {
-      const project = await generateFixture("all-kinds");
+      const project = await fixtures.run("all-kinds");
       expect(await project.typecheck()).toBe("");
    });
 });

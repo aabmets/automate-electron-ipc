@@ -12,24 +12,23 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { vi } from "vitest";
-import { type E2EProject, runFixture } from "../e2e-utils.js";
+import type { E2EProject } from "../e2e-utils.js";
 import { createFakeElectron, createFakePreloadElectron, loadGenerated } from "./runtime-utils.js";
 import { loadSerializer } from "./serializer-wire-utils.js";
 import { createSession, createWorker } from "./service-worker-utils.js";
 
 /**
- * Makes the `connect` function of one test file. `track` gets the project of each run, so that
- * the file can delete it in its own `afterEach`.
+ * Makes the `connect` function of one test file. `run` is the `run` of the tracker of the file,
+ * which deletes the project of each run after the test.
  *
  * `connect` loads the main process and the preload script of a service worker, wired to each
  * other the way Electron does it: what crosses is structured cloned, and a message reaches the
  * listeners of the other side. `main.ipc.<name>` is the API of the main process, `api.<name>` the
  * one of the worker.
  */
-export function workerConnector(track: (project: E2EProject) => void) {
+export function workerConnector(run: (fixture: string) => Promise<E2EProject>) {
    return async function connect(fixture = "serializer-worker", wireToWorker = true) {
-      const project = await runFixture(fixture);
-      track(project);
+      const project = await run(fixture);
       const real = await loadSerializer(project);
       // The calls are counted, so that a test sees whether the serializer was used at all.
       const serializer = {

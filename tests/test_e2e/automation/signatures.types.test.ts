@@ -14,21 +14,14 @@ import {
    createFakeWindow,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, parameter names and generic signatures", () => {
    // Regression for T57: `(browserWindow: number)` produced a duplicate parameter (TS2300),
    // and `event` and `callback` could shadow the names that the wrappers use.
    it("renames generated parameters that clash with the ones of the signature", async () => {
-      project = await runFixture("param-clashes");
+      const project = await fixtures.run("param-clashes");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -62,7 +55,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
    });
 
    it("inserts the event parameter after the type parameters of generic signatures", async () => {
-      project = await runFixture("param-clashes");
+      const project = await fixtures.run("param-clashes");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -81,12 +74,12 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("param-clashes");
+      const project = await fixtures.run("param-clashes");
       expect(await project.typecheck()).toBe("");
    });
 
    it("forwards the arguments to the right parameters at runtime", async () => {
-      project = await runFixture("param-clashes");
+      const project = await fixtures.run("param-clashes");
       const electron = createFakeElectron();
       const { ipc } = loadGenerated(project.generated["main.ts"], { electron });
       const win = createFakeWindow();
@@ -107,7 +100,7 @@ describe("ipcAutomation, async return types", () => {
    // Regression for T56: a user type `PromiseResult` and `PromiseLike<T>` counted as async,
    // so their invoke senders were not typed as promises.
    it("types every invoke sender as a promise of the awaited result", async () => {
-      project = await runFixture("async-types");
+      const project = await fixtures.run("async-types");
       const windowTypes = project.generated["window.d.ts"];
 
       const invokeOf = (channel: string) => {
@@ -121,7 +114,7 @@ describe("ipcAutomation, async return types", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("async-types");
+      const project = await fixtures.run("async-types");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -130,7 +123,7 @@ describe("ipcAutomation, results that are Promises, thenables or both", () => {
    // Regression for T96: `Awaited<Promise<X>>` was reported as a Promise, and a handler of
    // `Promise<void> | void` was refused for a `send` channel.
    it("types a result of `Promise<X> | X`, `Awaited` and `PromiseLike` as a promise of X", async () => {
-      project = await runFixture("promise-unions");
+      const project = await fixtures.run("promise-unions");
       const windowTypes = project.generated["window.d.ts"];
 
       const invokeOf = (channel: string) => {
@@ -149,7 +142,7 @@ describe("ipcAutomation, results that are Promises, thenables or both", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("promise-unions");
+      const project = await fixtures.run("promise-unions");
       expect(await project.typecheck()).toBe("");
    });
 });

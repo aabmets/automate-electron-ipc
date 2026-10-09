@@ -11,16 +11,12 @@
 
 import { loadBoundedProject, loadPage } from "@testutils/e2e/port-queue-utils.js";
 import { type E2EProject } from "@testutils/e2e-utils.js";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 let project: E2EProject;
 
 beforeAll(async () => {
    project = await loadBoundedProject();
-});
-
-afterAll(async () => {
-   await project.cleanup();
 });
 
 afterEach(() => {

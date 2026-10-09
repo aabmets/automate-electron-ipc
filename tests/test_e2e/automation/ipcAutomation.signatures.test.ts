@@ -12,21 +12,14 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { methodLine } from "@testutils/e2e/generated-text-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, handler and sender types", () => {
    // Regression for B6 and B7: `handle` listeners got the wrong event type, and Broadcast
    // senders were typed as promises although `ipcRenderer.send` returns `undefined`.
    it("types Unicast handlers with IpcMainInvokeEvent and Broadcast ones with IpcMainEvent", async () => {
-      project = await runFixture("handler-types");
+      const project = await fixtures.run("handler-types");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -43,7 +36,7 @@ describe("ipcAutomation, handler and sender types", () => {
    });
 
    it("types Broadcast senders as void and Unicast senders as promises", async () => {
-      project = await runFixture("handler-types");
+      const project = await fixtures.run("handler-types");
       const windowTypes = project.generated["window.d.ts"];
 
       expect(methodLine(windowTypes, "echo", "send")).toContain(
@@ -56,7 +49,7 @@ describe("ipcAutomation, handler and sender types", () => {
    });
 
    it("generates files that type-check against the declared signatures", async () => {
-      project = await runFixture("handler-types");
+      const project = await fixtures.run("handler-types");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -64,7 +57,7 @@ describe("ipcAutomation, handler and sender types", () => {
 describe("ipcAutomation, rest, optional and destructured parameters", () => {
    // Regression for B4: the sender dropped the spread, so `webContents.send` received one array.
    it("forwards rest parameters with their spread", async () => {
-      project = await runFixture("param-shapes");
+      const project = await fixtures.run("param-shapes");
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
@@ -81,7 +74,7 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("param-shapes");
+      const project = await fixtures.run("param-shapes");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -90,7 +83,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
    // Regression for T66: swc spans are UTF-8 byte offsets, so non-ASCII text (and a BOM) in front
    // of a signature shifted every later slice and garbled the generated signatures.
    it("generates intact signatures from a schema with a BOM and non-ASCII text", async () => {
-      project = await runFixture("non-ascii");
+      const project = await fixtures.run("non-ascii");
       const { generated } = project;
       expect(await fsp.readFile(path.join(project.dir, "ipc/schema.ts"), "utf8")).toMatch(
          /^\uFEFF/,
@@ -113,7 +106,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("non-ascii");
+      const project = await fixtures.run("non-ascii");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -158,11 +151,7 @@ describe("ipcAutomation, locale-independent output order", () => {
             const result = collator.compare(this, that);
             return reversed ? -result : result;
          });
-         try {
-            project = await runFixture("sort-order");
-         } finally {
-            spy.mockRestore();
-         }
+         const project = await fixtures.run("sort-order").finally(() => spy.mockRestore());
          for (const [file, names] of Object.entries(expected)) {
             expect(members(project.generated[file as keyof typeof expected])).toStrictEqual(names);
          }
@@ -170,7 +159,7 @@ describe("ipcAutomation, locale-independent output order", () => {
    );
 
    it("generates files that type-check", async () => {
-      project = await runFixture("sort-order");
+      const project = await fixtures.run("sort-order");
       expect(await project.typecheck()).toBe("");
    });
 });
@@ -178,7 +167,7 @@ describe("ipcAutomation, locale-independent output order", () => {
 // T72: channel names are free of the rules that came from the old listener names.
 describe("ipcAutomation, channel names", () => {
    it("accepts short, 'on'-prefixed, capitalized and symbol-led channel names", async () => {
-      project = await runFixture("short-names");
+      const project = await fixtures.run("short-names");
       const { "main.ts": main, "preload.ts": preload, "window.d.ts": dts } = project.generated;
 
       for (const name of ["ok", "on", "onReady", "Capital", "_hidden", "$dollar", "p"]) {
@@ -192,7 +181,7 @@ describe("ipcAutomation, channel names", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("short-names");
+      const project = await fixtures.run("short-names");
       expect(await project.typecheck()).toBe("");
    });
 });

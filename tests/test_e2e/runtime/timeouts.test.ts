@@ -10,20 +10,16 @@
  */
 
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.useRealTimers();
-   await project?.cleanup();
-   project = undefined;
 });
 
 /** Loads the generated preload script, with an `ipcRenderer.invoke` that the test answers itself. */
 async function loadPreload() {
-   project = await runFixture("invoke-timeouts");
+   const project = await fixtures.run("invoke-timeouts");
    const { electron, exposed } = createFakePreloadElectron();
    const replies = new Map<
       string,
@@ -59,13 +55,13 @@ function track(promise: Promise<unknown>) {
 
 describe("fixture invoke-timeouts", () => {
    it("generates files that type-check, including the timeout error", async () => {
-      project = await runFixture("invoke-timeouts");
+      const project = await fixtures.run("invoke-timeouts");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("documents the timeout error in window.d.ts", async () => {
-      project = await runFixture("invoke-timeouts");
+      const project = await fixtures.run("invoke-timeouts");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain("/** @throws {IpcError<NotFoundError | IpcTimeoutError>} */");
@@ -76,7 +72,7 @@ describe("fixture invoke-timeouts", () => {
    });
 
    it("fails the type-check when the timeout error is used wrongly", async () => {
-      project = await runFixture("invoke-timeouts");
+      const project = await fixtures.run("invoke-timeouts");
       const fsp = await import("node:fs/promises");
       const path = await import("node:path");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");

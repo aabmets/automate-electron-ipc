@@ -12,20 +12,14 @@
 import { EventEmitter } from "node:events";
 import { appointment, serializerConnector } from "@testutils/e2e/serializer-runtime-utils.js";
 import { settle } from "@testutils/e2e/wire-utils.js";
-import type { E2EProject } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
-const connect = serializerConnector((created) => {
-   project = created;
-});
+const connect = serializerConnector(fixtures.run);
 
 describe("generated serializer, send", () => {
    it("delivers the arguments of a send as they were", async () => {

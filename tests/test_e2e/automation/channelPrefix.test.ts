@@ -15,15 +15,8 @@ import {
    createFakeWindow,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * The channel names that the generated code passes to Electron, as written in the text. The
@@ -47,7 +40,7 @@ describe.each([
    ["no-prefix", ""],
 ])("fixture %s, with the prefix '%s'", (fixture, prefix) => {
    it("puts the prefix in front of every channel name that Electron sees", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const { "main.ts": main, "preload.ts": preload } = project.generated;
 
       const expected = CHANNELS.map((name) => `${prefix}${name}`).sort();
@@ -56,7 +49,7 @@ describe.each([
    });
 
    it("uses the same wire names in the main process and in the preload script", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const { "main.ts": main, "preload.ts": preload } = project.generated;
 
       expect(wireNames(main)).toStrictEqual(wireNames(preload));
@@ -64,7 +57,7 @@ describe.each([
    });
 
    it("keeps the names of the generated API and of window.d.ts as they are in the schema", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
 
       for (const name of CHANNELS) {
          expect(project.generated["window.d.ts"]).toContain(`${name}: {`);
@@ -75,12 +68,12 @@ describe.each([
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       expect(await project.typecheck()).toBe("");
    });
 
    it("registers and invokes the same wire name at runtime", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const electron = createFakeElectron();
       const main = loadGenerated(project.generated["main.ts"], { electron });
       const fake = createFakePreloadElectron();
@@ -98,7 +91,7 @@ describe.each([
    });
 
    it("sends to a window and hands out ports under the wire name", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const electron = createFakeElectron();
       Object.assign(electron, {
          MessageChannelMain: class {
@@ -132,7 +125,7 @@ describe.each([
    });
 
    it("listens for the wire name in the preload script, for events and for ports", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
@@ -157,7 +150,7 @@ describe.each([
    });
 
    it("gives the hooks and the errors the name from the schema, not the wire name", async () => {
-      project = await runFixture(fixture);
+      const project = await fixtures.run(fixture);
       const electron = createFakeElectron();
       const main = loadGenerated(project.generated["main.ts"], { electron });
       const onRejected = vi.fn();
@@ -175,7 +168,7 @@ describe.each([
 
 describe("registeredHandlers and disposers", () => {
    it("removes the handler of the wire name when the disposer is called", async () => {
-      project = await runFixture("custom-prefix");
+      const project = await fixtures.run("custom-prefix");
       const electron = createFakeElectron();
       const main = loadGenerated(project.generated["main.ts"], { electron });
 
@@ -186,7 +179,7 @@ describe("registeredHandlers and disposers", () => {
    });
 
    it("removes the listener of the wire name when the disposer is called", async () => {
-      project = await runFixture("custom-prefix");
+      const project = await fixtures.run("custom-prefix");
       const electron = createFakeElectron();
       const main = loadGenerated(project.generated["main.ts"], { electron });
 

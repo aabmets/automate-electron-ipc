@@ -14,24 +14,18 @@
 import { AT, date, settled } from "@testutils/e2e/serializer-wire-utils.js";
 import { workerConnector } from "@testutils/e2e/serializer-worker-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
-const connect = workerConnector((created) => {
-   project = created;
-});
+const connect = workerConnector(fixtures.run);
 
 describe("the generated files of a schema with serialized worker channels", () => {
    it("type-checks the usage of the main process and of the worker, with the types of the signatures", async () => {
-      project = await runFixture("serializer-worker");
+      const project = await fixtures.run("serializer-worker");
 
       expect(await project.typecheck()).toBe("");
       expect(await project.typecheckWorker()).toBe("");
@@ -39,7 +33,7 @@ describe("the generated files of a schema with serialized worker channels", () =
    }, 60_000);
 
    it("imports the serializer in main.ts and in the script of the worker, not in the page files", async () => {
-      project = await runFixture("serializer-worker");
+      const project = await fixtures.run("serializer-worker");
       const line =
          'import { serialize as ipcSerialize, deserialize as ipcDeserialize } from "./serializer";';
 

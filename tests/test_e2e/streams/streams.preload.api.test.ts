@@ -10,13 +10,10 @@
  */
 
 import { callablePaths, windowIpcPaths } from "@testutils/e2e/runtime-utils.js";
-import {
-   cleanupStreams,
-   currentProject,
-   generateFixture,
-} from "@testutils/e2e/stream-main-utils.js";
+import { cleanupStreams, currentProject } from "@testutils/e2e/stream-main-utils.js";
 import { loadPreload } from "@testutils/e2e/stream-preload-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanupStreams);
@@ -64,7 +61,7 @@ describe("stream, preload script, the API of the page", () => {
 
 describe("window.d.ts of stream channels", () => {
    it("declares IpcStream and the stream method of every channel", async () => {
-      const project = await generateFixture("stream-channels");
+      const project = await fixtures.run("stream-channels");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain("interface IpcStream<T> {");
@@ -79,13 +76,13 @@ describe("window.d.ts of stream channels", () => {
    });
 
    it("type-checks the generated files and a program which uses them", async () => {
-      const project = await generateFixture("stream-channels");
+      const project = await fixtures.run("stream-channels");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("declares nothing of streams for a schema without them", async () => {
-      const project = await generateFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
 
       expect(project.generated["window.d.ts"]).not.toContain("IpcStream");
       expect(project.generated["preload.ts"]).not.toContain("openStream");

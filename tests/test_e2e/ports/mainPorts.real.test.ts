@@ -14,9 +14,9 @@ import { finishLoading } from "@testutils/e2e/runtime-utils.js";
 import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupMainPorts();
+   cleanupMainPorts();
 });
 
 describe("a main process and a page over a real message channel", () => {

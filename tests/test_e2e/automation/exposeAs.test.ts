@@ -12,19 +12,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
-
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it } from "vitest";
 
 describe("fixture expose-as, with the key 'bridge' in the main world", () => {
    it("declares the variable of window.d.ts under the key", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
       const types = project.generated["window.d.ts"];
 
       expect(types).toContain("var bridge: IpcApi;");
@@ -33,7 +26,7 @@ describe("fixture expose-as, with the key 'bridge' in the main world", () => {
    });
 
    it("exposes the API in the main world under the key", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
@@ -49,13 +42,13 @@ describe("fixture expose-as, with the key 'bridge' in the main world", () => {
    });
 
    it("generates files that type-check, with the API used as window.bridge and globalThis.bridge", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("fails the type-check when the API is used under the default name", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
       await fsp.writeFile(usage, text.replace("window.bridge.logLine", "window.ipc.logLine"));
@@ -66,7 +59,7 @@ describe("fixture expose-as, with the key 'bridge' in the main world", () => {
 
 describe("fixture isolated-world, with the key 'api' in the world 1004", () => {
    it("declares the variable under the key, and notes the world", async () => {
-      project = await runFixture("isolated-world");
+      const project = await fixtures.run("isolated-world");
 
       expect(project.generated["window.d.ts"]).toContain(
          "/** Exposed in the isolated world 1004, so only scripts of that world can use it. */\n   var api: IpcApi;",
@@ -74,7 +67,7 @@ describe("fixture isolated-world, with the key 'api' in the world 1004", () => {
    });
 
    it("exposes the API in the isolated world, and not in the main world", async () => {
-      project = await runFixture("isolated-world");
+      const project = await fixtures.run("isolated-world");
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
@@ -93,7 +86,7 @@ describe("fixture isolated-world, with the key 'api' in the world 1004", () => {
    });
 
    it("generates files that type-check", async () => {
-      project = await runFixture("isolated-world");
+      const project = await fixtures.run("isolated-world");
 
       expect(await project.typecheck()).toBe("");
    });
@@ -101,7 +94,7 @@ describe("fixture isolated-world, with the key 'api' in the world 1004", () => {
 
 describe("fixture compose-preload, with `autoExpose` off", () => {
    const load = async () => {
-      project = await runFixture("compose-preload");
+      const project = await fixtures.run("compose-preload");
       const fake = createFakePreloadElectron();
       const generated = loadGenerated(project.generated["preload.ts"], {
          electron: fake.electron,
@@ -150,14 +143,14 @@ describe("fixture compose-preload, with `autoExpose` off", () => {
    });
 
    it("generates a preload script that app code can import and use, and type-checks", async () => {
-      project = await runFixture("compose-preload");
+      const project = await fixtures.run("compose-preload");
 
       expect(project.generated["preload.ts"]).not.toMatch(/^expose\(\);$/m);
       expect(await project.typecheck()).toBe("");
    });
 
    it("fails the type-check when the usage imports something that is not exported", async () => {
-      project = await runFixture("compose-preload");
+      const project = await fixtures.run("compose-preload");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
       await fsp.writeFile(usage, text.replace("{ api, expose }", "{ api, exposeAll }"));
@@ -168,7 +161,7 @@ describe("fixture compose-preload, with `autoExpose` off", () => {
 
 describe("generated preload script, with `autoExpose` on", () => {
    it("exposes the API as it loads, and again under another key on request", async () => {
-      project = await runFixture("expose-as");
+      const project = await fixtures.run("expose-as");
       const fake = createFakePreloadElectron();
       const generated = loadGenerated(project.generated["preload.ts"], {
          electron: fake.electron,
@@ -181,7 +174,7 @@ describe("generated preload script, with `autoExpose` on", () => {
    });
 
    it("keeps the isolated world when the key is passed to `expose`", async () => {
-      project = await runFixture("isolated-world");
+      const project = await fixtures.run("isolated-world");
       const fake = createFakePreloadElectron();
       const generated = loadGenerated(project.generated["preload.ts"], {
          electron: fake.electron,

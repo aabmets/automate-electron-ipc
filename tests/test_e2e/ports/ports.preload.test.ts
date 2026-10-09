@@ -13,9 +13,9 @@ import { cleanupPortConnect, loadPreload } from "@testutils/e2e/port-connect-uti
 import { settle, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await cleanupPortConnect();
+   cleanupPortConnect();
 });
 
 describe("generated preload script of a port channel", () => {

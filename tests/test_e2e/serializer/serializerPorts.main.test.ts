@@ -18,19 +18,16 @@ import {
 } from "@testutils/e2e/runtime-utils.js";
 import { AT, date, listenerOf, loadSerializer } from "@testutils/e2e/serializer-wire-utils.js";
 import { closeWire, settle } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 });
 
 /** The ports a `MessageChannelMain` made, in order, with what the main process posted to each. */
@@ -86,7 +83,7 @@ function createContents(state: { loading?: boolean } = {}) {
 
 /** The generated main process and preload script of the fixture, wired to each other for one page. */
 async function loadBoth(loading = false) {
-   project = await runFixture("serializer-ports");
+   const project = await fixtures.run("serializer-ports");
    const serializer = await loadSerializer(project);
    posted.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: RealChannelMain };

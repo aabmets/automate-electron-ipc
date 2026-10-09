@@ -25,25 +25,21 @@ import {
    resetUtilityFakes,
 } from "@testutils/e2e/utility-process-utils.js";
 import { flush, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await resetUtilityFakes();
-   await project?.cleanup();
-   project = undefined;
+afterEach(() => {
+   resetUtilityFakes();
 });
 
 describe("utility channels, files", () => {
    it("type-checks main.ts, utility.ts and the code which uses them", async () => {
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       expect(await project.typecheck()).toBe("");
    });
 
    it("leaves the files for the renderer to the renderer channels", async () => {
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       const preload = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: preload.electron });
       expect(callablePaths(preload.exposed.ipc)).toStrictEqual(["getJob.invoke"]);
@@ -53,18 +49,17 @@ describe("utility channels, files", () => {
    });
 
    it("writes the utility file next to the other files by default, and only for utility channels", async () => {
-      project = await runFixture("utility-channels");
-      expect(project.generated["utility.ts"]).toContain("export const ipc = {");
-      await project.cleanup();
+      const withUtility = await fixtures.run("utility-channels");
+      expect(withUtility.generated["utility.ts"]).toContain("export const ipc = {");
 
-      project = await runFixture("ask-channels");
+      const project = await fixtures.run("ask-channels");
       expect(project.generated["utility.ts"]).toBeUndefined();
       const files = await fsp.readdir(path.join(project.dir, project.ipcDataDir));
       expect(files).not.toContain("utility.ts");
    });
 
    it("writes the utility file to the configured path, and leaves empty files for the renderer", async () => {
-      project = await runFixture("utility-custom-path");
+      const project = await fixtures.run("utility-custom-path");
       expect(project.generated["utility.ts"]).toContain(
          'import type { Row } from "../../ipc/schema";',
       );
@@ -129,7 +124,7 @@ describe("utility channels, children which the bindings do not know", () => {
    });
 
    it("forks with utilityProcess.fork and the same arguments, and attaches the child at once", async () => {
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       const electron = createFakeElectron();
       const { child, posted } = createChild({ attached: false });
       electron.utilityProcess.fork.mockReturnValue(child);
@@ -160,7 +155,7 @@ describe("utility channels, children which the bindings do not know", () => {
    });
 
    it("answers a child which calls the main process from its start, when it was forked by forkUtility", async () => {
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       const electron = createFakeElectron();
       const { child, posted, emitFromChild } = createChild({ attached: false });
       electron.utilityProcess.fork.mockReturnValue(child);

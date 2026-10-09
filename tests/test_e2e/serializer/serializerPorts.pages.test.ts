@@ -12,24 +12,21 @@
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { AT, date, listenerOf, loadSerializer } from "@testutils/e2e/serializer-wire-utils.js";
 import { settle, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];
 
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 });
 
 /** A generated preload script of the fixture, with the serializer that it imports. */
 async function loadPage() {
-   project ??= await runFixture("serializer-ports");
+   const project = fixtures.current() ?? (await fixtures.run("serializer-ports"));
    const serializer = await loadSerializer(project);
    const fake = createFakePreloadElectron();
    loadGenerated(project.generated["preload.ts"], {
@@ -49,13 +46,13 @@ function pair(fake: ReturnType<typeof createFakePreloadElectron>, name: string, 
 
 describe("the generated files of a schema with serialized port channels", () => {
    it("type-checks the usage of both sides, with the types of the signatures", async () => {
-      project = await runFixture("serializer-ports");
+      const project = await fixtures.run("serializer-ports");
 
       expect(await project.typecheck()).toBe("");
    });
 
    it("imports the serializer in the preload script and for the main port, not for the pairing", async () => {
-      project = await runFixture("serializer-ports");
+      const project = await fixtures.run("serializer-ports");
       const line =
          'import { serialize as ipcSerialize, deserialize as ipcDeserialize } from "./serializer";';
 

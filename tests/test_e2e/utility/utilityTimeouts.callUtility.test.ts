@@ -19,25 +19,21 @@ import {
    track,
 } from "@testutils/e2e/utility-timeout-utils.js";
 import { ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    resetTimeoutFakes();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("fixture utility-timeouts", () => {
    it("generates files that type-check, including the timeout code", async () => {
-      project = await runFixture("utility-timeouts");
+      const project = await fixtures.run("utility-timeouts");
       expect(await project.typecheck()).toBe("");
    });
 
    it("adds the timeout to the calls of a channel that has one, and to none else", async () => {
-      project = await runFixture("utility-timeouts");
+      const project = await fixtures.run("utility-timeouts");
       const main = project.generated["main.ts"];
       const utility = project.generated["utility.ts"];
       const preload = project.generated["preload.ts"];
@@ -58,12 +54,12 @@ describe("fixture utility-timeouts", () => {
    });
 
    it("declares the timeout code in window.d.ts", async () => {
-      project = await runFixture("utility-timeouts");
+      const project = await fixtures.run("utility-timeouts");
       expect(project.generated["window.d.ts"]).toContain("'IPC_UTILITY_TIMEOUT'");
    });
 
    it("does not write the timers into a project without a timeout", async () => {
-      project = await runFixture("utility-channels");
+      const project = await fixtures.run("utility-channels");
       expect(project.generated["main.ts"]).not.toMatch(/callUtilityPeer\([^)]*\), \d+\)/);
       expect(project.generated["utility.ts"]).not.toMatch(/callUtilityPeer\([^)]*\), \d+\)/);
    });
@@ -71,7 +67,7 @@ describe("fixture utility-timeouts", () => {
 
 describe("timeouts of callUtility, in the main process", () => {
    async function load() {
-      project = await runFixture("utility-timeouts");
+      const project = await fixtures.run("utility-timeouts");
       const main = loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
       setAttachChild(main.attachUtility);
       return main;

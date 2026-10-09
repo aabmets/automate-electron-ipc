@@ -10,19 +10,10 @@
  */
 
 import { createContents, mainLoader } from "@testutils/e2e/sender-utils.js";
-import type { E2EProject } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
-const loadMain = mainLoader((created) => {
-   project = created;
-});
+const loadMain = mainLoader(fixtures.run);
 
 describe("send, to a window, a view or contents", () => {
    it.each([

@@ -11,19 +11,10 @@
 
 import { errorsMainLoader } from "@testutils/e2e/errors-main-utils.js";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject } from "@testutils/e2e-utils.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fixtures } from "@testutils/fixture-tracker.js";
+import { describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
-   await project?.cleanup();
-   project = undefined;
-});
-
-const loadMain = errorsMainLoader((created) => {
-   project = created;
-});
+const loadMain = errorsMainLoader(fixtures.run);
 
 describe("generated error envelope of the main process", () => {
    const reply = async (handle: () => unknown) => {
@@ -183,7 +174,9 @@ describe("generated error round trip, from the handler to the renderer", () => {
       fake.electron.ipcRenderer.invoke.mockImplementation((channel: string, ...args: unknown[]) =>
          handlerOf(channel.replace("autoipc:", ""))({ sender: "renderer" }, ...args),
       );
-      loadGenerated(project?.generated["preload.ts"] as string, { electron: fake.electron });
+      loadGenerated(fixtures.current()?.generated["preload.ts"] as string, {
+         electron: fake.electron,
+      });
       return { main: ipc, renderer: fake.exposed.ipc };
    }
 

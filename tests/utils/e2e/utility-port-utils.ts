@@ -18,14 +18,13 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { fixtures } from "../fixture-tracker.js";
 import { closeWire, wire } from "./wire-utils.js";
 
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
 const rawPorts: MessagePort[] = [];
-let project: E2EProject | undefined;
 
 /** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
 export function createContents(state: { loading?: boolean; url?: string; id?: number } = {}) {
@@ -70,7 +69,7 @@ export class FakeChannelMain {
 }
 
 export async function loadMain(channelClass: unknown = FakeChannelMain) {
-   project = await runFixture("utility-ports");
+   const project = await fixtures.run("utility-ports");
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: channelClass };
    const main = loadGenerated(project.generated["main.ts"], { electron });
@@ -110,7 +109,7 @@ export function createParentPort() {
 }
 
 export async function loadUtility() {
-   project = await runFixture("utility-ports");
+   const project = await fixtures.run("utility-ports");
    const parent = createParentPort();
    const utility = loadGenerated(project.generated["utility.ts"] ?? "", {});
    return { ...parent, ipc: utility.ipc };
@@ -163,7 +162,7 @@ export class FakePagePort {
 }
 
 export async function loadPage() {
-   project = await runFixture("utility-ports");
+   const project = await fixtures.run("utility-ports");
    const fake = createFakePreloadElectron();
    loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
    const listener = (channel: string) => {
@@ -230,7 +229,7 @@ export class RealChannelMain {
 
 /** The three generated scripts, wired to each other the way Electron does for one page and one child. */
 export async function loadAll() {
-   project = await runFixture("utility-ports");
+   const project = await fixtures.run("utility-ports");
    const electron = { ...createFakeElectron(), MessageChannelMain: RealChannelMain };
    const mainModule = loadGenerated(project.generated["main.ts"], { electron });
    attachChild = mainModule.attachUtility;
@@ -257,13 +256,11 @@ export async function loadAll() {
    return { main, utility, page: fake.exposed.ipc, child, contents };
 }
 
-/** Closes what the helpers of this module opened, and removes their project. */
-export async function cleanupUtilityPorts() {
+/** Closes what the helpers of this module opened */
+export function cleanupUtilityPorts() {
    attachChild = undefined;
    Reflect.deleteProperty(process, "parentPort");
    for (const port of rawPorts.splice(0)) {
       port.close();
    }
-   await project?.cleanup();
-   project = undefined;
 }

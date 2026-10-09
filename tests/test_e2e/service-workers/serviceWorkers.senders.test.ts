@@ -15,15 +15,11 @@ import {
    loadWorkerMain,
 } from "@testutils/e2e/service-worker-utils.js";
 import { failed, ok, wire } from "@testutils/e2e/wire-utils.js";
-import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
+import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let project: E2EProject | undefined;
-
-afterEach(async () => {
+afterEach(() => {
    vi.restoreAllMocks();
-   await project?.cleanup();
-   project = undefined;
 });
 
 describe("service worker channels, main process", () => {
@@ -31,7 +27,7 @@ describe("service worker channels, main process", () => {
    let fake: ReturnType<typeof createSession>;
 
    beforeEach(async () => {
-      project = await runFixture("service-worker-channels");
+      const project = await fixtures.run("service-worker-channels");
       main = loadWorkerMain(project);
       fake = createSession();
    }, 60_000);
