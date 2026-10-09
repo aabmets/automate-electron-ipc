@@ -9,25 +9,22 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import type * as t from "@types";
 import type { TestWriterClass } from "./test-writers.js";
 import { buildFileSpecs, type SimpleChannel } from "./writer-utils.js";
 
 /**
- * Writes the file of a writer for the tests and reads it back. The test must have called
- * `mockGetTargetFilePath` for the class, which gives the file a path to be written to. `scope`
- * is the surface of the page that the writer is made for.
+ * Renders the file of a writer for the tests, without the notice. The test must have called
+ * `mockGetTargetFilePath` for the class, which gives the file a path that its imports are
+ * relative to. `scope` is the surface of the page that the writer is made for.
  */
-export async function renderSpecs(
+export function renderSpecs(
    Writer: TestWriterClass,
    pfsArray: t.ParsedFileSpecs[],
    config: Partial<t.IPCResolvedConfig> = {},
    scope: string | null = null,
 ) {
-   const writer = new Writer(pfsArray, config, scope);
-   await writer.write(false);
-   return (await fsp.readFile(writer.getTargetFilePath())).toString();
+   return new Writer(pfsArray, config, scope).render(false);
 }
 
 /** `renderSpecs` for channels that are described by `buildFileSpecs`. */

@@ -54,4 +54,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - Verify byte-identical output with the fixture diff from the module-structure skill
     (`.claude/skills/module-structure`).
 - **Follow-up IDs:** if this task discovers follow-up work, use IDs T140-T141.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `BaseWriter.write()` is `render()` and `toOutputFile()` now, the notice is `NOTICE` in `src/output-files.ts`, and `ipcAutomation` is `planRun` plus `writeOutputs`, with `collectWriters` in `automation.ts` (280 lines were not near, so no `run-plan.ts`). `render(withNotice = true)` keeps a flag that the writer tests use to assert on the contents without the notice; `renderSpecs` calls it and no longer writes a file. `toOutputFile()` is the one place that makes the posix path. `typecheckProject` is in `tests/utils/e2e/typecheck-project.ts`, and `extraGeneratedFiles` there is the array that T44, T46 and T47 add a finder to. The output of all 95 fixtures is byte-identical before and after (`diff -r`), apart from the temp path in one error message. 3326 tests (7 new) and 214 Electron tests pass.

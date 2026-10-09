@@ -9,7 +9,6 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
 import { VitestBaseWriter } from "@testutils/writer/test-writers.js";
@@ -208,24 +207,19 @@ describe("BaseWriter", () => {
       });
    });
 
-   it("should render empty file contents when pfsArray is empty", async () => {
+   it("should render empty file contents when pfsArray is empty", () => {
       const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, []);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toStrictEqual("EMPTY FILE");
+      expect(obj.render(false)).toStrictEqual("EMPTY FILE");
    });
 
-   it("should render file contents when pfsArray is not empty", async () => {
+   it("should render file contents when pfsArray is not empty", () => {
       const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
-      expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
+      expect(obj.render(false)).toStrictEqual("const asdfg = 123;");
    });
 
-   it("should prepend the generated-file notice, without the stale 'PLUGIN' wording", async () => {
+   it("should prepend the generated-file notice, without the stale 'PLUGIN' wording", () => {
       const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
-      await obj.write(true);
-      const text = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const text = obj.render();
       // Regression for T65: the file started with a blank line.
       expect(text).toStrictEqual(
          [
@@ -236,6 +230,15 @@ describe("BaseWriter", () => {
          ].join("\n"),
       );
       expect(text).not.toContain("PLUGIN");
+   });
+
+   it("should describe the file as a run writes it, with a posix path and the notice", () => {
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
+      vi.spyOn(obj, "getTargetFilePath").mockReturnValue("C:\\p\\ipc\\main.ts");
+      expect(obj.toOutputFile()).toStrictEqual({
+         path: "C:/p/ipc/main.ts",
+         contents: obj.render(),
+      });
    });
 
    describe("scope", () => {

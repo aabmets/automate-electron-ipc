@@ -9,7 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IPCOptionalConfig } from "./internal-config.js";
+import type { IPCOptionalConfig, IPCResolvedConfig } from "./internal-config.js";
+import type { ParsedFileSpecs } from "./internal-specs.js";
+
+/** One generated file: the absolute path in posix form, and the full text with the notice. */
+export interface OutputFile {
+   path: string;
+   contents: string;
+}
 
 /** Options of a run. */
 export interface RunOptions {
@@ -19,4 +26,11 @@ export interface RunOptions {
    configFile?: string;
    /** Config options that win over the config source and the defaults. */
    overrides?: IPCOptionalConfig;
+}
+
+/** What a run generates: the resolved config, the parsed schema, and the files to write. */
+export interface RunPlan {
+   config: IPCResolvedConfig;
+   pfsArray: ParsedFileSpecs[];
+   outputs: OutputFile[];
 }

@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import { vi } from "vitest";
-import { runTsc } from "./tsc-utils.js";
+import { typecheckProject } from "./e2e/typecheck-project.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const fixturesDir = path.join(root, "tests/fixtures");
@@ -79,13 +79,6 @@ export interface E2EProject {
    read: (name: string) => Promise<string>;
    /** Deletes the temp dir. */
    cleanup: () => Promise<void>;
-}
-
-async function listFiles(dir: string): Promise<string[]> {
-   const entries = await fsp.readdir(dir, { recursive: true, withFileTypes: true });
-   return entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
 /**
@@ -157,132 +150,5 @@ export async function runFixture(
       // The caller never receives the handle of a failed run, so it cannot clean up itself.
       await cleanup();
       throw error;
-   }
-}
-
-/** The generated file for utility processes, as a list for the files of the type-check. */
-async function utilityFiles(dir: string, ipcDataDir: string): Promise<string[]> {
-   const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
-   const utilityBindingsPath = manifest.config?.autoipc?.utilityBindingsPath;
-   const file = (utilityBindingsPath ?? `${ipcDataDir}/utility.ts`).replaceAll("\\", "/");
-   const exists = await fsp.access(path.join(dir, file)).then(
-      () => true,
-      () => false,
-   );
-   return exists ? [file] : [];
-}
-
-/**
- * The generated files for service workers, relative to the project: the preload script, and the
- * typings next to it. Absent when the schema has no channel to or from a worker.
- */
-async function workerFiles(
-   dir: string,
-   ipcDataDir: string,
-): Promise<{ preload: string; types: string } | null> {
-   const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
-   const configured = manifest.config?.autoipc?.serviceWorkerPreloadPath;
-   const preload = (configured ?? `${ipcDataDir}/service-worker-preload.ts`).replaceAll("\\", "/");
-   const exists = await fsp.access(path.join(dir, preload)).then(
-      () => true,
-      () => false,
-   );
-   return exists ? { preload, types: `${path.posix.dirname(preload)}/service-worker.d.ts` } : null;
-}
-
-/** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */
-const windowCheckFile = "window.dts-check.ts";
-/** The same for `service-worker.d.ts`, which declares the same global as `window.d.ts` does. */
-const workerCheckFile = "service-worker.dts-check.ts";
-
-/**
- * Compiles the schema files, `main.ts`, `preload.ts` and `window.d.ts` of the project
- * against the `electron` types pinned by this repo, using a tiny tsconfig in the project dir.
- *
- * `skipLibCheck` skips every `.d.ts` file, including the generated `window.d.ts`, so that file
- * is compiled as a `.ts` copy instead. The copy replaces the original in the compiled files,
- * which avoids declaring the global `Window` members twice.
- */
-async function typecheckProject(
-   dir: string,
-   ipcDataDir: string,
-   compilerOptions: Record<string, unknown> = {},
-   scope?: string,
-   worker = false,
-): Promise<string> {
-   const ipcDir = path.join(dir, ipcDataDir);
-   // With a scope, the files are those of that scope alone. Without one, the files of the page are
-   // those of the surface of no scope, and the files that use a scope are left out.
-   const scopeSuffix = scope === undefined || scope === "default" ? "" : `.${scope}`;
-   const scopeFile = scope === undefined ? null : `${ipcDataDir}/schema-scope-${scope}.ts`;
-   const schemaFiles = (await listFiles(ipcDir))
-      .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
-      .map((file) => path.relative(dir, file).replaceAll("\\", "/"))
-      .filter((file) => file.startsWith(`${ipcDataDir}/schema`))
-      .filter((file) => !file.startsWith(`${ipcDataDir}/schema-scope-`) || file === scopeFile)
-      // The files that use the API of a service worker are checked with the typings of the worker.
-      .filter((file) => worker || !file.startsWith(`${ipcDataDir}/schema-worker-`));
-   const workerGenerated = await workerFiles(dir, ipcDataDir);
-   const tsconfig = {
-      compilerOptions: {
-         strict: true,
-         noEmit: true,
-         target: "ESNext",
-         lib: worker ? ["ESNext", "WebWorker"] : ["ESNext", "DOM"],
-         module: "ESNext",
-         moduleResolution: "bundler",
-         skipLibCheck: true,
-         types: [],
-         ...compilerOptions,
-         // The path mappings of a test are added to the ones that the type-check needs.
-         paths: {
-            electron: [path.join(root, "node_modules/electron/electron.d.ts")],
-            "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
-            ...(compilerOptions.paths as Record<string, string[]> | undefined),
-         },
-      },
-      files: worker
-         ? [
-              `${ipcDataDir}/main.ts`,
-              ...(workerGenerated
-                 ? [
-                      workerGenerated.preload,
-                      `${path.posix.dirname(workerGenerated.types)}/${workerCheckFile}`,
-                   ]
-                 : []),
-              ...schemaFiles,
-           ]
-         : [
-              ...["main.ts", `preload${scopeSuffix}.ts`, windowCheckFile].map(
-                 (name) => `${ipcDataDir}/${name}`,
-              ),
-              ...(workerGenerated ? [workerGenerated.preload] : []),
-              ...(await utilityFiles(dir, ipcDataDir)),
-              ...schemaFiles,
-           ],
-   };
-   // The typings are compiled as a `.ts` copy, since `skipLibCheck` would skip a `.d.ts` file.
-   const copies: [string, string][] = [];
-   if (worker) {
-      if (workerGenerated) {
-         copies.push([
-            path.join(dir, workerGenerated.types),
-            path.join(dir, path.posix.dirname(workerGenerated.types), workerCheckFile),
-         ]);
-      }
-   } else {
-      copies.push([
-         path.join(ipcDir, `window${scopeSuffix}.d.ts`),
-         path.join(ipcDir, windowCheckFile),
-      ]);
-   }
-   await Promise.all(
-      copies.map(async ([from, to]) => fsp.writeFile(to, await fsp.readFile(from, "utf8"))),
-   );
-   await fsp.writeFile(path.join(dir, "tsconfig.json"), JSON.stringify(tsconfig));
-   try {
-      return runTsc(dir);
-   } finally {
-      await Promise.all(copies.map(([, to]) => fsp.rm(to, { force: true })));
    }
 }
