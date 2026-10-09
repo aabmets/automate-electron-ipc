@@ -76,8 +76,8 @@ describe("ipcAutomation, type names that collide across schema files", () => {
             new RegExp(`^import type \\* as (\\w+) from "${from}";$`, "m").exec(text)?.[1];
          const one = aliasOf("./types/one");
          const two = aliasOf("./types/two");
-         expect(one).toBeDefined();
-         expect(two).toBeDefined();
+         expect(one).toMatch(/^[A-Za-z_$][\w$]*$/);
+         expect(two).toMatch(/^[A-Za-z_$][\w$]*$/);
          expect(one).not.toBe(two);
 
          const method = file === "main.ts" ? "handle" : "invoke";

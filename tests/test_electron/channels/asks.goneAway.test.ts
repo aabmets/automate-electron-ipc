@@ -21,13 +21,16 @@ const scenarios: Record<string, Scenario> = {
    destroyed: async (ctx) => {
       const win = await ctx.open();
       await ctx.evaluate(win, () => {
-         ipc.silent.handle(() => new Promise(() => undefined));
+         ipc.silent.handle(() => {
+            (window as any).asked = true;
+            return new Promise(() => undefined);
+         });
       });
       const pending = ctx.ipc.silent.invoke(win).then(
          () => ({ rejected: false }),
          (error: any) => ({ rejected: true, name: error.name, code: error.code }),
       );
-      await ctx.sleep(100);
+      await ctx.until(win, () => (window as any).asked === true);
       win.destroy();
       const whilePending = await pending;
       // Asking a window which is gone fails at once.
@@ -50,8 +53,8 @@ const scenarios: Record<string, Scenario> = {
    // navigation of the frame that was asked. The old document can no longer answer.
    askedPageGoesAway: async (ctx) => {
       const settleState = (promise: Promise<unknown>) => {
-         const state = { value: "pending" };
-         promise.then(
+         const state = { value: "pending", settled: Promise.resolve() };
+         state.settled = promise.then(
             (value) => {
                state.value = `resolved ${value}`;
             },
@@ -62,10 +65,10 @@ const scenarios: Record<string, Scenario> = {
          return state;
       };
       const answerLater = () => {
-         ipc.delayed.handle(
-            (label: string, ms: number) =>
-               new Promise((resolve) => setTimeout(() => resolve(label), ms)),
-         );
+         ipc.delayed.handle((label: string, ms: number) => {
+            (window as any).asked = true;
+            return new Promise((resolve) => setTimeout(() => resolve(label), ms));
+         });
       };
       const reloaded = await ctx.open();
       await ctx.evaluate(reloaded, answerLater);
@@ -75,10 +78,13 @@ const scenarios: Record<string, Scenario> = {
       const onNavigate = settleState(
          ctx.ipc.delayed.invoke(navigated.webContents.mainFrame, "b", 800),
       );
-      await ctx.sleep(100);
+      await ctx.until(reloaded, () => (window as any).asked === true);
+      await ctx.until(navigated, () => (window as any).asked === true);
       reloaded.webContents.reload();
       await navigated.webContents.loadURL("app://main/index.html?other");
-      await ctx.sleep(1500);
+      // Both questions should be rejected as soon as the document is replaced, long before the 800 ms
+      // of the answers. A bug leaves them pending, which the result then shows.
+      await Promise.race([Promise.all([onReload.settled, onNavigate.settled]), ctx.sleep(1500)]);
       return { reload: onReload.value, navigate: onNavigate.value };
    },
 

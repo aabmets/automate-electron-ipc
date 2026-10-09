@@ -45,7 +45,7 @@ const scenarios: Record<string, Scenario> = {
          ipc.restrictedSend.send();
          return result;
       });
-      await ctx.sleep(200);
+      await ctx.waitFor(() => rejected.length === 2, "both rejections");
       return { outcome, rejected, sent };
    },
 
@@ -80,8 +80,10 @@ const scenarios: Record<string, Scenario> = {
          ipc.checkedSend.send(5);
          return result;
       });
-      await ctx.waitFor(() => heard.length === 1, "the valid message");
-      await ctx.sleep(200);
+      await ctx.waitFor(
+         () => heard.length === 1 && rejected.length === 3,
+         "the valid message and the three rejections",
+      );
       return { outcome, handled, heard, rejected };
    },
 

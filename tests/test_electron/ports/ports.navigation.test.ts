@@ -62,10 +62,13 @@ const scenarios: Record<string, Scenario> = {
       try {
          const win = await ctx.open({ url: "app://main/log.html" });
          const connections = [];
+         let ready = 0;
          for (let n = 0; n < 11; n++) {
-            connections.push(ctx.ipc.logTail.connect(win));
+            const connection = ctx.ipc.logTail.connect(win);
+            connection.onReady(() => ready++);
+            connections.push(connection);
          }
-         await ctx.sleep(300);
+         await ctx.waitFor(() => ready === 11, "all the connections");
          for (const connection of connections) {
             connection.close();
          }

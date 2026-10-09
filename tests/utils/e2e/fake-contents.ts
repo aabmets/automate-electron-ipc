@@ -12,7 +12,7 @@
 import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 
-export interface FakeContentsOptions {
+interface FakeContentsOptions {
    /** The `id` of the contents. Defaults to 1. */
    id?: number;
    /** Whether `isLoading()` is true. Defaults to false, a page that has loaded. */

@@ -13,9 +13,9 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-export type ElectronSupport = { ok: true; binary: string } | { ok: false; reason: string };
+type ElectronSupport = { ok: true; binary: string } | { ok: false; reason: string };
 
-export interface SupportProbe {
+interface SupportProbe {
    env?: NodeJS.ProcessEnv;
    platform?: NodeJS.Platform;
    /** Returns the path of the Electron binary, or throws. */

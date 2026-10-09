@@ -74,7 +74,7 @@ const scenarios: Record<string, Scenario> = {
       const connection = ctx.ipc.logTail.connect(win);
       connection.send("queued");
       await win.loadURL("app://main/log.html");
-      await ctx.sleep(500);
+      await ctx.until(win, () => (window as any).events.length >= 2);
       return { events: await ctx.evaluate(win, () => (window as any).events) };
    },
 
@@ -86,9 +86,9 @@ const scenarios: Record<string, Scenario> = {
       connection.onReady(() => ready++);
       await ctx.waitFor(() => ready === 1);
       win.webContents.reload();
-      await ctx.sleep(1000);
+      await ctx.waitFor(() => ready === 2, "the page after the reload");
       connection.send("after the reload");
-      await ctx.sleep(300);
+      await ctx.until(win, () => (window as any).events.some((e: string[]) => e[0] === "message"));
       return { ready, events: await ctx.evaluate(win, () => (window as any).events) };
    },
 
@@ -109,7 +109,7 @@ const scenarios: Record<string, Scenario> = {
          connection.send(n);
       }
       await win.loadURL("app://main/bounded.html");
-      await ctx.sleep(500);
+      await ctx.until(win, () => (window as any).events.length >= 3);
       return { events: await ctx.evaluate(win, () => (window as any).events), warnings };
    },
 
@@ -132,7 +132,7 @@ const scenarios: Record<string, Scenario> = {
       await ctx.sleep(500);
       const afterFailure = [...main];
       await win.loadURL("app://main/log.html");
-      await ctx.sleep(500);
+      await ctx.until(win, () => (window as any).events.length >= 2);
       return { failure, afterFailure, page: await ctx.evaluate(win, () => (window as any).events) };
    },
 
@@ -155,7 +155,7 @@ const scenarios: Record<string, Scenario> = {
          connection.send("queued");
          win.webContents.once("did-navigate", () => setTimeout(() => win.webContents.stop(), 150));
          await win.loadURL(`http://127.0.0.1:${server.address().port}/`).catch(() => undefined);
-         await ctx.sleep(500);
+         await ctx.until(win, () => (window as any).events.length >= 2);
          return { main: [...main], page: await ctx.evaluate(win, () => (window as any).events) };
       } finally {
          server.closeAllConnections();

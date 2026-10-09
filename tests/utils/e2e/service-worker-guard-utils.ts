@@ -13,7 +13,7 @@ import { vi } from "vitest";
 import type { E2EProject } from "../e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "./runtime-utils.js";
 
-export type Check = (args: unknown[]) => string | null;
+type Check = (args: unknown[]) => string | null;
 
 /** A Standard Schema of an argument tuple, whose answer the test can hold back. */
 export function schema(check: Check, held = false) {

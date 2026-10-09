@@ -159,8 +159,7 @@ const scenarios: Record<string, Scenario> = {
          ipc.checkedSend.send("bad");
          ipc.checkedSend.send(1);
       });
-      await ctx.waitFor(() => received.length === 1);
-      await ctx.sleep(100);
+      await ctx.waitFor(() => received.length === 1 && rejected.length === 1, "the valid message");
       return { received, rejected };
    },
 };

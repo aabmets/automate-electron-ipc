@@ -17,6 +17,7 @@ import {
    loadValidated,
    ok,
 } from "@testutils/e2e/runtime-validation-utils.js";
+import { flush } from "@testutils/e2e/wire-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -153,7 +154,7 @@ describe("generated main process bindings", () => {
          try {
             ipc.logLine.on(callback);
             emitter.emit("logLine", {}, "x");
-            await new Promise((resolve) => setTimeout(resolve, 5));
+            await flush();
          } finally {
             process.off("unhandledRejection", unhandled);
          }

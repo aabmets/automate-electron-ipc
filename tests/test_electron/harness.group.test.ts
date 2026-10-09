@@ -154,7 +154,7 @@ describe.skipIf(!supported)("runElectronGroup", () => {
             },
          }),
       ).rejects.toThrow("did not finish in time and was killed");
-      expect(child).toBeDefined();
+      expect(child?.pid).toBeGreaterThan(0);
       expect(isGroupAlive(child as ChildProcess)).toBe(false);
       expect(await exists(appDir)).toBe(false);
       expect(dirs).toHaveLength(2);

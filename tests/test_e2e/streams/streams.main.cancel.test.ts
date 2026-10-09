@@ -20,7 +20,7 @@ import {
    start,
 } from "@testutils/e2e/stream-main-utils.js";
 import { settle } from "@testutils/e2e/wire-utils.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupStreams);
 
@@ -169,7 +169,7 @@ describe("stream, main process, cancelling", () => {
          }
       });
       await context.listener("counter")(createEvent(createContents()), 1);
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await vi.waitFor(() => expect(posted().length).toBeGreaterThan(0));
 
       fromPage({ type: "cancel" });
       await settle();

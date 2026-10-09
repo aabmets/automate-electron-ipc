@@ -22,7 +22,7 @@ export const getSecret = (
    id = 1,
 ) => handlers.get("getSecret")?.(event, id);
 
-export type Validate = (value: unknown) => unknown;
+type Validate = (value: unknown) => unknown;
 /** A hand-written Standard Schema, which records what it was asked to validate. */
 export const schema = (validate: Validate) => {
    const wrapped = vi.fn(validate);

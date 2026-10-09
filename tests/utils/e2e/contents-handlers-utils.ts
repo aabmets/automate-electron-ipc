@@ -22,7 +22,7 @@ import { wire } from "./wire-utils.js";
 // to the first of the two that has a handler, and a `send` goes to the listeners of both.
 
 /** An `IpcMain` stand-in: real listeners, and handlers which refuse a second one like Electron's. */
-export function createFakeIpc() {
+function createFakeIpc() {
    const emitter = new EventEmitter().setMaxListeners(0);
    const handlers = new Map<string, (...args: any[]) => any>();
    return {
@@ -44,7 +44,7 @@ export function createFakeIpc() {
    };
 }
 
-export type FakeIpc = ReturnType<typeof createFakeIpc>;
+type FakeIpc = ReturnType<typeof createFakeIpc>;
 
 let lastContentsId = 0;
 

@@ -17,6 +17,7 @@ import {
    loadValidated,
    ok,
 } from "@testutils/e2e/runtime-validation-utils.js";
+import { flush } from "@testutils/e2e/wire-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -145,7 +146,7 @@ describe("generated main process bindings", () => {
 
          await expect(first).resolves.toBe("done");
          await expect(second).rejects.toThrowError("No handler registered for 'getCount'");
-         await new Promise((resolve) => setTimeout(resolve, 5));
+         await flush();
          expect(answer).toHaveBeenCalledOnce();
          expect(heard).toHaveBeenCalledOnce();
          expect(heard).toHaveBeenCalledWith({}, "a");

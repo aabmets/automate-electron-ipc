@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 129 delivered, 11 remaining, 1 dropped.
+**Progress:** 130 delivered, 10 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -163,7 +163,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T135: Shared fakes for utility processes and service workers in the e2e tests](./tasks/T135-shared-fake-utility-and-service-worker.md) · depends on: T134
 - [x] [T136: One `render` helper for the writer tests](./tasks/T136-writer-test-render-helper.md) · depends on: T124
 - [x] [T137: Shared preambles of the automation and config validator tests](./tasks/T137-automation-and-validator-test-preambles.md) · depends on: T124
-- [ ] [T138: Fixed sleeps, weak assertions and needless exports in the tests](./tasks/T138-test-sleeps-weak-assertions-and-exports.md) · depends on: T133, T134, T135
+- [x] [T138: Fixed sleeps, weak assertions and needless exports in the tests](./tasks/T138-test-sleeps-weak-assertions-and-exports.md) · depends on: T133, T134, T135
 
 ## Phase 4: Developer experience
 

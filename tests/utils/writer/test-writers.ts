@@ -71,7 +71,7 @@ export interface TestWriterClass<W extends BaseWriter = BaseWriter> {
  * A writer for the tests: the same class, with the specs first and a config that may be partial
  * (it gets `codeIndent: 3`), and a target path that `mockGetTargetFilePath` replaces.
  */
-export function createTestWriter<
+function createTestWriter<
    W extends new (
       config: t.IPCResolvedConfig,
       pfsArray: t.ParsedFileSpecs[],

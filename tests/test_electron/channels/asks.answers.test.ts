@@ -155,7 +155,7 @@ describeElectron("ask channels in Electron", "electron-asks", scenarios, (group)
       const result = group.value("noHandler");
       expect(result.rejected).toBe(true);
       expect(result.name).toBe("IpcAskError");
-      expect(result.code).toBeDefined();
+      expect(result.code).toBe("IPC_ASK_NO_HANDLER");
    });
 
    it("rejects with IPC_ASK_TIMEOUT when the page does not answer in time", () => {

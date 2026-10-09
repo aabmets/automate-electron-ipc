@@ -26,14 +26,14 @@ const SCENARIO_TIMEOUT_MS = 20_000;
 /** How long the Electron process may run before it is killed. */
 const PROCESS_TIMEOUT_MS = 120_000;
 /** The timeout of the hook which runs a group, which is more than the process may take. */
-export const GROUP_HOOK_TIMEOUT_MS = PROCESS_TIMEOUT_MS + 30_000;
+const GROUP_HOOK_TIMEOUT_MS = PROCESS_TIMEOUT_MS + 30_000;
 
 /**
  * What a scenario can use in the Electron main process. The scenario function is turned into
  * text and runs there, so it must not use anything from the scope of the test file: the types
  * are `any`, since the generated bindings and `electron` are not visible to the test.
  */
-export interface ScenarioContext {
+interface ScenarioContext {
    /** The `electron` module of the main process. */
    electron: any;
    /** The exports of the generated `main.ts`, loaded fresh for each scenario. */
@@ -85,7 +85,7 @@ export interface ScenarioContext {
    waitFor: <T>(fn: () => T | Promise<T>, what?: string) => Promise<NonNullable<Awaited<T>>>;
 }
 
-export interface OpenOptions {
+interface OpenOptions {
    /** The page to load. Defaults to `app://main/index.html`. */
    url?: string;
    /** Run the preload script in the frames of the page as well. */
@@ -100,9 +100,9 @@ export interface OpenOptions {
 }
 
 export type Scenario = (ctx: ScenarioContext) => unknown;
-export type ScenarioResult = { ok: true; value: unknown } | { ok: false; error: string };
+type ScenarioResult = { ok: true; value: unknown } | { ok: false; error: string };
 
-export interface ElectronRun {
+interface ElectronRun {
    results: Record<string, ScenarioResult>;
    /** Errors which nobody caught in the main process. */
    uncaught: string[];
@@ -112,7 +112,7 @@ export interface ElectronRun {
    generated: E2EProject["generated"];
 }
 
-export interface RunOptions {
+interface RunOptions {
    fixture: string;
    scenarios: Record<string, Scenario>;
    /** JSON values for `ctx.data`, since the scenarios cannot use the scope of the test file. */

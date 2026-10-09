@@ -12,7 +12,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
 /** The time that a stopped process gets to clean up before it is killed. */
-export const KILL_GRACE_MS = 3_000;
+const KILL_GRACE_MS = 3_000;
 
 export function startElectron(binary: string, appDir: string): ChildProcess {
    const args = [appDir];

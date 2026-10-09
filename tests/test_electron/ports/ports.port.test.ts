@@ -92,7 +92,8 @@ const scenarios: Record<string, Scenario> = {
       ctx.ipc.chat.connect(a, b);
       await a.loadURL("app://main/chat.html");
       await b.loadURL("app://main/chat.html");
-      await ctx.sleep(500);
+      await ctx.until(a, () => (window as any).events.length === 1);
+      await ctx.until(b, () => (window as any).events.length === 1);
       return {
          a: await ctx.evaluate(a, () => (window as any).events),
          b: await ctx.evaluate(b, () => (window as any).events),
@@ -106,7 +107,8 @@ const scenarios: Record<string, Scenario> = {
       await a.loadURL("app://main/chat.html");
       await b.loadURL("app://main/chat.html");
       ctx.ipc.chat.connect(a, b);
-      await ctx.sleep(500);
+      await ctx.until(a, () => (window as any).events.length === 1);
+      await ctx.until(b, () => (window as any).events.length === 1);
       return {
          a: await ctx.evaluate(a, () => (window as any).events),
          b: await ctx.evaluate(b, () => (window as any).events),
@@ -122,10 +124,12 @@ const scenarios: Record<string, Scenario> = {
       await ctx.until(b, () => (window as any).events.length === 1);
       // The page of b is replaced, and the connection should pair it with a again.
       b.webContents.reload();
-      await ctx.sleep(1000);
+      await ctx.until(a, () => (window as any).events.length === 3);
+      await ctx.until(b, () => (window as any).events.length === 1);
       await ctx.evaluate(a, () => ipc.chat.send("to the new page"));
       await ctx.evaluate(b, () => ipc.chat.send("from the new page"));
-      await ctx.sleep(300);
+      await ctx.until(a, () => (window as any).events.length === 4);
+      await ctx.until(b, () => (window as any).events.length === 2);
       return {
          a: await ctx.evaluate(a, () => (window as any).events),
          b: await ctx.evaluate(b, () => (window as any).events),
