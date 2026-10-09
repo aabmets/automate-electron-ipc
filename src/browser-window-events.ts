@@ -11,7 +11,7 @@
 
 /**
  * The BrowserWindow events from the Electron docs which can be used as a `trigger`.
- * Keep in sync with `EmitConfig['trigger']` in `types/index.d.ts`.
+ * Keep in sync with `EmitConfig['trigger']` in `types/config-renderer.d.ts`.
  */
 export const BROWSER_WINDOW_EVENTS: readonly string[] = [
    "show",

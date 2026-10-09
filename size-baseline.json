@@ -47,7 +47,5 @@
    "tests/utils.test.ts": 332,
    "tests/utils/electron-runner.cjs": 382,
    "tests/utils/electron-utils.ts": 471,
-   "tests/validators.test.ts": 1683,
-   "types/index.d.ts": 637,
-   "types/internal.d.ts": 302
+   "tests/validators.test.ts": 1683
 }

@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 103 delivered, 22 remaining, 1 dropped.
+**Progress:** 104 delivered, 21 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -137,7 +137,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T109: Split `parser.ts`, part 2: channel maps, imports, definitions and `parseSpecs`](./tasks/T109-parser-part-2-channel-maps-and-specs.md) · depends on: T108
 - [x] [T110: Split `validators.ts`](./tasks/T110-validators-split.md) · depends on: T102
 - [x] [T111: Split the remaining writer modules](./tasks/T111-remaining-writer-modules-split.md) · depends on: T102
-- [ ] [T112: Split `types/index.d.ts` and `types/internal.d.ts`](./tasks/T112-types-split.md) · depends on: T102 · **Decision needed**
+- [x] [T112: Split `types/index.d.ts` and `types/internal.d.ts`](./tasks/T112-types-split.md) · depends on: T102
 - [ ] [T113: Split `tests/test_writer/main-bindings.test.ts`](./tasks/T113-main-bindings-tests-split.md) · depends on: T102
 - [ ] [T114: Split the writer tests, part 1: preload, imports and base writer](./tasks/T114-writer-tests-split-a.md) · depends on: T102
 - [ ] [T115: Split the writer tests, part 2: renderer types, service workers, serializer, utility](./tasks/T115-writer-tests-split-b.md) · depends on: T102

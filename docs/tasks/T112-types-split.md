@@ -18,4 +18,12 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   Options: a Biome override that allows re-exports in `types/index.d.ts` only; the entry keeps its
   declarations and only `internal.d.ts` is split; or `package.json` `exports` / `typesVersions`
   points at several files.
-- **Delivered:**
+- **Decision:** a Biome override that allows re-exports in the two entry files, `types/index.d.ts` and
+  `types/internal.d.ts`.
+- **Delivered:** 2026-10-09. `types/index.d.ts` is the doc comment plus `export *` of seven files
+  (`channel-base`, `config-renderer`, `config-utility`, `config-worker`, `verbs-renderer`,
+  `verbs-utility`, `verbs-worker`); `types/internal.d.ts` re-exports four (`internal-config`,
+  `internal-signature`, `internal-channels`, `internal-specs`), so the `@types` alias and its 69 importers
+  are unchanged. The override covers `internal.d.ts` too, which the question did not name: the other way
+  was to touch every importer. The published names are the same, `channelDef` and `channelErrors`
+  included (they are exported implicitly in a `.d.ts`).

@@ -130,6 +130,17 @@
    },
    "overrides": [
       {
+         "includes": ["types/index.d.ts", "types/internal.d.ts"],
+         "linter": {
+            "rules": {
+               "performance": {
+                  "noBarrelFile": "off",
+                  "noReExportAll": "off"
+               }
+            }
+         }
+      },
+      {
          "includes": ["tests/**"],
          "linter": {
             "rules": {

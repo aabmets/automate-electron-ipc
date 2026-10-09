@@ -11,6 +11,8 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 - `src/writer/*` emits the three generated files.
 - `src/automation.ts` orchestrates a run; `src/cli.ts` is the bin entry.
 - Public types live in `types/index.d.ts`; internal types in `types/internal.d.ts` (alias `@types`).
+  Both are thin entries that `export *` from the other files in `types/`; Biome allows that in these
+  two files only. Add new declarations to the matching themed file, not to the entry.
 
 ## Commands
 

@@ -93,8 +93,10 @@ describe("package.json", () => {
    });
 
    it("has no stale 'IpcAutomationPlugin' reference in the shipped types", () => {
-      for (const file of ["types/index.d.ts", "types/internal.d.ts"]) {
-         expect(fs.readFileSync(path.join(root, file), "utf8")).not.toContain(
+      const files = fs.readdirSync(path.join(root, "types")).filter((f) => f.endsWith(".d.ts"));
+      expect(files).toEqual(expect.arrayContaining(["index.d.ts", "internal.d.ts"]));
+      for (const file of files) {
+         expect(fs.readFileSync(path.join(root, "types", file), "utf8")).not.toContain(
             "IpcAutomationPlugin",
          );
       }

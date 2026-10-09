@@ -55,7 +55,7 @@ describe("trigger validation", () => {
    });
 
    it("lists the same events as the public EmitConfig type", () => {
-      const types = fs.readFileSync(path.join(root, "types/index.d.ts"), "utf8");
+      const types = fs.readFileSync(path.join(root, "types/config-renderer.d.ts"), "utf8");
       const union = types.slice(
          types.indexOf("trigger?:"),
          types.indexOf("}", types.indexOf("trigger?:")),
