@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { errorsOf, issuesOf } from "@testutils/parser/clone-issues-utils.js";
 import { describe, expect, it } from "vitest";
 
@@ -174,7 +174,7 @@ describe("cloneIssues, from a schema file", () => {
    const IMPORT = 'import { defineChannels, invoke, send } from "automate-electron-ipc";';
 
    it("reports the issues on the channel specs", () => {
-      const specs = parser.parseSpecs({
+      const specs = parseSpecs({
          fullPath: "/p/ipc/schema.ts",
          relativePath: "schema.ts",
          contents: [
@@ -203,7 +203,7 @@ describe("cloneIssues, from a schema file", () => {
          "});",
       ].join("\n");
       expect(() =>
-         parser.parseSpecs({ fullPath: "/p/ipc/schema.ts", relativePath: "s", contents }),
+         parseSpecs({ fullPath: "/p/ipc/schema.ts", relativePath: "s", contents }),
       ).toThrowError(
          "Schema file '/p/ipc/schema.ts': Channel 'profile': return type contains a Promise " +
             "('Promise<string>'). It cannot be sent over IPC. Only the result of an async " +
@@ -221,7 +221,7 @@ describe("cloneIssues, from a schema file", () => {
          "});",
       ].join("\n");
       expect(() =>
-         parser.parseSpecs({ fullPath: "/p/ipc/schema.ts", relativePath: "s", contents }),
+         parseSpecs({ fullPath: "/p/ipc/schema.ts", relativePath: "s", contents }),
       ).toThrowErrorMatchingInlineSnapshot(`
            [Error: Schema file '/p/ipc/schema.ts': Channel 'run': parameter 'done' contains a function ('() => void') through 'Done'. It cannot be sent over IPC, and Electron throws 'An object could not be cloned'. Send plain data instead, and use a channel to call back.
            Schema file '/p/ipc/schema.ts': Channel 'run': parameter 'key' contains a symbol ('symbol'). It cannot be sent over IPC, and Electron throws 'An object could not be cloned'. Send plain data instead, and use a channel to call back.]

@@ -11,7 +11,7 @@
 
 import { parseModule } from "@src/parser/ast.js";
 import { collectModuleBindings } from "@src/parser/module-bindings.js";
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("collectModuleBindings", () => {
@@ -50,8 +50,7 @@ describe("collectModuleBindings", () => {
 });
 
 describe("parseSpecs, import-equals", () => {
-   const specs = (body: string) =>
-      parser.parseSpecs({ contents: body, relativePath: "", fullPath: "" });
+   const specs = (body: string) => parseSpecs({ contents: body, relativePath: "", fullPath: "" });
 
    it("records an exported alias as an exported declaration of the schema file", () => {
       const { typeSpecArray, importSpecArray } = specs(

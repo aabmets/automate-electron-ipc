@@ -13,7 +13,7 @@ import { UTILITY_RUNTIME_NAMES } from "../utility/utility-runtime.js";
 import { WORKER_RESERVED_NAMES } from "./main-workers.js";
 
 /** What the generated `main.ts` uses, which decides the names that it reserves. */
-export interface ReservedNameUses {
+interface ReservedNameUses {
    rendererPorts: boolean;
    mainPorts: boolean;
    brokered: boolean;

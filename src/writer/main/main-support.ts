@@ -28,7 +28,7 @@ import { buildEventWatch, buildPageLoadWatch } from "./main-watches.js";
 import { buildWorkerHelpers } from "./main-worker-helpers.js";
 
 /** Which helpers the channels of the file use. */
-export interface SupportUses {
+interface SupportUses {
    usesIpcMain: boolean;
    usesValidation: boolean;
    usesEnvelope: boolean;

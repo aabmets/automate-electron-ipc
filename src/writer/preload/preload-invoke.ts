@@ -135,7 +135,7 @@ export function getTimeoutComponents(ctx: PreloadContext, pfsArray: t.ParsedFile
 }
 
 /** Whether the promise of an `invoke` channel is rejected after a timeout. */
-export function hasTimeout(ctx: PreloadContext, spec: t.ChannelSpec): boolean {
+function hasTimeout(ctx: PreloadContext, spec: t.ChannelSpec): boolean {
    return (
       spec.kind === "Unicast" && spec.direction === "RendererToMain" && ctx.getTimeoutMs(spec) > 0
    );

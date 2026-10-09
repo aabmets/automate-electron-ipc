@@ -10,8 +10,8 @@
  */
 
 import fsp from "node:fs/promises";
-import scopes from "@src/scopes.js";
-import writer from "@src/writer/index.js";
+import { filterByScope } from "@src/scopes.js";
+import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
@@ -115,7 +115,7 @@ describe("RendererTypesWriter", () => {
       } as t.IPCResolvedConfig;
       const targetOf = (scope: string | null) =>
          (
-            new writer.RendererTypesWriter(config, [], scope) as unknown as {
+            new RendererTypesWriter(config, [], scope) as unknown as {
                getTargetFilePath(): string;
             }
          ).getTargetFilePath();
@@ -130,7 +130,7 @@ describe("RendererTypesWriter", () => {
       );
       const render = async (scope: string | null) => {
          const obj = new shared.VitestRendererTypesWriter(
-            scopes.filterByScope(channels, scope),
+            filterByScope(channels, scope),
             {},
             scope,
          );

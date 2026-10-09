@@ -12,7 +12,12 @@
 import { parseModule } from "@src/parser/ast.js";
 import { parseSignature } from "@src/parser/type/signature.js";
 import { BaseWriter } from "@src/writer/base-writer.js";
-import writer from "@src/writer/index.js";
+import { MainBindingsWriter } from "@src/writer/main/main-bindings.js";
+import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
+import { ServiceWorkerPreloadWriter } from "@src/writer/preload/service-worker-preload.js";
+import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
+import { ServiceWorkerTypesWriter } from "@src/writer/renderer/service-worker-types.js";
+import { UtilityBindingsWriter } from "@src/writer/utility/utility-bindings.js";
 import type * as t from "@types";
 
 export class VitestBaseWriter extends BaseWriter {
@@ -55,7 +60,7 @@ export class VitestBaseWriter extends BaseWriter {
    }
 }
 
-export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
+export class VitestMainBindingsWriter extends MainBindingsWriter {
    constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
       super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
@@ -64,7 +69,7 @@ export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
    }
 }
 
-export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
+export class VitestPreloadBindingsWriter extends PreloadBindingsWriter {
    constructor(
       pfsArray: t.ParsedFileSpecs[],
       config: Partial<t.IPCResolvedConfig> = {},
@@ -77,7 +82,7 @@ export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
    }
 }
 
-export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
+export class VitestRendererTypesWriter extends RendererTypesWriter {
    constructor(
       pfsArray: t.ParsedFileSpecs[],
       config: Partial<t.IPCResolvedConfig> = {},
@@ -90,7 +95,7 @@ export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
    }
 }
 
-export class VitestUtilityBindingsWriter extends writer.UtilityBindingsWriter {
+export class VitestUtilityBindingsWriter extends UtilityBindingsWriter {
    constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
       super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
@@ -99,7 +104,7 @@ export class VitestUtilityBindingsWriter extends writer.UtilityBindingsWriter {
    }
 }
 
-export class VitestServiceWorkerPreloadWriter extends writer.ServiceWorkerPreloadWriter {
+export class VitestServiceWorkerPreloadWriter extends ServiceWorkerPreloadWriter {
    constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
       super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }
@@ -108,7 +113,7 @@ export class VitestServiceWorkerPreloadWriter extends writer.ServiceWorkerPreloa
    }
 }
 
-export class VitestServiceWorkerTypesWriter extends writer.ServiceWorkerTypesWriter {
+export class VitestServiceWorkerTypesWriter extends ServiceWorkerTypesWriter {
    constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
       super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
    }

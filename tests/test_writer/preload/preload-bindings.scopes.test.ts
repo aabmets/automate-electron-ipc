@@ -10,8 +10,8 @@
  */
 
 import fsp from "node:fs/promises";
-import scopes from "@src/scopes.js";
-import writer from "@src/writer/index.js";
+import { filterByScope } from "@src/scopes.js";
+import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
 import mocks from "@testutils/writer/shared-mocks.js";
 import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
@@ -27,7 +27,7 @@ describe("PreloadBindingsWriter", () => {
       } as t.IPCResolvedConfig;
       const targetOf = (scope: string | null) =>
          (
-            new writer.PreloadBindingsWriter(config, [], scope) as unknown as {
+            new PreloadBindingsWriter(config, [], scope) as unknown as {
                getTargetFilePath(): string;
             }
          ).getTargetFilePath();
@@ -51,16 +51,16 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("writes the code of the channels it is given, whatever the scope is", async () => {
-         const surface = scopes.filterByScope(channels, "settings");
+         const surface = filterByScope(channels, "settings");
 
          expect(await render(surface, "settings")).toStrictEqual(await render(surface, null));
          expect(await render(surface, "settings")).toContain("   sendIt: {");
       });
 
       it("writes only the channels of the surface of the scope", async () => {
-         const none = await render(scopes.filterByScope(channels, null), null);
-         const settings = await render(scopes.filterByScope(channels, "settings"), "settings");
-         const editor = await render(scopes.filterByScope(channels, "editor"), "editor");
+         const none = await render(filterByScope(channels, null), null);
+         const settings = await render(filterByScope(channels, "settings"), "settings");
+         const editor = await render(filterByScope(channels, "editor"), "editor");
 
          expect(none).toContain("   getIt: {");
          expect(none).not.toContain("sendIt");

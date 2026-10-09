@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 116 delivered, 24 remaining, 1 dropped.
+**Progress:** 117 delivered, 23 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -150,7 +150,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T122: Split the e2e tests, part 3: automation, utility, scopes and handlers](./tasks/T122-e2e-automation-utility-scopes-tests-split.md) · depends on: T102
 - [x] [T123: Split the e2e tests, part 4: service workers, serializers and the rest](./tasks/T123-e2e-service-worker-serializer-tests-split.md) · depends on: T102
 - [x] [T124: Group the source and test modules into directories](./tasks/T124-group-modules-into-directories.md) · depends on: T123
-- [ ] [T125: Named imports instead of default export objects, and dead exports](./tasks/T125-named-imports-and-dead-exports.md) · depends on: T124
+- [x] [T125: Named imports instead of default export objects, and dead exports](./tasks/T125-named-imports-and-dead-exports.md) · depends on: T124
 - [ ] [T126: Split `src/utils.ts`, and one helper for posix paths](./tasks/T126-split-utils-and-posix-paths.md) · depends on: T124
 - [ ] [T127: Extract the channel collection of `MainBindingsWriter`, and an `anySpec` helper](./tasks/T127-main-writer-channel-collection.md) · depends on: T124
 - [ ] [T128: Duplication in config resolution and validation](./tasks/T128-config-resolution-duplication.md) · depends on: T126

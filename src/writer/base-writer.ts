@@ -19,9 +19,9 @@ import { getOriginalParams } from "./param-names.js";
 import { renameChannelSpecs } from "./rename-signatures.js";
 
 /** The `maxQueue` of a port channel which does not set it: how many messages a send queue holds. */
-export const DEFAULT_MAX_QUEUE = 1000;
+const DEFAULT_MAX_QUEUE = 1000;
 /** The `highWaterMark` of a stream which does not set it: how many chunks the page may not have read. */
-export const DEFAULT_HIGH_WATER_MARK = 1024;
+const DEFAULT_HIGH_WATER_MARK = 1024;
 
 export class BaseWriter {
    protected config: t.IPCResolvedConfig;

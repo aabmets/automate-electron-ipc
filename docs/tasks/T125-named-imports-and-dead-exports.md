@@ -17,4 +17,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   `utils` and `config`, which the tests spy on.
 - **Tests:** No behavior change: generated output byte-identical for every fixture, same test count,
   `bun run check` and `bunx vitest run` pass.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The default objects of `reserved-globals`, `cache`, `parser` and `scopes` are gone, `writer/index.ts` is deleted and `automation.ts` imports the writer classes by name. Tests import by name too; 3276 tests as before.

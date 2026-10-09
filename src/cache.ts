@@ -58,5 +58,3 @@ export class LRUCache {
       this.cache.set(key, value);
    }
 }
-
-export default { LRUCache };

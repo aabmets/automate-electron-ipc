@@ -11,13 +11,13 @@
 
 import { parseModule } from "@src/parser/ast.js";
 import { collectModuleBindings } from "@src/parser/module-bindings.js";
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseSpecs, export specifiers and default classes", () => {
    const header = 'import { defineChannels, invoke } from "automate-electron-ipc";\n';
    const parse = (contents: string) =>
-      parser.parseSpecs({ contents: header + contents, relativePath: "", fullPath: "" });
+      parseSpecs({ contents: header + contents, relativePath: "", fullPath: "" });
    const channels = (...types: string[]) =>
       `export default defineChannels({ ${types.map((x, i) => `chan${i}: invoke<() => ${x}>()`).join(", ")} });`;
 
@@ -112,7 +112,7 @@ describe("parseSpecs, export specifiers and default classes", () => {
 describe("parseSpecs, typeof of values declared in the schema file", () => {
    const header = 'import { defineChannels, invoke } from "automate-electron-ipc";\n';
    const parse = (contents: string) =>
-      parser.parseSpecs({ contents: header + contents, relativePath: "", fullPath: "" });
+      parseSpecs({ contents: header + contents, relativePath: "", fullPath: "" });
    const using = (name: string) =>
       `export default defineChannels({ get: invoke<(current: typeof ${name}) => void>() });`;
    const values = (contents: string) =>

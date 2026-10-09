@@ -9,12 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseSpecs", () => {
    it("should parse interfaces and types", () => {
-      const { typeSpecArray } = parser.parseSpecs({
+      const { typeSpecArray } = parseSpecs({
          contents: `
             export interface MyInterface {
                property: string;
@@ -40,7 +40,7 @@ describe("parseSpecs", () => {
    });
 
    it("should accept non-exported types that no channel uses", () => {
-      const { typeSpecArray } = parser.parseSpecs({
+      const { typeSpecArray } = parseSpecs({
          contents: `
             import { defineChannels, invoke } from "automate-electron-ipc";
 
@@ -70,13 +70,13 @@ describe("parseSpecs", () => {
             getHidden: invoke<() => Promise<Hidden>>(),
          });
       `;
-      expect(() => parser.parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
+      expect(() => parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
          "Type 'Hidden' is used by channel 'getHidden' and must be exported",
       );
    });
 
    it("should parse enums, classes and namespaces as local types", () => {
-      const { typeSpecArray } = parser.parseSpecs({
+      const { typeSpecArray } = parseSpecs({
          contents: `
             export enum Kind { A, B }
             export class Model<T> {}
@@ -106,13 +106,13 @@ describe("parseSpecs", () => {
             setKind: send<(kind: Kind.A) => void>(),
          });
       `;
-      expect(() => parser.parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
+      expect(() => parseSpecs({ contents, relativePath: "", fullPath: "" })).toThrowError(
          "Type 'Kind' is used by channel 'setKind' and must be exported",
       );
    });
 
    it("should mark a default exported interface", () => {
-      const { typeSpecArray } = parser.parseSpecs({
+      const { typeSpecArray } = parseSpecs({
          contents: `
             import { defineChannels, invoke } from "automate-electron-ipc";
 
@@ -131,7 +131,7 @@ describe("parseSpecs", () => {
    });
 
    it("should parse ES module import statements", () => {
-      const { importSpecArray } = parser.parseSpecs({
+      const { importSpecArray } = parseSpecs({
          contents: `
             import type { CustomType1 } from 'module-name1';
             import { namedExport2, type CustomType2 } from 'module-name2';
@@ -166,8 +166,7 @@ describe("parseSpecs", () => {
 });
 
 describe("parseSpecs, names of globals that the schema binds", () => {
-   const parse = (contents: string) =>
-      parser.parseSpecs({ contents, relativePath: "", fullPath: "" });
+   const parse = (contents: string) => parseSpecs({ contents, relativePath: "", fullPath: "" });
 
    // Regression for T60.
    it("collects a declared type that is named like a global", () => {

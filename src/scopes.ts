@@ -71,5 +71,3 @@ export function scopedFilePath(filePath: string, scope: Scope): string {
    }
    return `${filePath.slice(0, extension.index)}.${scope}${extension[0]}`;
 }
-
-export default { isInScope, collectScopes, filterByScope, scopedFilePath };

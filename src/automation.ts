@@ -14,15 +14,20 @@ import path from "node:path";
 import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
-import parser from "./parser/parser.js";
-import scopeUtils from "./scopes.js";
+import { parseSpecs } from "./parser/parser.js";
+import { collectScopes, filterByScope, scopedFilePath } from "./scopes.js";
 import utils from "./utils.js";
 import { getCloneWarnings } from "./validation/clone-issues.js";
 import {
    validateGlobalChannelSpecs,
    validateReservedApiNames,
 } from "./validation/global-validation.js";
-import writer from "./writer/index.js";
+import { MainBindingsWriter } from "./writer/main/main-bindings.js";
+import { PreloadBindingsWriter } from "./writer/preload/preload-bindings.js";
+import { ServiceWorkerPreloadWriter } from "./writer/preload/service-worker-preload.js";
+import { RendererTypesWriter } from "./writer/renderer/renderer-types.js";
+import { ServiceWorkerTypesWriter } from "./writer/renderer/service-worker-types.js";
+import { UtilityBindingsWriter } from "./writer/utility/utility-bindings.js";
 
 /**
  * Throws if the file of a scope would overwrite another generated file. The files of the scopes
@@ -36,7 +41,7 @@ function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): vo
    ];
    for (const scope of scopes) {
       for (const base of [config.preloadBindingsFilePath, config.rendererTypesFilePath]) {
-         const file = scopeUtils.scopedFilePath(base, scope);
+         const file = scopedFilePath(base, scope);
          for (const [option, taken] of configured) {
             if (file === taken) {
                throw new Error(
@@ -70,7 +75,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
          // The data dir is the directory of the file, so the file is named with `schema.ts`.
          relativePath: path.posix.join(config.ipcDataDir.replaceAll("\\", "/"), "schema.ts"),
       };
-      const specs = parser.parseSpecs({
+      const specs = parseSpecs({
          contents: contents.toString(),
          ...fileData,
       });
@@ -98,7 +103,7 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
          )
       ).filter((item) => item !== null);
       for (const item of rawFileContents) {
-         const specs = parser.parseSpecs(item);
+         const specs = parseSpecs(item);
          if (specs.channelSpecArray.length > 0) {
             pfsArray.push({
                fullPath: item.fullPath,
@@ -114,28 +119,28 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
       pfsArray.flatMap((pfs) => getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
    // The file for utility processes exists only for a schema that has channels to them.
-   const utilityWriter = new writer.UtilityBindingsWriter(config, pfsArray);
+   const utilityWriter = new UtilityBindingsWriter(config, pfsArray);
    // The files for service workers exist only for a schema that has channels to or from them.
    const workerWriters = [
-      new writer.ServiceWorkerPreloadWriter(config, pfsArray),
-      new writer.ServiceWorkerTypesWriter(config, pfsArray),
+      new ServiceWorkerPreloadWriter(config, pfsArray),
+      new ServiceWorkerTypesWriter(config, pfsArray),
    ];
    // The files of a page hold the surface of one scope. The surface of no scope has the channels
    // that are open to all windows, and each scope adds its own channels to that.
-   const scopes = scopeUtils.collectScopes(pfsArray);
+   const scopes = collectScopes(pfsArray);
    assertScopeFilesFree(config, scopes);
    const pageSurfaces: [string | null, t.ParsedFileSpecs[]][] = [
-      [null, scopes.length > 0 ? scopeUtils.filterByScope(pfsArray, null) : pfsArray],
+      [null, scopes.length > 0 ? filterByScope(pfsArray, null) : pfsArray],
       ...scopes.map((scope): [string, t.ParsedFileSpecs[]] => [
          scope,
-         scopeUtils.filterByScope(pfsArray, scope),
+         filterByScope(pfsArray, scope),
       ]),
    ];
    await Promise.all([
-      new writer.MainBindingsWriter(config, pfsArray).write(),
+      new MainBindingsWriter(config, pfsArray).write(),
       ...pageSurfaces.flatMap(([scope, surface]) => [
-         new writer.PreloadBindingsWriter(config, surface, scope).write(),
-         new writer.RendererTypesWriter(config, surface, scope).write(),
+         new PreloadBindingsWriter(config, surface, scope).write(),
+         new RendererTypesWriter(config, surface, scope).write(),
       ]),
       ...(utilityWriter.hasChannels() ? [utilityWriter.write()] : []),
       ...workerWriters.filter((worker) => worker.hasChannels()).map((worker) => worker.write()),

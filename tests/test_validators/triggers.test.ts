@@ -11,7 +11,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { BROWSER_WINDOW_EVENTS } from "@src/validation/browser-window-events.js";
 import { validateChannelSpecs } from "@src/validation/channel-validation.js";
 import { ChannelSpecGenerator } from "@testutils/validator-utils.js";
@@ -41,7 +41,7 @@ describe("trigger validation", () => {
 
    it("rejects an unknown trigger in the as form of a schema file", () => {
       const parse = () =>
-         parser.parseSpecs({
+         parseSpecs({
             contents: `
                import { defineChannels, emit } from "automate-electron-ipc";
                export default defineChannels({

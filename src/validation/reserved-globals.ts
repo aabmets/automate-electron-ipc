@@ -197,5 +197,3 @@ const RESERVED_NAMES: ReadonlySet<string> = new Set([...RESERVED_WORDS, ...WELL_
 export function isReservedGlobalName(name: string): boolean {
    return RESERVED_NAMES.has(name);
 }
-
-export default { isReservedGlobalName };

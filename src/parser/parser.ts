@@ -69,7 +69,3 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
       channelMapExport,
    };
 }
-
-export default {
-   parseSpecs,
-};

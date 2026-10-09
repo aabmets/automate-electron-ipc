@@ -9,12 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import parser from "@src/parser/parser.js";
+import { parseSpecs } from "@src/parser/parser.js";
 import { describe, expect, it } from "vitest";
 
 describe("parseSpecs", () => {
    it("should parse simple unicast channels", () => {
-      const { channelSpecArray, channelMapExport } = parser.parseSpecs({
+      const { channelSpecArray, channelMapExport } = parseSpecs({
          contents: `
             import { defineChannels, invoke } from "automate-electron-ipc";
 
@@ -44,7 +44,7 @@ describe("parseSpecs", () => {
    });
 
    it("should parse simple broadcast channels", () => {
-      const { channelSpecArray, channelMapExport } = parser.parseSpecs({
+      const { channelSpecArray, channelMapExport } = parseSpecs({
          contents: `
             import { defineChannels, send } from "automate-electron-ipc";
 
@@ -74,7 +74,7 @@ describe("parseSpecs", () => {
    });
 
    it("should parse complex unicast channels", () => {
-      const { channelSpecArray } = parser.parseSpecs({
+      const { channelSpecArray } = parseSpecs({
          contents: `
             import { defineChannels, invoke } from "automate-electron-ipc";
 
@@ -103,7 +103,7 @@ describe("parseSpecs", () => {
    });
 
    it("should parse triggered emit channels and ports in one map", () => {
-      const { channelSpecArray } = parser.parseSpecs({
+      const { channelSpecArray } = parseSpecs({
          contents: `
             import { defineChannels, emit, port } from "automate-electron-ipc";
 
@@ -133,7 +133,7 @@ describe("parseSpecs", () => {
    });
 
    it("should ignore files which do not declare a channel map", () => {
-      const out = parser.parseSpecs({
+      const out = parseSpecs({
          contents: "export type Shared = { id: number };",
          relativePath: "",
          fullPath: "",
@@ -145,7 +145,7 @@ describe("parseSpecs", () => {
 
    it("should name the file in schema errors", () => {
       expect(() =>
-         parser.parseSpecs({
+         parseSpecs({
             contents: `
                import { defineChannels, invoke } from "automate-electron-ipc";
                export default defineChannels({ userChannel: invoke() });
@@ -159,7 +159,7 @@ describe("parseSpecs", () => {
    it("should report syntax errors with the file path, line and column", () => {
       // Regression for T08: parse errors were swallowed and reported as "no channels found".
       const parse = () =>
-         parser.parseSpecs({
+         parseSpecs({
             contents: "const a = 1;\nexport default defineChannels({ a: ;\n});",
             relativePath: "schema/user.ts",
             fullPath: "/app/src/ipc/schema/user.ts",
@@ -171,7 +171,7 @@ describe("parseSpecs", () => {
 
    it("should report the editor column of a syntax error after a tab or a wide character", () => {
       const parse = (contents: string) => () =>
-         parser.parseSpecs({ contents, relativePath: "s.ts", fullPath: "/p/s.ts" });
+         parseSpecs({ contents, relativePath: "s.ts", fullPath: "/p/s.ts" });
       expect(parse("\tconst b = ;")).toThrow("Syntax error in schema file '/p/s.ts:1:12'");
       expect(parse('const s = "日本"; const b = ;')).toThrow(
          "Syntax error in schema file '/p/s.ts:1:27'",
@@ -180,7 +180,7 @@ describe("parseSpecs", () => {
 
    it("should report the end of the input for a syntax error at the end", () => {
       expect(() =>
-         parser.parseSpecs({
+         parseSpecs({
             contents: "const a = 1;\nconst b = ",
             relativePath: "",
             fullPath: "/p/s.ts",
@@ -190,13 +190,13 @@ describe("parseSpecs", () => {
 
    it("should fall back to the relative path when naming a file with a syntax error", () => {
       expect(() =>
-         parser.parseSpecs({ contents: "const = ;", relativePath: "user.ts", fullPath: "" }),
+         parseSpecs({ contents: "const = ;", relativePath: "user.ts", fullPath: "" }),
       ).toThrow(/^Syntax error in schema file 'user\.ts:1:\d+': /);
    });
 
    it("should validate parsed channels", () => {
       const parse = (entries: string) =>
-         parser.parseSpecs({
+         parseSpecs({
             contents: `
                import { defineChannels, invoke, send, emit } from "automate-electron-ipc";
                export default defineChannels({ ${entries} });
