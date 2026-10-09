@@ -42,6 +42,10 @@ export class PreloadBindingsWriter extends BaseWriter {
    protected isEmpty(): boolean {
       return !this.hasRendererChannels();
    }
+   /** The page takes no part in the traffic between the main process and a utility process. */
+   protected isSerializedSpec(spec: t.ChannelSpec): boolean {
+      return !this.isUtilitySpec(spec) && super.isSerializedSpec(spec);
+   }
    protected renderEmptyFileContents(): string {
       const [i0] = this.indents;
       const bridge = this.getPathForFileEnabled() ? "contextBridge, webUtils" : "contextBridge";
@@ -792,10 +796,16 @@ export class PreloadBindingsWriter extends BaseWriter {
     *   the call, so it covers the wait for the port too. The handler in the child is not stopped
     *   and its late reply is dropped, but a timed-out stream is cancelled in the child. A stream
     *   that has begun is not cut short, since a slow reader holds the generator back on purpose.
+    * - with a serializer, the arguments of a call or a stream go as a list of one value, the list
+    *   of them as the serializer made it, and the value of a reply and every chunk are deserialized.
+    *   Arguments that cannot be serialized reject the call, or fail the stream, at once with the plain
+    *   object `{ name: 'IpcSerializationError', message, code: 'IPC_SERIALIZATION' }`, as does a
+    *   value that cannot be deserialized; a chunk of that kind also cancels the stream in the child.
     * Messages that are not the library's, or are for another channel or ID, are ignored.
     */
    private buildUtilityClientComponents(streams: boolean): string {
       const [i1, i2, i3, i4] = this.indents;
+      const serialized = this.usesSerializer();
       return [
          "",
          "interface UtilityClient {",
@@ -856,7 +866,15 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}client.calls.delete(id);`,
          `${i2}const envelope = typeof source.envelope === 'object' && source.envelope !== null ? (source.envelope as { [key: string]: unknown }) : null;`,
          `${i2}if (envelope && envelope.ok === true) {`,
-         `${i3}call.resolve(envelope.value);`,
+         ...(serialized
+            ? [
+                 `${i3}try {`,
+                 `${i4}call.resolve(decodeValue(client.name, envelope.value));`,
+                 `${i3}} catch (error) {`,
+                 `${i4}call.reject(error);`,
+                 `${i3}}`,
+              ]
+            : [`${i3}call.resolve(envelope.value);`]),
          `${i2}} else if (envelope && envelope.ok === false && typeof envelope.error === 'object' && envelope.error !== null) {`,
          `${i3}call.reject(toIpcError(envelope.error));`,
          `${i2}} else {`,
@@ -868,7 +886,21 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}return;`,
          `${i2}}`,
          `${i2}if (source.__ipc === 'chunk') {`,
-         `${i3}stream.push(source.value);`,
+         ...(serialized
+            ? [
+                 `${i3}try {`,
+                 `${i4}stream.push(decodeValue(client.name, source.value));`,
+                 `${i3}} catch (error) {`,
+                 `${i4}// The stream cannot go on, and the child is told to stop it.`,
+                 `${i4}try {`,
+                 `${i4}${i1}client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id });`,
+                 `${i4}} catch {`,
+                 `${i4}${i1}// The port is gone, which stops the stream in the child as well.`,
+                 `${i4}}`,
+                 `${i4}stream.finish({ error: toIpcError(error) });`,
+                 `${i3}}`,
+              ]
+            : [`${i3}stream.push(source.value);`]),
          `${i2}} else if (source.__ipc === 'end') {`,
          `${i3}stream.finish();`,
          `${i2}} else if (source.__ipc === 'error') {`,
@@ -901,6 +933,17 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}reject(utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED'));`,
          `${i3}return;`,
          `${i2}}`,
+         ...(serialized
+            ? [
+                 `${i2}let wired: unknown[];`,
+                 `${i2}try {`,
+                 `${i3}wired = [encodeValue(client.name, args)];`,
+                 `${i2}} catch (error) {`,
+                 `${i3}reject(error);`,
+                 `${i3}return;`,
+                 `${i2}}`,
+              ]
+            : []),
          `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
          `${i2}let settled = false;`,
          `${i2}let id = 0;`,
@@ -918,7 +961,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}id = ++lastUtilityCallId;`,
          `${i3}client.calls.set(id, { resolve: (value) => settle(() => resolve(value)), reject: (error) => settle(() => reject(error)) });`,
          `${i3}try {`,
-         `${i4}client.port?.postMessage({ __ipc: 'call', channel: client.channel, id, args });`,
+         `${i4}client.port?.postMessage({ __ipc: 'call', channel: client.channel, id, ${serialized ? "args: wired" : "args"} });`,
          `${i3}} catch (error) {`,
          `${i4}client.calls.delete(id);`,
          `${i4}settle(() => reject(utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE')));`,
@@ -963,6 +1006,17 @@ export class PreloadBindingsWriter extends BaseWriter {
                  `${i3}}`,
                  `${i2}},`,
                  `${i1});`,
+                 ...(serialized
+                    ? [
+                         `${i1}let wired: unknown[];`,
+                         `${i1}try {`,
+                         `${i2}wired = [encodeValue(client.name, args)];`,
+                         `${i1}} catch (error) {`,
+                         `${i2}reader.finish({ error: toIpcError(error) });`,
+                         `${i2}return reader.stream;`,
+                         `${i1}}`,
+                      ]
+                    : []),
                  `${i1}const start = () => {`,
                  `${i2}if (reader.isFinished()) {`,
                  `${i3}return;`,
@@ -975,7 +1029,7 @@ export class PreloadBindingsWriter extends BaseWriter {
                  `${i3}finish: reader.finish,`,
                  `${i2}});`,
                  `${i2}try {`,
-                 `${i3}client.port?.postMessage({ __ipc: 'stream', channel: client.channel, id, args });`,
+                 `${i3}client.port?.postMessage({ __ipc: 'stream', channel: client.channel, id, ${serialized ? "args: wired" : "args"} });`,
                  `${i3}reader.topUp();`,
                  `${i2}} catch (error) {`,
                  `${i3}reader.finish({ error: utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE') });`,

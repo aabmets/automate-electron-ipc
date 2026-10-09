@@ -71,6 +71,33 @@ const utility: shared.SimpleChannel = {
    params: ["at: Date"],
    returnType: "Promise<void>",
 };
+const utilityNotify: shared.SimpleChannel = {
+   name: "utilityNotify",
+   kind: "Broadcast",
+   direction: "MainToUtility",
+   params: ["at: Date"],
+};
+const callMain: shared.SimpleChannel = {
+   name: "callMain",
+   kind: "Unicast",
+   direction: "UtilityToMain",
+   params: ["at: Date"],
+   returnType: "Promise<Date>",
+};
+const brokeredCall: shared.SimpleChannel = {
+   name: "brokeredCall",
+   kind: "Unicast",
+   direction: "RendererToUtility",
+   params: ["at: Date"],
+   returnType: "Promise<Date>",
+};
+const brokeredStream: shared.SimpleChannel = {
+   name: "brokeredStream",
+   kind: "Stream",
+   direction: "RendererToUtility",
+   params: ["since: Date"],
+   returnType: "AsyncIterable<Date>",
+};
 const worker: shared.SimpleChannel = {
    name: "workerIt",
    kind: "Unicast",
@@ -90,6 +117,7 @@ describe("serializer, the generated files", () => {
    mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
    mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
    mocks.mockGetTargetFilePath(shared.VitestServiceWorkerPreloadWriter);
+   mocks.mockGetTargetFilePath(shared.VitestUtilityBindingsWriter);
 
    const config = { serializer: "superjson", channelPrefix: "autoipc:" };
    const main = async (
@@ -108,6 +136,17 @@ describe("serializer, the generated files", () => {
       extra: Partial<t.IPCResolvedConfig> = {},
    ) => {
       const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels), {
+         ...config,
+         ...extra,
+      });
+      await obj.write(false);
+      return (await fsp.readFile(obj.getTargetFilePath())).toString();
+   };
+   const utilityFile = async (
+      channels: shared.SimpleChannel[],
+      extra: Partial<t.IPCResolvedConfig> = {},
+   ) => {
+      const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels), {
          ...config,
          ...extra,
       });
@@ -261,8 +300,8 @@ describe("serializer, the generated files", () => {
       expect(output).toContain("value: encodeValue(channel, step.value)");
    });
 
-   it("leaves the utility channels and the worker channels out", async () => {
-      for (const channel of [utility, worker, workerAsk]) {
+   it("leaves the worker channels out", async () => {
+      for (const channel of [worker, workerAsk]) {
          // biome-ignore lint/performance/noAwaitInLoops: the writers of a class share one file
          const output = await main([channel]);
          const page = await preload([channel]);
@@ -271,6 +310,109 @@ describe("serializer, the generated files", () => {
          expect(output).not.toContain("encodeValue");
          expect(page).not.toContain("ipcSerialize");
       }
+   });
+
+   it("serializes the calls and the sends between main and a utility process, in the peer code of main", async () => {
+      const output = await main([utility, utilityNotify, callMain]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("export class IpcSerializationError extends Error {");
+      // A call posts the arguments as a list of one value, and reads the value of the reply.
+      expect(output).toContain("wired = [encodeValue(channel, args)];");
+      expect(output).toContain("peer.post({ __ipc: 'call', channel, id, args: wired });");
+      expect(output).toContain("call.resolve(decodeValue(channel, outcome.value));");
+      // A send is serialized in the same way, and one that arrives is read, or logged and dropped.
+      expect(output).toContain("peer.post({ __ipc: 'send', channel, args: wired });");
+      expect(output).toContain("const args = readSentArguments(channel, source.args);");
+      // A call that arrives is read inside the envelope, and so is the result.
+      expect(output).toContain(
+         "return encodeValue(channel, await handler(...readArguments(channel, args)));",
+      );
+   });
+
+   it("leaves the peer code without the serializer when the config names none", async () => {
+      const output = await main([utility, utilityNotify, callMain], { serializer: undefined });
+
+      expect(output).not.toMatch(/encodeValue|decodeValue|readArguments|IpcSerializationError/);
+      expect(output).toContain("peer.post({ __ipc: 'call', channel, id, args });");
+      expect(output).toContain("peer.post({ __ipc: 'send', channel, args });");
+   });
+
+   it("does not serialize the channels of a page and a utility process in main, which only brokers the port", async () => {
+      const output = await main([brokeredCall, brokeredStream]);
+
+      expect(output).not.toContain("ipcSerialize");
+      expect(output).not.toContain("encodeValue");
+      expect(output).not.toContain("IpcSerializationError");
+   });
+
+   it("serializes the channels with a utility process in the utility file, with the import of the config", async () => {
+      const output = await utilityFile([utility, utilityNotify, callMain]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("export class IpcSerializationError extends Error {");
+      expect(output).toContain("peer.post({ __ipc: 'call', channel, id, args: wired });");
+      expect(output).toContain("peer.post({ __ipc: 'send', channel, args: wired });");
+      expect(output).toContain("const args = readSentArguments(channel, source.args);");
+   });
+
+   it("serializes the arguments and the chunks of the brokered channels in the utility file", async () => {
+      const output = await utilityFile([brokeredCall, brokeredStream]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("await handler(...readArguments(channel, args))");
+      expect(output).toContain("value: encodeValue(channel, step.value)");
+      expect(output).toContain("fail(error instanceof IpcSerializationError ? error : {");
+      expect(output).toContain(
+         "return encodeValue(channel, await handler(...readArguments(channel, args)));",
+      );
+   });
+
+   it("leaves the utility file without the serializer when the config names none", async () => {
+      const output = await utilityFile([brokeredCall, brokeredStream, utility], {
+         serializer: undefined,
+      });
+
+      expect(output).not.toMatch(/ipcSerialize|encodeValue|decodeValue|readArguments|Serializ/);
+      expect(output).toContain("await handler(...args)");
+      expect(output).toContain("value: step.value");
+   });
+
+   it("serializes the calls of the page to a utility process in the preload script", async () => {
+      const output = await preload([brokeredCall, brokeredStream]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("wired = [encodeValue(client.name, args)];");
+      expect(output).toContain("args: wired });");
+      expect(output).toContain("call.resolve(decodeValue(client.name, envelope.value));");
+      expect(output).toContain("stream.push(decodeValue(client.name, source.value));");
+      // A chunk that cannot be read stops the stream in the child as well.
+      expect(output).toMatch(/catch \(error\) \{\n\s+\/\/ The stream cannot go on/);
+   });
+
+   it("leaves the preload script without the serializer for the traffic of main and a utility process", async () => {
+      const output = await preload([utility, utilityNotify, callMain]);
+
+      expect(output).not.toContain("ipcSerialize");
+      expect(output).not.toContain("encodeValue");
+   });
+
+   it("reserves the names of the serializer in the utility file", () => {
+      const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(utility), config);
+      const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
+
+      for (const name of [
+         "ipcSerialize",
+         "IpcSerializationError",
+         "encodeValue",
+         "readArguments",
+      ]) {
+         expect(names).toContain(name);
+      }
+      const off = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(utility), {});
+      expect((off as unknown as { getReservedNames(): string[] }).getReservedNames()).not.toContain(
+         "encodeValue",
+      );
    });
 
    it("posts a message of a port channel in the page as a list of the serialized arguments", async () => {
@@ -313,11 +455,11 @@ describe("serializer, the generated files", () => {
    });
 
    it("serializes the channels of the page and leaves the others of the same schema alone", async () => {
-      const output = await main([invoke, utility, worker]);
+      const output = await main([invoke, worker]);
 
       expect(output).toContain(IMPORT);
       expect(output).toContain("encodeValue('getIt'");
-      expect(output).not.toMatch(/(?:encode|decode)Value\('(?:utilityIt|workerIt)'/);
+      expect(output).not.toMatch(/(?:encode|decode)Value\('workerIt'/);
    });
 
    it("writes the preload script of a service worker without the serializer", async () => {

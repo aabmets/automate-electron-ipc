@@ -13,7 +13,12 @@ import type * as t from "@types";
 import { collectScopes } from "../scopes.js";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
-import { buildErrorEnvelope, buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
+import {
+   buildErrorEnvelope,
+   buildSerializerRuntime,
+   buildUtilityPeer,
+   UTILITY_RUNTIME_NAMES,
+} from "./utility-runtime.js";
 
 interface ChannelEntry {
    name: string;
@@ -229,9 +234,16 @@ export class MainBindingsWriter extends BaseWriter {
          ...(this.hasWorkerChannels() ? WORKER_RESERVED_NAMES : []),
       ];
    }
-   /** The main process only pairs the pages of a `port` channel, and sees none of their messages. */
+   /**
+    * The main process only pairs the pages of a `port` channel, and brokers the port between a page and
+    * a utility process, and sees none of their messages.
+    */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
-      return spec.direction !== "RendererToRenderer" && super.isSerializedSpec(spec);
+      return (
+         spec.direction !== "RendererToRenderer" &&
+         spec.direction !== "RendererToUtility" &&
+         super.isSerializedSpec(spec)
+      );
    }
    protected renderEmptyFileContents(): string {
       return "export const ipc = {};";
@@ -759,63 +771,14 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
    }
    /**
-    * The serializer of the config, for the channels between the main process and a page.
-    * `encodeValue` turns what is sent into the wire value and `decodeValue` turns it back; the
-    * arguments of a call travel as one value, the list of them. `IpcSerializationError` is what a
-    * failure throws: it reaches the caller of a `send`, `emit` or `ask`, and the page as the
-    * `{ name, message, code }` of the usual error envelope. `readArguments` throws for a call that
-    * answers, and `readSentArguments` drops a message that nobody answers, so that a bad message
-    * is logged and does not become an uncaught error of the main process. Deserializing is done
-    * only after the sender is checked, so that a rejected sender reaches no code of the serializer.
+    * The serializer of the config, for the channels between the main process and a page and for
+    * the ones between the main process and a utility process (see `buildSerializerRuntime`).
+    * `IpcSerializationError` reaches the caller of a `send`, `emit` or `ask`, and the page as the
+    * `{ name, message, code }` of the usual error envelope. Deserializing is done only after the
+    * sender is checked, so that a rejected sender reaches no code of the serializer.
     */
    private buildSerializerHelpers(): string {
-      const [i1, i2] = this.indents;
-      return [
-         "",
-         "export class IpcSerializationError extends Error {",
-         `${i1}readonly code = 'IPC_SERIALIZATION';`,
-         `${i1}readonly channel: string;`,
-         `${i1}constructor(channel: string, what: string, cause: unknown) {`,
-         `${i2}super(\`\${what} of the channel '\${channel}': \${cause instanceof Error ? cause.message : String(cause)}\`);`,
-         `${i2}this.name = 'IpcSerializationError';`,
-         `${i2}this.channel = channel;`,
-         `${i1}}`,
-         "}",
-         "",
-         "function encodeValue(channel: string, value: unknown): unknown {",
-         `${i1}try {`,
-         `${i2}return (ipcSerialize as (value: unknown) => unknown)(value);`,
-         `${i1}} catch (cause) {`,
-         `${i2}throw new IpcSerializationError(channel, 'The data cannot be serialized', cause);`,
-         `${i1}}`,
-         "}",
-         "",
-         "function decodeValue(channel: string, wire: unknown): unknown {",
-         `${i1}try {`,
-         `${i2}return (ipcDeserialize as (wire: unknown) => unknown)(wire);`,
-         `${i1}} catch (cause) {`,
-         `${i2}throw new IpcSerializationError(channel, 'The data cannot be deserialized', cause);`,
-         `${i1}}`,
-         "}",
-         "",
-         "function readArguments(channel: string, received: unknown[]): unknown[] {",
-         `${i1}const value = received.length === 1 ? decodeValue(channel, received[0]) : undefined;`,
-         `${i1}if (!Array.isArray(value)) {`,
-         `${i2}throw new IpcSerializationError(channel, 'The arguments are not a list', 'the message has an unknown shape');`,
-         `${i1}}`,
-         `${i1}return value;`,
-         "}",
-         "",
-         "function readSentArguments(channel: string, received: unknown[]): unknown[] | undefined {",
-         `${i1}try {`,
-         `${i2}return readArguments(channel, received);`,
-         `${i1}} catch (error) {`,
-         `${i2}console.error(error);`,
-         `${i2}return undefined;`,
-         `${i1}}`,
-         "}",
-         "",
-      ].join("\n");
+      return buildSerializerRuntime(this.indents);
    }
    /**
     * The sender validation of the main process: `configureIpc`, which sets the global validator
@@ -2285,7 +2248,7 @@ export class MainBindingsWriter extends BaseWriter {
    private buildUtilityHelpers(): string {
       const [i1] = this.indents;
       return [
-         buildUtilityPeer(this.indents),
+         buildUtilityPeer(this.indents, this.usesSerializer()),
          "const utilityPeers = new WeakMap<UtilityProcess, UtilityPeer>();",
          "",
          "function getUtilityPeer(child: UtilityProcess): UtilityPeer {",

@@ -50,6 +50,65 @@ export const UTILITY_RUNTIME_NAMES = [
 ];
 
 /**
+ * The serializer of the config, for the files that talk to the other side of a channel with it:
+ * `encodeValue` turns what is sent into the wire value and `decodeValue` turns it back; the
+ * arguments of a call travel as one value, the list of them. `IpcSerializationError` is what a
+ * failure throws. `readArguments` throws for a call that answers, and `readSentArguments` drops a
+ * message that nobody answers, so that a bad message is logged and does not become an uncaught
+ * error of the process. The code refers to the serializer through `ipcSerialize` and
+ * `ipcDeserialize`, which the file imports.
+ */
+export function buildSerializerRuntime(indents: string[]): string {
+   const [i1, i2] = indents;
+   return [
+      "",
+      "export class IpcSerializationError extends Error {",
+      `${i1}readonly code = 'IPC_SERIALIZATION';`,
+      `${i1}readonly channel: string;`,
+      `${i1}constructor(channel: string, what: string, cause: unknown) {`,
+      `${i2}super(\`\${what} of the channel '\${channel}': \${cause instanceof Error ? cause.message : String(cause)}\`);`,
+      `${i2}this.name = 'IpcSerializationError';`,
+      `${i2}this.channel = channel;`,
+      `${i1}}`,
+      "}",
+      "",
+      "function encodeValue(channel: string, value: unknown): unknown {",
+      `${i1}try {`,
+      `${i2}return (ipcSerialize as (value: unknown) => unknown)(value);`,
+      `${i1}} catch (cause) {`,
+      `${i2}throw new IpcSerializationError(channel, 'The data cannot be serialized', cause);`,
+      `${i1}}`,
+      "}",
+      "",
+      "function decodeValue(channel: string, wire: unknown): unknown {",
+      `${i1}try {`,
+      `${i2}return (ipcDeserialize as (wire: unknown) => unknown)(wire);`,
+      `${i1}} catch (cause) {`,
+      `${i2}throw new IpcSerializationError(channel, 'The data cannot be deserialized', cause);`,
+      `${i1}}`,
+      "}",
+      "",
+      "function readArguments(channel: string, received: unknown[]): unknown[] {",
+      `${i1}const value = received.length === 1 ? decodeValue(channel, received[0]) : undefined;`,
+      `${i1}if (!Array.isArray(value)) {`,
+      `${i2}throw new IpcSerializationError(channel, 'The arguments are not a list', 'the message has an unknown shape');`,
+      `${i1}}`,
+      `${i1}return value;`,
+      "}",
+      "",
+      "function readSentArguments(channel: string, received: unknown[]): unknown[] | undefined {",
+      `${i1}try {`,
+      `${i2}return readArguments(channel, received);`,
+      `${i1}} catch (error) {`,
+      `${i2}console.error(error);`,
+      `${i2}return undefined;`,
+      `${i1}}`,
+      "}",
+      "",
+   ].join("\n");
+}
+
+/**
  * The envelope of the answers of `invoke`-like channels: `settleInvoke` runs the handler and answers
  * with `{ ok: true, value }`, or with `{ ok: false, error }` when anything fails. `toIpcError`
  * reduces what was thrown to `{ name, message, code?, data? }`. The stack never leaves the process.
@@ -120,8 +179,17 @@ export function buildErrorEnvelope(indents: string[]): string {
  * Everything that arrives is untrusted: a reply counts only if its ID is pending for the same
  * channel, and a message of an unknown shape is dropped. A peer is closed when the other end is
  * gone, which rejects the pending calls and the later ones.
+ *
+ * With a `serializer` (see `buildSerializerRuntime`, which the file must hold as well), `args` is a
+ * list of one value, the list of the arguments as the serializer made it, and so is the value of
+ * an `ok` envelope. The caller serializes the arguments and deserializes the value, and the other
+ * side does the opposite. A call or a send that cannot be serialized fails with an
+ * `IpcSerializationError`. A call that cannot be read is answered with the error envelope of that
+ * error, so does a result that cannot be serialized, and the caller rejects with an
+ * `IpcUtilityError` that has its name and code. A reply that cannot be read rejects the call with an
+ * `IpcSerializationError`. A `send` that cannot be read is logged with `console.error` and dropped.
  */
-export function buildUtilityPeer(indents: string[]): string {
+export function buildUtilityPeer(indents: string[], serialized = false): string {
    const [i1, i2, i3, i4] = indents;
    return [
       "",
@@ -222,12 +290,27 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i3}const outcome = readUtilityReply(channel, source.envelope);`,
       `${i3}if ('error' in outcome) {`,
       `${i4}call.reject(outcome.error);`,
-      `${i3}} else {`,
-      `${i4}call.resolve(outcome.value);`,
-      `${i3}}`,
+      ...(serialized
+         ? [
+              `${i3}} else {`,
+              `${i4}try {`,
+              `${i4}${i1}call.resolve(decodeValue(channel, outcome.value));`,
+              `${i4}} catch (error) {`,
+              `${i4}${i1}call.reject(error as IpcUtilityError);`,
+              `${i4}}`,
+              `${i3}}`,
+           ]
+         : [`${i3}} else {`, `${i4}call.resolve(outcome.value);`, `${i3}}`]),
       `${i2}}`,
       `${i1}} else if (source.__ipc === 'send' && Array.isArray(source.args)) {`,
-      `${i2}const args: unknown[] = source.args;`,
+      ...(serialized
+         ? [
+              `${i2}const args = readSentArguments(channel, source.args);`,
+              `${i2}if (!args) {`,
+              `${i3}return;`,
+              `${i2}}`,
+           ]
+         : [`${i2}const args: unknown[] = source.args;`]),
       `${i2}for (const listener of [...(peer.listeners.get(channel) ?? [])]) {`,
       `${i3}try {`,
       `${i4}const result = listener(...args) as { then?: unknown } | undefined;`,
@@ -242,11 +325,13 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i2}const id: number = source.id;`,
       `${i2}const args: unknown[] = source.args;`,
       `${i2}const handler = peer.handlers.get(channel);`,
-      `${i2}void settleInvoke(() => {`,
+      `${i2}void settleInvoke(${serialized ? "async " : ""}() => {`,
       `${i3}if (!handler) {`,
       `${i4}throw { name: 'IpcUtilityError', message: \`The other side has no handler for the channel '\${channel}'\`, code: 'IPC_UTILITY_NO_HANDLER' };`,
       `${i3}}`,
-      `${i3}return handler(...args);`,
+      ...(serialized
+         ? [`${i3}return encodeValue(channel, await handler(...readArguments(channel, args)));`]
+         : [`${i3}return handler(...args);`]),
       `${i2}}).then((envelope) => sendUtilityReply(peer, channel, id, envelope));`,
       `${i1}}`,
       "}",
@@ -257,6 +342,17 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i3}reject(new IpcUtilityError(channel, \`The other side of the channel '\${channel}' is gone\`, 'IPC_UTILITY_EXITED'));`,
       `${i3}return;`,
       `${i2}}`,
+      ...(serialized
+         ? [
+              `${i2}let wired: unknown[];`,
+              `${i2}try {`,
+              `${i3}wired = [encodeValue(channel, args)];`,
+              `${i2}} catch (error) {`,
+              `${i3}reject(error);`,
+              `${i3}return;`,
+              `${i2}}`,
+           ]
+         : []),
       `${i2}const id = ++lastUtilityCallId;`,
       `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
       `${i2}peer.pending.set(id, {`,
@@ -271,7 +367,7 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i3}},`,
       `${i2}});`,
       `${i2}try {`,
-      `${i3}peer.post({ __ipc: 'call', channel, id, args });`,
+      `${i3}peer.post({ __ipc: 'call', channel, id, ${serialized ? "args: wired" : "args"} });`,
       `${i2}} catch (error) {`,
       `${i3}peer.pending.delete(id);`,
       `${i3}reject(unsendableUtilityError(channel, error));`,
@@ -291,8 +387,9 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i1}if (peer.closed) {`,
       `${i2}throw new IpcUtilityError(channel, \`The other side of the channel '\${channel}' is gone\`, 'IPC_UTILITY_EXITED');`,
       `${i1}}`,
+      ...(serialized ? [`${i1}const wired = [encodeValue(channel, args)];`] : []),
       `${i1}try {`,
-      `${i2}peer.post({ __ipc: 'send', channel, args });`,
+      `${i2}peer.post({ __ipc: 'send', channel, ${serialized ? "args: wired" : "args"} });`,
       `${i1}} catch (error) {`,
       `${i2}throw unsendableUtilityError(channel, error);`,
       `${i1}}`,

@@ -12,7 +12,12 @@
 import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
-import { buildErrorEnvelope, buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
+import {
+   buildErrorEnvelope,
+   buildSerializerRuntime,
+   buildUtilityPeer,
+   UTILITY_RUNTIME_NAMES,
+} from "./utility-runtime.js";
 
 interface ChannelEntry {
    name: string;
@@ -37,6 +42,18 @@ export class UtilityBindingsWriter extends BaseWriter {
          "utilityPeer",
          "getUtilityPeer",
          "globalThis",
+         // The serializer of the config.
+         ...(this.usesSerializer()
+            ? [
+                 "ipcSerialize",
+                 "ipcDeserialize",
+                 "IpcSerializationError",
+                 "encodeValue",
+                 "decodeValue",
+                 "readArguments",
+                 "readSentArguments",
+              ]
+            : []),
          // The code which serves the ports that the main process brokers for pages.
          ...(this.hasBrokeredChannels()
             ? [
@@ -64,6 +81,10 @@ export class UtilityBindingsWriter extends BaseWriter {
       return this.pfsArray.some((pfs) =>
          pfs.specs.channelSpecArray.some((spec) => this.isBrokeredSpec(spec)),
       );
+   }
+   /** The file only holds the channels with the main process and with the pages over brokered ports. */
+   protected isSerializedSpec(spec: t.ChannelSpec): boolean {
+      return this.usesSerializer() && (this.isUtilitySpec(spec) || this.isBrokeredSpec(spec));
    }
    /** Whether the schema has anything for this file, which is not written otherwise. */
    public hasChannels(): boolean {
@@ -95,9 +116,13 @@ export class UtilityBindingsWriter extends BaseWriter {
       }
       const out = importDeclarations.sort(utils.compareStrings);
       const brokered = this.getBrokeredSpecs();
+      if (this.hasSerializedChannels()) {
+         out.push(this.buildSerializerImport());
+      }
       out.push(
+         ...(this.hasSerializedChannels() ? [buildSerializerRuntime(this.indents)] : []),
          buildErrorEnvelope(this.indents),
-         buildUtilityPeer(this.indents),
+         buildUtilityPeer(this.indents, this.usesSerializer()),
          this.buildParentPort(brokered.length > 0),
          ...(brokered.length > 0 ? [this.buildBrokerServer(brokered)] : []),
          this.buildBindings(channels),
@@ -168,6 +193,11 @@ export class UtilityBindingsWriter extends BaseWriter {
     * that goes wrong before the first chunk is sent as the `error` message of the call. A chunk that
     * cannot be cloned stops the iterator and fails the stream.
     *
+    * With a serializer, the arguments of a `stream` message are a list of one value, as in the
+    * shared peer code, and read before the handler runs: arguments that cannot be read fail the
+    * stream like any error before the first chunk. A chunk is serialized as it is sent, and one that
+    * cannot be fails the stream with the `IpcSerializationError`.
+    *
     * The flow is controlled by credits, per call, as in `startStream` of `main.ts`. A call starts
     * with a `limit` of the `highWaterMark` of its channel, and the pump does not pull from the
     * generator once it has sent that many chunks. The page raises the limit with `{ __ipc: 'credit',
@@ -177,6 +207,7 @@ export class UtilityBindingsWriter extends BaseWriter {
     */
    private buildBrokerServer(brokered: t.ChannelSpec[]): string {
       const [i1, i2, i3, i4, i5] = this.indents;
+      const serialized = this.usesSerializer();
       const channels = brokered
          .map((spec) => this.wireName(spec.name))
          .sort(utils.compareStrings)
@@ -259,7 +290,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i2}if (!handler) {`,
          `${i3}throw { name: 'IpcUtilityError', message: \`The utility process has no stream handler for the channel '\${channel}'\`, code: 'IPC_UTILITY_NO_HANDLER' };`,
          `${i2}}`,
-         `${i2}const source = (await handler(...args)) as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> } | null | undefined;`,
+         `${i2}const source = (await handler(...${serialized ? "readArguments(channel, args)" : "args"})) as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> } | null | undefined;`,
          `${i2}const open = source ? source[Symbol.asyncIterator] : undefined;`,
          `${i2}if (!source || typeof open !== 'function') {`,
          `${i3}throw { name: 'IpcUtilityError', message: \`The handler of the channel '\${channel}' did not return an async iterable\`, code: 'IPC_UTILITY_NOT_ITERABLE' };`,
@@ -309,11 +340,17 @@ export class UtilityBindingsWriter extends BaseWriter {
          `${i3}return;`,
          `${i2}}`,
          `${i2}try {`,
-         `${i3}peer.post({ __ipc: 'chunk', channel, id, value: step.value });`,
+         `${i3}peer.post({ __ipc: 'chunk', channel, id, value: ${serialized ? "encodeValue(channel, step.value)" : "step.value"} });`,
          `${i3}sent += 1;`,
          `${i2}} catch (error) {`,
          `${i3}stopBrokerIterator(iterator);`,
-         `${i3}fail({ name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
+         ...(serialized
+            ? [
+                 `${i3}fail(error instanceof IpcSerializationError ? error : { name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
+              ]
+            : [
+                 `${i3}fail({ name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
+              ]),
          `${i3}return;`,
          `${i2}}`,
          `${i1}}`,

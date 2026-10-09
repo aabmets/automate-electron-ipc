@@ -1338,8 +1338,15 @@ It applies to `port` and `mainPort` channels as well, at both ends, whether the 
 page or the main process: a message is posted as a list of one value, the list of the arguments as the
 serializer made it. The main process only pairs the pages of a `port` channel and sees none of their
 messages, so its file does not import the serializer for that channel.
+It applies to the channels of utility processes as well, at both ends, in `main.ts`, in `utility.ts` and
+in the preload script: the arguments and the result of `callUtility` and `callMain`, the arguments of
+`notifyUtility` and `notifyMain`, and, over the brokered port, the arguments and the result of
+`invokeUtility` and the arguments and the chunks of `streamUtility`. They travel as they do between a
+page and the main process: the arguments of a call as one value, the list of them. The main process only
+brokers the port between a page and a utility process and sees none of its messages, so its file does not
+import the serializer for `invokeUtility` and `streamUtility`.
 It does not apply to the errors of an `invoke`, whose `data` is cloned as before, nor to the channels
-of utility processes and the channels of service workers, which carry their values as they are.
+of service workers, which carry their values as they are.
 
 - **Order.** The main process checks the sender first, then deserializes, then runs the `validate`
   schema on the deserialized arguments. A message from a sender that is rejected never reaches the
@@ -1355,6 +1362,22 @@ of utility processes and the channels of service workers, which carry their valu
   is there. A message that waits in the queue for a port is serialized when the queue is flushed, so one
   that cannot be is logged with `console.error` and dropped, and the others go on. A message that arrives
   and cannot be deserialized is logged and dropped as well.
+  For a utility process, a call whose arguments cannot be serialized rejects, and a `send` throws, with
+  an `IpcSerializationError` in `main.ts` and in `utility.ts` (both export the class); in the page it is
+  the plain object, as above. A call that arrives with arguments that cannot be read, or whose result
+  cannot be serialized, is answered with the error envelope, so the caller rejects with an
+  `IpcUtilityError` that has the `name` `IpcSerializationError` and the `code` `IPC_SERIALIZATION`. A
+  reply that cannot be deserialized rejects the call with an `IpcSerializationError`. A `send` that
+  arrives and cannot be read is logged with `console.error` and dropped, and a `once` listener is not used
+  up by it. A stream whose arguments cannot be read, or one of whose chunks cannot be serialized in the
+  child, fails with the error; a chunk that the page cannot deserialize fails the stream there and
+  cancels it in the child.
+- **The utility file.** `utility.ts` imports the serializer module like `main.ts` does: a package name
+  stays as it is, and a path from the project root becomes a path relative to `utility.ts`. A utility
+  process is a Node process with Node's module resolution, not a sandbox, so a package resolves from the
+  place of the file. Build `utility.ts` and the serializer module for the child the way you build the
+  rest of the child (the same bundler config as for `main.ts`), so that the package or the TypeScript path
+  is there when the process starts. The child and the main process must use the same serializer module.
 - **`contextBridge`.** The page and the preload script are separate worlds. The values that your
   serializer revives in the preload script reach the page through `contextBridge`, which copies them
   again: a `Date`, a `Map` and a `Set` stay what they are, a class instance becomes a plain object
