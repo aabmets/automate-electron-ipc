@@ -22,4 +22,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   (`node_modules/.bin/biome` exists here) and checks that `--check` reports a fresh project as up to
   date after a formatted run.
 - **Follow-up IDs:** T162-T163.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `format` runs inside `planRun` through `src/formatter.ts` (injectable spawn). The
+  formatter gets the body without the notice, and the notice is put in front of its output: the notice
+  has `biome-ignore-all format`, which makes Biome return the whole file unformatted. A formatter that
+  cannot be spawned for a reason other than a missing binary (such as `EACCES`) is an error too. No
+  follow-ups; T162-T163 stay unused.

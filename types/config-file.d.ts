@@ -91,6 +91,13 @@ export interface AutoIpcConfig {
     */
    getPathForFile?: boolean;
    /**
+    * Formats the generated files with the formatter of your project: `"biome"` or `"prettier"`.
+    * The formatter runs from `node_modules/.bin` of the project root, so your own formatter config
+    * applies. If the binary is not installed, a warning is printed and the files are written
+    * unformatted. `false`, the default, writes the files as they are rendered.
+    */
+   format?: "biome" | "prettier" | false;
+   /**
     * A module that exports the functions `serialize(value)` and `deserialize(wire)`, in the shape
     * of superjson: what `serialize` returns must be cloneable by Electron, and `deserialize` turns
     * it back into the value. The generated main and preload code apply them to the arguments and

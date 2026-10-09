@@ -196,3 +196,20 @@ describe("validateOptionalConfig, getPathForFile", () => {
       expect(() => check(value)).toThrowError(/getPathForFile/);
    });
 });
+
+describe("validateOptionalConfig, format", () => {
+   const check = (format: unknown) =>
+      validateOptionalConfig({ ...baseConfig, format: format as "biome" });
+
+   it.each(["biome", "prettier", false])("accepts %j", (value) => {
+      expect(() => check(value)).not.toThrowError();
+   });
+
+   it("accepts a config without the option", () => {
+      expect(() => validateOptionalConfig(baseConfig)).not.toThrowError();
+   });
+
+   it.each(["dprint", "Biome", true, 0, null, []])("rejects %j", (value) => {
+      expect(() => check(value)).toThrowError(/format must be 'biome', 'prettier' or false/);
+   });
+});

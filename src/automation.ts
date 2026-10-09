@@ -13,6 +13,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
 import cfg from "./config.js";
+import { createFormatter } from "./formatter.js";
 import logger from "./logger.js";
 import { writeOutputs } from "./output-files.js";
 import type { SchemaError } from "./parser/diagnostics.js";
@@ -137,7 +138,9 @@ export async function planRun(options?: t.RunOptions | string): Promise<t.RunPla
    logger.cloneWarnings(
       pfsArray.flatMap((pfs) => getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
-   const outputs = collectWriters(config, pfsArray).map((writer) => writer.toOutputFile());
+   // The formatter runs before the plan is compared or written, so `--check` sees formatted text.
+   const format = createFormatter(config) ?? undefined;
+   const outputs = collectWriters(config, pfsArray).map((writer) => writer.toOutputFile(format));
    const staleFiles = await findStaleGeneratedFiles(config, outputs);
    return { config, pfsArray, outputs, staleFiles };
 }

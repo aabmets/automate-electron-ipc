@@ -34,6 +34,7 @@ export interface IPCResolvedConfig {
    isolatedWorldId?: number;
    autoExpose: boolean;
    getPathForFile: boolean;
+   format: "biome" | "prettier" | false;
    serializer?: string;
    /** The path of the `serializer` module with `/` separators, when the config gives a path. */
    serializerFilePath?: string;

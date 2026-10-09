@@ -185,7 +185,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [ ] [T46: Mock generation for renderer tests](./tasks/T46-mock-generation-for-renderer-tests.md) · depends on: T14, T38a, T44
 - [ ] [T47a: React hooks (optional output)](./tasks/T47a-react-hooks.md) · depends on: T14, T38a, T44
 - [x] [T41b: Vite / electron-vite plugin (`automate-electron-ipc/vite`)](./tasks/T41b-vite-plugin.md) · depends on: T40, T41a
-- [ ] [T43b: `format` option](./tasks/T43b-format-option.md) · depends on: T43a
+- [x] [T43b: `format` option](./tasks/T43b-format-option.md) · depends on: T43a
 - [ ] [T47b: Vue composables (optional output)](./tasks/T47b-vue-composables.md) · depends on: T47a
 - [-] [T45: Generic DSL syntax](./tasks/T45-generic-dsl-syntax.md)
 - [ ] [T48a: README reference sections and the README example check](./tasks/T48a-readme-reference-and-example-harness.md) · depends on: T38b, T38c, T41b, T42b, T43b, T46, T47b

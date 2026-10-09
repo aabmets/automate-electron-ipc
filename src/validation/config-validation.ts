@@ -12,6 +12,7 @@
 import path from "node:path";
 import type * as t from "@types";
 import {
+   any,
    assert,
    boolean,
    number,
@@ -105,6 +106,13 @@ const IPCOptionalConfigStruct = object({
    ),
    autoExpose: optional(boolean()),
    getPathForFile: optional(boolean()),
+   format: optional(
+      refine(any(), "formatter", (value) =>
+         value === "biome" || value === "prettier" || value === false
+            ? true
+            : "format must be 'biome', 'prettier' or false",
+      ),
+   ),
    serializer: optional(
       refine(string(), "module", (value) => {
          if (value.startsWith(".")) {

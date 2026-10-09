@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import type { FormatFunction } from "../formatter.js";
 import { notice } from "../output-files.js";
 import { type Scope, scopedFilePath } from "../scopes.js";
 import utils from "../utils.js";
@@ -261,8 +262,20 @@ export class BaseWriter {
       return withNotice ? `${notice(this.config)}\n\n${contents}` : contents;
    }
 
-   /** The file as a run writes it: the absolute posix path, and the full text with the notice. */
-   public toOutputFile(): t.OutputFile {
-      return { path: utils.toPosix(this.getTargetFilePath()), contents: this.render() };
+   /**
+    * The file as a run writes it: the absolute posix path, and the full text with the notice.
+    *
+    * @param [format] - Formats the contents. The notice is put in front of what it returns, since
+    * its `biome-ignore-all format` line would make Biome leave the whole file as it is.
+    */
+   public toOutputFile(format?: FormatFunction): t.OutputFile {
+      const file = utils.toPosix(this.getTargetFilePath());
+      if (!format) {
+         return { path: file, contents: this.render() };
+      }
+      return {
+         path: file,
+         contents: `${notice(this.config)}\n\n${format(file, this.render(false))}`,
+      };
    }
 }

@@ -70,7 +70,8 @@ The same options can live in a config file instead, see [Config file](#config-fi
          "serviceWorkerPreloadPath": "src/autoipc/service-worker-preload.ts",
          "exposeAs": "ipc",
          "autoExpose": true,
-         "getPathForFile": false
+         "getPathForFile": false,
+         "format": false
       }
    }
 }
@@ -134,6 +135,13 @@ Config explanation:
    throws for a value that is not a `File`. A channel cannot be named `getPathForFile` while this is on.
    It is in the API of every scope, and in the empty API of a schema without channels for the page.
    Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
+ - `format` - Formats the generated files with the formatter of your project: `"biome"` or `"prettier"`,
+   `false` by default (the files are written as they are rendered). The formatter runs from
+   `node_modules/.bin` of the project root, with the project root as its working directory, so your own
+   formatter config applies. If the binary is not installed, a warning is printed once per run and the files
+   are written unformatted; a formatter that exits with an error fails the run and names the file. The
+   notice at the top of each file is not formatted. `--check` and the programmatic API compare the formatted
+   text, so run them with the same `format` as the run that wrote the files.
  - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
    crosses between a page, a utility process or a service worker and the main process, and to the messages
    of `port` and `mainPort` channels, so that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as

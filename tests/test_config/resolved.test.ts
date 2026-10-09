@@ -53,6 +53,7 @@ describe("getResolvedConfig", () => {
          exposeAs: "ipc",
          autoExpose: true,
          getPathForFile: false,
+         format: false,
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -82,6 +83,7 @@ describe("getResolvedConfig", () => {
                isolatedWorldId: 1004,
                autoExpose: false,
                getPathForFile: true,
+               format: "prettier",
             },
          },
       });
@@ -100,6 +102,7 @@ describe("getResolvedConfig", () => {
          isolatedWorldId: 1004,
          autoExpose: false,
          getPathForFile: true,
+         format: "prettier",
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,
@@ -119,6 +122,12 @@ describe("getResolvedConfig", () => {
 
       it.each(["name", "my-app", "Promise"])("refuses the key '%s'", async (exposeAs) => {
          await expect(resolve({ exposeAs })).rejects.toThrowError(/exposeAs/);
+      });
+
+      it.each(["yes", true, "Biome", null])("refuses the format %j", async (format) => {
+         await expect(resolve({ format })).rejects.toThrowError(
+            /format must be 'biome', 'prettier' or false/,
+         );
       });
 
       it.each(["yes", 1])("refuses the getPathForFile %j", async (getPathForFile) => {

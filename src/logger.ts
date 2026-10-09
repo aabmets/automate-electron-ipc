@@ -142,6 +142,14 @@ export function removedStaleFiles(paths: string[], projectRoot?: string): void {
    success(["Removed stale generated files:", ...paths.map((p) => displayPath(p, projectRoot))]);
 }
 
+/** Warns that the formatter of the `format` option is not installed, so the files stay unformatted. */
+export function formatterMissing(formatter: string, binary: string, projectRoot?: string): void {
+   warn([
+      `The config 'format' is '${formatter}', but '${displayPath(binary, projectRoot)}' does not exist.`,
+      "The generated files are written unformatted. Install the formatter in the project.",
+   ]);
+}
+
 export default {
    setSilent,
    nonExistentSchemaPath,
@@ -154,4 +162,5 @@ export default {
    staleFiles,
    watching,
    removedStaleFiles,
+   formatterMissing,
 };
