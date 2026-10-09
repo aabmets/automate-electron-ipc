@@ -533,12 +533,19 @@ function isVoidType(node: AstNode): boolean {
    return type.type === "TsKeywordType" && type.kind === "void";
 }
 
-/** Tells whether a return type is `void` or, for an async signature, `Promise<void>`. */
-function returnsVoid(returnNode: AstNode, isAsync: boolean): boolean {
-   if (isVoidType(returnNode)) {
+/**
+ * Tells whether a return type is `void`, `Promise<void>` (when `Promise` is the global one), or a
+ * union of those, such as `Promise<void> | void` of a handler that may be async.
+ */
+function returnsVoid(returnNode: AstNode, globalPromise: boolean): boolean {
+   const type = unwrapTypeParentheses(returnNode);
+   if (type.type === "TsUnionType") {
+      return (type.types as AstNode[]).every((member) => returnsVoid(member, globalPromise));
+   }
+   if (isVoidType(type)) {
       return true;
    }
-   const args: AstNode[] = isAsync ? unwrapTypeParentheses(returnNode).typeParams?.params : [];
+   const args: AstNode[] = globalPromise && isPromiseType(type) ? type.typeParams?.params : [];
    return args?.length === 1 && isVoidType(args[0]);
 }
 
@@ -634,6 +641,12 @@ const CLONE_SKIPPED_NODES = new Set([
    "TsSetterSignature",
 ]);
 
+/**
+ * The global thenable types. A `PromiseLike` is a Promise in practice, so it is allowed and reported
+ * in the same places. The generated code treats it as a sync result that `invoke` awaits.
+ */
+const PROMISE_TYPES = new Set(["Promise", "PromiseLike"]);
+
 /** The nodes through which a type is still the outermost type of the result. */
 const CLONE_OUTERMOST_NODES = new Set(["TsParenthesizedType", "TsUnionType", "TsTypeReference"]);
 
@@ -657,6 +670,12 @@ interface CloneWalk {
     * Electron cannot clone a Promise anywhere else.
     */
    promiseOk: boolean;
+   /**
+    * Whether the type is the argument of `Awaited<...>`, which unwraps a Promise or a `PromiseLike`
+    * (and the one inside it) at the outermost position, so those are not reported. Like
+    * `promiseOk`, it ends below an object, an array or a type argument.
+    */
+   awaited: boolean;
    /** The local types being followed, which guards against recursive types. */
    active: string[];
    /** The type parameters in scope, with their constraints. */
@@ -712,6 +731,7 @@ function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
          const inner = {
             ...walk,
             promiseOk: false,
+            awaited: false,
             active: [...walk.active, name],
             scope: typeParamScope(declaration, walk.scope),
          };
@@ -733,7 +753,8 @@ function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
 function walkCloneReference(node: AstNode, walk: CloneWalk): void {
    const args: AstNode[] = node.typeParams?.params ?? [];
    // The arguments of a type are always below the result, so a Promise there is not the result.
-   const below = walk.promiseOk ? { ...walk, promiseOk: false } : walk;
+   const below =
+      walk.promiseOk || walk.awaited ? { ...walk, promiseOk: false, awaited: false } : walk;
    const walkArgs = (list: AstNode[]) => {
       for (const arg of list) {
          walkCloneType(arg, below);
@@ -756,8 +777,14 @@ function walkCloneReference(node: AstNode, walk: CloneWalk): void {
       walkLocalType(name, node, args.length === 0 ? walk : below);
    } else if (UNCLONABLE_GLOBALS.has(name)) {
       reportCloneIssue(walk, "error", node, UNCLONABLE_GLOBALS.get(name) as string);
-   } else if (name === "Promise") {
-      if (walk.promiseOk) {
+   } else if (name === "Awaited" && args.length === 1) {
+      // `Awaited<Promise<X>>` is `X`: it unwraps the thenables at its outermost position.
+      walkCloneType(args[0], { ...walk, promiseOk: false, awaited: true });
+   } else if (PROMISE_TYPES.has(name)) {
+      if (walk.awaited) {
+         // The thenable is unwrapped, so what it resolves to is what is sent, and may be a thenable.
+         walkCloneType(args[0], { ...walk, promiseOk: false });
+      } else if (walk.promiseOk) {
          walkArgs(args);
       } else {
          reportCloneIssue(walk, "error", node, "a Promise");
@@ -776,8 +803,8 @@ function walkCloneType(node: AstNode | undefined, walk: CloneWalk): void {
       return;
    }
    // Only these keep the outermost position of the result, a reference decides for itself.
-   if (walk.promiseOk && !CLONE_OUTERMOST_NODES.has(node.type)) {
-      walk = { ...walk, promiseOk: false };
+   if ((walk.promiseOk || walk.awaited) && !CLONE_OUTERMOST_NODES.has(node.type)) {
+      walk = { ...walk, promiseOk: false, awaited: false };
    }
    if (CLONE_FUNCTION_NODES.has(node.type)) {
       reportCloneIssue(walk, "error", node, "a function");
@@ -841,6 +868,7 @@ export function parseSignature(
       declarations,
       where: "",
       promiseOk: false,
+      awaited: false,
       active: [],
       scope: typeParamScope(fn as AstNode, new Map()),
       issues: cloneIssues,
@@ -875,7 +903,7 @@ export function parseSignature(
       customTypes: Array.from(set),
       returnType,
       returnStart: offsetOf(returnNode.span.start),
-      returnsVoid: returnsVoid(returnNode as AstNode, isAsync),
+      returnsVoid: returnsVoid(returnNode as AstNode, !locals.has("Promise")),
       async: isAsync,
       typeRefs,
       ...(cloneIssues.length > 0 ? { cloneIssues } : {}),

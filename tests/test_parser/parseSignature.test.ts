@@ -114,6 +114,11 @@ describe("parseSignature, void return types", () => {
       "Promise<(void)>",
       "(Promise<void>)",
       "Promise<void /* x */>",
+      // A handler that may be async, as a sync union of both.
+      "Promise<void> | void",
+      "void | Promise<void>",
+      "(Promise<void> | void)",
+      "Promise<void> | Promise<void>",
    ])("treats %s as void", (returnType) => {
       expect(parseSignature(`() => ${returnType}`).returnsVoid).toBe(true);
    });
@@ -130,12 +135,16 @@ describe("parseSignature, void return types", () => {
       "PromiseLike<void>",
       "Foo<void>",
       "void | string",
+      "Promise<void> | string",
+      "Promise<string> | void",
+      "Promise<void> | undefined",
    ])("does not treat %s as void", (returnType) => {
       expect(parseSignature(`() => ${returnType}`).returnsVoid).toBe(false);
    });
 
    it("does not treat a declared Promise<void> as void", () => {
       expect(parseSignature("() => Promise<void>", ["Promise"]).returnsVoid).toBe(false);
+      expect(parseSignature("() => Promise<void> | void", ["Promise"]).returnsVoid).toBe(false);
    });
 });
 

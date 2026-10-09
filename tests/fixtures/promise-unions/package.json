@@ -1,0 +1,9 @@
+{
+   "name": "fixture-promise-unions",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

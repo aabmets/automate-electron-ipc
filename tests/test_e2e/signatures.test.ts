@@ -337,3 +337,31 @@ describe("ipcAutomation, async return types", () => {
       expect(await project.typecheck()).toBe("");
    });
 });
+
+describe("ipcAutomation, results that are Promises, thenables or both", () => {
+   // Regression for T96: `Awaited<Promise<X>>` was reported as a Promise, and a handler of
+   // `Promise<void> | void` was refused for a `send` channel.
+   it("types a result of `Promise<X> | X`, `Awaited` and `PromiseLike` as a promise of X", async () => {
+      project = await runFixture("promise-unions");
+      const windowTypes = project.generated["window.d.ts"];
+
+      const invokeOf = (channel: string) => {
+         const lines = windowTypes.split("\n");
+         return lines[lines.indexOf(`   ${channel}: {`) + 2].trim();
+      };
+      expect(invokeOf("lookup")).toBe(
+         "invoke: (id: number) => Promise<Awaited<Promise<string> | string>>;",
+      );
+      expect(invokeOf("maybe")).toBe(
+         "invoke: () => Promise<Awaited<Promise<string | null> | null>>;",
+      );
+      expect(invokeOf("awaited")).toBe("invoke: () => Promise<Awaited<Awaited<Promise<number>>>>;");
+      expect(invokeOf("thenable")).toBe("invoke: () => Promise<Awaited<PromiseLike<boolean>>>;");
+      expect(project.generated["main.ts"]).toContain("Promise<Awaited<Promise<string> | string>>");
+   });
+
+   it("generates files that type-check", async () => {
+      project = await runFixture("promise-unions");
+      expect(await project.typecheck()).toBe("");
+   });
+});

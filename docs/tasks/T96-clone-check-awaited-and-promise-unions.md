@@ -12,4 +12,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** unwrap `Awaited` (and decide on `PromiseLike`) in the clone check; either support a
   result of `Promise<X> | X` in the generated code, or reject it with a clear error.
 - **Tests:** parser tests of the clone issues; e2e fixtures that type-check the generated output.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The clone check (`src/parser.ts`) unwraps `Awaited<...>` (a Promise or `PromiseLike`, also nested and behind a local alias, but only at the outermost position, so `Awaited<Promise<{ a: Promise<X> }>>` is still reported) and treats `PromiseLike` like `Promise` (allowed as the result, reported elsewhere). A sync result of `Promise<X> | X` is supported, not rejected: the writers already type it as `Promise<Awaited<R>>`, which the new `promise-unions` fixture type-checks for `invoke` and `ask`; the only gap was `returnsVoid`, which now accepts `Promise<void> | void` so a `send` handler can be async.
