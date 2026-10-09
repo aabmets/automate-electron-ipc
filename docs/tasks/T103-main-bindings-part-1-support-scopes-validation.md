@@ -21,4 +21,12 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** No assertion changes. The generated output of every fixture in `tests/fixtures` is
   byte-identical before and after (dump it into the scratchpad first, then `diff -r`), the whole
   suite passes, and `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Pattern for T104 to T106: each feature group is a module of plain
+  exported functions, shaped like `utility-runtime.ts`. A function takes what it reads from the writer
+  as arguments: `indents` first, then the data, and `importsGenerator` where it imports. There are no
+  new classes and no pass-through wrapper methods. The new modules are `main-imports.ts`,
+  `main-registries.ts` (scope registry, target resolver), `main-validation.ts` and
+  `main-support.ts`. `buildSupport` takes a `SupportBuilders` object of callbacks for the groups
+  that are still methods. Each later part replaces its callbacks with direct calls, and T106
+  removes the interface. `main-bindings.ts` went from 3444 to 2913 lines, and the output of all 95
+  fixtures is byte-identical.

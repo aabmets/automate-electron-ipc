@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 94 delivered, 31 remaining, 1 dropped.
+**Progress:** 95 delivered, 30 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -128,7 +128,7 @@ Phase 4 would otherwise grow the big files first. `size-baseline.json` lists the
 tasks work down, and `bun run check` fails when one of them grows.
 
 - [x] [T102: The file size gate and the project skills](./tasks/T102-file-size-gate-and-project-skills.md) · depends on: none
-- [ ] [T103: Split `main-bindings.ts`, part 1: imports, support, scopes and validation](./tasks/T103-main-bindings-part-1-support-scopes-validation.md) · depends on: T102
+- [x] [T103: Split `main-bindings.ts`, part 1: imports, support, scopes and validation](./tasks/T103-main-bindings-part-1-support-scopes-validation.md) · depends on: T102
 - [ ] [T104: Split `main-bindings.ts`, part 2: channels, `ask` and streams](./tasks/T104-main-bindings-part-2-channels-and-asks.md) · depends on: T103
 - [ ] [T105: Split `main-bindings.ts`, part 3: ports, utility and brokered channels](./tasks/T105-main-bindings-part-3-ports-utility-and-broker.md) · depends on: T104
 - [ ] [T106: Split `main-bindings.ts`, part 4: service workers, and the final shape](./tasks/T106-main-bindings-part-4-service-workers.md) · depends on: T105

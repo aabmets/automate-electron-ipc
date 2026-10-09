@@ -14,11 +14,18 @@ import { collectScopes } from "../scopes.js";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 import {
-   buildErrorEnvelope,
-   buildSerializerRuntime,
-   buildUtilityPeer,
-   UTILITY_RUNTIME_NAMES,
-} from "./utility-runtime.js";
+   addScopeImports,
+   addStreamImports,
+   addTargetImports,
+   buildImports,
+   getImportedTypes,
+   getIpcMainImport,
+   importCustomTypes,
+} from "./main-imports.js";
+import { hasScopedGuards } from "./main-registries.js";
+import { buildSupport } from "./main-support.js";
+import { importValidator } from "./main-validation.js";
+import { buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
 
 interface ChannelEntry {
    name: string;
@@ -288,7 +295,8 @@ export class MainBindingsWriter extends BaseWriter {
                eventTypes.add(this.getEventType(spec));
                usesEnvelope ||= this.usesEnvelope(spec);
                usesStreams ||= spec.kind === "Stream";
-               const validator = this.importValidator(
+               const validator = importValidator(
+                  this.importsGenerator,
                   parsedFileSpecs,
                   spec,
                   importDeclarationsArray,
@@ -303,7 +311,8 @@ export class MainBindingsWriter extends BaseWriter {
                }
                channels.push(this.buildMainToRendererChannel(spec));
             } else {
-               const validator = this.importValidator(
+               const validator = importValidator(
+                  this.importsGenerator,
                   parsedFileSpecs,
                   spec,
                   importDeclarationsArray,
@@ -320,32 +329,38 @@ export class MainBindingsWriter extends BaseWriter {
                   ),
                );
             }
-            const specCustomTypes = new Set(this.getImportedTypes(spec));
+            const specCustomTypes = new Set(getImportedTypes(spec, this.isBrokeredSpec(spec)));
             customTypes = customTypes.union(specCustomTypes);
          }
-         this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
+         importCustomTypes(
+            this.importsGenerator,
+            parsedFileSpecs,
+            customTypes,
+            importDeclarationsArray,
+         );
       }
       usesEnvelope ||= offPage.envelope;
       if (this.hasSerializedChannels()) {
          importDeclarationsArray.push(this.buildSerializerImport());
       }
       this.addWorkerImports(offPage.workers, electronTypeImportsSet);
-      this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
-      this.addTargetImports(usesIpcMain, electronTypeImportsSet);
-      const scopes = this.getScopes();
-      this.addScopeImports(scopes.length > 0, electronTypeImportsSet);
+      addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
+      addTargetImports(usesIpcMain, electronTypeImportsSet);
+      const scopes = collectScopes(this.pfsArray);
+      addScopeImports(scopes.length > 0, electronTypeImportsSet);
       const usesAsks = this.hasChannels("Unicast");
       const usesEmits = this.hasChannels("Broadcast");
       const usesRendererPorts = this.hasPorts("RendererToRenderer");
       const usesMainPorts = this.hasPorts("MainToRenderer");
       const usesPorts = usesRendererPorts || usesMainPorts;
-      const out = this.buildImports(
-         [...this.getIpcMainImport(usesIpcMain || usesAsks || usesPorts), ...electronImportsSet],
+      const out = buildImports(
+         [...getIpcMainImport(usesIpcMain || usesAsks || usesPorts), ...electronImportsSet],
          [...electronTypeImportsSet],
          importDeclarationsArray,
       );
       const [i0] = this.indents;
-      const bindingsExpression = this.buildSupport(
+      const bindingsExpression = buildSupport(
+         this.indents,
          {
             usesIpcMain,
             usesValidation,
@@ -363,10 +378,25 @@ export class MainBindingsWriter extends BaseWriter {
             workerSpecs: offPage.workers,
             workerValidators: offPage.validators,
             scopes,
-            usesScopedGuards: this.hasScopedGuards(),
+            usesScopedGuards: hasScopedGuards(this.pfsArray),
             usesEventWatch: this.usesEventWatch(),
          },
          [...eventTypes].sort(utils.compareStrings),
+         {
+            senderHelpers: (usesEmits) => this.buildSenderHelpers(usesEmits),
+            eventWatch: () => this.buildEventWatch(),
+            askHelpers: () => this.buildAskHelpers(),
+            workerHelpers: (specs, usesAsks, validators) =>
+               this.buildWorkerHelpers(specs, usesAsks, validators),
+            workerEventType: (spec) => this.getWorkerEventType(spec),
+            streamHelpers: () => this.buildStreamHelpers(),
+            utilityHelpers: () => this.buildUtilityHelpers(),
+            portRegistry: () => this.buildPortRegistry(),
+            pageLoadWatch: () => this.buildPageLoadWatch(),
+            brokerHelpers: () => this.buildBrokerHelpers(),
+            portHelpers: () => this.buildPortHelpers(),
+            mainPortHelpers: () => this.buildMainPortHelpers(),
+         },
       );
       bindingsExpression.push("\nexport const ipc = {");
       for (const channel of this.sortChannels(channels)) {
@@ -408,55 +438,6 @@ export class MainBindingsWriter extends BaseWriter {
       uses.envelope ||= this.usesWorkerEnvelope(spec);
       return [this.buildWorkerChannel(spec)];
    }
-   /** The import of `ipcMain`, if the generated code registers a listener or a handler. */
-   private getIpcMainImport(used: boolean): string[] {
-      return used ? ["ipcMain as electronIpcMain"] : [];
-   }
-   /** Adds the import lines for the custom types that the channels of the file use. */
-   private importCustomTypes(
-      pfs: t.ParsedFileSpecs,
-      customTypes: Set<string>,
-      declarations: string[],
-   ): void {
-      for (const customType of customTypes) {
-         const declaration = this.importsGenerator.getDeclaration(pfs, customType);
-         if (declaration) {
-            declarations.push(declaration);
-         }
-      }
-   }
-   /** The import lines: the values and the types of `electron`, then the ones from the schema files. */
-   private buildImports(values: string[], types: string[], declarations: string[]): string[] {
-      return [
-         ...(values.length > 0 ? [`import { ${values.join(", ")} } from "electron";`] : []),
-         ...(types.length > 0 ? [`import type { ${types.join(", ")} } from "electron";`] : []),
-         ...declarations.sort(utils.compareStrings),
-      ];
-   }
-   /** Adds the electron imports that the helpers of the `stream` channels use. */
-   private addStreamImports(used: boolean, values: Set<string>, types: Set<string>): void {
-      if (used) {
-         values.add("MessageChannelMain");
-         for (const type of ["MessagePortMain", "WebContents", "WebFrameMain"]) {
-            types.add(type);
-         }
-      }
-   }
-   /** Adds the electron types that `resolveIpcTarget` uses: the `IpcMain` of the app or of some contents. */
-   private addTargetImports(used: boolean, types: Set<string>): void {
-      if (used) {
-         types.add("IpcMain");
-         types.add("WebContents");
-      }
-   }
-   /** Adds the electron types that `registerScope` uses. */
-   private addScopeImports(used: boolean, types: Set<string>): void {
-      if (used) {
-         for (const type of ["BrowserWindow", "WebContents", "WebContentsView"]) {
-            types.add(type);
-         }
-      }
-   }
    /** Whether any schema file declares a channel of the kind from the main process to a renderer. */
    private hasChannels(kind: t.ChannelKind): boolean {
       return this.pfsArray.some((pfs) =>
@@ -474,13 +455,6 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.direction === "MainToRenderer"
          ? this.buildMainPortChannel(spec)
          : this.buildPortChannel(spec);
-   }
-   /**
-    * The custom types of the signature that the generated code needs. The main process only pairs
-    * a page with a child, and sees none of the traffic, so it needs none for those channels.
-    */
-   private getImportedTypes(spec: t.ChannelSpec): string[] {
-      return this.isBrokeredSpec(spec) ? [] : spec.signature.customTypes;
    }
    /**
     * Whether the generated code watches events of contents, windows or children for the calls or
@@ -525,279 +499,6 @@ export class MainBindingsWriter extends BaseWriter {
       // The listener of the replies of an `ask` channel takes the event of `ipcMain.on`.
       return spec.kind === "Unicast" ? [...types, "IpcMainEvent"] : types;
    }
-   /** The helpers that the channels of the file use, in the order that they are declared. */
-   private buildSupport(
-      uses: {
-         usesIpcMain: boolean;
-         usesValidation: boolean;
-         usesEnvelope: boolean;
-         usesSenders: boolean;
-         usesEmits: boolean;
-         usesAsks: boolean;
-         usesPorts: boolean;
-         usesRendererPorts: boolean;
-         usesMainPorts: boolean;
-         usesStreams: boolean;
-         usesSerializer: boolean;
-         usesUtility: boolean;
-         usesBrokers: boolean;
-         workerSpecs: t.ChannelSpec[];
-         workerValidators: Map<t.ChannelSpec, string>;
-         scopes: string[];
-         usesScopedGuards: boolean;
-         usesEventWatch: boolean;
-      },
-      eventTypes: string[],
-   ): string[] {
-      const support: string[] = [];
-      if (uses.scopes.length > 0) {
-         support.push(this.buildScopeRegistry(uses.scopes));
-      }
-      if (uses.usesIpcMain) {
-         support.push(
-            this.buildSenderValidation(eventTypes, uses.usesValidation, uses.usesScopedGuards),
-            this.buildTargetResolver(),
-         );
-      }
-      if (uses.usesValidation || uses.workerValidators.size > 0) {
-         support.push(
-            this.buildArgumentValidation(
-               uses.usesValidation ? eventTypes : [],
-               this.getValidatedWorkerEvents(uses.workerValidators),
-            ),
-         );
-      }
-      if (uses.usesEnvelope) {
-         support.push(this.buildErrorEnvelope());
-      }
-      if (uses.usesSerializer) {
-         support.push(this.buildSerializerHelpers());
-      }
-      if (uses.usesSenders) {
-         support.push(this.buildSenderHelpers(uses.usesEmits));
-      }
-      if (uses.usesEventWatch) {
-         support.push(this.buildEventWatch());
-      }
-      if (uses.usesAsks) {
-         support.push(this.buildAskHelpers());
-      }
-      if (uses.workerSpecs.length > 0) {
-         support.push(
-            this.buildWorkerHelpers(uses.workerSpecs, uses.usesAsks, uses.workerValidators),
-         );
-      }
-      if (uses.usesStreams) {
-         support.push(this.buildStreamHelpers());
-      }
-      if (uses.usesUtility) {
-         support.push(this.buildUtilityHelpers());
-      }
-      if (uses.usesPorts) {
-         support.push(this.buildPortRegistry());
-      }
-      if (uses.usesPorts || uses.usesBrokers) {
-         support.push(this.buildPageLoadWatch());
-      }
-      if (uses.usesBrokers) {
-         support.push(this.buildBrokerHelpers());
-      }
-      if (uses.usesRendererPorts) {
-         support.push(this.buildPortHelpers());
-      }
-      if (uses.usesMainPorts) {
-         support.push(this.buildMainPortHelpers());
-      }
-      return support;
-   }
-   /** The scopes that the channels list, in code unit order. */
-   private getScopes(): string[] {
-      return collectScopes(this.pfsArray);
-   }
-   /**
-    * Whether a call from a renderer is checked against a scope: the channels that a page calls in
-    * the main process (`invoke`, `send` and `stream`) with `scopes`.
-    */
-   private hasScopedGuards(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some(
-            (spec) => spec.direction === "RendererToMain" && spec.scopes !== undefined,
-         ),
-      );
-   }
-   /**
-    * The registry of the scopes of the windows: `IpcScope`, the names that the schema declares, and
-    * `registerScope(target, scope)`, which puts the contents of a window, a view or contents into a
-    * scope. A channel with `scopes` is open only to the contents that are registered in one of its
-    * scopes, and contents that are in no scope can use only the channels without `scopes`. The
-    * registry holds the ID of the contents, so it keeps no reference to them. An entry is removed
-    * by its disposer and when the contents are destroyed, and registering the contents again
-    * replaces the entry: the disposer of the replaced one does nothing. A scope that the schema
-    * does not declare is a mistake which would otherwise lock the window out without a word, so
-    * it throws.
-    */
-   private buildScopeRegistry(scopes: string[]): string {
-      const [i1, i2, i3] = this.indents;
-      const names = scopes.map((scope) => `'${scope}'`);
-      return [
-         "",
-         `export type IpcScope = ${names.join(" | ")};`,
-         "",
-         `const ipcScopeNames: readonly string[] = [${names.join(", ")}];`,
-         "",
-         "interface ScopeEntry {",
-         `${i1}scope: IpcScope;`,
-         `${i1}remove: () => void;`,
-         "}",
-         "",
-         "const scopeRegistry: { [id: string]: ScopeEntry | undefined } = { __proto__: null } as any;",
-         "",
-         "export function registerScope(",
-         `${i1}target: BrowserWindow | WebContents | WebContentsView,`,
-         `${i1}scope: IpcScope,`,
-         "): () => void {",
-         `${i1}if (!ipcScopeNames.includes(scope)) {`,
-         `${i2}throw new TypeError(\`The scope '\${scope}' is not declared in the schema. Use one of: \${ipcScopeNames.join(', ')}\`);`,
-         `${i1}}`,
-         `${i1}const contents = 'webContents' in target ? target.webContents : target;`,
-         `${i1}if (contents.isDestroyed()) {`,
-         `${i2}throw new TypeError('Object has been destroyed');`,
-         `${i1}}`,
-         `${i1}const id = contents.id;`,
-         `${i1}scopeRegistry[id]?.remove();`,
-         `${i1}const remove = () => {`,
-         `${i2}if (scopeRegistry[id] === entry) {`,
-         `${i3}delete scopeRegistry[id];`,
-         `${i2}}`,
-         `${i2}if (!contents.isDestroyed()) {`,
-         `${i3}contents.removeListener('destroyed', remove);`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}const entry: ScopeEntry = { scope, remove };`,
-         `${i1}scopeRegistry[id] = entry;`,
-         `${i1}contents.once('destroyed', remove);`,
-         `${i1}return remove;`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * Where a listener or handler is registered: `resolveIpcTarget` returns the global `ipcMain`, or
-    * with `options.webContents` the `ipc` of those contents, which Electron dispatches to before
-    * `ipcMain` and which only gets the messages of that page. It also gives the registry of the
-    * handlers that the target has now, which a disposer compares against (it uses no global, which
-    * a schema type could shadow, and has no prototype), and `watch`, which disposes the
-    * registration when the contents are destroyed. The registry of the contents and the single
-    * `destroyed` listener are made once per contents, so any number of channels does not hit the
-    * limit of listeners, and both are dropped when the contents are destroyed. A handler replaces
-    * the one of its channel, and the registration it replaces is released at once, so registering
-    * again for each load does not accumulate the callbacks that were replaced. Contents which are
-    * already destroyed throw, since `ipc` would never receive anything.
-    */
-   private buildTargetResolver(): string {
-      const [i1, i2, i3, i4] = this.indents;
-      return [
-         "",
-         "export interface IpcListenOptions {",
-         `${i1}/**`,
-         `${i1} * Registers on the \`ipc\` of these contents instead of the global \`ipcMain\`: only the`,
-         `${i1} * messages of this page arrive, an \`invoke\` handler wins over the global one, and the`,
-         `${i1} * registration is removed when the contents are destroyed.`,
-         `${i1} */`,
-         `${i1}webContents?: WebContents;`,
-         "}",
-         "",
-         "interface IpcTarget {",
-         `${i1}ipc: IpcMain;`,
-         `${i1}handlers: { [channel: string]: unknown };`,
-         `${i1}watch: (remove: () => void, handled?: string) => () => void;`,
-         "}",
-         "",
-         "interface IpcContentsRecord {",
-         `${i1}handlers: { [channel: string]: unknown };`,
-         `${i1}removers: (() => void)[];`,
-         `${i1}/** The remover of the registration which holds the handler of each channel now. */`,
-         `${i1}current: { [channel: string]: unknown };`,
-         "}",
-         "",
-         "const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };",
-         "",
-         "const contentsIpcRegistry: { [id: string]: unknown } = { __proto__: null };",
-         "",
-         "function resolveIpcTarget(options?: IpcListenOptions): IpcTarget {",
-         `${i1}const contents = options?.webContents;`,
-         `${i1}if (!contents) {`,
-         `${i2}return { ipc: electronIpcMain, handlers: registeredHandlers, watch: () => () => {} };`,
-         `${i1}}`,
-         `${i1}if (contents.isDestroyed()) {`,
-         `${i2}throw new TypeError('Object has been destroyed');`,
-         `${i1}}`,
-         `${i1}const id = contents.id;`,
-         `${i1}let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;`,
-         `${i1}if (!record) {`,
-         `${i2}const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [], current: { __proto__: null } };`,
-         `${i2}record = created;`,
-         `${i2}contentsIpcRegistry[id] = created;`,
-         `${i2}contents.once('destroyed', () => {`,
-         `${i3}delete contentsIpcRegistry[id];`,
-         `${i3}for (const remove of created.removers.slice()) {`,
-         `${i4}remove();`,
-         `${i3}}`,
-         `${i2}});`,
-         `${i1}}`,
-         `${i1}const { handlers, removers, current } = record;`,
-         `${i1}const forget = (remove: () => void): void => {`,
-         `${i2}for (let at = 0; at < removers.length; at++) {`,
-         `${i3}if (removers[at] === remove) {`,
-         `${i3}${i1}removers.splice(at, 1);`,
-         `${i3}${i1}return;`,
-         `${i3}}`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}return {`,
-         `${i2}ipc: contents.ipc,`,
-         `${i2}handlers,`,
-         `${i2}watch: (remove, handled) => {`,
-         `${i3}// A handler replaces the one of its channel, so the registration it replaced is released:`,
-         `${i3}// its remover would otherwise hold the replaced callback until the contents are destroyed.`,
-         `${i3}if (handled !== undefined) {`,
-         `${i4}const replaced = current[handled] as (() => void) | undefined;`,
-         `${i4}if (replaced) {`,
-         `${i4}${i1}forget(replaced);`,
-         `${i4}}`,
-         `${i4}current[handled] = remove;`,
-         `${i3}}`,
-         `${i3}removers.push(remove);`,
-         `${i3}return () => {`,
-         `${i4}forget(remove);`,
-         `${i4}if (handled !== undefined && current[handled] === remove) {`,
-         `${i4}${i1}delete current[handled];`,
-         `${i4}}`,
-         `${i3}};`,
-         `${i2}},`,
-         `${i1}};`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * Imports the validator of the channel, if it has one, and returns its local name. The import
-    * line goes to `declarations` once, however many channels use the same validator.
-    */
-   private importValidator(
-      pfs: t.ParsedFileSpecs,
-      spec: t.ChannelSpec,
-      declarations: string[],
-   ): string | null {
-      if (!spec.validate) {
-         return null;
-      }
-      const imported = this.importsGenerator.getValueImport(pfs, spec.validate);
-      if (imported.declaration) {
-         declarations.push(imported.declaration);
-      }
-      return imported.local;
-   }
    /**
     * Whether the results and errors of the handler of the channel are sent as an envelope. A
     * stream always does, since the start of a stream has no error of Electron's to leave it to.
@@ -806,243 +507,11 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.kind === "Stream" || (spec.kind === "Unicast" && !this.config.rawErrors);
    }
    /**
-    * The envelope of `invoke` channels: `settleInvoke` runs the handler and answers with
-    * `{ ok: true, value }`, or with `{ ok: false, error }` when anything fails, including the
-    * rejection of the sender and the validation of the arguments. `toIpcError` reduces what was
-    * thrown to `{ name, message, code?, data? }`. Electron reports a rejected handler to the
-    * renderer as the text `Error invoking remote method`, so these fields would be lost, and the
-    * stack never leaves the main process. `data` is dropped when it cannot be cloned, since it
-    * would otherwise fail the whole reply.
-    */
-   private buildErrorEnvelope(): string {
-      return buildErrorEnvelope(this.indents);
-   }
-   /**
     * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
     * to `on` listeners.
     */
    private getEventType(spec: t.ChannelSpec): string {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
-   }
-   /**
-    * The serializer of the config, for the channels between the main process and a page and for
-    * the ones between the main process and a utility process (see `buildSerializerRuntime`).
-    * `IpcSerializationError` reaches the caller of a `send`, `emit` or `ask`, and the page as the
-    * `{ name, message, code }` of the usual error envelope. Deserializing is done only after the
-    * sender is checked, so that a rejected sender reaches no code of the serializer.
-    */
-   private buildSerializerHelpers(): string {
-      return buildSerializerRuntime(this.indents);
-   }
-   /**
-    * The sender validation of the main process: `configureIpc`, which sets the global validator
-    * and the rejection hook, `IpcForbiddenError`, and `isSenderAllowed`, which every listener
-    * and handler of a renderer-to-main channel calls first.
-    *
-    * Electron sets `senderFrame` to `null` when the frame is gone, so a missing frame is always
-    * rejected, and the frame is read before any other work. The origin of the frame is compared
-    * for equality with the allowed origins, never as a prefix, which `example.com.attacker.com`
-    * would pass. A validator which throws counts as a rejection. Nothing is checked, as before,
-    * until a validator or an `allowedOrigins` list applies to the channel.
-    */
-   private buildSenderValidation(
-      eventTypes: string[],
-      usesValidation: boolean,
-      usesScopes: boolean,
-   ): string {
-      const [i1, i2, i3] = this.indents;
-      const event = eventTypes.join(" | ");
-      // With validators, the hook also learns why the call was rejected.
-      const reason = usesValidation ? ", error: IpcForbiddenError | IpcValidationError" : "";
-      const reasonArg = usesValidation ? ", new IpcForbiddenError(channel)" : "";
-      return [
-         "",
-         "export class IpcForbiddenError extends Error {",
-         `${i1}readonly code = 'IPC_FORBIDDEN';`,
-         `${i1}readonly channel: string;`,
-         `${i1}constructor(channel: string) {`,
-         `${i2}super(\`The sender of the message is not allowed to use the channel '\${channel}'\`);`,
-         `${i2}this.name = 'IpcForbiddenError';`,
-         `${i2}this.channel = channel;`,
-         `${i1}}`,
-         "}",
-         "",
-         "export interface IpcConfig {",
-         `${i1}validateSender?: (event: ${event}, channel: string) => boolean;`,
-         `${i1}onRejected?: (event: ${event}, channel: string${reason}) => void;`,
-         "}",
-         "",
-         "let ipcConfig: IpcConfig = {};",
-         "",
-         "export function configureIpc(config: IpcConfig): void {",
-         `${i1}ipcConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
-         "}",
-         "",
-         usesScopes
-            ? `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[], scopes?: readonly IpcScope[]): boolean {`
-            : `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[]): boolean {`,
-         `${i1}const validateSender = ipcConfig.validateSender;`,
-         `${i1}if (!allowedOrigins && ${usesScopes ? "!scopes && " : ""}!validateSender) {`,
-         `${i2}return true;`,
-         `${i1}}`,
-         `${i1}let allowed = false;`,
-         `${i1}try {`,
-         `${i2}const frame = event.senderFrame;`,
-         `${i2}const origin = frame ? frame.origin : null;`,
-         ...(usesScopes
-            ? [`${i2}const entry = scopes ? scopeRegistry[event.sender.id] : undefined;`]
-            : []),
-         `${i2}allowed =`,
-         `${i3}frame != null &&`,
-         ...(usesScopes
-            ? [`${i3}(!scopes || (entry !== undefined && scopes.includes(entry.scope))) &&`]
-            : []),
-         `${i3}(!allowedOrigins || (typeof origin === 'string' && allowedOrigins.includes(origin))) &&`,
-         `${i3}(!validateSender || validateSender(event, channel) === true);`,
-         `${i1}} catch {`,
-         `${i2}allowed = false;`,
-         `${i1}}`,
-         `${i1}if (!allowed && ipcConfig.onRejected) {`,
-         `${i2}try {`,
-         `${i3}ipcConfig.onRejected(event, channel${reasonArg});`,
-         `${i2}} catch {`,
-         `${i3}// A failing hook must not decide whether the call is rejected.`,
-         `${i2}}`,
-         `${i1}}`,
-         `${i1}return allowed;`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * The argument validation of the main process, for channels with a `validate` option:
-    * `IpcValidationError`, which carries the issues of the schema, and `validateArguments`,
-    * which every validated listener calls after the sender check. It uses the Standard Schema
-    * interface through a structural type, so the generated file has no dependency on a library.
-    *
-    * It validates the arguments exactly as they arrived, as one array, and passes the output of
-    * the schema on, so what the handler gets is what the schema vouches for. A schema which
-    * throws, rejects or answers with anything but a result, counts as a failure, so it never
-    * lets an argument through. A synchronous schema keeps the call synchronous. An invalid call
-    * is reported to `onRejected`, then an invoke throws the error and a send is dropped.
-    *
-    * `eventTypes` are the events of the channels of the pages, and `workerEvents` those of the
-    * validated channels of service workers. A worker call has its own hook, so it passes `report`,
-    * which `validateArguments` calls instead of the `onRejected` of `configureIpc`.
-    */
-   private buildArgumentValidation(eventTypes: string[], workerEvents: string[]): string {
-      const [i1, i2, i3] = this.indents;
-      const pageEvent = eventTypes.join(" | ");
-      const workerEvent = workerEvents.join(" | ");
-      const event = [...eventTypes, ...workerEvents].join(" | ");
-      const hasPages = eventTypes.length > 0;
-      const hasWorkers = workerEvents.length > 0;
-      // The page hook is called when no `report` is given. A file with only worker calls has no such hook.
-      const notify = hasWorkers
-         ? hasPages
-            ? [
-                 `${i3}if (report) {`,
-                 `${i3}${i1}report(event as ${workerEvent}, channel, error);`,
-                 `${i3}} else {`,
-                 `${i3}${i1}ipcConfig.onRejected?.(event as ${pageEvent}, channel, error);`,
-                 `${i3}}`,
-              ]
-            : [`${i3}report(event as ${workerEvent}, channel, error);`]
-         : [`${i3}ipcConfig.onRejected?.(event, channel, error);`];
-      const report = hasWorkers
-         ? [
-              `${i1}report${hasPages ? "?" : ""}: (event: ${workerEvent}, channel: string, error: IpcValidationError) => void,`,
-           ]
-         : [];
-      return [
-         "",
-         "export interface IpcValidationIssue {",
-         `${i1}readonly message: string;`,
-         `${i1}readonly path?: readonly (string | number | symbol | { readonly key: string | number | symbol })[];`,
-         "}",
-         "",
-         "type IpcSchemaResult =",
-         `${i1}| { readonly value: unknown; readonly issues?: undefined }`,
-         `${i1}| { readonly issues: readonly IpcValidationIssue[] };`,
-         "",
-         "interface IpcArgumentsSchema {",
-         `${i1}readonly '~standard': {`,
-         `${i2}readonly validate: (value: unknown) => IpcSchemaResult | Promise<IpcSchemaResult>;`,
-         `${i1}};`,
-         "}",
-         "",
-         "export class IpcValidationError extends Error {",
-         `${i1}readonly code = 'IPC_VALIDATION';`,
-         `${i1}readonly channel: string;`,
-         `${i1}readonly issues: readonly IpcValidationIssue[];`,
-         `${i1}/** The issues with plain paths, which can be sent to the renderer. */`,
-         `${i1}readonly data: { message: string; path?: (string | number)[] }[];`,
-         `${i1}constructor(channel: string, issues: readonly IpcValidationIssue[]) {`,
-         `${i2}super(\`The arguments of the channel '\${channel}' are invalid: \${issues.map((issue) => issue.message).join('; ')}\`);`,
-         `${i2}this.name = 'IpcValidationError';`,
-         `${i2}this.channel = channel;`,
-         `${i2}this.issues = issues;`,
-         `${i2}this.data = issues.map((issue) => ({`,
-         `${i3}message: issue.message,`,
-         `${i3}path: issue.path?.map((segment) => {`,
-         `${i3}${i1}const key = typeof segment === 'object' ? segment.key : segment;`,
-         `${i3}${i1}return typeof key === 'symbol' ? String(key) : key;`,
-         `${i3}}),`,
-         `${i2}}));`,
-         `${i1}}`,
-         "}",
-         "",
-         "function validateArguments<R>(",
-         `${i1}event: ${event},`,
-         `${i1}channel: string,`,
-         `${i1}schema: IpcArgumentsSchema,`,
-         `${i1}received: unknown[],`,
-         `${i1}drop: boolean,`,
-         `${i1}run: (args: unknown[]) => R,`,
-         ...report,
-         "): R | Promise<R | undefined> | undefined {",
-         `${i1}const reject = (issues: readonly IpcValidationIssue[]): undefined => {`,
-         `${i2}const error = new IpcValidationError(channel, issues);`,
-         `${i2}try {`,
-         ...notify,
-         `${i2}} catch {`,
-         `${i3}// A failing hook must not decide whether the call is rejected.`,
-         `${i2}}`,
-         `${i2}if (!drop) {`,
-         `${i3}throw error;`,
-         `${i2}}`,
-         `${i2}return undefined;`,
-         `${i1}};`,
-         `${i1}const failed = (): undefined => reject([{ message: 'The arguments could not be validated' }]);`,
-         `${i1}const accept = (result: IpcSchemaResult): R | undefined => {`,
-         `${i2}if (!result || result.issues) {`,
-         `${i3}return result ? reject(result.issues) : failed();`,
-         `${i2}}`,
-         `${i2}return Array.isArray(result.value)`,
-         `${i3}? run(result.value)`,
-         `${i3}: reject([{ message: 'The validated arguments are not an array' }]);`,
-         `${i1}};`,
-         `${i1}let outcome: IpcSchemaResult | Promise<IpcSchemaResult>;`,
-         `${i1}try {`,
-         `${i2}outcome = schema['~standard'].validate(received);`,
-         `${i1}} catch {`,
-         `${i2}return failed();`,
-         `${i1}}`,
-         `${i1}if (outcome && typeof (outcome as Promise<IpcSchemaResult>).then === 'function') {`,
-         `${i2}return (outcome as Promise<IpcSchemaResult>).then(accept, failed);`,
-         `${i1}}`,
-         `${i1}return accept(outcome as IpcSchemaResult);`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /** The events of the validated channels that a service worker calls, which the validation reports. */
-   private getValidatedWorkerEvents(validators: Map<t.ChannelSpec, string>): string[] {
-      const events = new Set<string>();
-      for (const spec of validators.keys()) {
-         events.add(this.getWorkerEventType(spec));
-      }
-      return [...events].sort(utils.compareStrings);
    }
    /**
     * `ipc.<name>.on(callback)` and `once` for `send` channels, and `handle` and `handleOnce` for
