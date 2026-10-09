@@ -314,9 +314,11 @@ export default defineChannels({
 | `askWorker` | MainToServiceWorker | any value or promise            |
 | `emitToWorker` | MainToServiceWorker | `void` or `Promise<void>`    |
 
-The verbs for utility processes take no options, and neither do `askWorker` and `emitToWorker`. The
-channels that a service worker calls have `allowedOrigins` and `validate`, and `invokeFromWorker` also
-`timeoutMs`. The only option of the others that is
+`notifyUtility`, `notifyMain`, `askWorker` and `emitToWorker` take no options. `callUtility` and
+`callMain` take `timeoutMs`, and `invokeUtility` and `streamUtility` take `timeoutMs` and `scopes`
+(`streamUtility` also `highWaterMark`); see [Timeouts](#timeouts). None of the utility verbs has
+`allowedOrigins` or `validate`. The channels that a service worker calls have `allowedOrigins` and
+`validate`, and `invokeFromWorker` also `timeoutMs`. The only option of the others that is
 not described in its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
 The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
 With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
@@ -1099,8 +1101,10 @@ A few things to know:
    instead of a call that waits for a child that may be gone. Once a child has exited, `invoke` rejects with
    `IPC_UTILITY_EXITED`, `send` throws it, and so does `connect`.
  - The errors of `invoke` use the envelope also with `rawErrors`, since there is no Electron behavior
-   to leave them to. There are no `allowedOrigins`, `validate` or `timeoutMs` options yet: both
-   ends are your own code. A call whose handler never answers waits until the process exits.
+   to leave them to. `callUtility` and `callMain` take `timeoutMs` (see [Timeouts](#timeouts)), and
+   the default of the config applies to them; a call without a limit, whose handler never answers,
+   waits until the process exits. There are no `allowedOrigins` or `validate` options, and
+   `notifyUtility` and `notifyMain` have no options at all: both ends are your own code.
  - `utility.ts` fails with a `TypeError` when a channel is used outside a utility process. Importing it
    elsewhere is harmless.
  - The signature is checked for what structured clone cannot send, like the others.
@@ -1175,8 +1179,13 @@ A few things to know:
  - The handler of the child is single, as for `callUtility`: a new `handle` replaces the old one, and
    the function it returns removes only its own. Register the handlers when the process starts, since a
    call for a channel without a handler is answered with `IPC_UTILITY_NO_HANDLER`.
- - There are no `allowedOrigins`, `validate` or `timeoutMs` options yet. The main process decides which
-   pages are connected, and a call whose handler never answers waits until the connection closes.
+ - `invokeUtility` and `streamUtility` take `timeoutMs` and `scopes` (and `streamUtility` also
+   `highWaterMark`, above). `timeoutMs` is described under [Timeouts](#timeouts): the default of the
+   config applies to `invokeUtility` but not to `streamUtility`, and a call without a limit, whose
+   handler never answers, waits until the connection closes. `scopes` decides which windows have the
+   channel in their API. There are no `allowedOrigins` or `validate` options: the main process decides
+   which pages are connected, and a port serves only the channel it was made for. The child receives
+   the arguments of the page as they are, so check them in the handler.
 
 #### Service workers
 

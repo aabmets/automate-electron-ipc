@@ -10,4 +10,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   two paragraphs say so. Documentation only, unless the check finds an option the README promises
   elsewhere but the code lacks; then add a task for it instead of fixing it here.
 - **Tests:** none, beyond the e2e fixtures that already cover the options.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Documentation only. `callUtility` and `callMain` take `timeoutMs`; `invokeUtility` and `streamUtility` take `timeoutMs` and `scopes` (`streamUtility` also `highWaterMark`); no utility verb has `allowedOrigins` or `validate`, and the verb paragraph under Verbs was stale as well. No option that the README promises is missing in the code.
