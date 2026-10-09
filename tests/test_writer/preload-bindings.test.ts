@@ -19,6 +19,51 @@ import { describe, expect, it } from "vitest";
 describe("PreloadBindingsWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
 
+   describe("exposure of the API", () => {
+      const channels = shared.buildFileSpecs({
+         name: "getIt",
+         kind: "Unicast",
+         direction: "RendererToMain",
+      });
+      const render = async (
+         pfsArray: t.ParsedFileSpecs[],
+         config: Partial<t.IPCResolvedConfig>,
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, config);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("exposes the API in the main world as 'ipc' when the config says nothing", async () => {
+         const output = await render(channels, {});
+         expect(output).toContain("contextBridge.exposeInMainWorld('ipc', {\n   getIt: {");
+         expect(output).not.toContain("exposeInIsolatedWorld");
+      });
+
+      it("exposes the API under the key of `exposeAs`", async () => {
+         const output = await render(channels, { exposeAs: "api" });
+         expect(output).toContain("contextBridge.exposeInMainWorld('api', {\n   getIt: {");
+         expect(output).not.toContain("'ipc'");
+      });
+
+      it("exposes the API in the isolated world of `isolatedWorldId`", async () => {
+         const output = await render(channels, { exposeAs: "bridge", isolatedWorldId: 1004 });
+         expect(output).toContain(
+            "contextBridge.exposeInIsolatedWorld(1004, 'bridge', {\n   getIt: {",
+         );
+         expect(output).not.toContain("exposeInMainWorld");
+      });
+
+      it("exposes the empty API the same way", async () => {
+         expect(await render([], { exposeAs: "api" })).toBe(
+            "import { contextBridge } from \"electron\";\n\ncontextBridge.exposeInMainWorld('api', {});",
+         );
+         expect(await render([], { isolatedWorldId: 2000 })).toBe(
+            "import { contextBridge } from \"electron\";\n\ncontextBridge.exposeInIsolatedWorld(2000, 'ipc', {});",
+         );
+      });
+   });
+
    it("should write empty ipc object into exposeInMainWorld when pfsArray is empty", async () => {
       const obj = new shared.VitestPreloadBindingsWriter([]);
       await obj.write(false);

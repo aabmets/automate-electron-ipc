@@ -268,6 +268,76 @@ describe("validateOptionalConfig, channelPrefix", () => {
    });
 });
 
+describe("validateOptionalConfig, exposeAs", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (exposeAs: unknown) =>
+      vld.validateOptionalConfig({ ...config, exposeAs: exposeAs as string });
+
+   it.each(["ipc", "api", "myApp", "_bridge", "$ipc", "ipc2", "IpcApi", "electronApi"])(
+      "accepts '%s'",
+      (name) => {
+         expect(() => check(name)).not.toThrowError();
+      },
+   );
+
+   it.each(["", "my-app", "2ipc", "two words", "a.b", "it's", "ipc;", "é", "ipc\n"])(
+      "rejects %j, since it is not an identifier",
+      (name) => {
+         expect(() => check(name)).toThrowError(/exposeAs must be an identifier/);
+      },
+   );
+
+   it.each(["name", "status", "close", "open", "top", "length", "document", "fetch", "location"])(
+      "rejects the property '%s' of window",
+      (name) => {
+         expect(() => check(name)).toThrowError(/reserved word or a global of the page/);
+      },
+   );
+
+   it.each(["class", "default", "new", "null", "true", "typeof", "eval", "arguments"])(
+      "rejects the reserved word '%s'",
+      (name) => {
+         expect(() => check(name)).toThrowError(/reserved word or a global of the page/);
+      },
+   );
+
+   it.each(["Promise", "Error", "Symbol", "Object", "globalThis", "process", "require"])(
+      "rejects the global '%s'",
+      (name) => {
+         expect(() => check(name)).toThrowError(/reserved word or a global of the page/);
+      },
+   );
+
+   it.each([5, null, true, ["a"]])("rejects %j, since it is not a string", (name) => {
+      expect(() => check(name)).toThrowError(/exposeAs/);
+   });
+});
+
+describe("validateOptionalConfig, isolatedWorldId", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (isolatedWorldId: unknown) =>
+      vld.validateOptionalConfig({ ...config, isolatedWorldId: isolatedWorldId as number });
+
+   it.each([1000, 1001, 5000, 2 ** 31 - 1])("accepts %d", (id) => {
+      expect(() => check(id)).not.toThrowError();
+   });
+
+   it("accepts a config without a world", () => {
+      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+   });
+
+   it.each([0, 1, 999, -1000, 1000.5, 2 ** 31, Number.POSITIVE_INFINITY])("rejects %d", (id) => {
+      expect(() => check(id)).toThrowError(/isolatedWorldId must be an integer of 1000 or more/);
+   });
+
+   it.each(["1000", null, true, [1000], Number.NaN])(
+      "rejects %j, since it is not a number",
+      (id) => {
+         expect(() => check(id)).toThrowError(/isolatedWorldId/);
+      },
+   );
+});
+
 describe("validateChannelSpecs, errors", () => {
    const errors = { definition: "NotFoundError | AuthError", customTypes: ["NotFoundError"] };
    const make = (

@@ -25,6 +25,7 @@ import {
    string,
 } from "superstruct";
 import { BROWSER_WINDOW_EVENTS } from "./browser-window-events.js";
+import { isReservedGlobalName } from "./reserved-globals.js";
 import utils from "./utils.js";
 
 export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
@@ -60,6 +61,23 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
             Number.isSafeInteger(value) && value >= 0
                ? true
                : "timeoutMs must be a non-negative integer",
+         ),
+      ),
+      exposeAs: optional(
+         refine(string(), "identifier", (value) => {
+            if (!/^[A-Za-z_$][\w$]*$/.test(value)) {
+               return "exposeAs must be an identifier: letters, digits, _ and $, not starting with a digit";
+            }
+            return isReservedGlobalName(value)
+               ? `exposeAs '${value}' is a reserved word or a global of the page. Choose another name.`
+               : true;
+         }),
+      ),
+      isolatedWorldId: optional(
+         refine(number(), "world", (value) =>
+            Number.isInteger(value) && value >= 1000 && value <= 2 ** 31 - 1
+               ? true
+               : "isolatedWorldId must be an integer of 1000 or more, up to 2147483647",
          ),
       ),
       codeIndent: refine(number(), "clamped", (value) => {

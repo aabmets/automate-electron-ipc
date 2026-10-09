@@ -69,6 +69,7 @@ describe("getResolvedConfig", () => {
 
       expect(config?.ipcSchema?.stats?.isDirectory()).toStrictEqual(false);
       expect(config?.ipcSchema?.stats?.isFile()).toStrictEqual(true);
+      expect(config.isolatedWorldId).toBeUndefined();
       expect(config).toMatchObject({
          projectRoot: "/home/user/project",
          projectUsesNodeNext: false,
@@ -77,6 +78,7 @@ describe("getResolvedConfig", () => {
          rawErrors: false,
          channelPrefix: "autoipc:",
          timeoutMs: 0,
+         exposeAs: "ipc",
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
@@ -99,6 +101,8 @@ describe("getResolvedConfig", () => {
                rawErrors: true,
                channelPrefix: "",
                timeoutMs: 15000,
+               exposeAs: "api",
+               isolatedWorldId: 1004,
             },
          },
       });
@@ -113,12 +117,30 @@ describe("getResolvedConfig", () => {
          rawErrors: true,
          channelPrefix: "",
          timeoutMs: 15000,
+         exposeAs: "api",
+         isolatedWorldId: 1004,
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,
          ipcSchema: {
             path: `${dir}/schema`,
          },
+      });
+   });
+
+   describe("exposure of the API", () => {
+      const resolve = async (autoipc: Record<string, unknown>) => {
+         mocks.mockFspStatsByPath({});
+         mocks.mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it.each(["name", "my-app", "Promise"])("refuses the key '%s'", async (exposeAs) => {
+         await expect(resolve({ exposeAs })).rejects.toThrowError(/exposeAs/);
+      });
+
+      it.each([999, 0, 1000.5])("refuses the world %d", async (isolatedWorldId) => {
+         await expect(resolve({ isolatedWorldId })).rejects.toThrowError(/isolatedWorldId/);
       });
    });
 

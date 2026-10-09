@@ -427,6 +427,53 @@ describe("RendererTypesWriter", () => {
       });
    });
 
+   describe("exposure of the API", () => {
+      const channels = shared.buildFileSpecs({
+         name: "getIt",
+         kind: "Unicast",
+         direction: "RendererToMain",
+         errors: "NotFoundError",
+      });
+      const render = async (
+         pfsArray: t.ParsedFileSpecs[],
+         config: Partial<t.IPCResolvedConfig>,
+      ) => {
+         const obj = new shared.VitestRendererTypesWriter(pfsArray, config);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("declares the global variable as 'ipc' when the config says nothing", async () => {
+         const output = await render(channels, {});
+         expect(output).toContain("\n   var ipc: IpcApi;\n");
+         expect(output).toContain("`ipc.<name>.invoke`");
+      });
+
+      it("declares the global variable under the name of `exposeAs`", async () => {
+         const output = await render(channels, { exposeAs: "api" });
+         expect(output).toContain("\n   var api: IpcApi;\n");
+         expect(output).not.toContain("var ipc");
+         expect(output).toContain("`api.<name>.invoke`");
+         expect(output).toContain("`api.<name>.stream`");
+         expect(output).not.toContain("`ipc.<name>");
+      });
+
+      it("declares the variable of the empty API under the name of `exposeAs`", async () => {
+         expect(await render([], { exposeAs: "api" })).toContain("var api: IpcApi;");
+      });
+
+      it("documents that the variable exists only in the isolated world", async () => {
+         const output = await render(channels, { exposeAs: "bridge", isolatedWorldId: 1004 });
+         expect(output).toContain(
+            "   /** Exposed in the isolated world 1004, so only scripts of that world can use it. */\n   var bridge: IpcApi;",
+         );
+      });
+
+      it("has no such note for the main world", async () => {
+         expect(await render(channels, {})).not.toContain("isolated world");
+      });
+   });
+
    describe("channel prefix", () => {
       it("does not change the declarations, since they use the names from the schema", async () => {
          const channels = [

@@ -109,6 +109,11 @@ export class BaseWriter {
       return `'${this.config.channelPrefix ?? ""}${name}${suffix}'`;
    }
 
+   /** The name that the API is exposed as in the page. */
+   protected getExposeAs(): string {
+      return this.config.exposeAs ?? "ipc";
+   }
+
    /**
     * The time after which an `invoke` channel rejects with an `IpcTimeoutError`: the option of the
     * channel, or else the default of the config. `0` means no timeout.

@@ -39,6 +39,18 @@ export interface IPCOptionalConfig {
     * utility process.
     */
    utilityBindingsPath?: string;
+   /**
+    * The name that the API is exposed as in the page, and that `window.d.ts` declares it as.
+    * Defaults to `"ipc"`. It must be an identifier that is not a reserved word or a global of the
+    * page, such as `name` or `status`.
+    */
+   exposeAs?: string;
+   /**
+    * Exposes the API in the isolated world with this ID, with `contextBridge.exposeInIsolatedWorld`,
+    * instead of in the main world. It must be an integer of 1000 or more, since Electron keeps the
+    * lower IDs for itself. Without it, the API is exposed in the main world.
+    */
+   isolatedWorldId?: number;
 }
 
 export interface IPCResolvedConfig {
@@ -54,6 +66,8 @@ export interface IPCResolvedConfig {
    rawErrors: boolean;
    channelPrefix: string;
    timeoutMs: number;
+   exposeAs: string;
+   isolatedWorldId?: number;
    ipcSchema: {
       path: string;
       stats: Stats | null;

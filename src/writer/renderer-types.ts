@@ -108,13 +108,15 @@ export class RendererTypesWriter extends BaseWriter {
       return spec.direction === "MainToRenderer" ? this.buildMainToRendererChannel(spec) : null;
    }
    /**
-    * `ipc` is declared as a global variable, which types the bare `ipc`, `window.ipc` and
-    * `globalThis.ipc` alike. The empty export makes the file a module, which `declare global`
+    * The API is declared as a global variable, which types the bare name, `window.<name>` and
+    * `globalThis.<name>` alike. The name is `exposeAs` of the config, `ipc` by default. The empty export makes the file a module, which `declare global`
     * requires.
     */
    private renderDeclaration(channels: ChannelEntry[]): string {
       const i0 = this.indents[0];
       const [, i1, i2] = this.indents;
+      const exposeAs = this.getExposeAs();
+      const worldId = this.config.isolatedWorldId;
       const members = this.sortChannels(channels).flatMap((channel) => [
          `\n${i0}${channel.name}: {`,
          ...channel.methods,
@@ -125,8 +127,8 @@ export class RendererTypesWriter extends BaseWriter {
       const errorType = channels.some((channel) => channel.throws)
          ? [
               `${i0}/**`,
-              `${i0} * The object that the promise of \`ipc.<name>.invoke\` is rejected with when the handler`,
-              `${i0} * throws, and that a read of \`ipc.<name>.stream\` is rejected with when the stream fails.`,
+              `${i0} * The object that the promise of \`${exposeAs}.<name>.invoke\` is rejected with when the handler`,
+              `${i0} * throws, and that a read of \`${exposeAs}.<name>.stream\` is rejected with when the stream fails.`,
               `${i0} * It is a plain object, since contextBridge does not keep the fields of an \`Error\`.`,
               `${i0} */`,
               `${i0}type IpcError<E extends Error = Error> = E extends unknown`,
@@ -170,7 +172,12 @@ export class RendererTypesWriter extends BaseWriter {
            ].join("\n")
          : "";
       const globals = [
-         `${i0}var ipc: IpcApi;`,
+         ...(worldId === undefined
+            ? []
+            : [
+                 `${i0}/** Exposed in the isolated world ${worldId}, so only scripts of that world can use it. */`,
+              ]),
+         `${i0}var ${exposeAs}: IpcApi;`,
          ...(errorType ? [errorType] : []),
          ...(timeoutType ? [timeoutType] : []),
          ...(utilityType ? [utilityType] : []),

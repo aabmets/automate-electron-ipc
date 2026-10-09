@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 60 delivered, 19 remaining, 1 dropped.
+**Progress:** 61 delivered, 18 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -87,7 +87,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T28: Invoke timeouts](./tasks/T28-invoke-timeouts.md) · depends on: T18
 - [x] [T29: utilityProcess channels](./tasks/T29-utilityprocess-channels.md) · depends on: T18
 - [x] [T30: Renderer ↔ utility process via a brokered port](./tasks/T30-renderer-utility-process-via.md) · depends on: T26, T29
-- [ ] [T31: Configurable exposure key and isolated worlds](./tasks/T31-configurable-exposure-key-and-isolated.md) · depends on: T13
+- [x] [T31: Configurable exposure key and isolated worlds](./tasks/T31-configurable-exposure-key-and-isolated.md) · depends on: T13
 - [ ] [T32: Composable preload output](./tasks/T32-composable-preload-output.md) · depends on: T31
 - [ ] [T33: Per-window API scopes (least privilege)](./tasks/T33-per-window-api-scopes.md) · depends on: T16, T32
 - [ ] [T34: Per-window scoped handlers (`webContents.ipc`)](./tasks/T34-per-window-scoped-handlers.md) · depends on: T15

@@ -36,15 +36,14 @@ export class PreloadBindingsWriter extends BaseWriter {
       return !this.hasRendererChannels();
    }
    protected renderEmptyFileContents(): string {
-      return [
-         'import { contextBridge } from "electron";\n',
-         "contextBridge.exposeInMainWorld('ipc', {});",
-      ].join("\n");
+      return ['import { contextBridge } from "electron";\n', `${this.getExposeCall()}{});`].join(
+         "\n",
+      );
    }
    protected renderFileContents(): string {
       const groups = this.groupChannels();
       const out = this.buildComponents(groups);
-      const bindingsExpression = ["\ncontextBridge.exposeInMainWorld('ipc', {"];
+      const bindingsExpression = [`\n${this.getExposeCall()}{`];
       for (const channel of this.sortChannels(groups.channels)) {
          bindingsExpression.push(channel.property);
       }
@@ -52,6 +51,18 @@ export class PreloadBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return out.join("\n");
+   }
+
+   /**
+    * The start of the call that exposes the API, up to the opening of its argument: in the main
+    * world by default, or in the isolated world of the config.
+    */
+   private getExposeCall(): string {
+      const key = this.getExposeAs();
+      const worldId = this.config.isolatedWorldId;
+      return worldId === undefined
+         ? `contextBridge.exposeInMainWorld('${key}', `
+         : `contextBridge.exposeInIsolatedWorld(${worldId}, '${key}', `;
    }
 
    /** Sorts the channels of the page into the groups that need components of their own. */

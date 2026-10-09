@@ -1,0 +1,11 @@
+{
+   "name": "fixture-isolated-world",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "exposeAs": "api",
+         "isolatedWorldId": 1004
+      }
+   }
+}

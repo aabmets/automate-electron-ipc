@@ -60,7 +60,8 @@ If no configuration is provided, IPC automation will use the default values as s
          "rawErrors": false,
          "channelPrefix": "autoipc:",
          "timeoutMs": 0,
-         "utilityBindingsPath": "src/autoipc/utility.ts"
+         "utilityBindingsPath": "src/autoipc/utility.ts",
+         "exposeAs": "ipc"
       }
    }
 }
@@ -83,6 +84,15 @@ Config explanation:
    `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
    file is written only when the schema has a channel to a utility process. See
    [Utility processes](#utility-processes).
+ - `exposeAs` - The name that the API of the page is exposed as, `ipc` by default: `window.ipc`. The
+   generated `window.d.ts` declares the global variable under the same name. It must be an identifier
+   that is not a reserved word or a global of the page (`name`, `status`, `close`, `open`, `Promise`, ...),
+   since the exposed API would hide it. The `ipc` object of `main.ts` is not affected.
+ - `isolatedWorldId` - Exposes the API in the isolated world with this ID, with
+   `contextBridge.exposeInIsolatedWorld`, instead of in the main world. It must be an integer of 1000 or
+   more, since Electron keeps the lower IDs for itself. Only the scripts that run in that world see the
+   API, so the world needs to be created for the page, for example with `webFrame.setIsolatedWorldInfo`.
+   Without it, the API is exposed in the main world.
 
 
 ### Getting Started

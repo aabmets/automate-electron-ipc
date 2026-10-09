@@ -1,0 +1,10 @@
+{
+   "name": "fixture-expose-as",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "exposeAs": "bridge"
+      }
+   }
+}

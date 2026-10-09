@@ -87,12 +87,17 @@ export function createFakeElectron() {
 /** A fake `electron` module for the generated preload script, which records what it exposes. */
 export function createFakePreloadElectron() {
    const exposed: Record<string, any> = {};
+   const exposedInWorld: Record<number, Record<string, any>> = {};
    return {
       exposed,
+      exposedInWorld,
       electron: {
          contextBridge: {
             exposeInMainWorld: vi.fn((key: string, api: unknown) => {
                exposed[key] = api;
+            }),
+            exposeInIsolatedWorld: vi.fn((worldId: number, key: string, api: unknown) => {
+               exposedInWorld[worldId] = { ...exposedInWorld[worldId], [key]: api };
             }),
          },
          ipcRenderer: {
