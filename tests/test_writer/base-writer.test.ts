@@ -331,6 +331,79 @@ describe("BaseWriter", () => {
       });
    });
 
+   // Regression for T89: the path of an import type is relative to the schema file, and was
+   // copied as it is into the generated files.
+   describe("import types in signatures", () => {
+      class InIpcDir extends shared.VitestBaseWriter {
+         public getTargetFilePath(): string {
+            return "/project/ipc/main.ts";
+         }
+      }
+      const channelsOf = (fullPath: string, definition: string, nodeNext = false) => {
+         const pfs: t.ParsedFileSpecs = {
+            fullPath,
+            relativePath: "",
+            specs: {
+               channelSpecArray: [
+                  {
+                     name: "chan",
+                     signature: shared.parseTestSignature(definition),
+                  } as unknown as t.ChannelSpec,
+               ],
+               channelMapExport: null,
+               importSpecArray: [],
+               typeSpecArray: [],
+            },
+         };
+         const config = { projectUsesNodeNext: nodeNext } as t.IPCResolvedConfig;
+         return new InIpcDir(config, [pfs]).getChannelSpecs(pfs)[0].signature;
+      };
+
+      it("should rebase the path to the directory of the generated file", () => {
+         const signature = channelsOf(
+            "/project/ipc/schema/api.ts",
+            '(a: import("./models").User) => Promise<typeof import("../shared/x.mjs")>',
+         );
+         expect(signature.definition).toBe(
+            '(a: import("./schema/models").User) => Promise<typeof import("./shared/x.mjs")>',
+         );
+         expect(signature.params[0].type).toBe('import("./schema/models").User');
+         expect(signature.returnType).toBe('Promise<typeof import("./shared/x.mjs")>');
+         expect(signature.definition.slice(signature.paramsStart)).toBe(
+            'a: import("./schema/models").User) => Promise<typeof import("./shared/x.mjs")>',
+         );
+      });
+
+      it("should add the script extension for NodeNext", () => {
+         const signature = channelsOf(
+            "/project/ipc/schema/api.ts",
+            '(a: import("./models").User, b: import("./data.json")) => void',
+            true,
+         );
+         expect(signature.definition).toBe(
+            '(a: import("./schema/models.js").User, b: import("./schema/data.json")) => void',
+         );
+      });
+
+      it("should keep the specifier of a package", () => {
+         const spec = channelsOf(
+            "/project/ipc/schema/api.ts",
+            '(a: import("zod").ZodType) => void',
+         );
+         expect(spec.definition).toBe('(a: import("zod").ZodType) => void');
+      });
+
+      it("should rebase the path in the type arguments of an import type", () => {
+         const signature = channelsOf(
+            "/project/ipc/schema/api.ts",
+            '(a: import("./a").Box<import("./b").Item>) => void',
+         );
+         expect(signature.definition).toBe(
+            '(a: import("./schema/a").Box<import("./schema/b").Item>) => void',
+         );
+      });
+   });
+
    it("should render empty file contents when pfsArray is empty", async () => {
       const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
       await obj.write(false);

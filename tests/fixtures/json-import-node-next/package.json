@@ -1,6 +1,7 @@
 {
    "name": "fixture-json-import-node-next",
    "private": true,
+   "type": "module",
    "config": {
       "autoipc": {
          "ipcDataDir": "ipc",

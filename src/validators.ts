@@ -212,6 +212,14 @@ const ValidatorRefStruct = object({
    ),
 });
 
+/** A reference in a signature that the writers may rewrite: a type name, or an import type path. */
+const TypeRefStruct = object({
+   name: string(),
+   start: number(),
+   end: number(),
+   importPath: optional(string()),
+});
+
 /** What differs between the kinds of channel spec: the options that they accept. */
 interface SpecStructFlags {
    /** A `trigger` option (`emit`). */
@@ -303,7 +311,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
          chunkStart: streaming ? optional(number()) : optional(never()),
          customTypes: array(string()),
          async: boolean(),
-         typeRefs: optional(array(object({ name: string(), start: number(), end: number() }))),
+         typeRefs: optional(array(TypeRefStruct)),
          cloneIssues: optional(
             array(
                object({
@@ -324,9 +332,7 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
                  object({
                     definition: string(),
                     customTypes: array(string()),
-                    typeRefs: optional(
-                       array(object({ name: string(), start: number(), end: number() })),
-                    ),
+                    typeRefs: optional(array(TypeRefStruct)),
                  }),
               )
             : optional(never()),

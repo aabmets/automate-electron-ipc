@@ -12,7 +12,7 @@
 // Bugs of the generator that the review of 2026-10-09 found, one `describe` per task. Each test is
 // an `it.fails` until its task fixes the bug, and then moves to the tests of its feature.
 
-import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
+import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 let project: E2EProject | undefined;
@@ -31,35 +31,6 @@ async function failureOf(fixture: string): Promise<string | null> {
       return error instanceof Error ? error.message : String(error);
    }
 }
-
-describe("T89: import paths of the generated files", () => {
-   it("generates the files of schema files with script extensions", async () => {
-      project = await runFixture("script-extensions");
-      expect(project.generated["main.ts"]).toContain("getAccount");
-      expect(project.generated["main.ts"]).toContain("getUser");
-   });
-
-   // The import of the types of `api.mts` drops the extension: "./schema/api", which does not
-   // resolve, and `./models.mjs` loses its extension as well.
-   it.fails("type-checks imports of .mts schema files and .mjs modules", async () => {
-      project = await runFixture("script-extensions");
-      expect(await project.typecheck()).toBe("");
-   });
-
-   it.fails("keeps the specifier of a JSON module under NodeNext, without a script extension", async () => {
-      project = await runFixture("json-import-node-next");
-      expect(project.generated["main.ts"]).not.toContain("settings.json.js");
-      expect(await project.typecheck({ ...NODE_NEXT_OPTIONS, resolveJsonModule: true })).toBe("");
-   });
-
-   // The path of `import("./models")` is relative to the schema file, and is copied as it is into
-   // the generated files, which are in another directory.
-   it.fails("rebases the path of an import type to the generated files", async () => {
-      project = await runFixture("inline-import-types");
-      expect(project.generated["main.ts"]).not.toContain('import("./models")');
-      expect(await project.typecheck()).toBe("");
-   });
-});
 
 describe("T90: TypeScript syntax that the schema parser does not support", () => {
    // swc parses without `decorators: true`.

@@ -300,6 +300,49 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
    });
 });
 
+describe("ipcAutomation, import paths of script extensions, JSON modules and import types", () => {
+   // Regression for T89: the extension of `api.mts` and of `./models.mjs` was dropped (TS2307).
+   it("keeps .mjs for the .mts schema files and the .mjs specifiers", async () => {
+      project = await runFixture("script-extensions");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+         expect(imports).toContain('import type { User } from "./schema/api.mjs";');
+         expect(imports).toContain('import type { Account } from "./schema/models.mjs";');
+      }
+   });
+
+   it("type-checks imports of .mts schema files and .mjs modules", async () => {
+      project = await runFixture("script-extensions");
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("resolves imports of .mts schema files and .mjs modules under NodeNext", async () => {
+      project = await runFixture("script-extensions");
+      expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
+   });
+
+   // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
+   it("keeps the specifier of a JSON module under NodeNext, without a script extension", async () => {
+      project = await runFixture("json-import-node-next");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(project.generated[file]).toContain('from "./settings.json";');
+         expect(project.generated[file]).not.toContain("settings.json.js");
+      }
+      expect(await project.typecheck({ ...NODE_NEXT_OPTIONS, resolveJsonModule: true })).toBe("");
+   });
+
+   // Regression for T89: the path of `import("./models")` is relative to the schema file, and it
+   // was copied as it is into the generated files, which are in another directory.
+   it("rebases the path of an import type to the generated files", async () => {
+      project = await runFixture("inline-import-types");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(project.generated[file]).not.toContain('import("./models")');
+         expect(project.generated[file]).toContain('import("./schema/models").User');
+      }
+      expect(await project.typecheck()).toBe("");
+   });
+});
+
 describe("ipcAutomation, qualified names, typeof queries and destructuring", () => {
    // Regression for T54: `Kind.A` and `typeof config` produced no import. The renamed binding of
    // a destructured param is covered by the collectCustomTypes unit tests, since TypeScript

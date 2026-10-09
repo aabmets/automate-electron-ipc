@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 79 delivered, 16 remaining, 1 dropped.
+**Progress:** 80 delivered, 15 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -66,7 +66,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [ ] [T86: Calls to a utility process that exited before the bindings saw it hang forever](./tasks/T86-calls-to-a-utility-child-that-already-exited.md) · depends on: T30 · **Decision needed**
 - [ ] [T87: Listeners that grow with each call, stream, connection or registration](./tasks/T87-listeners-that-grow-per-call-or-registration.md) · depends on: T84, T85
 - [x] [T88: Config values which are accepted, but break the output](./tasks/T88-config-values-that-break-the-output.md) · depends on: T29, T36
-- [ ] [T89: Import paths of script extensions, JSON modules and import types](./tasks/T89-import-paths-of-script-extensions-and-import-types.md) · depends on: T55
+- [x] [T89: Import paths of script extensions, JSON modules and import types](./tasks/T89-import-paths-of-script-extensions-and-import-types.md) · depends on: T55
 - [ ] [T90: Decorators and import-equals in schema files](./tasks/T90-schema-syntax-decorators-and-import-equals.md) · depends on: T54
 - [x] [T91: A Promise nested in a result is not reported](./tasks/T91-promise-nested-in-a-result.md) · depends on: T19
 - [x] [T92: Diagnostics which name the wrong path, or none](./tasks/T92-diagnostics-that-name-the-wrong-path.md) · depends on: T71

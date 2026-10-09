@@ -18,4 +18,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** the `it.fails` of `T89` in `tests/test_e2e/generatorFindings.test.ts` turn into
   passing tests, with the fixtures `script-extensions`, `json-import-node-next` and
   `inline-import-types`.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The `.mts`/`.mjs` and `.cts`/`.cjs` extensions stay in both modes (the
+  ids of modules treat `a.mts` and `a.mjs` as one file). NodeNext adds `.js` only to a specifier
+  without an extension, where an extension is a script one or one of a list of data extensions
+  (`.json`, `.node`, `.wasm`, styles, images, `.md`...): other dots, as in `user.model`, belong to the
+  name (T55). `TsImportType` arguments that start with `.` are recorded as `typeRefs` with an
+  `importPath` and rewritten by `getChannelSpecs` through `resolveImportPath`, in signatures and
+  error types. The fixture `json-import-node-next` got `"type": "module"`, which the import
+  attribute of its schema file needs under NodeNext.

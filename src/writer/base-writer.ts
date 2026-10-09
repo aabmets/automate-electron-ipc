@@ -17,8 +17,9 @@ import utils from "../utils.js";
 import { ImportsGenerator } from "./imports-generator.js";
 
 /**
- * Replaces the type names of a text of a signature, such as `User` with `User_2`. `refs` are the
- * type references of the whole definition, which the parser took from the AST, and `offset` is
+ * Replaces the type names of a text of a signature, such as `User` with `User_2`, and the
+ * specifiers of its import types with the ones that `rebase` gives. `refs` are the type
+ * references of the whole definition, which the parser took from the AST, and `offset` is
  * the position in the definition where `text` starts. Only the references inside the text are
  * replaced, so names of members, string literals, property keys and parameters stay as written.
  */
@@ -27,11 +28,15 @@ function renameTypeReferences(
    offset: number,
    refs: readonly t.TypeRef[],
    renames: ReadonlyMap<string, string>,
+   rebase: (importPath: string) => string,
 ): string {
    let result = "";
    let last = 0;
    for (const ref of refs) {
-      const renamed = renames.get(ref.name);
+      const renamed =
+         ref.importPath === undefined
+            ? renames.get(ref.name)
+            : JSON.stringify(rebase(ref.importPath));
       if (renamed !== undefined && ref.start >= offset + last && ref.end <= offset + text.length) {
          result += text.slice(last, ref.start - offset) + renamed;
          last = ref.end - offset;
@@ -283,15 +288,25 @@ export class BaseWriter {
    protected getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
       const specs = parsedFileSpecs.specs.channelSpecArray;
       const renames = this.importsGenerator.getRenames(parsedFileSpecs);
-      if (renames.size === 0) {
+      const hasImportTypes = (refs: readonly t.TypeRef[] | undefined) =>
+         !!refs?.some((ref) => ref.importPath !== undefined);
+      if (
+         renames.size === 0 &&
+         !specs.some(
+            (spec) =>
+               hasImportTypes(spec.signature.typeRefs) || hasImportTypes(spec.errors?.typeRefs),
+         )
+      ) {
          return specs;
       }
+      const rebase = (importPath: string) =>
+         this.importsGenerator.getImportTypePath(parsedFileSpecs, importPath);
       return specs.map((spec) => {
          const { definition, paramsStart, returnType, returnStart, params, chunkType, chunkStart } =
             spec.signature;
          const refs = spec.signature.typeRefs ?? [];
          const rename = (text: string, offset: number | undefined) =>
-            offset === undefined ? text : renameTypeReferences(text, offset, refs, renames);
+            offset === undefined ? text : renameTypeReferences(text, offset, refs, renames, rebase);
          const errors = spec.errors && {
             ...spec.errors,
             definition: renameTypeReferences(
@@ -299,6 +314,7 @@ export class BaseWriter {
                0,
                spec.errors.typeRefs ?? [],
                renames,
+               rebase,
             ),
             typeRefs: [],
          };

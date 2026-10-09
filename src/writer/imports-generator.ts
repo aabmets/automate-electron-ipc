@@ -14,7 +14,11 @@ import type * as t from "@types";
 
 const SCRIPT_EXTENSION = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/;
 
-/** The extension of the compiled file for each script extension, as NodeNext imports need it. */
+/**
+ * The extension of the compiled file for each script extension. A specifier needs it under
+ * NodeNext for every script, and under every resolution for the module scripts: `./a.mjs` is the
+ * only spelling of `a.mts` that resolves.
+ */
 const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
    ts: ".js",
    tsx: ".js",
@@ -25,6 +29,14 @@ const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
    cts: ".cjs",
    cjs: ".cjs",
 };
+
+/**
+ * Extensions of the files that a schema file imports as they are, such as a JSON module. A
+ * specifier with one is not extensionless, so NodeNext does not add `.js` to it. Other dots in
+ * the file name, as in `user.model`, belong to the name.
+ */
+const DATA_EXTENSION =
+   /\.(json|node|wasm|css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|ico|html?|txt|md|csv|ya?ml|toml)$/i;
 
 /** One import line of a generated file, shared by every schema file that refers to the type. */
 interface Binding {
@@ -78,13 +90,25 @@ export class ImportsGenerator {
 
    /**
     * Turns the path of a source file into an import specifier. Only script extensions are
-    * replaced: with NodeNext by the extension of the compiled file, otherwise they are dropped.
+    * replaced, by the extension of the compiled file. `.ts`, `.tsx`, `.js` and `.jsx` are
+    * dropped unless the project uses NodeNext, which also adds `.js` to a path without an
+    * extension. `.mts`, `.mjs`, `.cts` and `.cjs` are never dropped: they do not resolve without.
     */
    private getImportPath(...paths: string[]): string {
       const { base, ext } = this.splitScriptExtension(path.join(...paths));
-      return this.projectUsesNodeNext
-         ? `${base}${ext ? SCRIPT_OUTPUT_EXTENSIONS[ext] : ".js"}`
-         : base;
+      if (ext) {
+         const output = SCRIPT_OUTPUT_EXTENSIONS[ext];
+         return this.projectUsesNodeNext || output !== ".js" ? `${base}${output}` : base;
+      }
+      return this.projectUsesNodeNext && !DATA_EXTENSION.test(base) ? `${base}.js` : base;
+   }
+
+   /**
+    * The specifier of an import type in a signature of the schema file, as written from the
+    * generated file. Packages and aliases are kept.
+    */
+   public getImportTypePath(pfs: t.ParsedFileSpecs, fromPath: string): string {
+      return this.resolveImportPath(fromPath, pfs.fullPath);
    }
 
    private resolveImportPath(fromPath: string, sourceFilePath: string): string {
@@ -115,13 +139,25 @@ export class ImportsGenerator {
       return this.adjustImportPath(this.getImportPath(path.basename(filePath)), filePath);
    }
 
-   /** Identifies a module independently of how it is spelled: `./a`, `./a.ts` and `./a.js`. */
+   /**
+    * The base name of a script together with the kind of module it is, which spellings of the
+    * same file share: `./a`, `./a.ts` and `./a.js`; `./a.mts` and `./a.mjs`; `./a.cts` and `./a.cjs`.
+    */
+   private scriptId(filePath: string): string {
+      const { base, ext } = this.splitScriptExtension(filePath);
+      const output = ext ? SCRIPT_OUTPUT_EXTENSIONS[ext] : ".js";
+      return output === ".js" ? base : `${base}${output}`;
+   }
+
+   /** Identifies a module independently of how it is spelled. */
    private moduleId(fromPath: string, sourceFilePath: string): string {
       if (!fromPath.startsWith(".")) {
          return fromPath;
       }
-      const { base } = this.splitScriptExtension(fromPath);
-      return path.join(path.dirname(sourceFilePath), base).replaceAll(path.sep, "/");
+      return this.scriptId(path.join(path.dirname(sourceFilePath), fromPath)).replaceAll(
+         path.sep,
+         "/",
+      );
    }
 
    /**
@@ -143,7 +179,7 @@ export class ImportsGenerator {
          const exported = typeSpec.isDefault ? "default" : (typeSpec.exportedAs ?? name);
          const fileName = path.basename(pfs.fullPath);
          const filePath = this.adjustImportPath(this.getImportPath(fileName), pfs.fullPath);
-         const fileId = this.splitScriptExtension(pfs.fullPath).base;
+         const fileId = this.scriptId(pfs.fullPath);
          return { key: `${fileId}#${exported}`, render: this.namedImport(exported, filePath) };
       }
       // Entries are `Foo`, `Foo as Bar` or `default as Foo`. The local name is what signatures use.

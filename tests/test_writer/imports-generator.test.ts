@@ -236,15 +236,17 @@ describe("ImportsGenerator", () => {
       });
 
       it("strips script extensions, and maps them to the compiled extension for NodeNext", () => {
+         // `.mjs` and `.cjs` stay in both modes: `./a` does not resolve to `a.mts` or `a.cts`.
          const cases: [string, string, string][] = [
             ["./a.ts", "./a", "./a.js"],
             ["./a.tsx", "./a", "./a.js"],
             ["./a.js", "./a", "./a.js"],
             ["./a.jsx", "./a", "./a.js"],
-            ["./a.mts", "./a", "./a.mjs"],
-            ["./a.mjs", "./a", "./a.mjs"],
-            ["./a.cts", "./a", "./a.cjs"],
-            ["./a.cjs", "./a", "./a.cjs"],
+            ["./a.mts", "./a.mjs", "./a.mjs"],
+            ["./a.mjs", "./a.mjs", "./a.mjs"],
+            ["./a.cts", "./a.cjs", "./a.cjs"],
+            ["./a.cjs", "./a.cjs", "./a.cjs"],
+            ["./a.model.mts", "./a.model.mjs", "./a.model.mjs"],
             ["./a.model.ts", "./a.model", "./a.model.js"],
             ["./a", "./a", "./a.js"],
          ];
@@ -254,6 +256,70 @@ describe("ImportsGenerator", () => {
                `import type { Foo } from "${nodeNext}";`,
             );
          }
+      });
+
+      // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
+      it("adds no script extension to the specifier of a data file", () => {
+         for (const fromPath of ["./settings.json", "../a/b.c.json", "./logo.svg", "./data.node"]) {
+            for (const nodeNext of [false, true]) {
+               expect(importOf(fromPath, nodeNext)).toStrictEqual(
+                  `import type { Foo } from "${fromPath}";`,
+               );
+            }
+         }
+      });
+
+      it("keeps the extension of a local .mts schema file in both modes", () => {
+         const pfs: t.ParsedFileSpecs = {
+            fullPath: "/project/src/autoipc/schema/api.mts",
+            relativePath: "",
+            specs: {
+               channelSpecArray: [],
+               channelMapExport: null,
+               importSpecArray: [],
+               typeSpecArray: [
+                  { name: "Foo", kind: "type" as t.TypeKind, generics: null, isExported: true },
+               ],
+            },
+         };
+         for (const nodeNext of [false, true]) {
+            const ig = new ImportsGenerator(nodeNext, "/project/src/autoipc/main.ts");
+            expect(ig.getDeclaration(pfs, "Foo")).toStrictEqual(
+               'import type { Foo } from "./schema/api.mjs";',
+            );
+         }
+      });
+
+      it("imports a module once, whichever of its spellings the files use", () => {
+         const pfs: t.ParsedFileSpecs = {
+            fullPath: "/project/src/autoipc/schema.ts",
+            relativePath: "",
+            specs: {
+               channelSpecArray: [],
+               channelMapExport: null,
+               importSpecArray: [
+                  { fromPath: "./a.mjs", customTypes: ["Foo"], namespace: null },
+                  { fromPath: "./a.mts", customTypes: ["Foo"], namespace: null },
+                  { fromPath: "./a.cjs", customTypes: ["Foo"], namespace: null },
+               ],
+               typeSpecArray: [],
+            },
+         };
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         expect(ig.getDeclaration(pfs, "Foo")).toStrictEqual('import type { Foo } from "./a.mjs";');
+         // The first import of the name wins, as before: the same name is one declaration.
+         expect(ig.getDeclaration(pfs, "Foo")).toBeNull();
+      });
+
+      it("rebases the path of an import type, keeping packages", () => {
+         const ig = new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+         const pfs = pfsOf("./x");
+         expect(ig.getImportTypePath(pfs, "./models")).toStrictEqual("./models");
+         expect(ig.getImportTypePath(pfs, "../lib/a.mts")).toStrictEqual("../lib/a.mjs");
+         expect(ig.getImportTypePath(pfs, "zod")).toStrictEqual("zod");
+         const nodeNext = new ImportsGenerator(true, "/project/src/autoipc/main.ts");
+         expect(nodeNext.getImportTypePath(pfs, "./models")).toStrictEqual("./models.js");
+         expect(nodeNext.getImportTypePath(pfs, "./data.json")).toStrictEqual("./data.json");
       });
 
       it("keeps the dots of the name of a local schema file", () => {

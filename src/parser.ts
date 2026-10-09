@@ -38,6 +38,8 @@ export interface AstNode {
 export interface SpanRef {
    name: string;
    span: Span;
+   /** For the argument of an import type: its specifier, which `name` and `span` stand for. */
+   importPath?: string;
 }
 
 export interface Source {
@@ -266,6 +268,13 @@ export function collectCustomTypes(
       if (identifier && !inScope.has(identifier.value)) {
          set.add(identifier.value);
          refs?.push({ name: identifier.value, span: identifier.span });
+      }
+   } else if (node.type === "TsImportType") {
+      // `import("./models").User` names its module by a path relative to the schema file, so the
+      // path is recorded to be rebased. Its qualifier and type arguments are visited as children.
+      const argument = node.argument;
+      if (argument?.type === "StringLiteral" && argument.value.startsWith(".")) {
+         refs?.push({ name: "import()", span: argument.span, importPath: argument.value });
       }
    } else if (node.type === "ImportDeclaration") {
       for (const element of node.specifiers) {
@@ -803,7 +812,12 @@ export function parseSignature(
    // Offsets in the decoded text of the definition, which starts at the span of the function type.
    const offsetOf = (position: number) => src.text({ span: { ...fn.span, end: position } }).length;
    const typeRefs: t.TypeRef[] = spanRefs
-      .map(({ name, span }) => ({ name, start: offsetOf(span.start), end: offsetOf(span.end) }))
+      .map(({ name, span, importPath }) => ({
+         name,
+         start: offsetOf(span.start),
+         end: offsetOf(span.end),
+         ...(importPath === undefined ? {} : { importPath }),
+      }))
       .sort((a, b) => a.start - b.start);
 
    const returnNode = fn.typeAnnotation.typeAnnotation;
@@ -1207,7 +1221,12 @@ function parseErrors(node: AstNode, ctx: ParseContext): t.ErrorsSpec {
       definition: ctx.src.text(type as { span: Span }),
       customTypes: Array.from(set),
       typeRefs: spanRefs
-         .map(({ name, span }) => ({ name, start: offsetOf(span.start), end: offsetOf(span.end) }))
+         .map(({ name, span, importPath }) => ({
+            name,
+            start: offsetOf(span.start),
+            end: offsetOf(span.end),
+            ...(importPath === undefined ? {} : { importPath }),
+         }))
          .sort((a, b) => a.start - b.start),
    };
 }

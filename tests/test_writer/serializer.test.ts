@@ -600,7 +600,9 @@ describe("ImportsGenerator, getFileImportPath", () => {
 
       expect(ig.getFileImportPath("/p/src/autoipc/serializer.ts")).toBe("./serializer");
       expect(ig.getFileImportPath("/p/src/lib/serializer.ts")).toBe("../lib/serializer");
-      expect(ig.getFileImportPath("/p/src/autoipc/util/wire.mts")).toBe("./util/wire");
+      // A module script does not resolve without its extension, under any module resolution.
+      expect(ig.getFileImportPath("/p/src/autoipc/util/wire.mts")).toBe("./util/wire.mjs");
+      expect(ig.getFileImportPath("/p/src/autoipc/util/wire.cts")).toBe("./util/wire.cjs");
    });
 
    it("keeps dots that belong to the name of the file", () => {

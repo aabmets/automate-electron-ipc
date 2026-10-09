@@ -145,6 +145,12 @@ export interface TypeRef {
    name: string;
    start: number;
    end: number;
+   /**
+    * Set for the string literal of an import type, `"./models"` in `import("./models").User`:
+    * the specifier that is written there, which is relative to the schema file. `name` is then
+    * not a type name.
+    */
+   importPath?: string;
 }
 
 /**

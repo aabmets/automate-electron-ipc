@@ -182,6 +182,25 @@ describe("parseSignature, type references", () => {
       expect(refsOf("(a: Error) => void", ["Error"])).toStrictEqual([["Error", "Error"]]);
    });
 
+   // Regression for T89: the path of an import type is relative to the schema file.
+   it("records the path of an import type as a reference to its specifier", () => {
+      const signature = parseSignature(
+         '(a: import("./models").User, b: typeof import("../x.mjs")) => import("zod").Z<import(\'./y\').Q>',
+      );
+      expect(
+         (signature.typeRefs ?? []).map((ref) => [
+            ref.importPath,
+            signature.definition.slice(ref.start, ref.end),
+         ]),
+      ).toStrictEqual([
+         ["./models", '"./models"'],
+         ["../x.mjs", '"../x.mjs"'],
+         ["./y", "'./y'"],
+      ]);
+      // An import type needs no import in the generated files, and a package keeps its path.
+      expect(signature.customTypes).toStrictEqual([]);
+   });
+
    it("records where the text of the parameter types and of the return type starts", () => {
       const signature = parseSignature('(k: "é", ...rest: Foo[]) => Promise<Bar>');
       const at = (start?: number, text?: string) =>
