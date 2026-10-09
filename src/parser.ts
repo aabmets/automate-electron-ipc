@@ -346,13 +346,17 @@ const VERBS = new Map<string, VerbInfo>([
       {
          kind: "Unicast",
          direction: "ServiceWorkerToMain",
-         options: ["allowedOrigins"],
+         options: ["allowedOrigins", "validate", "timeoutMs"],
          errors: true,
       },
    ],
    [
       "sendFromWorker",
-      { kind: "Broadcast", direction: "ServiceWorkerToMain", options: ["allowedOrigins"] },
+      {
+         kind: "Broadcast",
+         direction: "ServiceWorkerToMain",
+         options: ["allowedOrigins", "validate"],
+      },
    ],
    ["askWorker", { kind: "Unicast", direction: "MainToServiceWorker", options: [] }],
    ["emitToWorker", { kind: "Broadcast", direction: "MainToServiceWorker", options: [] }],

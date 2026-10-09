@@ -44,6 +44,13 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
    protected usesSerializer(): boolean {
       return false;
    }
+   /**
+    * The preload script of a worker has no timers (`setTimeout` and `setImmediate` are not defined
+    * there, only `queueMicrotask`), so the main process times the calls of a worker.
+    */
+   protected getTimeoutMs(): number {
+      return 0;
+   }
    protected groupChannels(): ChannelGroups {
       const groups: ChannelGroups = {
          portSpecs: [],

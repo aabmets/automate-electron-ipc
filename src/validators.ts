@@ -308,15 +308,12 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
       allowedOrigins:
          restrictable || workerCall ? optional(AllowedOriginsStruct) : optional(never()),
-      validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
+      validate: restrictable || workerCall ? optional(ValidatorRefStruct) : optional(never()),
       scopes: scoped ? optional(ScopesStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
       highWaterMark: streaming ? optional(number()) : optional(never()),
       timeoutMs:
-         (kind === "Unicast" || (kind === "Stream" && brokered)) &&
-         !asking &&
-         !workerCall &&
-         !workerNotify
+         (kind === "Unicast" || (kind === "Stream" && brokered)) && !asking && !workerNotify
             ? optional(number())
             : optional(never()),
    });

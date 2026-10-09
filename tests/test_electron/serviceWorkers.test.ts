@@ -145,6 +145,62 @@ const scenarios: Record<string, Scenario> = {
       return { outcome, rejected, sent };
    },
 
+   // The arguments of a call and of a message are validated before the callback runs.
+   validation: async (ctx) => {
+      const ses = ctx.workerSession();
+      const handled: unknown[][] = [];
+      ctx.ipc.checked.handle(ses, (_event: any, ...args: unknown[]) => {
+         handled.push(args);
+         return "handled";
+      });
+      const heard: unknown[][] = [];
+      ctx.ipc.checkedSend.on(ses, (_event: any, ...args: unknown[]) => heard.push(args));
+      const rejected: { channel: string; name: string; code: string }[] = [];
+      ctx.main.configureServiceWorkerIpc({
+         onRejected: (_event: any, channel: string, error: any) =>
+            rejected.push({ channel, name: error.name, code: error.code }),
+      });
+      const { win } = await ctx.startWorker(ses);
+      const outcome = await ctx.inWorker(win, async () => {
+         const failure = (error: any) => ({
+            name: error.name,
+            code: error.code,
+            message: error.message,
+            data: error.data,
+         });
+         const result: Record<string, unknown> = {};
+         result.valid = await ipc.checked.invoke(7);
+         result.invalid = await ipc.checked.invoke("seven").catch(failure);
+         result.extra = await ipc.checked.invoke(1, 2).catch(failure);
+         ipc.checkedSend.send("bad");
+         ipc.checkedSend.send(5);
+         return result;
+      });
+      await ctx.waitFor(() => heard.length === 1, "the valid message");
+      await ctx.sleep(200);
+      return { outcome, handled, heard, rejected };
+   },
+
+   // A call whose handler never answers is rejected by the preload script of the worker.
+   timeout: async (ctx) => {
+      const ses = ctx.workerSession();
+      ctx.ipc.hang.handle(ses, () => new Promise(() => undefined));
+      const { win } = await ctx.startWorker(ses);
+      return await ctx.inWorker(win, async () => {
+         const started = Date.now();
+         const error: any = await ipc.hang.invoke().then(
+            () => null,
+            (e: any) => e,
+         );
+         return {
+            name: error.name,
+            code: error.code,
+            message: error.message,
+            waitedMs: Date.now() - started,
+         };
+      });
+   },
+
    validateSender: async (ctx) => {
       const ses = ctx.workerSession();
       ctx.ipc.add.handle(ses, (_event: any, a: number, b: number) => a + b);
@@ -277,9 +333,12 @@ describeElectron(
             members: [
                "add",
                "allowed",
+               "checked",
+               "checkedSend",
                "configChanged",
                "flushQueue",
                "getToken",
+               "hang",
                "neverAnswers",
                "restricted",
                "restrictedSend",
@@ -349,6 +408,38 @@ describeElectron(
             rejected: ["restricted:service-worker", "restrictedSend:service-worker"],
             sent: [],
          });
+      });
+
+      it("validates the arguments of a call and of a message, and tells onRejected", () => {
+         const result = group.value("validation");
+         expect(result.outcome.valid).toBe("handled");
+         expect(result.outcome.invalid).toStrictEqual({
+            name: "IpcValidationError",
+            code: "IPC_VALIDATION",
+            message: "The arguments of the channel 'checked' are invalid: expected one number",
+            data: [{ message: "expected one number", path: [0] }],
+         });
+         expect(result.outcome.extra).toMatchObject({ code: "IPC_VALIDATION" });
+         // Only the valid call and the valid message get as far as the callbacks.
+         expect(result.handled).toStrictEqual([[7]]);
+         expect(result.heard).toStrictEqual([[5]]);
+         const invalid = { name: "IpcValidationError", code: "IPC_VALIDATION" };
+         expect(result.rejected).toStrictEqual([
+            { channel: "checked", ...invalid },
+            { channel: "checked", ...invalid },
+            { channel: "checkedSend", ...invalid },
+         ]);
+      });
+
+      it("rejects a call whose handler never answers with the IpcTimeoutError", () => {
+         const result = group.value("timeout");
+         expect(result).toMatchObject({
+            name: "IpcTimeoutError",
+            code: "IPC_TIMEOUT",
+            message: "The channel 'hang' did not answer within 300 ms",
+         });
+         expect(result.waitedMs).toBeGreaterThanOrEqual(250);
+         expect(result.waitedMs).toBeLessThan(5000);
       });
 
       it("lets validateSender reject a call, with the scope and the version of the worker", () => {

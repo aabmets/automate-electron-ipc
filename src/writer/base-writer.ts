@@ -240,13 +240,14 @@ export class BaseWriter {
    /**
     * The channel as the page writers see it: the API of a service worker is that of a page, so its
     * channels are written like the ones with the same shape between the main process and a renderer.
-    * A worker channel has no timeout.
+    * A call from a worker keeps its timeout, which the main process applies and the typings of the
+    * worker declare. A question to a worker times out in the main process on its own, so it has none here.
     */
    protected asRendererSpec(spec: t.ChannelSpec): t.ChannelSpec {
       return {
          ...spec,
          direction: spec.direction === "ServiceWorkerToMain" ? "RendererToMain" : "MainToRenderer",
-         timeoutMs: 0,
+         timeoutMs: spec.direction === "ServiceWorkerToMain" ? spec.timeoutMs : 0,
       };
    }
 

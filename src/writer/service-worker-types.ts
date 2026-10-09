@@ -35,6 +35,13 @@ export class ServiceWorkerTypesWriter extends RendererTypesWriter {
    protected getPathForFileEnabled(): boolean {
       return false;
    }
+   /**
+    * The main process times the calls of a worker, and rejects with an `IpcTimeoutError` in the
+    * envelope. With `rawErrors` there is no envelope, so the worker gets the error of Electron.
+    */
+   protected getTimeoutMs(spec: t.ChannelSpec): number {
+      return this.config.rawErrors ? 0 : super.getTimeoutMs(spec);
+   }
    protected buildChannelEntry(spec: t.ChannelSpec) {
       return this.isWorkerSpec(spec) ? super.buildChannelEntry(this.asRendererSpec(spec)) : null;
    }

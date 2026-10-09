@@ -1378,18 +1378,53 @@ describe("service worker channels", () => {
    });
 
    it.each([
-      ["invokeFromWorker", "timeoutMs: 5"],
-      ["invokeFromWorker", "validate: v"],
       ["invokeFromWorker", 'scopes: ["a"]'],
-      ["sendFromWorker", "validate: v"],
+      ["sendFromWorker", "timeoutMs: 5"],
+      ["sendFromWorker", 'scopes: ["a"]'],
       ["askWorker", 'allowedOrigins: ["app://."]'],
       ["askWorker", "timeoutMs: 5"],
+      ["askWorker", "validate: v"],
+      ["emitToWorker", "validate: v"],
       ["emitToWorker", 'scopes: ["a"]'],
       ["emitToWorker", 'trigger: "focus"'],
    ])("rejects the option of another verb: %s with %s", (verb, option) => {
       expect(
          parseError(`export default defineChannels({ a: ${verb}<() => void>({ ${option} }) });`),
       ).toContain(`option '${option.split(":")[0]}' is not supported by '${verb}'.`);
+   });
+
+   it("reads validate and timeoutMs of invokeFromWorker, and validate of sendFromWorker", () => {
+      const imports = `${IMPORT}\nimport { idArgs } from "./validators";`;
+      const specOf = (entry: string) =>
+         parseMap(`export default defineChannels({ ${entry} });`, imports).channelSpecs[0];
+      const call = specOf(
+         "a: invokeFromWorker<(id: number) => string>({ validate: idArgs, timeoutMs: 800 })",
+      );
+      const expected = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
+      expect(call.validate).toStrictEqual(expected);
+      expect(call.timeoutMs).toBe(800);
+      const send = specOf(
+         'a: sendFromWorker<(id: number) => void>({ validate: idArgs, allowedOrigins: ["app://."] })',
+      );
+      expect(send.validate).toStrictEqual(expected);
+      expect(send.allowedOrigins).toStrictEqual(["app://."]);
+      expect(send.timeoutMs).toBeUndefined();
+   });
+
+   it.each([
+      ["invokeFromWorker", "timeoutMs: -1", "must be a non-negative integer literal"],
+      ["invokeFromWorker", "timeoutMs: 1.5", "must be a non-negative integer literal"],
+      ["invokeFromWorker", "timeoutMs: slow", "must be a non-negative integer literal"],
+      [
+         "invokeFromWorker",
+         "validate: () => 1",
+         "must be an identifier which the schema file imports",
+      ],
+      ["sendFromWorker", "validate: 5", "must be an identifier which the schema file imports"],
+   ])("rejects a bad value: %s with %s", (verb, option, message) => {
+      expect(
+         parseError(`export default defineChannels({ a: ${verb}<() => void>({ ${option} }) });`),
+      ).toContain(message);
    });
 
    it("takes the error types of invokeFromWorker as a second type argument", () => {

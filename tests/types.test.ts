@@ -158,11 +158,22 @@ describe("public types", () => {
          "schema.ts": `
             ${IMPORT}
             import { askWorker, emitToWorker, invokeFromWorker, sendFromWorker } from "automate-electron-ipc";
+            import type { StandardSchemaV1 } from "automate-electron-ipc";
+
+            declare const nameArgs: StandardSchemaV1<unknown, [name: string]>;
+            declare const countArgs: StandardSchemaV1<unknown, [n: number]>;
 
             export default defineChannels({
                getToken: invokeFromWorker<(scope: string) => Promise<string>, Error>(),
-               saveBlob: invokeFromWorker<(name: string) => number>({ allowedOrigins: ["app://."] }),
-               syncDone: sendFromWorker<(n: number) => void>({ allowedOrigins: ["app://."] }),
+               saveBlob: invokeFromWorker<(name: string) => number>({
+                  allowedOrigins: ["app://."],
+                  validate: nameArgs,
+                  timeoutMs: 2000,
+               }),
+               syncDone: sendFromWorker<(n: number) => void>({
+                  allowedOrigins: ["app://."],
+                  validate: countArgs,
+               }),
                flush: askWorker<(force: boolean) => number>(),
                changed: emitToWorker<(key: string) => void>(),
                asForm: invokeFromWorker() as (id: number) => Promise<string>,
@@ -176,20 +187,23 @@ describe("public types", () => {
       const diagnostics = await typecheck({
          "schema.ts": `
             ${IMPORT}
-            import { askWorker, emitToWorker, invokeFromWorker, sendFromWorker } from "automate-electron-ipc";
+            import { askWorker, emitToWorker, invokeFromWorker, sendFromWorker, type StandardSchemaV1 } from "automate-electron-ipc";
 
             export default defineChannels({
-               a: invokeFromWorker<() => void>({ timeoutMs: 5 }),
+               a: sendFromWorker<() => void>({ timeoutMs: 5 }),
                b: invokeFromWorker<() => void>({ scopes: ["a"] }),
-               c: sendFromWorker<() => void>({ validate: undefined as never, scopes: ["a"] }),
+               c: sendFromWorker<() => void>({ scopes: ["a"] }),
                d: askWorker<() => void>({ allowedOrigins: ["app://."] }),
                e: emitToWorker<() => void>({ trigger: "focus" }),
                f: sendFromWorker<() => void, Error>(),
                g: askWorker<() => void, Error>(),
+               h: askWorker<() => void>({ timeoutMs: 5 }),
+               i: emitToWorker<() => void>({ validate: {} as StandardSchemaV1<unknown, []> }),
+               j: invokeFromWorker<(id: number) => void>({ validate: undefined as unknown as StandardSchemaV1<unknown, [id: string]> }),
             });
          `,
       });
-      for (const line of [6, 7, 8, 9, 10, 11, 12]) {
+      for (const line of [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
          expect(diagnostics).toContain(`schema.ts(${line},`);
       }
    });

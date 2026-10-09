@@ -176,6 +176,226 @@ describe("MainBindingsWriter, service worker channels", () => {
       expect(output).toContain("   { channel: 'flush', wire: 'autoipc:flush:reply' },");
    });
 
+   describe("timeouts", () => {
+      it("writes no timer without a timeout", async () => {
+         const output = await render(all);
+         for (const name of ["timeWorkerCall", "IPC_TIMEOUT", "info.timeoutMs"]) {
+            expect(output).not.toContain(name);
+         }
+      });
+
+      it("lists the timeout of each call that has one, the option first and else the default", async () => {
+         const output = await render(
+            [
+               { ...invokeFromWorker, timeoutMs: 800 },
+               { ...invokeFromWorker, name: "defaulted" },
+               { ...invokeFromWorker, name: "patient", timeoutMs: 0 },
+               sendFromWorker,
+            ],
+            { timeoutMs: 5000 },
+         );
+
+         expect(output).toContain(
+            [
+               "const workerCalls: WorkerChannelInfo[] = [",
+               "   { channel: 'defaulted', wire: 'autoipc:defaulted', timeoutMs: 5000 },",
+               "   { channel: 'getToken', wire: 'autoipc:getToken', timeoutMs: 800 },",
+               "   { channel: 'patient', wire: 'autoipc:patient' },",
+               "];",
+            ].join("\n"),
+         );
+         expect(output).toContain("timeoutMs?: number;");
+         expect(output).toContain(
+            "function timeWorkerCall(info: WorkerChannelInfo, result: unknown): unknown {",
+         );
+         expect(output).toContain("'IpcTimeoutError'");
+         expect(output).toContain("'IPC_TIMEOUT'");
+         // The message has no timeout.
+         expect(output).toContain("{ channel: 'syncDone', wire: 'autoipc:syncDone' },");
+      });
+
+      it("times the result of the handler inside the envelope", async () => {
+         const output = await render([{ ...invokeFromWorker, timeoutMs: 800 }]);
+         expect(output).toContain(
+            "settleInvoke(() => timeWorkerCall(info, callWorkerHandler(hub, worker, event, info, args))),",
+         );
+      });
+
+      it("times the result of the handler with rawErrors too", async () => {
+         const output = await render([{ ...invokeFromWorker, timeoutMs: 800 }], {
+            rawErrors: true,
+         });
+         expect(output).toContain(
+            "timeWorkerCall(info, callWorkerHandler(hub, worker, event, info, args)),",
+         );
+         expect(output).not.toContain("settleInvoke(");
+      });
+
+      it("does not time a question to a worker, whatever the default is", async () => {
+         const output = await render([askWorker, emitToWorker], { timeoutMs: 500 });
+         expect(output).not.toContain("timeWorkerCall");
+      });
+   });
+
+   describe("validation of the arguments", () => {
+      const validate = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
+      const validatedCall = { ...invokeFromWorker, params: ["id: number"], validate } as const;
+      const validatedSend = {
+         ...sendFromWorker,
+         params: ["id: number"],
+         validate: { ...validate, name: "lineArgs", exported: "lineArgs" },
+      } as const;
+
+      it("writes nothing for validation when no channel of a worker has a validator", async () => {
+         const output = await render(all);
+         for (const name of ["IpcValidationError", "validateArguments", "IpcArgumentsSchema"]) {
+            expect(output).not.toContain(name);
+         }
+         expect(output).toContain(
+            "onRejected?: (event: IpcMainServiceWorkerInvokeEvent | IpcMainServiceWorkerEvent, channel: string) => void;",
+         );
+         expect(output).toContain("workerConfig.onRejected(event, channel);");
+         expect(output).toContain("const handler = hub.handlers[info.channel] as");
+      });
+
+      it("imports the validators and lists them in the tables of the channels", async () => {
+         const output = await render([
+            validatedCall,
+            validatedSend,
+            { ...invokeFromWorker, name: "plain" },
+         ]);
+
+         expect(output).toMatch(/^import \{ idArgs \} from "[^"]*validators";$/m);
+         expect(output).toMatch(/^import \{ lineArgs \} from "[^"]*validators";$/m);
+         expect(output).toContain(
+            [
+               "const workerCalls: WorkerChannelInfo[] = [",
+               "   { channel: 'getToken', wire: 'autoipc:getToken', validator: idArgs },",
+               "   { channel: 'plain', wire: 'autoipc:plain' },",
+               "];",
+            ].join("\n"),
+         );
+         expect(output).toContain(
+            "   { channel: 'syncDone', wire: 'autoipc:syncDone', validator: lineArgs },",
+         );
+         expect(output).toContain("validator?: IpcArgumentsSchema;");
+      });
+
+      it("keeps the validator next to the allowed origins", async () => {
+         const output = await render([{ ...validatedCall, allowedOrigins: ["app://main"] }]);
+         expect(output).toContain(
+            `   { channel: 'getToken', wire: 'autoipc:getToken', allowedOrigins: ["app://main"], validator: idArgs },`,
+         );
+      });
+
+      it("declares the error, the schema types and a validation function for the worker events", async () => {
+         const output = await render([validatedCall, validatedSend]);
+
+         expect(output).toContain("export class IpcValidationError extends Error {");
+         expect(output).toContain("function validateArguments<R>(");
+         expect(output).toContain(
+            "event: IpcMainServiceWorkerEvent | IpcMainServiceWorkerInvokeEvent,",
+         );
+         // A file without channels of pages has no hook of theirs, so the caller reports.
+         expect(output).toContain(
+            "report: (event: IpcMainServiceWorkerEvent | IpcMainServiceWorkerInvokeEvent, channel: string, error: IpcValidationError) => void,",
+         );
+         expect(output).toContain(
+            "report(event as IpcMainServiceWorkerEvent | IpcMainServiceWorkerInvokeEvent, channel, error);",
+         );
+         expect(output).not.toContain("ipcConfig");
+         expect(output).not.toContain("configureIpc");
+      });
+
+      it("types the events of the validated channels only", async () => {
+         const output = await render([validatedCall]);
+         expect(output).toContain("event: IpcMainServiceWorkerInvokeEvent,\n");
+         expect(output).not.toContain("event: IpcMainServiceWorkerEvent,\n");
+      });
+
+      it("tells the hook why a call was rejected", async () => {
+         const output = await render([validatedCall]);
+
+         expect(output).toContain(
+            "onRejected?: (event: IpcMainServiceWorkerInvokeEvent, channel: string, error: IpcWorkerError | IpcValidationError) => void;",
+         );
+         expect(output).toContain(
+            "workerConfig.onRejected(event, channel, new IpcWorkerError(channel, `The service worker is not allowed to use the channel '${channel}'`, 'IPC_WORKER_FORBIDDEN'));",
+         );
+         expect(output).toContain(
+            "(rejected, name, error) => workerConfig.onRejected?.(rejected, name, error)",
+         );
+      });
+
+      it("rejects an invalid call after the sender check, and looks the handler up again", async () => {
+         const output = await render([validatedCall]);
+
+         expect(output).toMatch(
+            /isWorkerAllowed\(worker, event, info\.channel, info\.allowedOrigins\)[\s\S]+?IPC_WORKER_FORBIDDEN[\s\S]+?const run = \(valid: unknown\[\]\): unknown => \{\n\s+const handler = hub\.handlers\[info\.channel\]/,
+         );
+         expect(output).toContain(
+            "? validateArguments(event, info.channel, info.validator, args, false, run, ",
+         );
+         expect(output).toContain(": run(args);");
+         expect(output).toContain("return handler(event, ...valid);");
+      });
+
+      it("drops an invalid message after the sender check, and looks the listeners up again", async () => {
+         const output = await render([validatedSend]);
+
+         expect(output).toContain("const run = (valid: unknown[]): void => {");
+         expect(output).toContain(
+            "void validateArguments(event, info.channel, info.validator, args, true, run, ",
+         );
+         expect(output).toContain(
+            "(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...valid);",
+         );
+      });
+
+      it("validates in the handler call with rawErrors too, which leaves the rejection to Electron", async () => {
+         const output = await render([validatedCall], { rawErrors: true });
+         expect(output).toContain(
+            "? validateArguments(event, info.channel, info.validator, args, false, run, ",
+         );
+         expect(output).toContain("callWorkerHandler(hub, worker, event, info, args),");
+         expect(output).not.toContain("settleInvoke(");
+      });
+
+      it("serves a validated call and a plain message in one file", async () => {
+         const output = await render([validatedCall, sendFromWorker]);
+         // The messages are not validated, so their dispatcher has no run function.
+         expect(output).toContain(
+            "(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...args);",
+         );
+         expect(output).not.toContain("void validateArguments(");
+      });
+
+      it("shares one validation function with the channels of the pages", async () => {
+         const page = {
+            ...renderer,
+            params: ["id: number"],
+            validate,
+         } as const;
+         const output = await render([page, validatedCall]);
+
+         expect(output.match(/function validateArguments</g)).toHaveLength(1);
+         expect(output).toContain("event: IpcMainInvokeEvent | IpcMainServiceWorkerInvokeEvent,");
+         expect(output).toContain(
+            "report?: (event: IpcMainServiceWorkerInvokeEvent, channel: string, error: IpcValidationError) => void,",
+         );
+         expect(output).toContain("if (report) {");
+         expect(output).toContain(
+            "ipcConfig.onRejected?.(event as IpcMainInvokeEvent, channel, error);",
+         );
+         // The hook of the pages does not see the events of the workers.
+         expect(output).toContain(
+            "onRejected?: (event: IpcMainInvokeEvent, channel: string, error: IpcForbiddenError | IpcValidationError) => void;",
+         );
+         // The page call is unchanged.
+         expect(output).toContain("validateArguments(event, 'getUser', idArgs, received, false,");
+      });
+   });
+
    it("puts the channel prefix in front of every wire name", async () => {
       const output = await render(all, { channelPrefix: "app:" });
 
@@ -325,11 +545,23 @@ describe("ServiceWorkerPreloadWriter", () => {
       expect(output).not.toMatch(/\nexpose\(\);/);
    });
 
-   it("has no helper for files and no timeout, which belong to pages", async () => {
-      const output = await render([invokeFromWorker], { getPathForFile: true, timeoutMs: 500 });
+   it("has no helper for files, which belongs to pages", async () => {
+      const output = await render([invokeFromWorker], { getPathForFile: true });
       expect(output).not.toContain("webUtils");
       expect(output).not.toContain("getPathForFile");
+   });
+
+   it("has no timer, which the preload script of a worker could not run", async () => {
+      const output = await render(
+         [
+            { ...invokeFromWorker, timeoutMs: 800 },
+            { ...invokeFromWorker, name: "defaulted" },
+         ],
+         { timeoutMs: 5000 },
+      );
       expect(output).not.toContain("withTimeout");
+      expect(output).not.toContain("setTimeout");
+      expect(output).toContain("ipcRenderer.invoke('autoipc:getToken', ...args)");
    });
 
    it("does not unwrap the envelope with rawErrors", async () => {
@@ -402,32 +634,43 @@ describe("ServiceWorkerTypesWriter", () => {
       expect(output).not.toContain("isolated world");
    });
 
-   it("has no timeout error, since a worker call has no timeout", async () => {
-      const output = await render([invokeFromWorker], { timeoutMs: 500 });
+   it("declares no timeout error without a timeout", async () => {
+      const output = await render([invokeFromWorker]);
+      expect(output).not.toContain("IpcTimeoutError");
+   });
+
+   it("declares the timeout error for a call that times out, by option or by the default", async () => {
+      const byOption = await render([{ ...invokeFromWorker, timeoutMs: 500 }]);
+      expect(byOption).toContain("type IpcTimeoutError =");
+      expect(byOption).toContain("/** @throws {IpcError<IpcTimeoutError>} */");
+      const byDefault = await render([invokeFromWorker], { timeoutMs: 500 });
+      expect(byDefault).toContain("type IpcTimeoutError =");
+      const off = await render([{ ...invokeFromWorker, timeoutMs: 0 }], { timeoutMs: 500 });
+      expect(off).not.toContain("IpcTimeoutError");
+   });
+
+   it("leaves the timeout error out with rawErrors, which has no envelope for it", async () => {
+      const output = await render([{ ...invokeFromWorker, timeoutMs: 500 }], { rawErrors: true });
+      expect(output).not.toContain("IpcTimeoutError");
+   });
+
+   it("declares no timeout error for a message or a question", async () => {
+      const output = await render([sendFromWorker, askWorker, emitToWorker], { timeoutMs: 500 });
       expect(output).not.toContain("IpcTimeoutError");
    });
 });
 
-describe("the files of the page, with service worker channels", () => {
+describe("PreloadBindingsWriter, calls of a worker", () => {
    mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
 
-   it("leave the worker channels out, and are empty for a schema with only those", async () => {
-      const preload = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...all));
-      await preload.write(false);
-      expect((await fsp.readFile(preload.getTargetFilePath())).toString()).toContain(
-         "export const api = {};",
+   it("leaves the timeout of a worker call out of the preload script of the page", async () => {
+      const obj = new shared.VitestPreloadBindingsWriter(
+         shared.buildFileSpecs(renderer, { ...invokeFromWorker, timeoutMs: 800 }),
+         { channelPrefix: "autoipc:" },
       );
-      const types = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...all));
-      await types.write(false);
-      expect((await fsp.readFile(types.getTargetFilePath())).toString()).toContain(
-         "interface IpcApi {}",
-      );
-      const mixed = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...all, renderer));
-      await mixed.write(false);
-      const output = (await fsp.readFile(mixed.getTargetFilePath())).toString();
-      expect(output).toContain("getUser");
+      await obj.write(false);
+      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      expect(output).not.toContain("withTimeout");
       expect(output).not.toContain("getToken");
-      expect(output).not.toContain("flush");
    });
 });

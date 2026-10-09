@@ -87,7 +87,7 @@ Config explanation:
  - `timeoutMs` - The default time in milliseconds after which the promise of an `invoke` is rejected
    with an `IpcTimeoutError`. `0`, the default, waits for ever. It is also the default of `callUtility`,
    `callMain` and `invokeUtility`, which reject with an `IpcUtilityError` of the code
-   `IPC_UTILITY_TIMEOUT`. See [Timeouts](#timeouts).
+   `IPC_UTILITY_TIMEOUT`, and of `invokeFromWorker`. See [Timeouts](#timeouts).
  - `utilityBindingsPath` - Relative path of the generated file for utility processes, `utility.ts` in
    `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
    file is written only when the schema has a channel to a utility process. See
@@ -315,7 +315,8 @@ export default defineChannels({
 | `emitToWorker` | MainToServiceWorker | `void` or `Promise<void>`    |
 
 The verbs for utility processes take no options, and neither do `askWorker` and `emitToWorker`. The
-channels that a service worker calls have `allowedOrigins` only. The only option of the others that is
+channels that a service worker calls have `allowedOrigins` and `validate`, and `invokeFromWorker` also
+`timeoutMs`. The only option of the others that is
 not described in its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
 The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
 With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
@@ -1001,6 +1002,14 @@ plain object of the same shape), and the default of the config applies to them. 
 the config does not apply to it: a timed-out stream is cancelled in the child and fails the read of the
 page. The handler of a call is not stopped, and its late reply is dropped.
 
+`invokeFromWorker` takes `timeoutMs` too, and the default of the config applies to it. The preload
+script of a service worker has no timers (`setTimeout` is not defined there), so the main process times
+the call: from the moment it arrives, over the schema of `validate` and the handler. The worker gets the
+plain object `{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is not stopped,
+and its late reply is dropped. With `rawErrors` the main process still rejects the call, but the worker
+gets the error of Electron, and the typings do not declare `IpcTimeoutError`. A question to a worker,
+`askWorker`, has no schema option: `invokeWith(worker, { timeoutMs }, ...args)` times it.
+
 #### Utility processes
 
 `utilityProcess` is where Electron wants CPU-heavy or crash-prone work (SQLite, indexing, native
@@ -1213,6 +1222,15 @@ a frame: `IpcMainServiceWorkerEvent` and `IpcMainServiceWorkerInvokeEvent` have 
  - `configureServiceWorkerIpc({ validateSender, onRejected })` is the hook of the workers, like
    `configureIpc` is for pages. `validateSender(event, channel)` sees the event with `versionId` and
    `serviceWorker.scope`, and only `true` allows the call. The hooks of pages are not changed.
+ - `validate` of `invokeFromWorker` and `sendFromWorker` is a Standard Schema of the argument tuple,
+   exactly as for `invoke` and `send` (see [Sender validation](#sender-validation)). It runs after the
+   sender check and before the callback, which gets the output of the schema. An invalid call is rejected
+   with an `IpcValidationError`, which reaches the worker as the plain object
+   `{ name, message, code: "IPC_VALIDATION", data }`, and an invalid message is dropped. When a channel
+   has a validator, `onRejected` gets the error as its third argument: an `IpcValidationError`, or an
+   `IpcWorkerError` for a call that the sender check rejected. A call for a channel without a handler,
+   and a message without a listener, are not validated. `handleOnce` and `once` are used up by the first
+   valid call, also when the schema is asynchronous.
  - A call that is rejected throws an `IpcWorkerError` with the code `IPC_WORKER_FORBIDDEN`, which reaches
    the worker as the plain object `{ name, message, code }`. A message that is rejected is dropped. A call
    for a channel without a handler is answered with `IPC_WORKER_NO_HANDLER`.
@@ -1234,9 +1252,8 @@ Errors and answers work as they do for the other channels:
    Listeners of `sendFromWorker` that throw are reported to `console.error`, and the others still run.
  - A stopped worker loses its state with the next start: register the responders and listeners of the
    worker at the top of its script, as it runs on every start.
- - There are no `validate`, `timeoutMs` or `scopes` options yet: a worker is not a window, and a call
-   whose handler never answers waits for ever. The signature is checked for what structured clone cannot
-   send, like the others.
+ - `invokeFromWorker` has `timeoutMs` (see [Timeouts](#timeouts)). There is no `scopes` option: a worker
+   is not a window. The signature is checked for what structured clone cannot send, like the others.
 
 #### Migrating from 0.2
 

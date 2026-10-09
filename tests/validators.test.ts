@@ -1534,17 +1534,44 @@ describe("validateChannelSpecs, service worker channels", () => {
       ).toThrowError(/is not an origin/);
    });
 
+   it("accepts a validator for the channels that a worker calls only", () => {
+      const validate = { name: "args", exported: "args", fromPath: "./v" };
+      for (const kind of ["Unicast", "Broadcast"] as const) {
+         expect(() =>
+            vld.validateChannelSpecs([{ ...generate("ServiceWorkerToMain", kind), validate }]),
+         ).not.toThrowError();
+         expect(() =>
+            vld.validateChannelSpecs([{ ...generate("MainToServiceWorker", kind), validate }]),
+         ).toThrowError(/validate/);
+      }
+   });
+
+   it("accepts a timeout for the calls of a worker only, not for its messages or questions", () => {
+      expect(() =>
+         vld.validateChannelSpecs([
+            { ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: 5 },
+         ]),
+      ).not.toThrowError();
+      expect(() =>
+         vld.validateChannelSpecs([
+            { ...generate("ServiceWorkerToMain", "Unicast"), timeoutMs: -1 },
+         ]),
+      ).toThrowError(/timeoutMs must be a non-negative integer/);
+      for (const spec of [
+         generate("ServiceWorkerToMain", "Broadcast"),
+         generate("MainToServiceWorker", "Unicast"),
+         generate("MainToServiceWorker", "Broadcast"),
+      ]) {
+         expect(() => vld.validateChannelSpecs([{ ...spec, timeoutMs: 5 }])).toThrowError(
+            /timeoutMs/,
+         );
+      }
+   });
+
    it("rejects the other options", () => {
-      const ref = { name: "args", exported: "args", fromPath: "./v" };
       for (const direction of ["ServiceWorkerToMain", "MainToServiceWorker"] as const) {
          for (const kind of ["Unicast", "Broadcast"] as const) {
-            for (const extra of [
-               { validate: ref },
-               { trigger: "focus" },
-               { maxQueue: 5 },
-               { timeoutMs: 5 },
-               { scopes: ["a"] },
-            ]) {
+            for (const extra of [{ trigger: "focus" }, { maxQueue: 5 }, { scopes: ["a"] }]) {
                const [key] = Object.keys(extra);
                const spec = { ...generate(direction, kind), ...extra };
                expect(() => vld.validateChannelSpecs([spec])).toThrowError(new RegExp(key));

@@ -49,6 +49,7 @@ const WORKER_RESERVED_NAMES = [
    "getWorkerOrigin",
    "isWorkerAllowed",
    "callWorkerHandler",
+   "timeWorkerCall",
    "dispatchWorkerSend",
    "answerWorkerAsk",
    "failWorkerAsks",
@@ -74,6 +75,8 @@ interface OffPageUse {
    brokers: boolean;
    envelope: boolean;
    workers: t.ChannelSpec[];
+   /** The local names of the validators of the channels that a service worker calls. */
+   validators: Map<t.ChannelSpec, string>;
 }
 
 /** The names that a generated listener uses, which differ from the names of its signature. */
@@ -240,7 +243,13 @@ export class MainBindingsWriter extends BaseWriter {
       let usesEnvelope = false;
       let usesSenders = false;
       let usesStreams = false;
-      const offPage: OffPageUse = { utility: false, brokers: false, envelope: false, workers: [] };
+      const offPage: OffPageUse = {
+         utility: false,
+         brokers: false,
+         envelope: false,
+         workers: [],
+         validators: new Map(),
+      };
       const eventTypes = new Set<string>();
 
       for (const parsedFileSpecs of this.pfsArray) {
@@ -270,6 +279,14 @@ export class MainBindingsWriter extends BaseWriter {
                }
                channels.push(this.buildMainToRendererChannel(spec));
             } else {
+               const validator = this.importValidator(
+                  parsedFileSpecs,
+                  spec,
+                  importDeclarationsArray,
+               );
+               if (validator !== null) {
+                  offPage.validators.set(spec, validator);
+               }
                channels.push(
                   ...this.buildOffPageChannels(
                      spec,
@@ -320,6 +337,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesUtility: offPage.utility,
             usesBrokers: offPage.brokers,
             workerSpecs: offPage.workers,
+            workerValidators: offPage.validators,
             scopes,
             usesScopedGuards: this.hasScopedGuards(),
          },
@@ -477,6 +495,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesUtility: boolean;
          usesBrokers: boolean;
          workerSpecs: t.ChannelSpec[];
+         workerValidators: Map<t.ChannelSpec, string>;
          scopes: string[];
          usesScopedGuards: boolean;
       },
@@ -492,8 +511,13 @@ export class MainBindingsWriter extends BaseWriter {
             this.buildTargetResolver(),
          );
       }
-      if (uses.usesValidation) {
-         support.push(this.buildArgumentValidation(eventTypes));
+      if (uses.usesValidation || uses.workerValidators.size > 0) {
+         support.push(
+            this.buildArgumentValidation(
+               uses.usesValidation ? eventTypes : [],
+               this.getValidatedWorkerEvents(uses.workerValidators),
+            ),
+         );
       }
       if (uses.usesEnvelope) {
          support.push(this.buildErrorEnvelope());
@@ -508,7 +532,9 @@ export class MainBindingsWriter extends BaseWriter {
          support.push(this.buildAskHelpers());
       }
       if (uses.workerSpecs.length > 0) {
-         support.push(this.buildWorkerHelpers(uses.workerSpecs, uses.usesAsks));
+         support.push(
+            this.buildWorkerHelpers(uses.workerSpecs, uses.usesAsks, uses.workerValidators),
+         );
       }
       if (uses.usesStreams) {
          support.push(this.buildStreamHelpers());
@@ -878,10 +904,35 @@ export class MainBindingsWriter extends BaseWriter {
     * throws, rejects or answers with anything but a result, counts as a failure, so it never
     * lets an argument through. A synchronous schema keeps the call synchronous. An invalid call
     * is reported to `onRejected`, then an invoke throws the error and a send is dropped.
+    *
+    * `eventTypes` are the events of the channels of the pages, and `workerEvents` those of the
+    * validated channels of service workers. A worker call has its own hook, so it passes `report`,
+    * which `validateArguments` calls instead of the `onRejected` of `configureIpc`.
     */
-   private buildArgumentValidation(eventTypes: string[]): string {
+   private buildArgumentValidation(eventTypes: string[], workerEvents: string[]): string {
       const [i1, i2, i3] = this.indents;
-      const event = eventTypes.join(" | ");
+      const pageEvent = eventTypes.join(" | ");
+      const workerEvent = workerEvents.join(" | ");
+      const event = [...eventTypes, ...workerEvents].join(" | ");
+      const hasPages = eventTypes.length > 0;
+      const hasWorkers = workerEvents.length > 0;
+      // The page hook is called when no `report` is given. A file with only worker calls has no such hook.
+      const notify = hasWorkers
+         ? hasPages
+            ? [
+                 `${i3}if (report) {`,
+                 `${i3}${i1}report(event as ${workerEvent}, channel, error);`,
+                 `${i3}} else {`,
+                 `${i3}${i1}ipcConfig.onRejected?.(event as ${pageEvent}, channel, error);`,
+                 `${i3}}`,
+              ]
+            : [`${i3}report(event as ${workerEvent}, channel, error);`]
+         : [`${i3}ipcConfig.onRejected?.(event, channel, error);`];
+      const report = hasWorkers
+         ? [
+              `${i1}report${hasPages ? "?" : ""}: (event: ${workerEvent}, channel: string, error: IpcValidationError) => void,`,
+           ]
+         : [];
       return [
          "",
          "export interface IpcValidationIssue {",
@@ -927,11 +978,12 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}received: unknown[],`,
          `${i1}drop: boolean,`,
          `${i1}run: (args: unknown[]) => R,`,
+         ...report,
          "): R | Promise<R | undefined> | undefined {",
          `${i1}const reject = (issues: readonly IpcValidationIssue[]): undefined => {`,
          `${i2}const error = new IpcValidationError(channel, issues);`,
          `${i2}try {`,
-         `${i3}ipcConfig.onRejected?.(event, channel, error);`,
+         ...notify,
          `${i2}} catch {`,
          `${i3}// A failing hook must not decide whether the call is rejected.`,
          `${i2}}`,
@@ -962,6 +1014,14 @@ export class MainBindingsWriter extends BaseWriter {
          "}",
          "",
       ].join("\n");
+   }
+   /** The events of the validated channels that a service worker calls, which the validation reports. */
+   private getValidatedWorkerEvents(validators: Map<t.ChannelSpec, string>): string[] {
+      const events = new Set<string>();
+      for (const spec of validators.keys()) {
+         events.add(this.getWorkerEventType(spec));
+      }
+      return [...events].sort(utils.compareStrings);
    }
    /**
     * `ipc.<name>.on(callback)` and `once` for `send` channels, and `handle` and `handleOnce` for
@@ -2445,14 +2505,16 @@ export class MainBindingsWriter extends BaseWriter {
     * `IpcMainServiceWorker` has no `off`, so a worker is only ever given routes, which look their
     * callbacks up when a message arrives.
     */
-   private buildWorkerHelpers(specs: t.ChannelSpec[], hasRendererAsks: boolean): string {
+   private buildWorkerHelpers(
+      specs: t.ChannelSpec[],
+      hasRendererAsks: boolean,
+      validators: Map<t.ChannelSpec, string>,
+   ): string {
       const [i1, i2, i3, i4] = this.indents;
-      const info = (spec: t.ChannelSpec, wire: string) => {
-         const origins = spec.allowedOrigins
-            ? `, allowedOrigins: [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
-            : "";
-         return `${i1}{ channel: '${spec.name}', wire: ${wire}${origins} },`;
-      };
+      const validates = validators.size > 0;
+      // An invalid call is reported to the hook, with the error, like a call that is forbidden.
+      const reportInvalid =
+         "(rejected, name, error) => workerConfig.onRejected?.(rejected, name, error)";
       const pick = (direction: t.ChannelDirection, kind: t.ChannelKind) =>
          specs
             .filter((spec) => spec.direction === direction && spec.kind === kind)
@@ -2460,6 +2522,9 @@ export class MainBindingsWriter extends BaseWriter {
       const calls = pick("ServiceWorkerToMain", "Unicast");
       const sends = pick("ServiceWorkerToMain", "Broadcast");
       const asks = pick("MainToServiceWorker", "Unicast");
+      const times = calls.some((spec) => this.getTimeoutMs(spec) > 0);
+      const validatesCalls = calls.some((spec) => validators.has(spec));
+      const validatesSends = sends.some((spec) => validators.has(spec));
       const inbound = calls.length > 0 || sends.length > 0;
       const events = [
          ...(calls.length > 0 ? ["IpcMainServiceWorkerInvokeEvent"] : []),
@@ -2482,42 +2547,22 @@ export class MainBindingsWriter extends BaseWriter {
          "}",
          "",
       );
-      if (inbound) {
-         out.push(
-            "export interface IpcWorkerConfig {",
-            `${i1}validateSender?: (event: ${events}, channel: string) => boolean;`,
-            `${i1}onRejected?: (event: ${events}, channel: string) => void;`,
-            "}",
-            "",
-            "let workerConfig: IpcWorkerConfig = {};",
-            "",
-            "export function configureServiceWorkerIpc(config: IpcWorkerConfig): void {",
-            `${i1}workerConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
-            "}",
-            "",
-            "interface WorkerChannelInfo {",
-            `${i1}channel: string;`,
-            `${i1}wire: string;`,
-            `${i1}allowedOrigins?: string[];`,
-            "}",
-            "",
-         );
-      } else if (asks.length > 0) {
-         out.push(
-            "interface WorkerChannelInfo {",
-            `${i1}channel: string;`,
-            `${i1}wire: string;`,
-            "}",
-            "",
-         );
-      }
+      out.push(
+         ...this.buildWorkerConfigLines({
+            inbound,
+            events,
+            hasAsks: asks.length > 0,
+            validates,
+            times,
+         }),
+      );
       const table = (
          name: string,
          list: t.ChannelSpec[],
          wire: (spec: t.ChannelSpec) => string,
       ) => [
          `const ${name}: WorkerChannelInfo[] = [`,
-         ...list.map((spec) => info(spec, wire(spec))),
+         ...list.map((spec) => this.describeWorkerChannel(spec, wire(spec), validators.get(spec))),
          "];",
          "",
       ];
@@ -2565,128 +2610,13 @@ export class MainBindingsWriter extends BaseWriter {
          "",
       );
       if (inbound) {
-         out.push(
-            "function getWorkerOrigin(scope: string): string | null {",
-            `${i1}try {`,
-            `${i2}const url = new URL(scope);`,
-            `${i2}// The origin of a scheme that is not special is "null", while a frame reports scheme://host.`,
-            `${i2}return url.origin !== 'null' ? url.origin : \`\${url.protocol}//\${url.host}\`;`,
-            `${i1}} catch {`,
-            `${i2}return null;`,
-            `${i1}}`,
-            "}",
-            "",
-            `function isWorkerAllowed(worker: ServiceWorkerMain, event: ${events}, channel: string, allowedOrigins?: string[]): boolean {`,
-            `${i1}const validateSender = workerConfig.validateSender;`,
-            `${i1}if (!allowedOrigins && !validateSender) {`,
-            `${i2}return true;`,
-            `${i1}}`,
-            `${i1}let allowed = false;`,
-            `${i1}try {`,
-            `${i2}const origin = getWorkerOrigin(worker.scope);`,
-            `${i2}allowed =`,
-            `${i3}(!allowedOrigins || (origin !== null && allowedOrigins.includes(origin))) &&`,
-            `${i3}(!validateSender || validateSender(event, channel) === true);`,
-            `${i1}} catch {`,
-            `${i2}allowed = false;`,
-            `${i1}}`,
-            `${i1}if (!allowed && workerConfig.onRejected) {`,
-            `${i2}try {`,
-            `${i3}workerConfig.onRejected(event, channel);`,
-            `${i2}} catch {`,
-            `${i3}// A failing hook must not decide whether the call is rejected.`,
-            `${i2}}`,
-            `${i1}}`,
-            `${i1}return allowed;`,
-            "}",
-            "",
-         );
+         out.push(...this.buildWorkerSenderCheck(events, validates));
       }
       if (calls.length > 0) {
-         out.push(
-            "function callWorkerHandler(",
-            `${i1}hub: WorkerHub,`,
-            `${i1}worker: ServiceWorkerMain,`,
-            `${i1}event: IpcMainServiceWorkerInvokeEvent,`,
-            `${i1}info: WorkerChannelInfo,`,
-            `${i1}args: unknown[],`,
-            "): unknown {",
-            `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
-            `${i2}throw new IpcWorkerError(info.channel, \`The service worker is not allowed to use the channel '\${info.channel}'\`, 'IPC_WORKER_FORBIDDEN');`,
-            `${i1}}`,
-            `${i1}const handler = hub.handlers[info.channel] as ((...handlerArgs: unknown[]) => unknown) | undefined;`,
-            `${i1}if (!handler) {`,
-            `${i2}throw new IpcWorkerError(info.channel, \`No handler is registered for the channel '\${info.channel}'\`, 'IPC_WORKER_NO_HANDLER');`,
-            `${i1}}`,
-            `${i1}return handler(event, ...args);`,
-            "}",
-            "",
-            "function registerWorkerHandler(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
-            `${i1}const hub = getWorkerHub(session);`,
-            `${i1}const handler = once`,
-            `${i2}? (event: unknown, ...args: unknown[]) => {`,
-            `${i3}remove();`,
-            `${i3}return (callback as (...handlerArgs: unknown[]) => unknown)(event, ...args);`,
-            `${i2}}`,
-            `${i2}: callback;`,
-            `${i1}const remove = (): void => {`,
-            `${i2}if (hub.handlers[channel] === handler) {`,
-            `${i3}delete hub.handlers[channel];`,
-            `${i2}}`,
-            `${i1}};`,
-            `${i1}hub.handlers[channel] = handler;`,
-            `${i1}return remove;`,
-            "}",
-            "",
-         );
+         out.push(...this.buildWorkerCallLines(validatesCalls, reportInvalid));
       }
       if (sends.length > 0) {
-         out.push(
-            "function dispatchWorkerSend(",
-            `${i1}hub: WorkerHub,`,
-            `${i1}worker: ServiceWorkerMain,`,
-            `${i1}event: IpcMainServiceWorkerEvent,`,
-            `${i1}info: WorkerChannelInfo,`,
-            `${i1}args: unknown[],`,
-            "): void {",
-            `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
-            `${i2}return;`,
-            `${i1}}`,
-            `${i1}const listeners = hub.listeners[info.channel];`,
-            `${i1}if (!listeners) {`,
-            `${i2}return;`,
-            `${i1}}`,
-            `${i1}for (const entry of listeners.slice()) {`,
-            `${i2}if (entry.once) {`,
-            `${i3}const at = listeners.indexOf(entry);`,
-            `${i3}if (at < 0) {`,
-            `${i4}continue;`,
-            `${i3}}`,
-            `${i3}listeners.splice(at, 1);`,
-            `${i2}}`,
-            `${i2}try {`,
-            `${i3}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...args);`,
-            `${i2}} catch (error) {`,
-            `${i3}console.error(error);`,
-            `${i2}}`,
-            `${i1}}`,
-            "}",
-            "",
-            "function addWorkerListener(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
-            `${i1}const hub = getWorkerHub(session);`,
-            `${i1}const entry: WorkerListener = { callback, once };`,
-            `${i1}const listeners = hub.listeners[channel] ?? [];`,
-            `${i1}listeners.push(entry);`,
-            `${i1}hub.listeners[channel] = listeners;`,
-            `${i1}return () => {`,
-            `${i2}const at = listeners.indexOf(entry);`,
-            `${i2}if (at >= 0) {`,
-            `${i3}listeners.splice(at, 1);`,
-            `${i2}}`,
-            `${i1}};`,
-            "}",
-            "",
-         );
+         out.push(...this.buildWorkerSendLines(validatesSends, reportInvalid));
       }
       if (asks.length > 0) {
          out.push(
@@ -2773,25 +2703,299 @@ export class MainBindingsWriter extends BaseWriter {
             "",
          );
       }
-      out.push(this.buildWorkerRouting(calls, sends, asks));
+      if (times) {
+         out.push(...this.buildWorkerTimer());
+      }
+      out.push(this.buildWorkerRouting(calls, sends, asks, times));
       out.push(...this.buildWorkerSenders(specs));
       return out.join("\n");
+   }
+   /** `getWorkerOrigin` and `isWorkerAllowed`, which the routes call first. */
+   private buildWorkerSenderCheck(events: string, validates: boolean): string[] {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "function getWorkerOrigin(scope: string): string | null {",
+         `${i1}try {`,
+         `${i2}const url = new URL(scope);`,
+         `${i2}// The origin of a scheme that is not special is "null", while a frame reports scheme://host.`,
+         `${i2}return url.origin !== 'null' ? url.origin : \`\${url.protocol}//\${url.host}\`;`,
+         `${i1}} catch {`,
+         `${i2}return null;`,
+         `${i1}}`,
+         "}",
+         "",
+         `function isWorkerAllowed(worker: ServiceWorkerMain, event: ${events}, channel: string, allowedOrigins?: string[]): boolean {`,
+         `${i1}const validateSender = workerConfig.validateSender;`,
+         `${i1}if (!allowedOrigins && !validateSender) {`,
+         `${i2}return true;`,
+         `${i1}}`,
+         `${i1}let allowed = false;`,
+         `${i1}try {`,
+         `${i2}const origin = getWorkerOrigin(worker.scope);`,
+         `${i2}allowed =`,
+         `${i3}(!allowedOrigins || (origin !== null && allowedOrigins.includes(origin))) &&`,
+         `${i3}(!validateSender || validateSender(event, channel) === true);`,
+         `${i1}} catch {`,
+         `${i2}allowed = false;`,
+         `${i1}}`,
+         `${i1}if (!allowed && workerConfig.onRejected) {`,
+         `${i2}try {`,
+         validates
+            ? `${i3}workerConfig.onRejected(event, channel, new IpcWorkerError(channel, \`The service worker is not allowed to use the channel '\${channel}'\`, 'IPC_WORKER_FORBIDDEN'));`
+            : `${i3}workerConfig.onRejected(event, channel);`,
+         `${i2}} catch {`,
+         `${i3}// A failing hook must not decide whether the call is rejected.`,
+         `${i2}}`,
+         `${i1}}`,
+         `${i1}return allowed;`,
+         "}",
+         "",
+      ];
+   }
+   /**
+    * `timeWorkerCall`, which rejects the call of a worker that the handler has not answered in time.
+    * The preload script of a worker has no timers, so the main process times its calls. The error is
+    * answered in the envelope, so it reaches the worker as the plain object `{ name:
+    * 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' }`, like the timeout of a page. The handler is not
+    * stopped, and its late reply is dropped. The timer is cleared as soon as the handler settles.
+    */
+   private buildWorkerTimer(): string[] {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "function timeWorkerCall(info: WorkerChannelInfo, result: unknown): unknown {",
+         `${i1}const timeoutMs = info.timeoutMs;`,
+         `${i1}if (!timeoutMs || !result || typeof (result as Promise<unknown>).then !== 'function') {`,
+         `${i2}return result;`,
+         `${i1}}`,
+         `${i1}return new Promise<unknown>((resolve, reject) => {`,
+         `${i2}const timer = setTimeout(() => {`,
+         `${i3}const message = \`The channel '\${info.channel}' did not answer within \${timeoutMs} ms\`;`,
+         `${i3}reject(Object.assign(new Error(message), { name: 'IpcTimeoutError', code: 'IPC_TIMEOUT' }));`,
+         `${i2}}, Math.min(timeoutMs, 2147483647));`,
+         `${i2}(result as Promise<unknown>).then(`,
+         `${i3}(value) => {`,
+         `${i3}${i1}clearTimeout(timer);`,
+         `${i3}${i1}resolve(value);`,
+         `${i3}},`,
+         `${i3}(error: unknown) => {`,
+         `${i3}${i1}clearTimeout(timer);`,
+         `${i3}${i1}reject(error);`,
+         `${i3}},`,
+         `${i2});`,
+         `${i1}});`,
+         "}",
+         "",
+      ];
+   }
+   /** `IpcWorkerConfig`, `configureServiceWorkerIpc` and the type of the entries of the tables of channels. */
+   private buildWorkerConfigLines(w: {
+      inbound: boolean;
+      events: string;
+      hasAsks: boolean;
+      validates: boolean;
+      times: boolean;
+   }): string[] {
+      const [i1] = this.indents;
+      const { events, validates, times } = w;
+      if (w.inbound) {
+         return [
+            "export interface IpcWorkerConfig {",
+            `${i1}validateSender?: (event: ${events}, channel: string) => boolean;`,
+            `${i1}onRejected?: (event: ${events}, channel: string${validates ? ", error: IpcWorkerError | IpcValidationError" : ""}) => void;`,
+            "}",
+            "",
+            "let workerConfig: IpcWorkerConfig = {};",
+            "",
+            "export function configureServiceWorkerIpc(config: IpcWorkerConfig): void {",
+            `${i1}workerConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
+            "}",
+            "",
+            "interface WorkerChannelInfo {",
+            `${i1}channel: string;`,
+            `${i1}wire: string;`,
+            `${i1}allowedOrigins?: string[];`,
+            ...(validates ? [`${i1}validator?: IpcArgumentsSchema;`] : []),
+            ...(times ? [`${i1}timeoutMs?: number;`] : []),
+            "}",
+            "",
+         ];
+      }
+      return w.hasAsks
+         ? ["interface WorkerChannelInfo {", `${i1}channel: string;`, `${i1}wire: string;`, "}", ""]
+         : [];
+   }
+   /** The line of a channel in the table of the channels that a hub routes. */
+   private describeWorkerChannel(spec: t.ChannelSpec, wire: string, validator?: string): string {
+      const origins = spec.allowedOrigins
+         ? `, allowedOrigins: [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
+         : "";
+      const validated = validator === undefined ? "" : `, validator: ${validator}`;
+      const timeoutMs = spec.direction === "ServiceWorkerToMain" ? this.getTimeoutMs(spec) : 0;
+      const timed = timeoutMs > 0 && spec.kind === "Unicast" ? `, timeoutMs: ${timeoutMs}` : "";
+      return `${this.indents[0]}{ channel: '${spec.name}', wire: ${wire}${origins}${validated}${timed} },`;
+   }
+   /** `callWorkerHandler` and the registration of the handlers of the calls of a worker, with the validation of the arguments if a channel has a validator. */
+   private buildWorkerCallLines(validated: boolean, reportInvalid: string): string[] {
+      const [i1, i2, i3] = this.indents;
+      return [
+         "function callWorkerHandler(",
+         `${i1}hub: WorkerHub,`,
+         `${i1}worker: ServiceWorkerMain,`,
+         `${i1}event: IpcMainServiceWorkerInvokeEvent,`,
+         `${i1}info: WorkerChannelInfo,`,
+         `${i1}args: unknown[],`,
+         "): unknown {",
+         `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
+         `${i2}throw new IpcWorkerError(info.channel, \`The service worker is not allowed to use the channel '\${info.channel}'\`, 'IPC_WORKER_FORBIDDEN');`,
+         `${i1}}`,
+         ...(validated
+            ? [
+                 `${i1}const missing = () => new IpcWorkerError(info.channel, \`No handler is registered for the channel '\${info.channel}'\`, 'IPC_WORKER_NO_HANDLER');`,
+                 `${i1}if (!hub.handlers[info.channel]) {`,
+                 `${i2}throw missing();`,
+                 `${i1}}`,
+                 `${i1}// The handler is looked up when the arguments are valid, since a schema may take its time`,
+                 `${i1}// and a handler of \`handleOnce\` may have been used up by then.`,
+                 `${i1}const run = (valid: unknown[]): unknown => {`,
+                 `${i2}const handler = hub.handlers[info.channel] as ((...handlerArgs: unknown[]) => unknown) | undefined;`,
+                 `${i2}if (!handler) {`,
+                 `${i3}throw missing();`,
+                 `${i2}}`,
+                 `${i2}return handler(event, ...valid);`,
+                 `${i1}};`,
+                 `${i1}return info.validator`,
+                 `${i2}? validateArguments(event, info.channel, info.validator, args, false, run, ${reportInvalid})`,
+                 `${i2}: run(args);`,
+              ]
+            : [
+                 `${i1}const handler = hub.handlers[info.channel] as ((...handlerArgs: unknown[]) => unknown) | undefined;`,
+                 `${i1}if (!handler) {`,
+                 `${i2}throw new IpcWorkerError(info.channel, \`No handler is registered for the channel '\${info.channel}'\`, 'IPC_WORKER_NO_HANDLER');`,
+                 `${i1}}`,
+                 `${i1}return handler(event, ...args);`,
+              ]),
+         "}",
+         "",
+         "function registerWorkerHandler(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
+         `${i1}const hub = getWorkerHub(session);`,
+         `${i1}const handler = once`,
+         `${i2}? (event: unknown, ...args: unknown[]) => {`,
+         `${i3}remove();`,
+         `${i3}return (callback as (...handlerArgs: unknown[]) => unknown)(event, ...args);`,
+         `${i2}}`,
+         `${i2}: callback;`,
+         `${i1}const remove = (): void => {`,
+         `${i2}if (hub.handlers[channel] === handler) {`,
+         `${i3}delete hub.handlers[channel];`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}hub.handlers[channel] = handler;`,
+         `${i1}return remove;`,
+         "}",
+         "",
+      ];
+   }
+   /** `dispatchWorkerSend` and the registration of the listeners of the messages of a worker, with the validation of the arguments if a channel has a validator. */
+   private buildWorkerSendLines(validated: boolean, reportInvalid: string): string[] {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "function dispatchWorkerSend(",
+         `${i1}hub: WorkerHub,`,
+         `${i1}worker: ServiceWorkerMain,`,
+         `${i1}event: IpcMainServiceWorkerEvent,`,
+         `${i1}info: WorkerChannelInfo,`,
+         `${i1}args: unknown[],`,
+         "): void {",
+         `${i1}if (!isWorkerAllowed(worker, event, info.channel, info.allowedOrigins)) {`,
+         `${i2}return;`,
+         `${i1}}`,
+         ...(validated
+            ? [
+                 `${i1}if (!hub.listeners[info.channel]) {`,
+                 `${i2}return;`,
+                 `${i1}}`,
+                 `${i1}// The listeners are looked up when the arguments are valid, since a schema may take its time`,
+                 `${i1}// and a listener of \`once\` may have been used up by then.`,
+                 `${i1}const run = (valid: unknown[]): void => {`,
+                 `${i2}const listeners = hub.listeners[info.channel];`,
+                 `${i2}if (!listeners) {`,
+                 `${i3}return;`,
+                 `${i2}}`,
+                 `${i2}for (const entry of listeners.slice()) {`,
+                 `${i3}if (entry.once) {`,
+                 `${i4}const at = listeners.indexOf(entry);`,
+                 `${i4}if (at < 0) {`,
+                 `${i4}${i1}continue;`,
+                 `${i4}}`,
+                 `${i4}listeners.splice(at, 1);`,
+                 `${i3}}`,
+                 `${i3}try {`,
+                 `${i4}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...valid);`,
+                 `${i3}} catch (error) {`,
+                 `${i4}console.error(error);`,
+                 `${i3}}`,
+                 `${i2}}`,
+                 `${i1}};`,
+                 `${i1}if (info.validator) {`,
+                 `${i2}void validateArguments(event, info.channel, info.validator, args, true, run, ${reportInvalid});`,
+                 `${i1}} else {`,
+                 `${i2}run(args);`,
+                 `${i1}}`,
+              ]
+            : [
+                 `${i1}const listeners = hub.listeners[info.channel];`,
+                 `${i1}if (!listeners) {`,
+                 `${i2}return;`,
+                 `${i1}}`,
+                 `${i1}for (const entry of listeners.slice()) {`,
+                 `${i2}if (entry.once) {`,
+                 `${i3}const at = listeners.indexOf(entry);`,
+                 `${i3}if (at < 0) {`,
+                 `${i4}continue;`,
+                 `${i3}}`,
+                 `${i3}listeners.splice(at, 1);`,
+                 `${i2}}`,
+                 `${i2}try {`,
+                 `${i3}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...args);`,
+                 `${i2}} catch (error) {`,
+                 `${i3}console.error(error);`,
+                 `${i2}}`,
+                 `${i1}}`,
+              ]),
+         "}",
+         "",
+         "function addWorkerListener(session: Session, channel: string, callback: unknown, once: boolean): () => void {",
+         `${i1}const hub = getWorkerHub(session);`,
+         `${i1}const entry: WorkerListener = { callback, once };`,
+         `${i1}const listeners = hub.listeners[channel] ?? [];`,
+         `${i1}listeners.push(entry);`,
+         `${i1}hub.listeners[channel] = listeners;`,
+         `${i1}return () => {`,
+         `${i2}const at = listeners.indexOf(entry);`,
+         `${i2}if (at >= 0) {`,
+         `${i3}listeners.splice(at, 1);`,
+         `${i2}}`,
+         `${i1}};`,
+         "}",
+         "",
+      ];
    }
    /** `routeWorker`, `getWorkerHub` and `attachServiceWorkers`, which connect the hubs to the workers. */
    private buildWorkerRouting(
       calls: t.ChannelSpec[],
       sends: t.ChannelSpec[],
       asks: t.ChannelSpec[],
+      times: boolean,
    ): string {
       const [i1, i2, i3, i4] = this.indents;
       const route: string[] = [];
       if (calls.length > 0) {
+         const call = "callWorkerHandler(hub, worker, event, info, args)";
+         const timed = times ? `timeWorkerCall(info, ${call})` : call;
          route.push(
             `${i1}for (const info of workerCalls) {`,
             `${i2}worker.ipc.handle(info.wire, (event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]) =>`,
-            this.config.rawErrors
-               ? `${i3}callWorkerHandler(hub, worker, event, info, args),`
-               : `${i3}settleInvoke(() => callWorkerHandler(hub, worker, event, info, args)),`,
+            this.config.rawErrors ? `${i3}${timed},` : `${i3}settleInvoke(() => ${timed}),`,
             `${i2});`,
             `${i1}}`,
          );

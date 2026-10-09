@@ -1,0 +1,10 @@
+{
+   "name": "fixture-service-worker-guards",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "timeoutMs": 5000
+      }
+   }
+}
