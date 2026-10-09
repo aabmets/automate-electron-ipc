@@ -30,7 +30,7 @@ interface ChannelGroups {
 
 export class PreloadBindingsWriter extends BaseWriter {
    protected getTargetFilePath(): string {
-      return this.config.preloadBindingsFilePath;
+      return this.getScopedFilePath(this.config.preloadBindingsFilePath);
    }
    protected isEmpty(): boolean {
       return !this.hasRendererChannels();

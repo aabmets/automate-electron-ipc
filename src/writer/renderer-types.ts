@@ -31,7 +31,7 @@ interface ChannelEntry {
 
 export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
-      return this.config.rendererTypesFilePath;
+      return this.getScopedFilePath(this.config.rendererTypesFilePath);
    }
    protected getReservedNames(): string[] {
       // `IpcApi` is declared by the generated file. `Promise`, `Awaited` and `Parameters` are
@@ -172,6 +172,14 @@ export class RendererTypesWriter extends BaseWriter {
            ].join("\n")
          : "";
       const globals = [
+         ...(this.scope === null
+            ? []
+            : [
+                 `${i0}/**`,
+                 `${i0} * The API of the scope '${this.scope}': its own channels and the ones that have no scope.`,
+                 `${i0} * Every window.*.d.ts declares this variable, so a project includes only one of them.`,
+                 `${i0} */`,
+              ]),
          ...(worldId === undefined
             ? []
             : [

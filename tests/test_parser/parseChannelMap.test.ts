@@ -1132,3 +1132,70 @@ describe("renderer to utility channels", () => {
       ]);
    });
 });
+
+describe("parseChannelMapModule, scopes", () => {
+   const wrap = (entry: string) => `export default defineChannels({ ${entry} });`;
+   const signatures: Record<string, string> = {
+      invoke: "() => Promise<void>",
+      send: "() => void",
+      emit: "() => void",
+      ask: "() => boolean",
+      stream: "() => AsyncIterable<number>",
+      port: "() => void",
+      mainPort: "() => void",
+      invokeUtility: "() => Promise<void>",
+      streamUtility: "() => AsyncIterable<number>",
+   };
+
+   it.each(Object.keys(signatures))("reads scopes of %s, in the order they are written", (verb) => {
+      const spec = parseOne(
+         `chan: ${verb}<${signatures[verb]}>({ scopes: ["settings", "editor"] })`,
+      );
+      expect(spec.scopes).toStrictEqual(["settings", "editor"]);
+   });
+
+   it("reads scopes of the form with `as`, through parentheses, and next to other options", () => {
+      expect(parseOne('chan: send({ scopes: ["a"] }) as () => void').scopes).toStrictEqual(["a"]);
+      expect(parseOne("chan: send<() => void>({ scopes: (['a']) })").scopes).toStrictEqual(["a"]);
+      const spec = parseOne(
+         'chan: invoke<() => void>({ allowedOrigins: ["app://."], timeoutMs: 5, scopes: ["a", "b"] })',
+      );
+      expect(spec).toMatchObject({ allowedOrigins: ["app://."], timeoutMs: 5, scopes: ["a", "b"] });
+   });
+
+   it("does not set scopes when none are given", () => {
+      expect(parseOne("chan: invoke<() => void>()")).not.toHaveProperty("scopes");
+      expect(parseOne("chan: invoke<() => void>({})")).not.toHaveProperty("scopes");
+   });
+
+   it("leaves the names to the validator, so that an empty list reaches it", () => {
+      expect(parseOne("chan: send<() => void>({ scopes: [] })").scopes).toStrictEqual([]);
+      expect(parseOne('chan: send<() => void>({ scopes: ["Not A Scope"] })').scopes).toStrictEqual([
+         "Not A Scope",
+      ]);
+   });
+
+   it("rejects scopes that are not an array of string literals", () => {
+      for (const value of [
+         '"settings"',
+         "scopes",
+         "[scope]",
+         '[...scopes, "a"]',
+         '["a", , "b"]',
+         "[`a`]",
+         "[1]",
+      ]) {
+         const msg = parseError(wrap(`chan: send<() => void>({ scopes: ${value} })`));
+         expect(msg).toContain("channel 'chan'");
+         expect(msg).toContain("option 'scopes' must be an array of string literals");
+      }
+   });
+
+   it.each(["callUtility", "notifyUtility", "callMain", "notifyMain"])(
+      "rejects scopes on %s, since a page has no part in it",
+      (verb) => {
+         const msg = parseError(wrap(`chan: ${verb}<() => void>({ scopes: ["a"] })`));
+         expect(msg).toContain(`option 'scopes' is not supported by '${verb}'`);
+      },
+   );
+});

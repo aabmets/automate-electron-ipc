@@ -32,6 +32,7 @@ Node library for generating IPC components for Electron apps.
 9) Typed channels between the main process and a `utilityProcess`, in a generated `utility.ts`
 10) Typed calls and streams from a renderer straight to a `utilityProcess`, over a port that the main
     process brokers
+11) Scopes, which give each kind of window its own API and keep the others out in the main process
 
 
 ### Installation
@@ -740,6 +741,62 @@ call. The generated code does not depend on any validation library.
 
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
+
+#### Scopes: a different API per window
+
+By default every window gets every channel. An app with a privileged settings window and a sandboxed
+window for content or plugins wants a different API for each. Put a channel in scopes with `scopes`:
+
+```typescript
+export default defineChannels({
+   // Open to all windows, also to the ones that are in no scope.
+   getVersion: invoke<() => Promise<string>>(),
+   // The settings window only.
+   saveSettings: invoke<(settings: Settings) => Promise<void>>({ scopes: ["settings"] }),
+   // The settings window and the editor window.
+   notify: send<(text: string) => void>({ scopes: ["settings", "editor"] }),
+   openFile: invoke<(path: string) => Promise<string>>({ scopes: ["editor"] }),
+});
+```
+
+`scopes` is accepted by `invoke`, `send`, `emit`, `ask`, `stream`, `port`, `mainPort`,
+`invokeUtility` and `streamUtility`, which are the channels that a page takes part in. A scope name
+is made of lower case letters and digits, joined by dashes, and `default` is taken.
+The API of a scope is its own channels and the ones without `scopes`.
+
+**One preload script and one declaration file per scope.** `ipcgen` writes `preload.<scope>.ts` and
+`window.<scope>.d.ts` next to the usual files, here `preload.settings.ts`, `window.settings.d.ts`,
+`preload.editor.ts` and `window.editor.d.ts`. The usual `preload.ts` and `window.d.ts` are the API of
+a window that is in no scope, so they have only the channels without `scopes`: all of them in a schema
+that uses no scopes. Use the file of its scope as the preload script of each window, and include only
+one `window*.d.ts` in a renderer project, since each of them declares the same global. A scope that
+you remove from the schema leaves its old files behind, so delete them by hand.
+
+**The main process admits a call by the scope of the window.** The preload script is only the API of
+the page, and a compromised page can call `ipcRenderer` itself, so the generated `main.ts` also
+checks. It exports `registerScope` and the type `IpcScope`, and you register each window in its scope:
+
+```typescript
+import { registerScope } from "./autoipc/main";
+
+const settings = new BrowserWindow({ webPreferences: { preload: settingsPreload, sandbox: true } });
+registerScope(settings, "settings");   // a window, a view or contents
+```
+
+A call to an `invoke`, `send` or `stream` channel with `scopes` is admitted only from contents that
+are registered in one of them. Others get an `IpcForbiddenError` (an `invoke`, and the start of a
+`stream`), or are dropped (a `send`), and `onRejected` of `configureIpc` hears of it, as it does for
+`allowedOrigins`. Contents that are in no scope can call the channels without `scopes` only, and
+those are open to all windows. The scope is checked first, then `allowedOrigins`, then
+`validateSender`, and a call has to pass all of them.
+
+`registerScope` returns a function which removes the registration. The registration is also removed
+when the contents are destroyed, and registering the same contents again replaces it. It belongs to
+the contents, so every frame of the window has the scope, and `allowedOrigins` still tells them apart.
+A scope that the schema does not declare throws a `TypeError`. Only the calls of a page are guarded
+in the main process. For `emit`, `ask`, port and utility channels `scopes` decides the API of the
+page: you pick the window that you send to or connect, and a window whose preload script lacks the
+channel has no listener for it.
 
 #### Errors
 

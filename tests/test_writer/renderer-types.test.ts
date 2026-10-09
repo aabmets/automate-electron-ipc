@@ -10,7 +10,9 @@
  */
 
 import fsp from "node:fs/promises";
+import scopes from "@src/scopes.js";
 import utils from "@src/utils.js";
+import writer from "@src/writer/index.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
 import type * as t from "@types";
@@ -471,6 +473,67 @@ describe("RendererTypesWriter", () => {
 
       it("has no such note for the main world", async () => {
          expect(await render(channels, {})).not.toContain("isolated world");
+      });
+   });
+
+   describe("scopes", () => {
+      const config = {
+         codeIndent: 3,
+         rendererTypesFilePath: "/p/ipc/window.d.ts",
+      } as t.IPCResolvedConfig;
+      const targetOf = (scope: string | null) =>
+         (
+            new writer.RendererTypesWriter(config, [], scope) as unknown as {
+               getTargetFilePath(): string;
+            }
+         ).getTargetFilePath();
+      const channels = shared.buildFileSpecs(
+         {
+            name: "getIt",
+            kind: "Unicast",
+            direction: "RendererToMain",
+            returnType: "Promise<string>",
+         },
+         { name: "sendIt", kind: "Broadcast", direction: "RendererToMain", scopes: ["settings"] },
+      );
+      const render = async (scope: string | null) => {
+         const obj = new shared.VitestRendererTypesWriter(
+            scopes.filterByScope(channels, scope),
+            {},
+            scope,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("writes the file of the surface of no scope to the usual path", () => {
+         expect(targetOf(null)).toBe("/p/ipc/window.d.ts");
+      });
+
+      it("writes the file of a scope next to it, named after the scope", () => {
+         expect(targetOf("settings")).toBe("/p/ipc/window.settings.d.ts");
+         expect(targetOf("plugin-host")).toBe("/p/ipc/window.plugin-host.d.ts");
+      });
+
+      it("declares the channels of the surface of the scope only", async () => {
+         expect(await render(null)).not.toContain("sendIt");
+         expect(await render("editor")).not.toContain("sendIt");
+         expect(await render("settings")).toContain("   sendIt: {\n      send: () => void;");
+         expect(await render("settings")).toContain("   getIt: {");
+      });
+
+      it("tells that the file of a scope declares the same variable as the others", async () => {
+         const output = await render("settings");
+
+         expect(output).toContain(
+            "The API of the scope 'settings': its own channels and the ones that have no scope.",
+         );
+         expect(output).toContain("so a project includes only one of them.");
+         expect(output).toContain("\n   var ipc: IpcApi;\n");
+      });
+
+      it("has no such note in the file of the surface of no scope", async () => {
+         expect(await render(null)).not.toContain("The API of the scope");
       });
    });
 

@@ -524,6 +524,108 @@ describe("validateChannelSpecs, stream channels", () => {
    });
 });
 
+describe("validateChannelSpecs, scopes", () => {
+   const make = (
+      direction: t.ChannelDirection,
+      kind: t.ChannelKind,
+      scopes: unknown,
+   ): Partial<t.ChannelSpec>[] => {
+      const returnType = kind === "Stream" ? "AsyncIterable<number>" : "void";
+      const spec = new ChannelSpecGenerator().generate(direction, kind, returnType);
+      return [{ ...spec, scopes } as Partial<t.ChannelSpec>];
+   };
+
+   it.each([
+      ["RendererToMain", "Unicast"],
+      ["RendererToMain", "Broadcast"],
+      ["RendererToMain", "Stream"],
+      ["MainToRenderer", "Broadcast"],
+      ["MainToRenderer", "Unicast"],
+      ["MainToRenderer", "Port"],
+      ["RendererToRenderer", "Port"],
+      ["RendererToUtility", "Unicast"],
+      ["RendererToUtility", "Stream"],
+   ] as const)("accepts scopes on a %s %s channel", (direction, kind) => {
+      expect(() =>
+         vld.validateChannelSpecs(make(direction, kind, ["settings", "plugin-host"])),
+      ).not.toThrowError();
+   });
+
+   it.each([
+      ["MainToUtility", "Unicast"],
+      ["MainToUtility", "Broadcast"],
+      ["UtilityToMain", "Unicast"],
+      ["UtilityToMain", "Broadcast"],
+   ] as const)(
+      "rejects scopes on a %s %s channel, which no page has a part in",
+      (direction, kind) => {
+         expect(() => vld.validateChannelSpecs(make(direction, kind, ["settings"]))).toThrowError(
+            /scopes/,
+         );
+      },
+   );
+
+   it("accepts a channel without scopes", () => {
+      const specs = [new ChannelSpecGenerator().generate("RendererToMain", "Unicast")];
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
+
+   it.each(["settings", "a", "editor2", "plugin-host", "a-b-c", "x".repeat(32)])(
+      "accepts '%s' as the name of a scope",
+      (name) => {
+         expect(() =>
+            vld.validateChannelSpecs(make("RendererToMain", "Unicast", [name])),
+         ).not.toThrowError();
+      },
+   );
+
+   it("rejects an empty list, since it would put the channel in no window", () => {
+      expect(() => vld.validateChannelSpecs(make("RendererToMain", "Unicast", []))).toThrowError(
+         /at least one scope/,
+      );
+   });
+
+   it("rejects 'default', which is the scope of the channels without scopes", () => {
+      expect(() =>
+         vld.validateChannelSpecs(make("RendererToMain", "Unicast", ["settings", "default"])),
+      ).toThrowError(/'default' is the scope of the channels without scopes/);
+   });
+
+   it.each([
+      "Settings",
+      "my_scope",
+      "2fast",
+      "-a",
+      "a-",
+      "a--b",
+      "a b",
+      "a.b",
+      "a/b",
+      "..",
+      "",
+      "é",
+      "x".repeat(33),
+   ])("rejects '%s' as the name of a scope", (name) => {
+      expect(() =>
+         vld.validateChannelSpecs(make("RendererToMain", "Unicast", [name])),
+      ).toThrowError(/is not a scope name/);
+   });
+
+   it("rejects a scope that is listed twice", () => {
+      expect(() =>
+         vld.validateChannelSpecs(make("RendererToMain", "Unicast", ["a", "b", "a"])),
+      ).toThrowError(/scope 'a' is listed twice/);
+   });
+
+   it("rejects a value which is not an array of strings", () => {
+      for (const value of ["settings", [1], { a: 1 }]) {
+         expect(() =>
+            vld.validateChannelSpecs(make("RendererToMain", "Unicast", value)),
+         ).toThrowError();
+      }
+   });
+});
+
 describe("validateChannelSpecs, allowedOrigins", () => {
    const make = (
       direction: t.ChannelDirection,

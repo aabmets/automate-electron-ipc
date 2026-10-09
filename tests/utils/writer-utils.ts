@@ -46,6 +46,9 @@ export class VitestBaseWriter extends BaseWriter {
    public getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
       return super.getChannelSpecs(parsedFileSpecs);
    }
+   public getScopedFilePath(filePath: string): string {
+      return super.getScopedFilePath(filePath);
+   }
 }
 
 export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
@@ -58,8 +61,12 @@ export class VitestMainBindingsWriter extends writer.MainBindingsWriter {
 }
 
 export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
+   constructor(
+      pfsArray: t.ParsedFileSpecs[],
+      config: Partial<t.IPCResolvedConfig> = {},
+      scope: string | null = null,
+   ) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray, scope);
    }
    public getTargetFilePath(): string {
       return "";
@@ -67,8 +74,12 @@ export class VitestPreloadBindingsWriter extends writer.PreloadBindingsWriter {
 }
 
 export class VitestRendererTypesWriter extends writer.RendererTypesWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
+   constructor(
+      pfsArray: t.ParsedFileSpecs[],
+      config: Partial<t.IPCResolvedConfig> = {},
+      scope: string | null = null,
+   ) {
+      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray, scope);
    }
    public getTargetFilePath(): string {
       return "";
@@ -139,6 +150,8 @@ export interface SimpleChannel {
    timeoutMs?: number;
    /** The error types of an invoke or stream channel, such as `"NotFoundError | AuthError"`. */
    errors?: string;
+   /** The scopes of the channel. */
+   scopes?: string[];
 }
 
 /**

@@ -107,8 +107,50 @@ describe("public types", () => {
          `,
       });
       // The option is not accepted, and the second type argument does not exist.
-      expect(diagnostics).toContain("schema.ts(4,46): error TS2322");
+      expect(diagnostics).toContain("schema.ts(4,46): error TS2353");
       expect(diagnostics).toContain("schema.ts(5,32): error TS2558");
+   });
+
+   it("accepts the scopes option on every channel that a page takes part in", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import { invokeUtility, streamUtility } from "automate-electron-ipc";
+
+            export default defineChannels({
+               getUser: invoke<(id: number) => Promise<string>>({ scopes: ["settings", "editor"] }),
+               note: send<(text: string) => void>({ scopes: ["settings"], allowedOrigins: ["app://."] }),
+               progress: emit<(n: number) => void>({ scopes: ["editor"], trigger: "focus" }),
+               dirty: ask<() => boolean>({ scopes: ["editor"] }),
+               rows: stream<() => AsyncIterable<number>>({ scopes: ["editor"] }),
+               chat: port<(msg: string) => void>({ scopes: ["editor"], maxQueue: 10 }),
+               logTail: mainPort<(line: string) => void>({ scopes: ["settings"] }),
+               query: invokeUtility<(sql: string) => Promise<number>>({ scopes: ["settings"] }),
+               scan: streamUtility<() => AsyncIterable<number>>({ scopes: ["settings"] }),
+               getUserAlt: invoke({ scopes: ["settings"] }) as (id: number) => Promise<string>,
+            });
+         `,
+      });
+      expect(diagnostics).toBe("");
+   });
+
+   it("rejects scopes that are not a list of strings, and on channels with no page", async () => {
+      const diagnostics = await typecheck({
+         "schema.ts": `
+            ${IMPORT}
+            import { callUtility, notifyMain } from "automate-electron-ipc";
+
+            export default defineChannels({
+               notAList: invoke<() => Promise<number>>({ scopes: "settings" }),
+               notStrings: send<() => void>({ scopes: [1] }),
+               toUtility: callUtility<() => Promise<number>>({ scopes: ["settings"] }),
+               fromUtility: notifyMain<() => void>({ scopes: ["settings"] }),
+            });
+         `,
+      });
+      for (const line of [6, 7, 8, 9]) {
+         expect(diagnostics).toContain(`schema.ts(${line},`);
+      }
    });
 
    it("keeps the signature of each channel in the type of the map", async () => {

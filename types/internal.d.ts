@@ -217,6 +217,12 @@ export interface ChannelSpec {
     * config.
     */
    timeoutMs?: number;
+   /**
+    * The scopes that the channel belongs to: the windows that have one of them get the channel in
+    * their API, and the main process rejects the calls of the other windows. Absent means that the
+    * channel is open to all windows. Only the channels that a page takes part in have it.
+    */
+   scopes?: string[];
 }
 
 export type ChannelMapExport = { kind: "default" } | { kind: "named"; name: string };

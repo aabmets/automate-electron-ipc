@@ -121,6 +121,33 @@ const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
    return true;
 });
 
+/** The names of scopes are part of file names, so they are lower case words joined by dashes. */
+const SCOPE_NAME_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const MAX_SCOPE_NAME_LENGTH = 32;
+/** The name of the scope of the channels that have no `scopes`, which is the name of no scope. */
+const RESERVED_SCOPE_NAME = "default";
+
+const ScopesStruct = refine(array(string()), "scopes", (values) => {
+   if (values.length === 0) {
+      return "scopes must list at least one scope, since an empty list puts the channel in no window";
+   }
+   const seen = new Set<string>();
+   for (const value of values) {
+      if (value === RESERVED_SCOPE_NAME) {
+         return `'${RESERVED_SCOPE_NAME}' is the scope of the channels without scopes. Choose another name`;
+      } else if (value.length > MAX_SCOPE_NAME_LENGTH || !SCOPE_NAME_PATTERN.test(value)) {
+         return (
+            `'${value}' is not a scope name. Use lower case letters and digits, joined by dashes ` +
+            `and starting with a letter, up to ${MAX_SCOPE_NAME_LENGTH} characters, such as 'settings' or 'plugin-host'`
+         );
+      } else if (seen.has(value)) {
+         return `scope '${value}' is listed twice`;
+      }
+      seen.add(value);
+   }
+   return true;
+});
+
 const IDENTIFIER_NAME = /^[A-Za-z_$][\w$]*$/;
 /** A channel name is emitted as an object key, so any ECMAScript identifier name is valid. */
 const CHANNEL_NAME = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*$/u;
@@ -137,16 +164,37 @@ const ValidatorRefStruct = object({
    ),
 });
 
-function getChannelSpecStruct(
-   kind: t.ChannelKind,
-   triggerable = false,
-   restrictable = false,
-   asking = false,
-   bounded = false,
-   streaming = false,
-   utility = false,
-   brokered = false,
-): Struct<any, any> {
+/** What differs between the kinds of channel spec: the options that they accept. */
+interface SpecStructFlags {
+   /** A `trigger` option (`emit`). */
+   triggerable?: boolean;
+   /** `allowedOrigins` and `validate` (a call of a page to the main process). */
+   restrictable?: boolean;
+   /** An `ask`, which goes from the main process to a page. */
+   asking?: boolean;
+   /** A `maxQueue` option (port channels). */
+   bounded?: boolean;
+   /** A `stream`, which has a chunk type. */
+   streaming?: boolean;
+   /** A channel between the main process and a utility process. */
+   utility?: boolean;
+   /** A channel between a page and a utility process. */
+   brokered?: boolean;
+   /** A `scopes` option (the channels that a page takes part in). */
+   scoped?: boolean;
+}
+
+function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}): Struct<any, any> {
+   const {
+      triggerable = false,
+      restrictable = false,
+      asking = false,
+      bounded = false,
+      streaming = false,
+      utility = false,
+      brokered = false,
+      scoped = false,
+   } = flags;
    return object({
       name: refine(string(), "identifier", (value) =>
          CHANNEL_NAME.test(value) ? true : `Channel name '${value}' is not a plain identifier`,
@@ -227,6 +275,7 @@ function getChannelSpecStruct(
       trigger: triggerable ? optional(TriggerStruct) : optional(never()),
       allowedOrigins: restrictable ? optional(AllowedOriginsStruct) : optional(never()),
       validate: restrictable ? optional(ValidatorRefStruct) : optional(never()),
+      scopes: scoped ? optional(ScopesStruct) : optional(never()),
       maxQueue: bounded ? optional(number()) : optional(never()),
       timeoutMs:
          kind === "Unicast" && !asking && !utility && !brokered
@@ -237,50 +286,27 @@ function getChannelSpecStruct(
 
 export function validateChannelSpecWithStruct(spec: Partial<t.ChannelSpec>): void {
    const structMap = {
-      TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", true),
-      BroadcastStruct: getChannelSpecStruct("Broadcast", false, true),
-      UnicastStruct: getChannelSpecStruct("Unicast", false, true),
-      AskStruct: getChannelSpecStruct("Unicast", false, false, true),
-      PortStruct: getChannelSpecStruct("Port", false, false, false, true),
-      StreamStruct: getChannelSpecStruct("Stream", false, true, false, false, true),
-      UtilityBroadcastStruct: getChannelSpecStruct(
-         "Broadcast",
-         false,
-         false,
-         false,
-         false,
-         false,
-         true,
-      ),
-      UtilityUnicastStruct: getChannelSpecStruct(
-         "Unicast",
-         false,
-         false,
-         false,
-         false,
-         false,
-         true,
-      ),
-      BrokeredUnicastStruct: getChannelSpecStruct(
-         "Unicast",
-         false,
-         false,
-         false,
-         false,
-         false,
-         false,
-         true,
-      ),
-      BrokeredStreamStruct: getChannelSpecStruct(
-         "Stream",
-         false,
-         false,
-         false,
-         false,
-         true,
-         false,
-         true,
-      ),
+      TriggerableBroadcastStruct: getChannelSpecStruct("Broadcast", {
+         triggerable: true,
+         scoped: true,
+      }),
+      BroadcastStruct: getChannelSpecStruct("Broadcast", { restrictable: true, scoped: true }),
+      UnicastStruct: getChannelSpecStruct("Unicast", { restrictable: true, scoped: true }),
+      AskStruct: getChannelSpecStruct("Unicast", { asking: true, scoped: true }),
+      PortStruct: getChannelSpecStruct("Port", { bounded: true, scoped: true }),
+      StreamStruct: getChannelSpecStruct("Stream", {
+         restrictable: true,
+         streaming: true,
+         scoped: true,
+      }),
+      UtilityBroadcastStruct: getChannelSpecStruct("Broadcast", { utility: true }),
+      UtilityUnicastStruct: getChannelSpecStruct("Unicast", { utility: true }),
+      BrokeredUnicastStruct: getChannelSpecStruct("Unicast", { brokered: true, scoped: true }),
+      BrokeredStreamStruct: getChannelSpecStruct("Stream", {
+         streaming: true,
+         brokered: true,
+         scoped: true,
+      }),
    };
    const brokered = spec?.direction === ("RendererToUtility" as t.ChannelDirection);
    const toUtility = spec?.direction === ("MainToUtility" as t.ChannelDirection);

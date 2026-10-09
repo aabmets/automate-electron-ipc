@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { collectScopes } from "../scopes.js";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 import { buildErrorEnvelope, buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
@@ -64,6 +65,11 @@ export class MainBindingsWriter extends BaseWriter {
          "ipcConfig",
          "configureIpc",
          "isSenderAllowed",
+         "IpcScope",
+         "ScopeEntry",
+         "ipcScopeNames",
+         "scopeRegistry",
+         "registerScope",
          "IpcValidationError",
          "IpcValidationIssue",
          "IpcArgumentsSchema",
@@ -206,6 +212,8 @@ export class MainBindingsWriter extends BaseWriter {
          this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
       }
       this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
+      const scopes = this.getScopes();
+      this.addScopeImports(scopes.length > 0, electronTypeImportsSet);
       const usesAsks = this.hasChannels("Unicast");
       const usesEmits = this.hasChannels("Broadcast");
       const usesRendererPorts = this.hasPorts("RendererToRenderer");
@@ -232,6 +240,8 @@ export class MainBindingsWriter extends BaseWriter {
             usesStreams,
             usesUtility,
             usesBrokers,
+            scopes,
+            usesScopedGuards: this.hasScopedGuards(),
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -274,6 +284,14 @@ export class MainBindingsWriter extends BaseWriter {
       if (used) {
          values.add("MessageChannelMain");
          for (const type of ["MessagePortMain", "WebContents", "WebFrameMain"]) {
+            types.add(type);
+         }
+      }
+   }
+   /** Adds the electron types that `registerScope` uses. */
+   private addScopeImports(used: boolean, types: Set<string>): void {
+      if (used) {
+         for (const type of ["BrowserWindow", "WebContents", "WebContentsView"]) {
             types.add(type);
          }
       }
@@ -346,12 +364,19 @@ export class MainBindingsWriter extends BaseWriter {
          usesStreams: boolean;
          usesUtility: boolean;
          usesBrokers: boolean;
+         scopes: string[];
+         usesScopedGuards: boolean;
       },
       eventTypes: string[],
    ): string[] {
       const support: string[] = [];
+      if (uses.scopes.length > 0) {
+         support.push(this.buildScopeRegistry(uses.scopes));
+      }
       if (uses.usesIpcMain) {
-         support.push(this.buildSenderValidation(eventTypes, uses.usesValidation));
+         support.push(
+            this.buildSenderValidation(eventTypes, uses.usesValidation, uses.usesScopedGuards),
+         );
       }
       if (uses.usesValidation) {
          support.push(this.buildArgumentValidation(eventTypes));
@@ -394,6 +419,77 @@ export class MainBindingsWriter extends BaseWriter {
          );
       }
       return support;
+   }
+   /** The scopes that the channels list, in code unit order. */
+   private getScopes(): string[] {
+      return collectScopes(this.pfsArray);
+   }
+   /**
+    * Whether a call from a renderer is checked against a scope: the channels that a page calls in
+    * the main process (`invoke`, `send` and `stream`) with `scopes`.
+    */
+   private hasScopedGuards(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some(
+            (spec) => spec.direction === "RendererToMain" && spec.scopes !== undefined,
+         ),
+      );
+   }
+   /**
+    * The registry of the scopes of the windows: `IpcScope`, the names that the schema declares, and
+    * `registerScope(target, scope)`, which puts the contents of a window, a view or contents into a
+    * scope. A channel with `scopes` is open only to the contents that are registered in one of its
+    * scopes, and contents that are in no scope can use only the channels without `scopes`. The
+    * registry holds the ID of the contents, so it keeps no reference to them. An entry is removed
+    * by its disposer and when the contents are destroyed, and registering the contents again
+    * replaces the entry: the disposer of the replaced one does nothing. A scope that the schema
+    * does not declare is a mistake which would otherwise lock the window out without a word, so
+    * it throws.
+    */
+   private buildScopeRegistry(scopes: string[]): string {
+      const [i1, i2, i3] = this.indents;
+      const names = scopes.map((scope) => `'${scope}'`);
+      return [
+         "",
+         `export type IpcScope = ${names.join(" | ")};`,
+         "",
+         `const ipcScopeNames: readonly string[] = [${names.join(", ")}];`,
+         "",
+         "interface ScopeEntry {",
+         `${i1}scope: IpcScope;`,
+         `${i1}remove: () => void;`,
+         "}",
+         "",
+         "const scopeRegistry: { [id: string]: ScopeEntry | undefined } = { __proto__: null } as any;",
+         "",
+         "export function registerScope(",
+         `${i1}target: BrowserWindow | WebContents | WebContentsView,`,
+         `${i1}scope: IpcScope,`,
+         "): () => void {",
+         `${i1}if (!ipcScopeNames.includes(scope)) {`,
+         `${i2}throw new TypeError(\`The scope '\${scope}' is not declared in the schema. Use one of: \${ipcScopeNames.join(', ')}\`);`,
+         `${i1}}`,
+         `${i1}const contents = 'webContents' in target ? target.webContents : target;`,
+         `${i1}if (contents.isDestroyed()) {`,
+         `${i2}throw new TypeError('Object has been destroyed');`,
+         `${i1}}`,
+         `${i1}const id = contents.id;`,
+         `${i1}scopeRegistry[id]?.remove();`,
+         `${i1}const remove = () => {`,
+         `${i2}if (scopeRegistry[id] === entry) {`,
+         `${i3}delete scopeRegistry[id];`,
+         `${i2}}`,
+         `${i2}if (!contents.isDestroyed()) {`,
+         `${i3}contents.removeListener('destroyed', remove);`,
+         `${i2}}`,
+         `${i1}};`,
+         `${i1}const entry: ScopeEntry = { scope, remove };`,
+         `${i1}scopeRegistry[id] = entry;`,
+         `${i1}contents.once('destroyed', remove);`,
+         `${i1}return remove;`,
+         "}",
+         "",
+      ].join("\n");
    }
    /**
     * Imports the validator of the channel, if it has one, and returns its local name. The import
@@ -450,7 +546,11 @@ export class MainBindingsWriter extends BaseWriter {
     * would pass. A validator which throws counts as a rejection. Nothing is checked, as before,
     * until a validator or an `allowedOrigins` list applies to the channel.
     */
-   private buildSenderValidation(eventTypes: string[], usesValidation: boolean): string {
+   private buildSenderValidation(
+      eventTypes: string[],
+      usesValidation: boolean,
+      usesScopes: boolean,
+   ): string {
       const [i1, i2, i3] = this.indents;
       const event = eventTypes.join(" | ");
       // With validators, the hook also learns why the call was rejected.
@@ -479,17 +579,25 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}ipcConfig = { validateSender: config.validateSender, onRejected: config.onRejected };`,
          "}",
          "",
-         `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[]): boolean {`,
+         usesScopes
+            ? `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[], scopes?: readonly IpcScope[]): boolean {`
+            : `function isSenderAllowed(event: ${event}, channel: string, allowedOrigins?: string[]): boolean {`,
          `${i1}const validateSender = ipcConfig.validateSender;`,
-         `${i1}if (!allowedOrigins && !validateSender) {`,
+         `${i1}if (!allowedOrigins && ${usesScopes ? "!scopes && " : ""}!validateSender) {`,
          `${i2}return true;`,
          `${i1}}`,
          `${i1}let allowed = false;`,
          `${i1}try {`,
          `${i2}const frame = event.senderFrame;`,
          `${i2}const origin = frame ? frame.origin : null;`,
+         ...(usesScopes
+            ? [`${i2}const entry = scopes ? scopeRegistry[event.sender.id] : undefined;`]
+            : []),
          `${i2}allowed =`,
          `${i3}frame != null &&`,
+         ...(usesScopes
+            ? [`${i3}(!scopes || (entry !== undefined && scopes.includes(entry.scope))) &&`]
+            : []),
          `${i3}(!allowedOrigins || (typeof origin === 'string' && allowedOrigins.includes(origin))) &&`,
          `${i3}(!validateSender || validateSender(event, channel) === true);`,
          `${i1}} catch {`,
@@ -630,14 +738,20 @@ export class MainBindingsWriter extends BaseWriter {
       const channel = `'${spec.name}'`;
       const wire = this.wireName(spec.name);
       const isBroadcast = spec.kind === "Broadcast";
+      // The origins come before the scopes, so a channel with scopes only passes `undefined` for them.
+      const scopes = spec.scopes
+         ? `, [${spec.scopes.map((scope) => `'${scope}'`).join(", ")}]`
+         : "";
       const origins = spec.allowedOrigins
          ? `, [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
-         : "";
+         : scopes
+           ? ", undefined"
+           : "";
       // The generated names that the listener calls must not be shadowed by its parameters,
       // so the listener only calls the local functions below, whose names are unique.
       const guardName = this.uniqueName("guard", taken);
       const removeName = this.uniqueName("remove", taken);
-      const allowed = `isSenderAllowed(${eventName}, ${channel}${origins})`;
+      const allowed = `isSenderAllowed(${eventName}, ${channel}${origins}${scopes})`;
       const guard = isBroadcast
          ? [`${i2}const ${guardName} = (${eventName}: ${eventType}) => ${allowed};`]
          : [

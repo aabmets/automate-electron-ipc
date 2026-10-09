@@ -52,6 +52,15 @@ export interface E2EProject {
     * `compilerOptions` are added to the ones of the generated tsconfig.
     */
    typecheck: (compilerOptions?: Record<string, unknown>) => Promise<string>;
+   /**
+    * Type-checks the files of one scope of the page, as one renderer project would: `main.ts`,
+    * `preload.<scope>.ts`, `window.<scope>.d.ts`, the schema files and the `schema-scope-<scope>.ts`
+    * file. `"default"` is the surface of no scope, with `preload.ts` and `window.d.ts`. The files of
+    * the other scopes are left out, since each `window*.d.ts` declares the same global.
+    */
+   typecheckScope: (scope: string, compilerOptions?: Record<string, unknown>) => Promise<string>;
+   /** Reads another generated file, such as `preload.settings.ts`. */
+   read: (name: string) => Promise<string>;
    /** Deletes the temp dir. */
    cleanup: () => Promise<void>;
 }
@@ -105,6 +114,9 @@ export async function runFixture(
          ipcDataDir,
          generated,
          typecheck: (compilerOptions) => typecheckProject(dir, ipcDataDir, compilerOptions),
+         typecheckScope: (scope, compilerOptions) =>
+            typecheckProject(dir, ipcDataDir, compilerOptions, scope),
+         read,
          cleanup,
       };
    } catch (error) {
@@ -141,12 +153,18 @@ async function typecheckProject(
    dir: string,
    ipcDataDir: string,
    compilerOptions: Record<string, unknown> = {},
+   scope?: string,
 ): Promise<string> {
    const ipcDir = path.join(dir, ipcDataDir);
+   // With a scope, the files are those of that scope alone. Without one, the files of the page are
+   // those of the surface of no scope, and the files that use a scope are left out.
+   const scopeSuffix = scope === undefined || scope === "default" ? "" : `.${scope}`;
+   const scopeFile = scope === undefined ? null : `${ipcDataDir}/schema-scope-${scope}.ts`;
    const schemaFiles = (await listFiles(ipcDir))
       .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
       .map((file) => path.relative(dir, file).replaceAll("\\", "/"))
-      .filter((file) => file.startsWith(`${ipcDataDir}/schema`));
+      .filter((file) => file.startsWith(`${ipcDataDir}/schema`))
+      .filter((file) => !file.startsWith(`${ipcDataDir}/schema-scope-`) || file === scopeFile);
    const tsconfig = {
       compilerOptions: {
          strict: true,
@@ -164,12 +182,14 @@ async function typecheckProject(
          ...compilerOptions,
       },
       files: [
-         ...["main.ts", "preload.ts", windowCheckFile].map((name) => `${ipcDataDir}/${name}`),
+         ...["main.ts", `preload${scopeSuffix}.ts`, windowCheckFile].map(
+            (name) => `${ipcDataDir}/${name}`,
+         ),
          ...(await utilityFiles(dir, ipcDataDir)),
          ...schemaFiles,
       ],
    };
-   const windowTypes = await fsp.readFile(path.join(ipcDir, "window.d.ts"), "utf8");
+   const windowTypes = await fsp.readFile(path.join(ipcDir, `window${scopeSuffix}.d.ts`), "utf8");
    const windowCheckPath = path.join(ipcDir, windowCheckFile);
    await fsp.writeFile(windowCheckPath, windowTypes);
    await fsp.writeFile(path.join(dir, "tsconfig.json"), JSON.stringify(tsconfig));

@@ -73,6 +73,11 @@ export interface OpenOptions {
    url?: string;
    /** Run the preload script in the frames of the page as well. */
    subframes?: boolean;
+   /**
+    * The scope whose preload script the window uses, as `preload.<scope>.js`. It only gives the page
+    * the API of the scope: the window is not registered in the scope, which the scenario does.
+    */
+   scope?: string;
    /** More `webPreferences`, which win over the defaults. */
    webPreferences?: Record<string, unknown>;
 }
@@ -176,7 +181,7 @@ async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
          jsc: { parser: { syntax: "typescript" }, target: "es2022" },
          module: { type: "commonjs" },
       });
-      if (entry.name === "preload.ts") {
+      if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
          // The preload script is one file which only requires `electron`, as a sandboxed one must.
          // This tells the tests that it really runs sandboxed and in an isolated context.
          code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;

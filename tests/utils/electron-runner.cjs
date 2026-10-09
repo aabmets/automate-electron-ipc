@@ -28,7 +28,8 @@ const scenarios = require("./scenarios.cjs");
 
 const ipcDir = path.join(__dirname, config.ipcDir);
 const mainPath = path.join(ipcDir, "main.js");
-const preloadPath = path.join(ipcDir, "preload.js");
+/** The preload script of the surface of a scope, or the one of the surface of no scope. */
+const preloadFor = (scope) => path.join(ipcDir, scope ? `preload.${scope}.js` : "preload.js");
 
 // An uncaught error in the main process would open a dialog and block the run.
 const uncaught = [];
@@ -115,7 +116,7 @@ function createContext() {
       nodeIntegration: false,
       nodeIntegrationInSubFrames: options.subframes === true,
       backgroundThrottling: false,
-      preload: preloadPath,
+      preload: preloadFor(options.scope),
       ...options.webPreferences,
    });
 

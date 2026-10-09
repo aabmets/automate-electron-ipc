@@ -12,6 +12,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
+import { type Scope, scopedFilePath } from "../scopes.js";
 import utils from "../utils.js";
 import { ImportsGenerator } from "./imports-generator.js";
 
@@ -47,6 +48,12 @@ const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
 export class BaseWriter {
    protected config: t.IPCResolvedConfig;
    protected pfsArray: t.ParsedFileSpecs[];
+   /**
+    * The scope that the file is written for. The writers of the files of a page are given the
+    * channels of the surface of the scope only, and write their file next to the one of the
+    * surface of no scope, which is `null`.
+    */
+   protected scope: Scope;
    protected importsGenerator: ImportsGenerator;
    protected indents: string[];
    protected notice = utils
@@ -56,12 +63,17 @@ export class BaseWriter {
       `)
       .trim();
 
-   public constructor(config: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs[]) {
+   public constructor(
+      config: t.IPCResolvedConfig,
+      pfsArray: t.ParsedFileSpecs[],
+      scope: Scope = null,
+   ) {
       if (this.constructor === BaseWriter) {
          throw new Error(`Cannot instantiate abstract base class '${this.constructor.name}'`);
       }
       this.config = config;
       this.pfsArray = pfsArray;
+      this.scope = scope;
       this.importsGenerator = new ImportsGenerator(
          config.projectUsesNodeNext,
          this.getTargetFilePath(),
@@ -77,6 +89,11 @@ export class BaseWriter {
    protected getTargetFilePath(): string {
       this.throwAbstractError("getTargetFilePath");
       return null as unknown as string;
+   }
+
+   /** The path of the file of a page for the scope, such as `preload.settings.ts` for `preload.ts`. */
+   protected getScopedFilePath(filePath: string): string {
+      return scopedFilePath(filePath, this.scope);
    }
 
    /** The names that the generated file declares or imports, which schema types must not take. */

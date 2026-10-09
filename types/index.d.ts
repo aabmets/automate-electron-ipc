@@ -82,6 +82,27 @@ export type ArgumentsSchema<S extends ChannelSignature> = [S] extends [never]
    : StandardSchemaV1<unknown, Parameters<S>>;
 
 /**
+ * Options of the channels that a page takes part in.
+ *
+ * @property scopes - The scopes that the channel belongs to, such as `["settings", "editor"]`:
+ *    lower case words, joined by dashes, up to 32 characters. Without `scopes` the channel is open
+ *    to all windows. With them, only the windows of one of these scopes have it:
+ *    - `ipcgen` generates a preload script and a `.d.ts` file for each scope, as
+ *      `preload.<scope>.ts` and `window.<scope>.d.ts`, with the channels of the scope and the ones
+ *      without `scopes`. The usual `preload.ts` and `window.d.ts` have only the channels without
+ *      `scopes`, which is all of them in a schema that uses no scopes;
+ *    - the generated `main.ts` exports `registerScope(window, scope)`, which puts the contents of
+ *      a window, a view or contents into a scope. The main process rejects a call (`invoke`,
+ *      `send` or `stream`) to a channel with `scopes` from contents that are not registered in one
+ *      of them, with an `IpcForbiddenError`, and drops a `send` from them, like a sender that
+ *      `allowedOrigins` does not allow. The `onRejected` hook of `configureIpc` hears of it.
+ *      Contents that are in no scope can call the channels without `scopes` only.
+ */
+export interface ScopedConfig {
+   scopes?: readonly string[];
+}
+
+/**
  * Options of `invoke` channels.
  *
  * @property allowedOrigins - The origins which may call the channel, such as
@@ -99,7 +120,7 @@ export type ArgumentsSchema<S extends ChannelSignature> = [S] extends [never]
  *    not stopped, and its late reply is dropped. `0` turns the timeout off for this channel,
  *    also when the `timeoutMs` of the `autoipc` config in `package.json` sets a default.
  */
-export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> {
+export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
    timeoutMs?: number;
@@ -112,7 +133,7 @@ export interface InvokeConfig<S extends ChannelSignature = ChannelSignature> {
  * @property validate - A Standard Schema of the arguments. See `InvokeConfig`. A message with
  *    invalid arguments is dropped, and reported to the `onRejected` hook.
  */
-export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
+export interface SendConfig<S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
 }
@@ -124,7 +145,7 @@ export interface SendConfig<S extends ChannelSignature = ChannelSignature> {
  * @property validate - A Standard Schema of the arguments. See `InvokeConfig`. A call with invalid
  *    arguments fails the stream with an `IpcValidationError`, before the handler runs.
  */
-export interface StreamConfig<S extends ChannelSignature = ChannelSignature> {
+export interface StreamConfig<S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    allowedOrigins?: readonly string[];
    validate?: ArgumentsSchema<S>;
 }
@@ -139,7 +160,7 @@ export interface StreamConfig<S extends ChannelSignature = ChannelSignature> {
  *    which the page registers with `ipc.<name>.onOverflow`, and the oldest message is dropped by
  *    default. The first drop is logged with `console.warn`, and then every 100th.
  */
-export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
+export interface PortConfig<_S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    maxQueue?: number;
 }
 
@@ -150,16 +171,16 @@ export interface PortConfig<_S extends ChannelSignature = ChannelSignature> {
  *    preload script and in the main process. See `PortConfig`. The main process registers its
  *    overflow callback with `configurePorts` and `connection.onOverflow`.
  */
-export interface MainPortConfig<_S extends ChannelSignature = ChannelSignature> {
+export interface MainPortConfig<_S extends ChannelSignature = ChannelSignature>
+   extends ScopedConfig {
    maxQueue?: number;
 }
 
 /**
- * Options of `ask` channels. There are none yet.
+ * Options of `ask` channels. See `ScopedConfig` for `scopes`: a window of another scope has no
+ * responder for the question, so it never answers the main process.
  */
-export interface AskConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
-}
+export interface AskConfig<_S extends ChannelSignature = ChannelSignature> extends ScopedConfig {}
 
 /**
  * Options of the channels between the main process and a utility process
@@ -171,11 +192,11 @@ export interface UtilityConfig<_S extends ChannelSignature = ChannelSignature> {
 
 /**
  * Options of the channels between a renderer and a utility process (`invokeUtility` and
- * `streamUtility`). There are none yet.
+ * `streamUtility`). See `ScopedConfig` for `scopes`, which decides which windows have the channel in
+ * their API. The main process pairs a window with a child in `connect`, whatever the scope is.
  */
-export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignature> {
-   [option: string]: never;
-}
+export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignature>
+   extends ScopedConfig {}
 
 /**
  * Options of `emit` channels.
@@ -185,7 +206,7 @@ export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignatur
  *    listener for the event, calls the provider each time the event fires and sends the
  *    arguments that the provider returns. It returns a function which removes the listener.
  */
-export interface EmitConfig<_S extends ChannelSignature = ChannelSignature> {
+export interface EmitConfig<_S extends ChannelSignature = ChannelSignature> extends ScopedConfig {
    trigger?:
       | "show"
       | "ready-to-show"

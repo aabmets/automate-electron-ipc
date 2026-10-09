@@ -1,0 +1,9 @@
+{
+   "name": "fixture-electron-scopes",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

@@ -1,0 +1,9 @@
+{
+   "name": "fixture-scoped-windows",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

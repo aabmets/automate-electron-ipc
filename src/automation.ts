@@ -15,9 +15,28 @@ import type * as t from "@types";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import parser from "./parser.js";
+import scopeUtils from "./scopes.js";
 import utils from "./utils.js";
 import vld from "./validators.js";
 import writer from "./writer/index.js";
+
+/**
+ * Throws if the file of a scope would overwrite another generated file. The files of the scopes
+ * are named after them, so only the path of the utility bindings, which is configurable, can clash.
+ */
+function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): void {
+   for (const scope of scopes) {
+      for (const base of [config.preloadBindingsFilePath, config.rendererTypesFilePath]) {
+         const file = scopeUtils.scopedFilePath(base, scope);
+         if (file === config.utilityBindingsFilePath) {
+            throw new Error(
+               `The config 'utilityBindingsPath' ('${path.relative(config.projectRoot, file).replaceAll("\\", "/")}') ` +
+                  `is the file that the scope '${scope}' is generated to. Choose a different path.`,
+            );
+         }
+      }
+   }
+}
 
 /**
  * Generates the IPC bindings of the project that contains `cwd`.
@@ -83,10 +102,23 @@ export async function ipcAutomation(cwd?: string): Promise<void> {
    );
    // The file for utility processes exists only for a schema that has channels to them.
    const utilityWriter = new writer.UtilityBindingsWriter(config, pfsArray);
+   // The files of a page hold the surface of one scope. The surface of no scope has the channels
+   // that are open to all windows, and each scope adds its own channels to that.
+   const scopes = scopeUtils.collectScopes(pfsArray);
+   assertScopeFilesFree(config, scopes);
+   const pageSurfaces: [string | null, t.ParsedFileSpecs[]][] = [
+      [null, scopes.length > 0 ? scopeUtils.filterByScope(pfsArray, null) : pfsArray],
+      ...scopes.map((scope): [string, t.ParsedFileSpecs[]] => [
+         scope,
+         scopeUtils.filterByScope(pfsArray, scope),
+      ]),
+   ];
    await Promise.all([
       new writer.MainBindingsWriter(config, pfsArray).write(),
-      new writer.PreloadBindingsWriter(config, pfsArray).write(),
-      new writer.RendererTypesWriter(config, pfsArray).write(),
+      ...pageSurfaces.flatMap(([scope, surface]) => [
+         new writer.PreloadBindingsWriter(config, surface, scope).write(),
+         new writer.RendererTypesWriter(config, surface, scope).write(),
+      ]),
       ...(utilityWriter.hasChannels() ? [utilityWriter.write()] : []),
    ]);
    if (pfsArray.length === 0) {

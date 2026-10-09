@@ -10,7 +10,9 @@
  */
 
 import fsp from "node:fs/promises";
+import scopes from "@src/scopes.js";
 import utils from "@src/utils.js";
+import writer from "@src/writer/index.js";
 import mocks from "@testutils/shared-mocks.js";
 import shared from "@testutils/writer-utils.js";
 import type * as t from "@types";
@@ -18,6 +20,63 @@ import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
    mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+
+   describe("scopes", () => {
+      const config = {
+         codeIndent: 3,
+         preloadBindingsFilePath: "/p/ipc/preload.ts",
+      } as t.IPCResolvedConfig;
+      const targetOf = (scope: string | null) =>
+         (
+            new writer.PreloadBindingsWriter(config, [], scope) as unknown as {
+               getTargetFilePath(): string;
+            }
+         ).getTargetFilePath();
+      const channels = shared.buildFileSpecs(
+         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+         { name: "sendIt", kind: "Broadcast", direction: "RendererToMain", scopes: ["settings"] },
+      );
+      const render = async (pfsArray: t.ParsedFileSpecs[], scope: string | null) => {
+         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, {}, scope);
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("writes the file of the surface of no scope to the usual path", () => {
+         expect(targetOf(null)).toBe("/p/ipc/preload.ts");
+      });
+
+      it("writes the file of a scope next to it, named after the scope", () => {
+         expect(targetOf("settings")).toBe("/p/ipc/preload.settings.ts");
+         expect(targetOf("plugin-host")).toBe("/p/ipc/preload.plugin-host.ts");
+      });
+
+      it("writes the code of the channels it is given, whatever the scope is", async () => {
+         const surface = scopes.filterByScope(channels, "settings");
+
+         expect(await render(surface, "settings")).toStrictEqual(await render(surface, null));
+         expect(await render(surface, "settings")).toContain("   sendIt: {");
+      });
+
+      it("writes only the channels of the surface of the scope", async () => {
+         const none = await render(scopes.filterByScope(channels, null), null);
+         const settings = await render(scopes.filterByScope(channels, "settings"), "settings");
+         const editor = await render(scopes.filterByScope(channels, "editor"), "editor");
+
+         expect(none).toContain("   getIt: {");
+         expect(none).not.toContain("sendIt");
+         expect(settings).toContain("   getIt: {");
+         expect(settings).toContain("   sendIt: {");
+         expect(editor).toContain("   getIt: {");
+         expect(editor).not.toContain("sendIt");
+      });
+
+      it("writes the empty API for a scope whose surface has no channel", async () => {
+         const output = await render([], "empty");
+         expect(output).toContain("export const api = {};");
+         expect(output).toContain("expose();");
+      });
+   });
 
    describe("exposure of the API", () => {
       const channels = shared.buildFileSpecs({

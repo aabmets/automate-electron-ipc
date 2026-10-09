@@ -360,4 +360,17 @@ describe("BaseWriter", () => {
       );
       expect(text).not.toContain("PLUGIN");
    });
+
+   describe("scope", () => {
+      it("writes the files of no scope to the path that it is given", () => {
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
+         expect(obj.getScopedFilePath("/p/ipc/preload.ts")).toBe("/p/ipc/preload.ts");
+      });
+
+      it("names the file of a scope after it, in front of the extension", () => {
+         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [], "settings");
+         expect(obj.getScopedFilePath("/p/ipc/preload.ts")).toBe("/p/ipc/preload.settings.ts");
+         expect(obj.getScopedFilePath("/p/ipc/window.d.ts")).toBe("/p/ipc/window.settings.d.ts");
+      });
+   });
 });

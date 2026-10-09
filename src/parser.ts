@@ -294,40 +294,47 @@ const VERBS = new Map<string, VerbInfo>([
       {
          kind: "Unicast",
          direction: "RendererToMain",
-         options: ["allowedOrigins", "validate", "timeoutMs"],
+         options: ["allowedOrigins", "validate", "timeoutMs", "scopes"],
          errors: true,
       },
    ],
    [
       "send",
-      { kind: "Broadcast", direction: "RendererToMain", options: ["allowedOrigins", "validate"] },
+      {
+         kind: "Broadcast",
+         direction: "RendererToMain",
+         options: ["allowedOrigins", "validate", "scopes"],
+      },
    ],
-   ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger"] }],
-   ["ask", { kind: "Unicast", direction: "MainToRenderer", options: [] }],
+   ["emit", { kind: "Broadcast", direction: "MainToRenderer", options: ["trigger", "scopes"] }],
+   ["ask", { kind: "Unicast", direction: "MainToRenderer", options: ["scopes"] }],
    [
       "stream",
       {
          kind: "Stream",
          direction: "RendererToMain",
-         options: ["allowedOrigins", "validate"],
+         options: ["allowedOrigins", "validate", "scopes"],
          errors: true,
       },
    ],
-   ["port", { kind: "Port", direction: "RendererToRenderer", options: ["maxQueue"] }],
-   ["mainPort", { kind: "Port", direction: "MainToRenderer", options: ["maxQueue"] }],
+   ["port", { kind: "Port", direction: "RendererToRenderer", options: ["maxQueue", "scopes"] }],
+   ["mainPort", { kind: "Port", direction: "MainToRenderer", options: ["maxQueue", "scopes"] }],
    ["callUtility", { kind: "Unicast", direction: "MainToUtility", options: [] }],
    ["notifyUtility", { kind: "Broadcast", direction: "MainToUtility", options: [] }],
    ["callMain", { kind: "Unicast", direction: "UtilityToMain", options: [] }],
    ["notifyMain", { kind: "Broadcast", direction: "UtilityToMain", options: [] }],
    [
       "invokeUtility",
-      { kind: "Unicast", direction: "RendererToUtility", options: [], errors: true },
+      { kind: "Unicast", direction: "RendererToUtility", options: ["scopes"], errors: true },
    ],
-   ["streamUtility", { kind: "Stream", direction: "RendererToUtility", options: [], errors: true }],
+   [
+      "streamUtility",
+      { kind: "Stream", direction: "RendererToUtility", options: ["scopes"], errors: true },
+   ],
 ]);
 
 /** The options whose value is an array of string literals. The others are string literals. */
-const ARRAY_OPTIONS = new Set(["allowedOrigins"]);
+const ARRAY_OPTIONS = new Set(["allowedOrigins", "scopes"]);
 
 /**
  * Names that the schema file imports from this library, keyed by their local name.

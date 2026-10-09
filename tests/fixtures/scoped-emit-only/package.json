@@ -1,0 +1,9 @@
+{
+   "name": "fixture-scoped-emit-only",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}
