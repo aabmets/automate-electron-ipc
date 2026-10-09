@@ -41,6 +41,13 @@ function error(messages: string[]): void {
    console.error(paint("red", formatOutput(messages, "✖")));
 }
 
+/** A path relative to the project root with `/` separators, or in full when it is outside it. */
+function displayPath(fullPath: string, projectRoot?: string): string {
+   const relative = projectRoot ? path.relative(projectRoot, fullPath) : "";
+   const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+   return inside ? toPosix(relative) : fullPath;
+}
+
 export function nonExistentSchemaPath(path: string): void {
    warn(["Skipping IPC automation, because schema path does not exist:", path]);
 }
@@ -76,13 +83,22 @@ export function reportSuccess(pfsArray: t.ParsedFileSpecs[], projectRoot?: strin
    success([
       "Successfully generated IPC bindings:",
       ...pfsArray.map((pfs) => {
-         const relative = projectRoot ? path.relative(projectRoot, pfs.fullPath) : "";
-         const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-         const resultPath = inside ? toPosix(relative) : pfs.fullPath;
          const count = pfs.specs.channelSpecArray.length;
-         return `${count} channels from path '${resultPath}'`;
+         return `${count} channels from path '${displayPath(pfs.fullPath, projectRoot)}'`;
       }),
    ]);
+}
+
+/**
+ * Reports the result of `--check`: the generated files that are out of date, one per line, or
+ * that all are up to date when `paths` is empty. Paths are shown like those of `reportSuccess`.
+ */
+export function staleFiles(paths: string[], projectRoot?: string): void {
+   if (paths.length === 0) {
+      success(["Generated files are up to date."]);
+      return;
+   }
+   error(["Generated files are out of date:", ...paths.map((p) => displayPath(p, projectRoot))]);
 }
 
 export default {
@@ -92,4 +108,5 @@ export default {
    cloneWarnings,
    fatalError,
    reportSuccess,
+   staleFiles,
 };

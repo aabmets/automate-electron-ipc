@@ -35,4 +35,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     type check writes a `tsconfig.json` that flips NodeNext detection.
 - **README:** document `--check` and a CI example (`npx ipcgen --check`).
 - **Follow-up IDs:** T148-T149.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `logger.staleFiles([], root)` prints the up-to-date line, so there is no
+  separate function for it. The CLI resolves the config a second time to get the project root and
+  schema path for the report (as `ipcAutomation` does). T38c has not landed, so the NodeNext
+  ordering note does not apply yet.

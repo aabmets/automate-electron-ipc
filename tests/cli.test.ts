@@ -13,6 +13,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const ipcAutomation = vi.hoisted(() => vi.fn());
 vi.mock("@src/automation.js", () => ({ ipcAutomation }));
+const findStaleOutputs = vi.hoisted(() => vi.fn());
+vi.mock("@src/check.js", () => ({ findStaleOutputs }));
+const getResolvedConfig = vi.hoisted(() => vi.fn());
+vi.mock("@src/config.js", () => ({ default: { getResolvedConfig } }));
 
 /** Imports the cli with a fresh commander program, since it registers on a global singleton. */
 async function importFreshCli(): Promise<void> {
@@ -31,6 +35,8 @@ describe("cli", () => {
       process.argv = originalArgv;
       process.exitCode = undefined;
       ipcAutomation.mockReset();
+      findStaleOutputs.mockReset();
+      getResolvedConfig.mockReset();
       vi.restoreAllMocks();
       vi.doUnmock("commander");
    });
@@ -75,5 +81,52 @@ describe("cli", () => {
       await importFreshCli();
       expect(String(err.mock.calls[0][0])).toContain("Syntax error in schema file 'a.ts:1:2'");
       expect(process.exitCode).toBe(1);
+   });
+
+   describe("--check", () => {
+      const config = { projectRoot: "/project", ipcSchema: { path: "/project/ipc/schema.ts" } };
+
+      it("exits non-zero and lists the files when they are stale", async () => {
+         process.argv = ["node", "ipcgen", "--check", "--cwd", "app", "--config", "c.json"];
+         findStaleOutputs.mockResolvedValue(["/project/ipc/main.ts"]);
+         getResolvedConfig.mockResolvedValue(config);
+         const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+         await importFreshCli();
+         expect(findStaleOutputs).toHaveBeenCalledWith({ cwd: "app", configFile: "c.json" });
+         expect(String(err.mock.calls[0][0])).toContain("ipc/main.ts");
+         expect(process.exitCode).toBe(1);
+         expect(ipcAutomation).not.toHaveBeenCalled();
+      });
+
+      it("leaves the exit code alone when the files are fresh", async () => {
+         process.argv = ["node", "ipcgen", "--check"];
+         findStaleOutputs.mockResolvedValue([]);
+         getResolvedConfig.mockResolvedValue(config);
+         const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+         await importFreshCli();
+         expect(String(warn.mock.calls[0][0])).toContain("up to date");
+         expect(process.exitCode).toBeUndefined();
+         expect(ipcAutomation).not.toHaveBeenCalled();
+      });
+
+      it("prints the schema-not-found message and exits non-zero without a schema", async () => {
+         process.argv = ["node", "ipcgen", "--check"];
+         findStaleOutputs.mockResolvedValue(null);
+         getResolvedConfig.mockResolvedValue(config);
+         const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+         await importFreshCli();
+         expect(String(warn.mock.calls[0][0])).toContain("/project/ipc/schema.ts");
+         expect(process.exitCode).toBe(1);
+         expect(ipcAutomation).not.toHaveBeenCalled();
+      });
+
+      it("prints the error and exits non-zero when the check fails", async () => {
+         process.argv = ["node", "ipcgen", "--check"];
+         findStaleOutputs.mockRejectedValue(new Error("Syntax error in schema file"));
+         const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+         await importFreshCli();
+         expect(String(err.mock.calls[0][0])).toContain("Syntax error in schema file");
+         expect(process.exitCode).toBe(1);
+      });
    });
 });

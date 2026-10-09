@@ -116,4 +116,32 @@ describe("logger", () => {
          expect(output()).toContain("path 'a/b.ts'");
       });
    });
+
+   describe("staleFiles", () => {
+      let errorSpy: ReturnType<typeof vi.spyOn>;
+      beforeEach(() => {
+         errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      });
+
+      it("lists the stale files relative to the project root, one per line", () => {
+         logger.staleFiles(["/project/ipc/main.ts", "/project/ipc/preload.ts"], "/project");
+         const text = String(errorSpy.mock.calls[0][0]);
+         expect(text).toContain("Generated files are out of date:");
+         expect(text).toContain("ipc/main.ts\n");
+         expect(text).toContain("ipc/preload.ts");
+         expect(text).not.toContain("/project");
+         expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it("reports a path outside the project in full", () => {
+         logger.staleFiles(["/elsewhere/main.ts"], "/project");
+         expect(String(errorSpy.mock.calls[0][0])).toContain("/elsewhere/main.ts");
+      });
+
+      it("reports that the files are up to date when none is stale", () => {
+         logger.staleFiles([], "/project");
+         expect(output()).toContain("Generated files are up to date.");
+         expect(errorSpy).not.toHaveBeenCalled();
+      });
+   });
 });

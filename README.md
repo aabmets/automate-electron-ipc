@@ -164,6 +164,19 @@ The `ipcgen` command also takes these flags, which win over the config:
 
 The order of precedence is: command line flags, then the one config source, then the defaults.
 
+### Checking that the generated files are up to date
+
+`ipcgen --check` renders the files in memory and compares them with the ones on disk. It writes
+nothing, lists the files that are out of date or missing (relative to the project root), and exits
+with `1` if there are any. It also exits with `1` when the schema path does not exist, and creates
+no directory. Use it in CI to catch a schema change whose generated files were not committed:
+
+```yaml
+- run: npx ipcgen --check
+```
+
+It takes `--cwd` and `--config` like a normal run.
+
 ### Composing the preload script
 
 The generated `preload.ts` exports the API it builds, and a function that exposes it:
