@@ -1,0 +1,10 @@
+{
+   "name": "fixture-electron-compose",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "autoExpose": false
+      }
+   }
+}

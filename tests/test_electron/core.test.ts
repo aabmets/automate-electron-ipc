@@ -150,6 +150,45 @@ const scenarios: Record<string, Scenario> = {
       return got;
    },
 
+   // The disposers of the listeners on both sides (T14, T15), which cross the context bridge in
+   // the page.
+   listenerDisposers: async (ctx) => {
+      const win = await ctx.open();
+      const kept: unknown[] = [];
+      const removed: unknown[] = [];
+      ctx.ipc.log.on((_event: unknown, text: string) => kept.push(text));
+      const off = ctx.ipc.log.on((_event: unknown, text: string) => removed.push(text));
+      const offOnce = ctx.ipc.log.once((_event: unknown, text: string) => removed.push(text));
+      await ctx.evaluate(win, () => ipc.log.send("before"));
+      await ctx.waitFor(() => kept.length === 1);
+      off();
+      offOnce();
+      await ctx.evaluate(win, () => ipc.log.send("after"));
+      await ctx.waitFor(() => kept.length === 2);
+
+      await ctx.evaluate(win, () => {
+         const got: Record<string, number[]> = { kept: [], removed: [], once: [], onceOff: [] };
+         (window as any).got = got;
+         ipc.tick.on((n: number) => got.kept.push(n));
+         (window as any).off = ipc.tick.on((n: number) => got.removed.push(n));
+         ipc.tick.once((n: number) => got.once.push(n));
+         ipc.tick.once((n: number) => got.onceOff.push(n))();
+      });
+      ctx.ipc.tick.send(win, 1);
+      await ctx.until(win, () => (window as any).got.kept.length === 1);
+      await ctx.evaluate(win, () => (window as any).off());
+      ctx.ipc.tick.send(win, 2);
+      const page = await ctx.until(
+         win,
+         () => (window as any).got.kept.length === 2 && (window as any).got,
+      );
+      return {
+         main: { kept, removed },
+         page,
+         listeners: ctx.electron.ipcMain.listenerCount("autoipc:log"),
+      };
+   },
+
    emitTargets: async (ctx) => {
       const { WebContentsView } = ctx.electron;
       const win = await ctx.open();
@@ -457,6 +496,14 @@ describeElectron("core channels in Electron", "electron-core", scenarios, (group
 
       it("handles only the first message with once", () => {
          expect(group.value("sendOnce")).toStrictEqual([["first"]]);
+      });
+   });
+
+   it("removes exactly the listener of a disposer, in the main process and in the page", () => {
+      expect(group.value("listenerDisposers")).toStrictEqual({
+         main: { kept: ["before", "after"], removed: ["before", "before"] },
+         page: { kept: [1, 2], removed: [1], once: [1], onceOff: [] },
+         listeners: 1,
       });
    });
 

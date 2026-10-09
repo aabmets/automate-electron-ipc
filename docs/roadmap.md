@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 74 delivered, 10 remaining, 1 dropped.
+**Progress:** 75 delivered, 10 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -101,6 +101,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T81a: Serializer for port channels](./tasks/T81a-serializer-for-port-channels.md) · depends on: T37, T26
 - [x] [T81b: Serializer for utility process channels](./tasks/T81b-serializer-for-utility-process-channels.md) · depends on: T81a, T30, T79
 - [x] [T81c: Serializer for service worker channels](./tasks/T81c-serializer-for-service-worker-channels.md) · depends on: T81a, T36, T80
+- [x] [T83: Real-Electron coverage of the features that only fakes tested](./tasks/T83-real-electron-coverage-gaps.md) · depends on: T75
 
 ## Phase 4: Developer experience
 
