@@ -19,13 +19,5 @@
    "tests/test_e2e/streams.test.ts": 1838,
    "tests/test_e2e/utility.test.ts": 959,
    "tests/test_e2e/utilityPorts.test.ts": 2078,
-   "tests/test_e2e/utilityTimeouts.test.ts": 673,
-   "tests/test_electron/asks.test.ts": 340,
-   "tests/test_electron/core.test.ts": 706,
-   "tests/test_electron/ports.test.ts": 522,
-   "tests/test_electron/scopes.test.ts": 314,
-   "tests/test_electron/serviceWorkers.test.ts": 484,
-   "tests/test_electron/streams.test.ts": 413,
-   "tests/test_electron/utility.test.ts": 452,
-   "tests/test_electron/utilityPorts.test.ts": 655
+   "tests/test_e2e/utilityTimeouts.test.ts": 673
 }

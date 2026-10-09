@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 110 delivered, 15 remaining, 1 dropped.
+**Progress:** 111 delivered, 14 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -144,7 +144,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T116: Split the parser tests](./tasks/T116-parser-tests-split.md) · depends on: T102
 - [x] [T117: Split `tests/validators.test.ts`](./tasks/T117-validators-tests-split.md) · depends on: T102
 - [x] [T118: Split the root tests and the test utilities](./tasks/T118-root-tests-and-test-utils-split.md) · depends on: T102
-- [ ] [T119: Split the real-Electron tests](./tasks/T119-electron-tests-split.md) · depends on: T102
+- [x] [T119: Split the real-Electron tests](./tasks/T119-electron-tests-split.md) · depends on: T102
 - [ ] [T120: Split the e2e tests, part 1: ports](./tasks/T120-e2e-port-tests-split.md) · depends on: T102
 - [ ] [T121: Split the e2e tests, part 2: streams, asks and runtime](./tasks/T121-e2e-stream-ask-runtime-tests-split.md) · depends on: T102
 - [ ] [T122: Split the e2e tests, part 3: automation, utility, scopes and handlers](./tasks/T122-e2e-automation-utility-scopes-tests-split.md) · depends on: T102

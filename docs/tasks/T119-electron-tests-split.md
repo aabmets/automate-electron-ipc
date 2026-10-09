@@ -19,4 +19,13 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The nine big files are 24 files of at most 255 lines in `tests/test_electron/`, each
+  with its own `describeElectron` and so its own Electron process, and the scenarios moved with the
+  tests that read them (`core.*`, `ports.*`, `utilityPorts.*`, `utility.*`, `serviceWorkers.*`,
+  `streams.*`, `asks.*`, `scopes.*`, `harness.gate` and `harness.group`). The pages of the `ports.*`
+  files are in `tests/utils/port-pages.ts`. 214 tests before and after, with the same titles, none
+  skipped, no assertion changed; `bun run test:electron` ran with the binary and `REQUIRE_ELECTRON=1`.
+  Two deviations: the one-line `forbidden` constant is in both `scopes.*` files, and the tests "has no
+  uncaught errors" and "runs every scenario to completion" exist once per old file, as before, so the
+  other new files of a split do not check the uncaught errors of their own process (adding them would
+  change the number of tests). `harness.test.ts` was under the hard limit, so its split is for the soft limit.
