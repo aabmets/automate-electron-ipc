@@ -91,7 +91,7 @@ run, which is noise.
 - To work on one test, turn coverage off:
 
 ```bash
-bunx vitest run tests/validators.test.ts -t "ipcDataDir path is absolute" --coverage.enabled=false
+bunx vitest run tests/test_validators/config.options.test.ts -t "ipcDataDir path is absolute" --coverage.enabled=false
 ```
 
 - A failing async or Electron test: run that one test alone first. A problem which shows up only in
@@ -104,7 +104,7 @@ bunx vitest run tests/validators.test.ts -t "ipcDataDir path is absolute" --cove
 - One file per area, at most 300 lines (see [`module-structure`](../module-structure/SKILL.md)).
   When a `describe` block pushes it over, that block is a new file.
 - Shared builders and fakes go to `tests/utils/`, imported with the `@testutils/` alias, not copied.
-- A regression test names the task and says what broke, as in `tests/validators.test.ts`
+- A regression test names the task and says what broke, as in `tests/test_validators/config.options.test.ts`
   (`// Regression for T58: 2.5 was accepted and silently rounded down by repeat.`).
 - Tests that cover generated code assert on the generated text, and e2e tests type-check it.
 - New test files carry the Apache-2.0 header.

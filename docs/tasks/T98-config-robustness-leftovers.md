@@ -12,7 +12,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** detect whether the project's file system ignores case and compare the output paths
   accordingly; make the origin pattern refuse a port that is not a number; name the manifest in the
   error of a manifest or an `autoipc` entry of the wrong shape.
-- **Tests:** unit tests in `tests/config.test.ts` and `tests/validators.test.ts`.
+- **Tests:** unit tests in `tests/config.test.ts` and `tests/test_validators/`.
 - **Delivered:** 2026-10-09. `utils.isCaseInsensitiveFileSystem(dir)` probes the file system without writing: it stats
   the nearest existing ancestor of the data dir and the same path with the case of its last name
   swapped, and compares `dev` and `ino`. When it reports true, `getResolvedConfig` compares the output

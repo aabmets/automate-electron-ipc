@@ -13,4 +13,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `tests/validators.test.ts` (1694 lines, 391 tests) is now ten files in `tests/test_validators/`, 141 to 248 lines each: config (`config.options`, `config.features`), channel specs (`channelSpecs`, `.streams`, `.scopesAndTimeouts`, `.guards`, `.utility`, `.serviceWorkers`), `global` and `cloneWarnings`. The 391 tests are unchanged (no `it.fails` or `it.skip`), and no helper needed to move. The paths in the `vitest-conventions` skill and in T98 were updated.
