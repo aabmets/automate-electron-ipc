@@ -37,7 +37,6 @@
    "tests/test_parser/parseTypeDefinitions.test.ts": 304,
    "tests/test_writer/base-writer.test.ts": 455,
    "tests/test_writer/imports-generator.test.ts": 1105,
-   "tests/test_writer/main-bindings.test.ts": 2569,
    "tests/test_writer/preload-bindings.test.ts": 1205,
    "tests/test_writer/renderer-types.test.ts": 845,
    "tests/test_writer/serializer.test.ts": 623,

@@ -14,4 +14,9 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `main-bindings.test.ts` is now 15 files, `main-bindings.<area>.test.ts`
+  (unicast, broadcast, emit, structure, arguments, senders, errors-and-prefix, ports, main-ports, asks,
+  streams, utility, broker, scopes, watches), the largest 264 lines. The 124 tests keep their full names
+  (every file keeps the `MainBindingsWriter` describe and its own `mockGetTargetFilePath`), and no line of
+  an assertion changed. No `it.fails` or `it.skip` existed. No helper moved to `tests/utils/`: each
+  `describe` builds its `render` locally and no two files share one. The baseline entry is removed.
