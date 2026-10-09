@@ -15,6 +15,16 @@ import { assert, boolean, number, object, optional, refine, string } from "super
 import utils from "../utils.js";
 import { isReservedGlobalName } from "./reserved-globals.js";
 
+/** A path in the project, relative to its root, of a TypeScript file. */
+function relativeScriptPath(option: string) {
+   return refine(string(), "relative", (value) => {
+      if (path.isAbsolute(value)) {
+         return `${option} must be relative to the project root`;
+      }
+      return utils.isSchemaSourceFile(value) ? true : `${option} must be the path of a .ts file`;
+   });
+}
+
 export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
    const IPCOptionalConfigStruct = object({
       projectUsesNodeNext: boolean(),
@@ -23,26 +33,8 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
          return path.isAbsolute(value) ? errMsg : true;
       }),
       rawErrors: optional(boolean()),
-      utilityBindingsPath: optional(
-         refine(string(), "relative", (value) => {
-            if (path.isAbsolute(value)) {
-               return "utilityBindingsPath must be relative to the project root";
-            }
-            return utils.isSchemaSourceFile(value)
-               ? true
-               : "utilityBindingsPath must be the path of a .ts file";
-         }),
-      ),
-      serviceWorkerPreloadPath: optional(
-         refine(string(), "relative", (value) => {
-            if (path.isAbsolute(value)) {
-               return "serviceWorkerPreloadPath must be relative to the project root";
-            }
-            return utils.isSchemaSourceFile(value)
-               ? true
-               : "serviceWorkerPreloadPath must be the path of a .ts file";
-         }),
-      ),
+      utilityBindingsPath: optional(relativeScriptPath("utilityBindingsPath")),
+      serviceWorkerPreloadPath: optional(relativeScriptPath("serviceWorkerPreloadPath")),
       channelPrefix: optional(
          refine(string(), "prefix", (value) => {
             if (value.length > 64) {

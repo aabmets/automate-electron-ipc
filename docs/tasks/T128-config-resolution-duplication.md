@@ -10,4 +10,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** One parametrised refiner; extract `deriveOutputPaths` and `assertOutputsDistinct`
   from `getResolvedConfig`, using `toPosix` of T126. Error messages stay word for word.
 - **Tests:** Same test count, no assertion changed; `bun run check` and `bunx vitest run` pass.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `relativeScriptPath(option)` replaces the two refiners. `deriveOutputPaths` and `assertOutputsDistinct` are in the new `src/config-outputs.ts`, together with the source-file checks they use; `getResolvedConfig` went from 80 to about 50 lines. Messages and the order of the checks are unchanged; 3283 tests as before.
