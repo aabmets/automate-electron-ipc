@@ -117,8 +117,8 @@ Config explanation:
    It is in the API of every scope, and in the empty API of a schema without channels for the page.
    Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
  - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
-   crosses between a page and the main process, and to the messages of `port` and `mainPort` channels, so
-   that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
+   crosses between a page, a utility process or a service worker and the main process, and to the messages
+   of `port` and `mainPort` channels, so that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
    `"./src/wire.ts"`; any other value is a package, such as `"superjson"`. See
    [Custom serializers](#custom-serializers).
 
@@ -1345,12 +1345,17 @@ in the preload script: the arguments and the result of `callUtility` and `callMa
 page and the main process: the arguments of a call as one value, the list of them. The main process only
 brokers the port between a page and a utility process and sees none of its messages, so its file does not
 import the serializer for `invokeUtility` and `streamUtility`.
-It does not apply to the errors of an `invoke`, whose `data` is cloned as before, nor to the channels
-of service workers, which carry their values as they are.
+It applies to the channels of service workers as well, in `main.ts` and in `service-worker-preload.ts`:
+the arguments and the result of `invokeFromWorker`, the arguments of `sendFromWorker` and `emitToWorker`,
+and the arguments and the answer of `askWorker`. They travel like the channels of a page: the arguments
+of a call or a message as one value, the list of them. The preload script of a worker is sandboxed, so it
+needs a bundler that inlines the serializer module, as the preload script of a page does.
+It does not apply to the `data` of an error, which is cloned as before.
 
 - **Order.** The main process checks the sender first, then deserializes, then runs the `validate`
   schema on the deserialized arguments. A message from a sender that is rejected never reaches the
-  code of the serializer.
+  code of the serializer. This holds for a service worker as well: `validateSender` and `allowedOrigins`
+  come first.
 - **Failures.** A value that cannot be serialized fails the call: an `invoke` or a `stream` rejects,
   and a `send` throws, in the page, with the plain object `{ name: 'IpcSerializationError', message,
   code: 'IPC_SERIALIZATION' }`. In the main process the same failure throws an `IpcSerializationError`
@@ -1372,6 +1377,16 @@ of service workers, which carry their values as they are.
   up by it. A stream whose arguments cannot be read, or one of whose chunks cannot be serialized in the
   child, fails with the error; a chunk that the page cannot deserialize fails the stream there and
   cancels it in the child.
+  For a service worker, a call from the worker whose arguments cannot be serialized rejects, and a
+  `send` throws, in the worker with the plain object, as above. A call that arrives with arguments that
+  cannot be read, or whose result cannot be serialized, is answered with the error envelope (or rejects
+  with the `IpcSerializationError`, with `rawErrors`). A message of the worker that cannot be read is
+  logged with `console.error` and dropped in the main process, and does not use up a `once` listener, and
+  a message to the worker that cannot be read is dropped there. Toward the worker, a question or a
+  message that cannot be serialized rejects or throws an `IpcSerializationError` in the main process, and
+  nothing is sent. A question the worker cannot read is answered with the error envelope, so the question
+  rejects with an `IpcAskError` that carries the `name` and the `code` of the error; an answer the main
+  process cannot deserialize rejects it with the code `IPC_ASK_INVALID_REPLY`.
 - **The utility file.** `utility.ts` imports the serializer module like `main.ts` does: a package name
   stays as it is, and a path from the project root becomes a path relative to `utility.ts`. A utility
   process is a Node process with Node's module resolution, not a sandbox, so a package resolves from the

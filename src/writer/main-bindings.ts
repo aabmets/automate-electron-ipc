@@ -2669,8 +2669,20 @@ export class MainBindingsWriter extends BaseWriter {
             `${i3}channel,`,
             `${i3}versionId,`,
             `${i3}answer: (envelope) => {`,
-            `${i4}const outcome = readAskReply(channel, envelope, 'service worker');`,
-            `${i4}finish(() => ('error' in outcome ? reject(outcome.error) : resolve(outcome.value)));`,
+            ...(this.usesSerializer()
+               ? [
+                    `${i4}let outcome = readAskReply(channel, envelope, 'service worker');`,
+                    `${i4}if (!('error' in outcome)) {`,
+                    `${i4}${i1}try {`,
+                    `${i4}${i2}outcome = { value: decodeValue(channel, outcome.value) };`,
+                    `${i4}${i1}} catch (cause) {`,
+                    `${i4}${i2}outcome = { error: new IpcAskError(channel, \`The answer cannot be read: \${cause instanceof Error ? cause.message : String(cause)}\`, 'IPC_ASK_INVALID_REPLY') };`,
+                    `${i4}${i1}}`,
+                    `${i4}}`,
+                    `${i4}const settled = outcome;`,
+                 ]
+               : [`${i4}const settled = readAskReply(channel, envelope, 'service worker');`]),
+            `${i4}finish(() => ('error' in settled ? reject(settled.error) : resolve(settled.value)));`,
             `${i3}},`,
             `${i3}fail: (error) => finish(() => reject(error)),`,
             `${i2}};`,
@@ -2679,9 +2691,10 @@ export class MainBindingsWriter extends BaseWriter {
             `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
             `${i2}}`,
             `${i2}try {`,
+            ...(this.usesSerializer() ? [`${i3}const question = encodeValue(channel, args);`] : []),
             `${i3}// Keeps the worker from stopping while it is asked.`,
             `${i3}task = worker.startTask();`,
-            `${i3}worker.send(wire, id, ...args);`,
+            `${i3}worker.send(wire, id, ${this.usesSerializer() ? "question" : "...args"});`,
             `${i2}} catch (error) {`,
             `${i3}finish(() => reject(error));`,
             `${i2}}`,
@@ -2824,6 +2837,7 @@ export class MainBindingsWriter extends BaseWriter {
    /** `callWorkerHandler` and the registration of the handlers of the calls of a worker, with the validation of the arguments if a channel has a validator. */
    private buildWorkerCallLines(validated: boolean, reportInvalid: string): string[] {
       const [i1, i2, i3] = this.indents;
+      const serialized = this.usesSerializer();
       return [
          "function callWorkerHandler(",
          `${i1}hub: WorkerHub,`,
@@ -2841,6 +2855,12 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i1}if (!hub.handlers[info.channel]) {`,
                  `${i2}throw missing();`,
                  `${i1}}`,
+                 ...(serialized
+                    ? [
+                         `${i1}// The sender is checked first, so that a rejected worker reaches no code of the serializer.`,
+                         `${i1}const decoded = readArguments(info.channel, args);`,
+                      ]
+                    : []),
                  `${i1}// The handler is looked up when the arguments are valid, since a schema may take its time`,
                  `${i1}// and a handler of \`handleOnce\` may have been used up by then.`,
                  `${i1}const run = (valid: unknown[]): unknown => {`,
@@ -2851,15 +2871,15 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i2}return handler(event, ...valid);`,
                  `${i1}};`,
                  `${i1}return info.validator`,
-                 `${i2}? validateArguments(event, info.channel, info.validator, args, false, run, ${reportInvalid})`,
-                 `${i2}: run(args);`,
+                 `${i2}? validateArguments(event, info.channel, info.validator, ${serialized ? "decoded" : "args"}, false, run, ${reportInvalid})`,
+                 `${i2}: run(${serialized ? "decoded" : "args"});`,
               ]
             : [
                  `${i1}const handler = hub.handlers[info.channel] as ((...handlerArgs: unknown[]) => unknown) | undefined;`,
                  `${i1}if (!handler) {`,
                  `${i2}throw new IpcWorkerError(info.channel, \`No handler is registered for the channel '\${info.channel}'\`, 'IPC_WORKER_NO_HANDLER');`,
                  `${i1}}`,
-                 `${i1}return handler(event, ...args);`,
+                 `${i1}return handler(event, ...${serialized ? "readArguments(info.channel, args)" : "args"});`,
               ]),
          "}",
          "",
@@ -2885,6 +2905,17 @@ export class MainBindingsWriter extends BaseWriter {
    /** `dispatchWorkerSend` and the registration of the listeners of the messages of a worker, with the validation of the arguments if a channel has a validator. */
    private buildWorkerSendLines(validated: boolean, reportInvalid: string): string[] {
       const [i1, i2, i3, i4] = this.indents;
+      const serialized = this.usesSerializer();
+      // A message that cannot be read is logged and dropped, and does not use up a `once` listener.
+      const decode = (name: string): string[] =>
+         serialized
+            ? [
+                 `${i1}const ${name} = readSentArguments(info.channel, args);`,
+                 `${i1}if (!${name}) {`,
+                 `${i2}return;`,
+                 `${i1}}`,
+              ]
+            : [];
       return [
          "function dispatchWorkerSend(",
          `${i1}hub: WorkerHub,`,
@@ -2901,6 +2932,7 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i1}if (!hub.listeners[info.channel]) {`,
                  `${i2}return;`,
                  `${i1}}`,
+                 ...decode("decoded"),
                  `${i1}// The listeners are looked up when the arguments are valid, since a schema may take its time`,
                  `${i1}// and a listener of \`once\` may have been used up by then.`,
                  `${i1}const run = (valid: unknown[]): void => {`,
@@ -2924,9 +2956,9 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i2}}`,
                  `${i1}};`,
                  `${i1}if (info.validator) {`,
-                 `${i2}void validateArguments(event, info.channel, info.validator, args, true, run, ${reportInvalid});`,
+                 `${i2}void validateArguments(event, info.channel, info.validator, ${serialized ? "decoded" : "args"}, true, run, ${reportInvalid});`,
                  `${i1}} else {`,
-                 `${i2}run(args);`,
+                 `${i2}run(${serialized ? "decoded" : "args"});`,
                  `${i1}}`,
               ]
             : [
@@ -2934,6 +2966,7 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i1}if (!listeners) {`,
                  `${i2}return;`,
                  `${i1}}`,
+                 ...decode("decoded"),
                  `${i1}for (const entry of listeners.slice()) {`,
                  `${i2}if (entry.once) {`,
                  `${i3}const at = listeners.indexOf(entry);`,
@@ -2943,7 +2976,7 @@ export class MainBindingsWriter extends BaseWriter {
                  `${i3}listeners.splice(at, 1);`,
                  `${i2}}`,
                  `${i2}try {`,
-                 `${i3}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...args);`,
+                 `${i3}(entry.callback as (...listenerArgs: unknown[]) => unknown)(event, ...${serialized ? "decoded" : "args"});`,
                  `${i2}} catch (error) {`,
                  `${i3}console.error(error);`,
                  `${i2}}`,
@@ -2979,10 +3012,18 @@ export class MainBindingsWriter extends BaseWriter {
       if (calls.length > 0) {
          const call = "callWorkerHandler(hub, worker, event, info, args)";
          const timed = times ? `timeWorkerCall(info, ${call})` : call;
+         // A serialized result is encoded once the handler has answered in time.
+         const result = this.usesSerializer() ? `encodeValue(info.channel, await ${timed})` : timed;
+         const params = "event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]";
+         const settle = this.usesSerializer() ? `async () => ${result}` : `() => ${timed}`;
          route.push(
             `${i1}for (const info of workerCalls) {`,
-            `${i2}worker.ipc.handle(info.wire, (event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]) =>`,
-            this.config.rawErrors ? `${i3}${timed},` : `${i3}settleInvoke(() => ${timed}),`,
+            this.config.rawErrors
+               ? this.usesSerializer()
+                  ? `${i2}worker.ipc.handle(info.wire, async (${params}) =>`
+                  : `${i2}worker.ipc.handle(info.wire, (${params}) =>`
+               : `${i2}worker.ipc.handle(info.wire, (${params}) =>`,
+            this.config.rawErrors ? `${i3}${result},` : `${i3}settleInvoke(${settle}),`,
             `${i2});`,
             `${i1}}`,
          );
@@ -3127,7 +3168,12 @@ export class MainBindingsWriter extends BaseWriter {
       const params = (...generated: string[]) =>
          [...generated, this.getOriginalParams(spec, false)].filter(Boolean).join(", ");
       const senderParams = this.getOriginalParams(spec, true);
-      const rest = senderParams ? `[${senderParams}]` : "[]";
+      // A serialized message is one argument, the list of the arguments, as the serializer made it.
+      const serialized = this.usesSerializer();
+      const wired = serialized ? `encodeValue('${spec.name}', [${senderParams}])` : senderParams;
+      const rest = serialized ? `[${wired}]` : senderParams ? `[${senderParams}]` : "[]";
+      // A question is serialized by `askServiceWorker`, so that a failure rejects the promise.
+      const askArgs = senderParams ? `[${senderParams}]` : "[]";
       if (spec.direction === "ServiceWorkerToMain") {
          const eventType = this.getWorkerEventType(spec);
          const signature = this.injectEventTypehint(spec.signature, eventType, eventName);
@@ -3165,7 +3211,7 @@ export class MainBindingsWriter extends BaseWriter {
          ? spec.signature.returnType
          : `Promise<Awaited<${spec.signature.returnType}>>`;
       const ask = (options: string) =>
-         `askServiceWorker(${channel}, ${wire}, ${workerName}, ${rest}${options}) as ${returned}`;
+         `askServiceWorker(${channel}, ${wire}, ${workerName}, ${askArgs}${options}) as ${returned}`;
       return {
          name: spec.name,
          members: [

@@ -162,9 +162,7 @@ export class BaseWriter {
    }
 
    /**
-    * Whether the files serialize what the channels between a page and the main process carry.
-    * The writer of the service worker script turns this off, since the traffic of a worker goes
-    * through its own code in the main process.
+    * Whether the files serialize what the channels carry, when the config names a serializer.
     */
    protected usesSerializer(): boolean {
       return !!this.config.serializer;
@@ -174,9 +172,9 @@ export class BaseWriter {
     * Whether the messages of the channel go through the serializer: the arguments and the results of
     * `invoke`, `send`, `stream`, `emit` and `ask`, the messages of a `port` or `mainPort` channel,
     * which travel as one value, the list of the arguments, and the calls, sends, results and chunks
-    * of the channels with a utility process. The traffic with a service worker is not covered. A
-    * writer that only pairs the ends of a channel, and sees none of its messages, turns the channel
-    * off for its file.
+    * of the channels with a utility process, and the calls, sends, questions and answers of the
+    * channels with a service worker. A writer that only pairs the ends of a channel, and sees none
+    * of its messages, turns the channel off for its file.
     */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
       return (
@@ -186,7 +184,9 @@ export class BaseWriter {
             spec.direction === "RendererToRenderer" ||
             spec.direction === "MainToUtility" ||
             spec.direction === "UtilityToMain" ||
-            spec.direction === "RendererToUtility")
+            spec.direction === "RendererToUtility" ||
+            spec.direction === "ServiceWorkerToMain" ||
+            spec.direction === "MainToServiceWorker")
       );
    }
 

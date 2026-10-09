@@ -15,8 +15,9 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   - List the errors that the preload script throws synchronously, and probe each in Electron.
   - Decide per case: keep the code in the message text, make the call report through a promise or a
     callback, or document that the page can tell the failure only by its message.
-  - Make the README, the tests and the T81a `it.fails` scenario
-    (`tests/test_electron/serializerPorts.test.ts`) say what is true.
+  - Make the README, the tests and the `it.fails` scenarios of T81a and T81c
+    (`tests/test_electron/serializerPorts.test.ts`, `tests/test_electron/serializerWorkers.test.ts`, the
+    `send` of a service worker) say what is true.
 - **Tests:** real-Electron scenarios for each synchronous error; the `it.fails` of T81a turns into a
   passing test, or into an assertion of the documented behavior.
 - **Delivered:**

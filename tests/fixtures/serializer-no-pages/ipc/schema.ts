@@ -1,8 +1,8 @@
-import { askWorker, defineChannels, invokeFromWorker } from "automate-electron-ipc";
+import { defineChannels, port } from "automate-electron-ipc";
 
-// None of these channels is between a page and the main process, a port channel or a channel of a
-// utility process, so none uses the serializer yet (the traffic with a service worker is not covered).
+// Two pages talk over this channel and the main process only pairs them, so it sees none of the
+// messages and has nothing to do with the serializer. Every other kind of channel has a message that
+// the main process reads or writes.
 export default defineChannels({
-   lookup: invokeFromWorker<(key: string) => Promise<number>>(),
-   zone: askWorker<(name: string) => Promise<number>>(),
+   tracker: port<(at: Date) => void>(),
 });

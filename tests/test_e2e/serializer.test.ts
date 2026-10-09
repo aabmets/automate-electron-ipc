@@ -689,13 +689,13 @@ describe("fixture serializer-raw-errors, with rawErrors on", () => {
    });
 });
 
-describe("a schema without a channel between a page and the main process", () => {
-   it("imports the serializer nowhere", async () => {
+describe("a schema in which the main process sees no message", () => {
+   it("imports the serializer in the preload script only, since the main process just pairs the pages", async () => {
       project = await runFixture("serializer-no-pages");
 
-      for (const file of ["main.ts", "preload.ts"] as const) {
-         expect(project.generated[file]).not.toContain("serializer");
-         expect(project.generated[file]).not.toContain("ipcSerialize");
-      }
+      expect(project.generated["main.ts"]).not.toContain("serializer");
+      expect(project.generated["main.ts"]).not.toContain("ipcSerialize");
+      expect(project.generated["preload.ts"]).toContain("ipcSerialize");
+      expect(await project.typecheck({ noUnusedLocals: true })).toBe("");
    });
 });

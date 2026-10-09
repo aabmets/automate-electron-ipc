@@ -42,9 +42,12 @@ export class PreloadBindingsWriter extends BaseWriter {
    protected isEmpty(): boolean {
       return !this.hasRendererChannels();
    }
-   /** The page takes no part in the traffic between the main process and a utility process. */
+   /**
+    * The page takes no part in the traffic between the main process and a utility process, or a
+    * service worker. The worker script has its channels mapped to those of a page first.
+    */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
-      return !this.isUtilitySpec(spec) && super.isSerializedSpec(spec);
+      return !(this.isUtilitySpec(spec) || this.isWorkerSpec(spec)) && super.isSerializedSpec(spec);
    }
    protected renderEmptyFileContents(): string {
       const [i0] = this.indents;

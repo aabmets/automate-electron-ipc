@@ -40,9 +40,13 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
    protected getPathForFileEnabled(): boolean {
       return false;
    }
-   /** The main process routes the traffic of a worker through its own code, which does not serialize. */
-   protected usesSerializer(): boolean {
-      return false;
+   /**
+    * The channels of a worker are mapped to those of a page (see `groupChannels`), which the
+    * serializer covers. The page channels of the schema are not the ones of this file, so only the
+    * channels of a worker decide whether the file imports the serializer.
+    */
+   protected hasSerializedChannels(): boolean {
+      return this.usesSerializer() && this.hasWorkerChannels();
    }
    /**
     * The preload script of a worker has no timers (`setTimeout` and `setImmediate` are not defined

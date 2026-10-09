@@ -197,7 +197,7 @@ async function compileFile(source: string): Promise<string> {
 
 /**
  * Inlines the modules of the project that a script requires, as a bundler does for the preload
- * script of an app: a sandboxed preload can require `electron` and nothing else. The generated
+ * script of an app or of a service worker: a sandboxed preload can require `electron` and nothing else. The generated
  * script requires a module only for the serializer of the config.
  */
 async function inlineLocalRequires(code: string, sourceFile: string): Promise<string> {
@@ -220,8 +220,10 @@ async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
       }
       const source = path.join(entry.parentPath, entry.name);
       let code = await compileFile(source);
-      if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
+      if (/^(service-worker-)?preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
          code = await inlineLocalRequires(code, source);
+      }
+      if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
          // The preload script is one file which only requires `electron`, as a sandboxed one must.
          // This tells the tests that it really runs sandboxed and in an isolated context.
          code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;
