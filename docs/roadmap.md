@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 97 delivered, 28 remaining, 1 dropped.
+**Progress:** 98 delivered, 27 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -131,7 +131,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T103: Split `main-bindings.ts`, part 1: imports, support, scopes and validation](./tasks/T103-main-bindings-part-1-support-scopes-validation.md) · depends on: T102
 - [x] [T104: Split `main-bindings.ts`, part 2: channels, `ask` and streams](./tasks/T104-main-bindings-part-2-channels-and-asks.md) · depends on: T103
 - [x] [T105: Split `main-bindings.ts`, part 3: ports, utility and brokered channels](./tasks/T105-main-bindings-part-3-ports-utility-and-broker.md) · depends on: T104
-- [ ] [T106: Split `main-bindings.ts`, part 4: service workers, and the final shape](./tasks/T106-main-bindings-part-4-service-workers.md) · depends on: T105
+- [x] [T106: Split `main-bindings.ts`, part 4: service workers, and the final shape](./tasks/T106-main-bindings-part-4-service-workers.md) · depends on: T105
 - [ ] [T107: Split `preload-bindings.ts`](./tasks/T107-preload-bindings-split.md) · depends on: T102
 - [ ] [T108: Split `parser.ts`, part 1: AST helpers, signatures, clone check and diagnostics](./tasks/T108-parser-part-1-ast-clone-check-and-diagnostics.md) · depends on: T102
 - [ ] [T109: Split `parser.ts`, part 2: channel maps, imports, definitions and `parseSpecs`](./tasks/T109-parser-part-2-channel-maps-and-specs.md) · depends on: T108

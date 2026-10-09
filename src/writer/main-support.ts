@@ -24,6 +24,7 @@ import {
    getValidatedWorkerEvents,
 } from "./main-validation.js";
 import { buildEventWatch, buildPageLoadWatch } from "./main-watches.js";
+import { buildWorkerHelpers } from "./main-worker-helpers.js";
 import { buildErrorEnvelope, buildSerializerRuntime } from "./utility-runtime.js";
 
 /** Which helpers the channels of the file use. */
@@ -48,26 +49,8 @@ export interface SupportUses {
    usesEventWatch: boolean;
 }
 
-/**
- * The builders of the helpers that are still methods of `MainBindingsWriter`. Each one moves to a
- * module of its feature, which `buildSupport` then calls directly.
- */
-export interface SupportBuilders {
-   workerHelpers: (
-      specs: t.ChannelSpec[],
-      usesAsks: boolean,
-      validators: Map<t.ChannelSpec, string>,
-   ) => string;
-   workerEventType: (spec: t.ChannelSpec) => string;
-}
-
 /** The helpers that the channels of the file use, in the order that they are declared. */
-export function buildSupport(
-   ctx: MainContext,
-   uses: SupportUses,
-   eventTypes: string[],
-   builders: SupportBuilders,
-): string[] {
+export function buildSupport(ctx: MainContext, uses: SupportUses, eventTypes: string[]): string[] {
    const { indents } = ctx;
    const support: string[] = [];
    if (uses.scopes.length > 0) {
@@ -84,7 +67,7 @@ export function buildSupport(
          buildArgumentValidation(
             indents,
             uses.usesValidation ? eventTypes : [],
-            getValidatedWorkerEvents(uses.workerValidators, builders.workerEventType),
+            getValidatedWorkerEvents(uses.workerValidators),
          ),
       );
    }
@@ -116,7 +99,7 @@ export function buildSupport(
       support.push(buildAskHelpers(ctx));
    }
    if (uses.workerSpecs.length > 0) {
-      support.push(builders.workerHelpers(uses.workerSpecs, uses.usesAsks, uses.workerValidators));
+      support.push(buildWorkerHelpers(ctx, uses.workerSpecs, uses.usesAsks, uses.workerValidators));
    }
    if (uses.usesStreams) {
       support.push(buildStreamHelpers(ctx));

@@ -16,4 +16,14 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** No assertion changes. The generated output of every fixture in `tests/fixtures` is
   byte-identical before and after (dump it into the scratchpad first, then `diff -r`), the whole
   suite passes, and `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The service worker section went to four modules, each under 280
+  lines: `main-workers.ts` (API side, `WORKER_RESERVED_NAMES`), `main-worker-helpers.ts` (hubs,
+  config, tables, sender check), `main-worker-calls.ts` (calls, sends, timer) and
+  `main-worker-routing.ts` (routes, plus `buildWorkerAskLines`). That last builder is the
+  `askServiceWorker` block of `buildWorkerHelpers`, pulled out verbatim so the helpers fit. Getting
+  the writer under the limit took two more moves. The reserved-name list became
+  `getMainReservedNames(uses)` in `main-reserved-names.ts`. `OffPageUse` and
+  `buildOffPageChannels` went to `main-off-page.ts`, and `isUtilitySpec` and `isBrokeredSpec`
+  joined `MainContext` for them. `SupportBuilders` is gone, and `getValidatedWorkerEvents` imports
+  `getWorkerEventType` directly. `main-bindings.ts` is 274 lines and left the baseline, and the
+  output of all 95 fixtures is byte-identical.

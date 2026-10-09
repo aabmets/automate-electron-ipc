@@ -12,6 +12,7 @@
 import type * as t from "@types";
 import utils from "../utils.js";
 import type { ImportsGenerator } from "./imports-generator.js";
+import { getWorkerEventType } from "./main-workers.js";
 
 /** The sender and argument validation of the generated `main.ts`. */
 
@@ -245,13 +246,10 @@ export function buildArgumentValidation(
 }
 
 /** The events of the validated channels that a service worker calls, which the validation reports. */
-export function getValidatedWorkerEvents(
-   validators: Map<t.ChannelSpec, string>,
-   eventOf: (spec: t.ChannelSpec) => string,
-): string[] {
+export function getValidatedWorkerEvents(validators: Map<t.ChannelSpec, string>): string[] {
    const events = new Set<string>();
    for (const spec of validators.keys()) {
-      events.add(eventOf(spec));
+      events.add(getWorkerEventType(spec));
    }
    return [...events].sort(utils.compareStrings);
 }
