@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 85 delivered, 16 remaining, 1 dropped.
+**Progress:** 91 delivered, 12 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -77,6 +77,8 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T97: Import paths and schema syntax left after T89 and T90](./tasks/T97-import-path-and-schema-syntax-leftovers.md) · depends on: T89, T90
 - [x] [T98: Config values left after T88 and T92](./tasks/T98-config-robustness-leftovers.md) · depends on: T88, T92
 - [x] [T99: The README denies options that utility channels have](./tasks/T99-readme-options-of-utility-channels.md) · depends on: T79, T86
+- [ ] [T100: Two blank lines in a row between components of the generated `preload.ts`](./tasks/T100-double-blank-lines-in-generated-preload.md) · depends on: T94
+- [ ] [T101: Directory imports through `package.json` and path mappings](./tasks/T101-directory-imports-through-package-json-and-paths.md) · depends on: T97
 
 ## Phase 2: Core API, listener lifecycle and security
 
