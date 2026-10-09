@@ -12,4 +12,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   sync type), and report one anywhere below it, for every verb that has a result.
 - **Tests:** the `it.fails.each` of `tests/test_parser/cloneIssues.test.ts` turns into a passing
   `it.each`.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The walk of the clone check (`src/parser.ts`) now allows a Promise only at the outermost position of a result (also in a union and behind a local alias); it is reported in `invoke`, stream chunk and all other results below that, and the hint of the error differs from the one of parameters. The `it.fails.each` is a passing `it.each`.

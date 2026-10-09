@@ -479,7 +479,12 @@ function validateCloneIssues(spec: Partial<t.ChannelSpec>, file?: string): void 
    }
    const where = file === undefined ? "" : `Schema file '${file}': `;
    const lines = errors.map((issue) => {
-      const hint = issue.reason === "a Promise" ? PROMISE_HINT : CLONE_HINT;
+      const hint =
+         issue.reason === "a Promise"
+            ? issue.where.startsWith("parameter")
+               ? PROMISE_HINT
+               : NESTED_PROMISE_HINT
+            : CLONE_HINT;
       return `${where}${describeCloneIssue(spec.name ?? "", issue)}. ${hint}`;
    });
    throw new Error(lines.join("\n"));
@@ -492,6 +497,10 @@ const CLONE_HINT =
 const PROMISE_HINT =
    "It cannot be sent over IPC. Only the result of an 'invoke' channel is a Promise, " +
    "so send the resolved value.";
+
+const NESTED_PROMISE_HINT =
+   "It cannot be sent over IPC. Only the result of an async signature is a Promise, " +
+   "and only as the outermost type, so await it and send the resolved value.";
 
 /**
  * The warnings about the signatures of one schema file: the types that Electron sends, but

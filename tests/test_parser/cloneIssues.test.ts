@@ -161,16 +161,69 @@ describe("cloneIssues, return types", () => {
       expect(issuesOf("(a: number) => Promise<string[]>")).toStrictEqual([]);
    });
 
-   // T91: only the Promise of an async signature may be in the result, and Electron cannot clone a
+   // Only the Promise of an async signature may be in the result, and Electron cannot clone a
    // Promise anywhere below it, as it cannot clone one in a parameter.
-   it.fails.each([
+   it.each([
       ["a Promise in the async result", "() => Promise<{ avatar: Promise<string> }>"],
+      ["a Promise in the Promise", "() => Promise<Promise<string>>"],
       ["an array of Promises", "() => Promise<number>[]"],
+      ["a generic array of Promises", "() => Array<Promise<number>>"],
       ["a Promise in a sync result", "() => { avatar: Promise<string> }"],
+      ["a Promise in a tuple", "() => [string, Promise<number>]"],
+      ["a Promise in an async array", "() => Promise<Promise<string>[]>"],
+      ["a Promise in a Map", "() => Map<string, Promise<number>>"],
+      ["a Promise in an async union", "() => Promise<string | Promise<number>>"],
+      ["a Promise in an intersection", "() => Promise<string> & { a: number }"],
+      ["a Promise below a sync union member", "() => string | { a: Promise<number> }"],
+      ["a Promise below a parenthesized Promise", "() => (Promise<{ a: Promise<number> }>)"],
    ])("rejects %s", (_name, definition) => {
       const issues = issuesOf(definition);
       expect(issues).toHaveLength(1);
-      expect(issues[0]).toMatchObject({ level: "error", where: "return type" });
+      expect(issues[0]).toMatchObject({
+         level: "error",
+         where: "return type",
+         reason: "a Promise",
+      });
+   });
+
+   it("allows the Promise of a sync union with its sync type, and an alias of it", () => {
+      expect(issuesOf("() => Promise<string> | string")).toStrictEqual([]);
+      expect(issuesOf("() => string | (Promise<string> | undefined)")).toStrictEqual([]);
+      expect(issuesOf("() => Done", "type Done = Promise<string>;")).toStrictEqual([]);
+      expect(issuesOf("() => Done", "type Done = Promise<string> | null;")).toStrictEqual([]);
+   });
+
+   it("reports a Promise below the outermost one, also through a local alias", () => {
+      expect(errorsOf("() => Done", "type Done = Promise<{ a: Promise<string> }>;")).toStrictEqual([
+         "return type: a Promise Promise<string>",
+      ]);
+      expect(errorsOf("() => Box<Promise<string>>", "type Box<T> = { value: T };")).toStrictEqual([
+         "return type: a Promise Promise<string>",
+      ]);
+      expect(errorsOf("() => Row", "interface Row { later: Promise<string> }")).toStrictEqual([
+         "return type: a Promise Promise<string>",
+      ]);
+   });
+
+   it("reports a Promise in the chunks of a stream", () => {
+      const { module, src } = parser.parseModule(
+         "type Sig = () => AsyncIterable<Promise<string>>;",
+      );
+      const signature = parser.parseSignature(
+         (module.body[0] as any).typeAnnotation,
+         src,
+         parser.collectModuleBindings(module),
+         parser.collectTypeDeclarations(module),
+         true,
+      );
+      expect(signature.cloneIssues).toStrictEqual([
+         {
+            level: "error",
+            where: "chunk type",
+            type: "Promise<string>",
+            reason: "a Promise",
+         },
+      ]);
    });
 
    it("allows a bare Promise return type", () => {
@@ -391,6 +444,23 @@ describe("cloneIssues, from a schema file", () => {
             reason: "an instance of the class 'User'",
          },
       ]);
+   });
+
+   it("fails the parse of a schema file with a Promise nested in a result", () => {
+      const contents = [
+         IMPORT,
+         "export default defineChannels({",
+         "   profile: invoke<() => Promise<{ avatar: Promise<string> }>>(),",
+         "});",
+      ].join("\n");
+      expect(() =>
+         parser.parseSpecs({ fullPath: "/p/ipc/schema.ts", relativePath: "s", contents }),
+      ).toThrowError(
+         "Schema file '/p/ipc/schema.ts': Channel 'profile': return type contains a Promise " +
+            "('Promise<string>'). It cannot be sent over IPC. Only the result of an async " +
+            "signature is a Promise, and only as the outermost type, so await it and send the " +
+            "resolved value.",
+      );
    });
 
    it("fails the parse of a schema file with an error issue", () => {

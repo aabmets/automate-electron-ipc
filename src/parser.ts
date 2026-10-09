@@ -615,6 +615,9 @@ const CLONE_SKIPPED_NODES = new Set([
    "TsSetterSignature",
 ]);
 
+/** The nodes through which a type is still the outermost type of the result. */
+const CLONE_OUTERMOST_NODES = new Set(["TsParenthesizedType", "TsUnionType", "TsTypeReference"]);
+
 const CLONE_FUNCTION_NODES = new Set([
    "TsFunctionType",
    "TsConstructorType",
@@ -629,8 +632,12 @@ interface CloneWalk {
    declarations: TypeDeclarations;
    /** `parameter 'x'` or `return type`, for the issues found. */
    where: string;
-   /** A Promise is sent by `invoke` as its result only, so it is an error in parameters. */
-   inParam: boolean;
+   /**
+    * Whether a Promise is allowed at this place. Only the outermost type of a result may be one
+    * (also in a union and behind a local alias), as that is what an async signature returns.
+    * Electron cannot clone a Promise anywhere else.
+    */
+   promiseOk: boolean;
    /** The local types being followed, which guards against recursive types. */
    active: string[];
    /** The type parameters in scope, with their constraints. */
@@ -685,6 +692,7 @@ function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
       } else if (declaration.type === "TsInterfaceDeclaration") {
          const inner = {
             ...walk,
+            promiseOk: false,
             active: [...walk.active, name],
             scope: typeParamScope(declaration, walk.scope),
          };
@@ -705,9 +713,11 @@ function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
 
 function walkCloneReference(node: AstNode, walk: CloneWalk): void {
    const args: AstNode[] = node.typeParams?.params ?? [];
+   // The arguments of a type are always below the result, so a Promise there is not the result.
+   const below = walk.promiseOk ? { ...walk, promiseOk: false } : walk;
    const walkArgs = (list: AstNode[]) => {
       for (const arg of list) {
-         walkCloneType(arg, walk);
+         walkCloneType(arg, below);
       }
    };
    if (node.typeName.type !== "Identifier") {
@@ -720,14 +730,19 @@ function walkCloneReference(node: AstNode, walk: CloneWalk): void {
       const constraint = walk.scope.get(name);
       const outer = new Map(walk.scope);
       outer.delete(name);
-      walkCloneType(constraint, { ...walk, scope: outer });
+      walkCloneType(constraint, { ...below, scope: outer });
    } else if (walk.locals.has(name)) {
       walkArgs(args);
-      walkLocalType(name, node, walk);
+      // An alias of a Promise is still the outermost type of the result, when the alias is.
+      walkLocalType(name, node, args.length === 0 ? walk : below);
    } else if (UNCLONABLE_GLOBALS.has(name)) {
       reportCloneIssue(walk, "error", node, UNCLONABLE_GLOBALS.get(name) as string);
-   } else if (name === "Promise" && walk.inParam) {
-      reportCloneIssue(walk, "error", node, "a Promise");
+   } else if (name === "Promise") {
+      if (walk.promiseOk) {
+         walkArgs(args);
+      } else {
+         reportCloneIssue(walk, "error", node, "a Promise");
+      }
    } else if (!CLONE_SKIPPED_ARGUMENTS.has(name)) {
       walkArgs(args);
    }
@@ -740,7 +755,12 @@ function walkCloneReference(node: AstNode, walk: CloneWalk): void {
 function walkCloneType(node: AstNode | undefined, walk: CloneWalk): void {
    if (!node || CLONE_SKIPPED_NODES.has(node.type)) {
       return;
-   } else if (CLONE_FUNCTION_NODES.has(node.type)) {
+   }
+   // Only these keep the outermost position of the result, a reference decides for itself.
+   if (walk.promiseOk && !CLONE_OUTERMOST_NODES.has(node.type)) {
+      walk = { ...walk, promiseOk: false };
+   }
+   if (CLONE_FUNCTION_NODES.has(node.type)) {
       reportCloneIssue(walk, "error", node, "a function");
    } else if (node.type === "TsKeywordType") {
       if (node.kind === "symbol") {
@@ -796,7 +816,7 @@ export function parseSignature(
       locals,
       declarations,
       where: "",
-      inParam: true,
+      promiseOk: false,
       active: [],
       scope: typeParamScope(fn as AstNode, new Map()),
       issues: cloneIssues,
@@ -819,7 +839,9 @@ export function parseSignature(
       walkCloneType(node, {
          ...walk,
          where: chunkNode ? "chunk type" : "return type",
-         inParam: false,
+         // A stream sends its chunks, not a Promise. The result of an async signature was unwrapped
+         // above, so the Promise of a sync signature may only be the result itself.
+         promiseOk: !(chunkNode || isAsync),
       });
    }
    return {

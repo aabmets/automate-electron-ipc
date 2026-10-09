@@ -1024,6 +1024,17 @@ describe("validateChannelSpecs, structured clone", () => {
       );
    });
 
+   it("explains that a Promise in a result is only allowed as the outermost type", () => {
+      for (const where of ["return type", "chunk type"]) {
+         const spec = specWith(issue({ where, type: "Promise<string>", reason: "a Promise" }));
+         expect(() => vld.validateChannelSpecs([spec])).toThrowError(
+            `${where} contains a Promise ('Promise<string>'). It cannot be sent over IPC. ` +
+               "Only the result of an async signature is a Promise, and only as the outermost type, " +
+               "so await it and send the resolved value.",
+         );
+      }
+   });
+
    it("reports every error issue, one per line", () => {
       const spec = specWith(
          issue(),
