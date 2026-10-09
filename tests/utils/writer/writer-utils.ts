@@ -100,7 +100,12 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
       {
          fullPath: "/project/ipc/schema.ts",
          relativePath: "schema.ts",
-         specs: { typeSpecArray: [], importSpecArray: [], channelSpecArray },
+         specs: {
+            typeSpecArray: [],
+            importSpecArray: [],
+            channelSpecArray,
+            channelMapExport: { kind: "default" },
+         },
       } as unknown as t.ParsedFileSpecs,
    ];
 }

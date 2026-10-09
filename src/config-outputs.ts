@@ -75,6 +75,7 @@ export interface OutputPaths {
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
+   typesFilePath: string;
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;
@@ -119,6 +120,7 @@ export function deriveOutputPaths(
          cwd,
       ),
       rendererTypesFilePath: outputPath(config.rendererTypesPath, ipcDataDir, "window.d.ts", cwd),
+      typesFilePath: outputPath(undefined, ipcDataDir, "types.ts", cwd),
       utilityBindingsFilePath: outputPath(
          config.utilityBindingsPath,
          ipcDataDir,
@@ -172,6 +174,7 @@ export async function assertOutputsDistinct(
    const taken = [
       ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
       outputs.serviceWorkerTypesFilePath,
+      outputs.typesFilePath,
    ].map(fold);
    for (const [option, value, file] of configured) {
       if (taken.includes(fold(file))) {

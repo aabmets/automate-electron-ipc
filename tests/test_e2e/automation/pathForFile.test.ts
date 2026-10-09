@@ -58,7 +58,7 @@ describe("fixture path-for-file, with `getPathForFile` on", () => {
    it("generates files that type-check, with the helper used from the page", async () => {
       const project = await fixtures.run("path-for-file");
 
-      expect(project.generated["window.d.ts"]).toContain("getPathForFile: (file: File) => string;");
+      expect(project.generated["types.ts"]).toContain("getPathForFile: (file: File) => string;");
       expect(await project.typecheck()).toBe("");
    });
 
@@ -79,7 +79,7 @@ describe("fixture expose-as, with `getPathForFile` off", () => {
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
       expect(fake.exposed.bridge.getPathForFile).toBeUndefined();
-      expect(project.generated["window.d.ts"]).not.toContain("getPathForFile");
+      expect(project.generated["types.ts"]).not.toContain("getPathForFile");
       expect(project.generated["preload.ts"]).not.toContain("webUtils");
    });
 });

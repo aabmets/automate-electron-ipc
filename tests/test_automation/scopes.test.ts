@@ -50,6 +50,9 @@ describe("ipcAutomation", () => {
             "preload.plugin-host.ts",
             "preload.settings.ts",
             "preload.ts",
+            "types.plugin-host.ts",
+            "types.settings.ts",
+            "types.ts",
             "window.d.ts",
             "window.plugin-host.d.ts",
             "window.settings.d.ts",
@@ -73,7 +76,7 @@ describe("ipcAutomation", () => {
             "getVersion",
             "note",
          ]);
-         expect(channelsOf(await read("window.settings.d.ts"))).toStrictEqual([
+         expect(channelsOf(await read("types.settings.ts"))).toStrictEqual([
             "getSettings",
             "getVersion",
             "note",
@@ -90,7 +93,12 @@ describe("ipcAutomation", () => {
             SCHEMA.replaceAll(/, \{ scopes: \[[^\]]*\] \}|\{ scopes: \[[^\]]*\] \}/g, "{}"),
          );
 
-         expect(await written()).toStrictEqual(["main.ts", "preload.ts", "window.d.ts"]);
+         expect(await written()).toStrictEqual([
+            "main.ts",
+            "preload.ts",
+            "types.ts",
+            "window.d.ts",
+         ]);
       });
 
       it("writes the empty files of the surface of no scope when every channel has scopes", async () => {
@@ -104,7 +112,7 @@ describe("ipcAutomation", () => {
             fsp.readFile(path.join(automation.dir, "out", name), "utf8");
 
          expect(await read("preload.ts")).toContain("export const api = {};");
-         expect(await read("window.d.ts")).toContain("interface IpcApi {}");
+         expect(await read("types.ts")).toContain("interface IpcApi {}");
          expect(await read("preload.one.ts")).toContain("   a: {");
       });
 
@@ -136,6 +144,16 @@ describe("ipcAutomation", () => {
                utilityBindingsFilePath: path.join(automation.dir, "out/window.plugin-host.d.ts"),
             }),
          ).rejects.toThrowError(/is the file that the scope 'plugin-host' is generated to/);
+      });
+
+      it("rejects a utility path which is the types module of a scope", async () => {
+         await expect(
+            generate(SCHEMA, {
+               utilityBindingsFilePath: path.join(automation.dir, "out/types.settings.ts"),
+            }),
+         ).rejects.toThrowError(
+            /'utilityBindingsPath' \(.*types\.settings\.ts'\) is the file that the scope 'settings' is generated to/,
+         );
       });
 
       it("rejects an invalid scope name with the channel and the file", async () => {

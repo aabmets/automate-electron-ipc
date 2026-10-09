@@ -60,11 +60,11 @@ describe.each([
       const project = await fixtures.run(fixture);
 
       for (const name of CHANNELS) {
-         expect(project.generated["window.d.ts"]).toContain(`${name}: {`);
+         expect(project.generated["types.ts"]).toContain(`${name}: {`);
          expect(project.generated["preload.ts"]).toContain(`\n   ${name}: `);
          expect(project.generated["main.ts"]).toContain(`\n   ${name}: {`);
       }
-      expect(project.generated["window.d.ts"]).not.toContain(prefix || "\u0000");
+      expect(project.generated["types.ts"]).not.toContain(prefix || "\u0000");
    });
 
    it("generates files that type-check", async () => {

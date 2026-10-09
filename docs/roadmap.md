@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 141 delivered, 9 remaining, 1 dropped.
+**Progress:** 142 delivered, 8 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -178,7 +178,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [x] [T38c: Detect NodeNext from `tsconfig.json`](./tasks/T38c-nodenext-detection.md) · depends on: T38a
 - [x] [T39: `ipcgen --check`](./tasks/T39-ipcgen-check.md) · depends on: T06, T38a, T139
 - [x] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38a
-- [ ] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13, T139
+- [x] [T44: Exported helper types](./tasks/T44-exported-helper-types.md) · depends on: T13, T139
 - [x] [T42b: Report multiple schema errors together](./tasks/T42b-collect-multiple-errors.md) · depends on: T42a, T139
 - [x] [T41a: Programmatic API (`automate-electron-ipc/api`)](./tasks/T41a-programmatic-api.md) · depends on: T38a, T39
 - [x] [T43a: Generated file headers and stale-file removal](./tasks/T43a-generated-file-headers-and-stale-files.md) · depends on: T39

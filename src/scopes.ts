@@ -62,7 +62,8 @@ export function filterByScope(
 
 /**
  * The path of the file of a scope, next to the file of the surface of no scope: `preload.ts`
- * becomes `preload.settings.ts` and `window.d.ts` becomes `window.settings.d.ts`.
+ * becomes `preload.settings.ts`, `window.d.ts` becomes `window.settings.d.ts` and `types.ts` becomes
+ * `types.settings.ts`.
  */
 export function scopedFilePath(filePath: string, scope: Scope): string {
    const extension = /(\.d\.ts|\.ts)$/.exec(filePath);

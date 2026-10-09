@@ -39,9 +39,10 @@ describe("service worker channels, files", () => {
          "preload.ts",
          "service-worker-preload.ts",
          "service-worker.d.ts",
+         "types.ts",
          "window.d.ts",
       ]);
-      expect(windowIpcPaths(generated["window.d.ts"])).toStrictEqual(["getUser.invoke"]);
+      expect(windowIpcPaths(generated["types.ts"])).toStrictEqual(["getUser.invoke"]);
       expect(windowIpcPaths(generated["service-worker.d.ts"])).toStrictEqual([
          "configChanged.on",
          "configChanged.once",

@@ -50,7 +50,8 @@ describe("findStaleOutputs", () => {
       await fsp.writeFile(schema, edited);
 
       expect(await findStaleOutputs({ cwd: project.dir })).toEqual(
-         ["main.ts", "preload.ts", "window.d.ts"].map((name) =>
+         // window.d.ts only imports the types of types.ts, which holds the new member.
+         ["main.ts", "preload.ts", "types.ts"].map((name) =>
             generatedPath(project.dir, project.ipcDataDir, name),
          ),
       );

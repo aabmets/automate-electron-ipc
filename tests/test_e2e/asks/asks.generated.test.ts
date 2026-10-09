@@ -18,7 +18,7 @@ afterEach(cleanupAsks);
 describe("ask, generated files", () => {
    it("declares only the handle method of an ask in window.d.ts", async () => {
       const project = await fixtures.run("ask-channels");
-      const types = project.generated["window.d.ts"];
+      const types = project.generated["types.ts"];
 
       expect(types).toContain(
          "hasUnsavedChanges: {\n      handle: (callback: (documentId: number) => boolean) => () => void;\n   };",

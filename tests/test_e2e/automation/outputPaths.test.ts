@@ -29,12 +29,14 @@ describe("the paths of the generated files of the page", () => {
             expect(fsp.access(path.join(project.dir, file))).resolves.toBeUndefined(),
          ),
       );
-      // The data directory holds only the schema, and its imports.
+      // The data directory holds the schema, its imports and types.ts, which no option moves.
       await expect(fsp.access(path.join(project.dir, "src/ipc/main.ts"))).rejects.toThrowError();
       // The files that import the types of the schema reach them from their own directory.
       expect(project.generated["main.ts"]).toContain('"../../ipc/models"');
       expect(project.generated["main.ts"]).toContain('"../../shared/shapes"');
-      expect(project.generated["window.d.ts"]).toContain('"../src/ipc/models"');
+      expect(project.generated["types.ts"]).toContain('"./models"');
+      // The typings reach the types module from their own directory.
+      expect(project.generated["window.d.ts"]).toContain('"../src/ipc/types"');
       expect(await project.typecheck()).toBe("");
    });
 

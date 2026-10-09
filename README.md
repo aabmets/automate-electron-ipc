@@ -337,6 +337,7 @@ Since this library is well-documented through its type definitions, the develope
 which facilitates easy type inference and hints within its user interface. To that end, you should configure your 
 `tsconfig.node.json` to include the generated `main.ts` and `preload.ts` files from within the IPC data directory.
 For the renderer process, you should include the generated `window.d.ts` file into your `tsconfig.web.json` file.
+It takes the types of the API from `types.ts`, which is written next to it (see [Helper types](#helper-types)).
 
 _Note: IPC automation does not make a distinction between senders/listeners and invokers/handlers as they are 
 defined in the IPC documentation of the Electron library. Whether an IPC component is generated as a sender/listener
@@ -756,7 +757,7 @@ signal.addEventListener("abort", () => stream.cancel(), { once: true });
 
 If the generator throws, the chunks that came before the error are read first. Then the read rejects
 with the error object of an `invoke` channel, `{ name, message, code?, data? }` (see Errors), and
-later reads are `done`. The second type argument documents the error types, in `window.d.ts`, as for
+later reads are `done`. The second type argument documents the error types, in `types.ts`, as for
 `invoke`, and the `as` form cannot declare them. A chunk that cannot be cloned stops the generator
 and fails the stream with `IPC_STREAM_UNSENDABLE`. The other codes are `IPC_STREAM_NOT_ITERABLE` (the
 handler did not return an async iterable), `IPC_STREAM_INVALID_REQUEST`, `IPC_STREAM_INVALID_REPLY`,
@@ -1040,9 +1041,10 @@ export default defineChannels({
 is made of lower case letters and digits, joined by dashes, and `default` is taken.
 The API of a scope is its own channels and the ones without `scopes`.
 
-**One preload script and one declaration file per scope.** `ipcgen` writes `preload.<scope>.ts` and
-`window.<scope>.d.ts` next to the usual files, here `preload.settings.ts`, `window.settings.d.ts`,
-`preload.editor.ts` and `window.editor.d.ts`. The usual `preload.ts` and `window.d.ts` are the API of
+**One preload script, one declaration file and one types module per scope.** `ipcgen` writes
+`preload.<scope>.ts`, `window.<scope>.d.ts` and `types.<scope>.ts` next to the usual files, here
+`preload.settings.ts`, `window.settings.d.ts`, `types.settings.ts`, `preload.editor.ts`,
+`window.editor.d.ts` and `types.editor.ts`. The usual `preload.ts`, `window.d.ts` and `types.ts` are the API of
 a window that is in no scope, so they have only the channels without `scopes`: all of them in a schema
 that uses no scopes. Use the file of its scope as the preload script of each window, and include only
 one `window*.d.ts` in a renderer project, since each of them declares the same global. A scope that
@@ -1115,7 +1117,7 @@ that is not allowed, and one with invalid arguments, reject the same way, with t
 the message of Electron.
 
 Declare the errors that a handler may throw in a second type argument of `invoke`. They are
-documented in the generated `window.d.ts`, and the global type `IpcError<E>` describes the object
+documented in the generated `types.ts`, and the global type `IpcError<E>` describes the object
 that the promise is rejected with:
 
 ```typescript
@@ -1154,7 +1156,7 @@ export default defineChannels({
 ```
 
 When the time has passed without a reply, the preload script rejects the promise with a plain object,
-like the other errors of the library, and `window.d.ts` documents it as `IpcTimeoutError`:
+like the other errors of the library, and `types.ts` documents it as `IpcTimeoutError`:
 
 ```typescript
 catch (error) {
@@ -1307,7 +1309,7 @@ for await (const row of ipc.scanRows.stream("notes")) {
 }
 ```
 
-The page API is that of `invoke` and `stream`, and the types of `window.d.ts` declare the errors: the
+The page API is that of `invoke` and `stream`, and the types of `types.ts` declare the errors: the
 optional second type argument of the verbs lists the error types of the handler, like it does for
 `invoke`. A failure reaches the page as a plain object `{ name, message, code?, data? }`. The library
 adds an `IpcUtilityError` with these codes:
@@ -1451,6 +1453,41 @@ Errors and answers work as they do for the other channels:
    worker at the top of its script, as it runs on every start.
  - `invokeFromWorker` has `timeoutMs` (see [Timeouts](#timeouts)). There is no `scopes` option: a worker
    is not a window. The signature is checked for what structured clone cannot send, like the others.
+
+#### Helper types
+
+`ipcgen` writes `types.ts` next to the other files. It declares no global, so any file can import it,
+also one of the main process, and it holds the types for code that wraps the API generically:
+
+| Type | Is |
+|------|----|
+| `IpcApi` | The interface of the API of the page: what `window.ipc` is, with the members of every channel of the page |
+| `ChannelName` | The union of the names of the channels of the page |
+| `ChannelArgs<N>` | The parameters of the channel `N`, as a tuple |
+| `ChannelReturn<N>` | What a call of the channel `N` gives: the result of the handler with its promise resolved, and the type of the chunks for a `stream` |
+
+```typescript
+import type { ChannelArgs, ChannelName, ChannelReturn } from "./autoipc/types";
+
+// A typed wrapper for any `invoke` channel of the page.
+async function call<N extends ChannelName>(name: N, ...args: ChannelArgs<N>): Promise<ChannelReturn<N>> {
+   const channel = window.ipc[name] as unknown as { invoke(...args: unknown[]): Promise<ChannelReturn<N>> };
+   return channel.invoke(...args);
+}
+
+const user = await call("getUser", 1);   // typed as what the handler of getUser returns
+```
+
+The error types that the members refer to (`IpcError<E>`, `IpcTimeoutError` and `IpcUtilityError`, when a channel can fail
+with them), `IpcStream<T>` and the types of the overflow callbacks are exported from the same file. The global
+types `IpcError` and the like that `window.d.ts` declares are those of this file.
+
+`ChannelArgs` and `ChannelReturn` read the signature from the exported channel map of the schema file, with
+`typeof`, so the file imports the schema file (as a type only) and the type `ChannelDef` of this library. They hold for
+both forms of the declaration, the verb call `invoke<(id: number) => Promise<User>>()` and the `as` form.
+They cover the channels that the page has, not the ones to a utility process or a service worker that the page has
+no part in. With scopes, `types.<scope>.ts` holds the channels of that scope. `types.ts` is written on every run,
+also for a schema without channels, where `ChannelName` is `never`.
 
 #### Migrating from 0.2
 
@@ -1601,7 +1638,7 @@ It does not apply to the `data` of an error, which is cloned as before.
   `contextBridge` carries.
 - **Both ends.** All the code that talks to the channel must agree. A page that was built without the
   serializer cannot talk to a main process that has it. Turn it on for the whole project.
-- **Types.** The types in `window.d.ts` and in the signatures are those of the schema, as before: the
+- **Types.** The types in `types.ts` and in the signatures are those of the schema, as before: the
   signature says `Date`, and the page gets a `Date`.
 
 

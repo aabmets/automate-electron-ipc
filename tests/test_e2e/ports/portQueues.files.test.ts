@@ -44,7 +44,7 @@ describe("the generated files of channels with a maxQueue", () => {
    });
 
    it("declares the overflow types in window.d.ts and the exports of main.ts", () => {
-      const windowTypes = project.generated["window.d.ts"];
+      const windowTypes = project.generated["types.ts"];
       const main = project.generated["main.ts"];
 
       expect(windowTypes).toContain("interface IpcPortOverflowInfo {");

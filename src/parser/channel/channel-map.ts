@@ -30,7 +30,7 @@ import { VERBS } from "./channel-verbs.js";
 /**
  * Parses the second type argument of `invoke`, the error types of the channel. The text is kept
  * as written, and the types that it names are collected like the types of a signature, so that
- * the generated `window.d.ts` imports them.
+ * the generated `types.ts` imports them.
  */
 function parseErrors(node: AstNode, ctx: ParseContext): t.ErrorsSpec {
    const type = unwrapTypeParentheses(node);

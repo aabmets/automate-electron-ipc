@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import { vi } from "vitest";
-import { typecheckProject } from "./e2e/typecheck-project.js";
+import { typecheckFiles, typecheckProject } from "./e2e/typecheck-project.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const fixturesDir = path.join(root, "tests/fixtures");
@@ -56,6 +56,8 @@ export interface E2EProject {
       "main.ts": string;
       "preload.ts": string;
       "window.d.ts": string;
+      /** The types module, which holds `IpcApi` and the helper types. */
+      "types.ts": string;
       "utility.ts"?: string;
       /** The preload script and the typings of service workers exist only for worker channels. */
       "service-worker-preload.ts"?: string;
@@ -81,6 +83,11 @@ export interface E2EProject {
     * left out, since both `window.d.ts` and `service-worker.d.ts` declare the same global.
     */
    typecheckWorker: (compilerOptions?: Record<string, unknown>) => Promise<string>;
+   /**
+    * Type-checks only the given files, relative to the project root, which the test lists with
+    * the generated files it wants. The files of the project that are not named are not compiled.
+    */
+   typecheckFiles: (files: string[], compilerOptions?: Record<string, unknown>) => Promise<string>;
    /** Reads another generated file, such as `preload.settings.ts`. */
    read: (name: string) => Promise<string>;
    /** Deletes the temp dir. */
@@ -143,6 +150,7 @@ export async function runFixture(
          "main.ts": await readOutput(autoipc.mainBindingsPath, "main.ts"),
          "preload.ts": await readOutput(autoipc.preloadBindingsPath, "preload.ts"),
          "window.d.ts": await readOutput(autoipc.rendererTypesPath, "window.d.ts"),
+         "types.ts": await read("types.ts"),
          ...(utility === undefined ? {} : { "utility.ts": utility }),
          ...(workerPreload === undefined ? {} : { "service-worker-preload.ts": workerPreload }),
          ...(workerTypes === undefined ? {} : { "service-worker.d.ts": workerTypes }),
@@ -157,6 +165,7 @@ export async function runFixture(
             typecheckProject(dir, ipcDataDir, compilerOptions, scope),
          typecheckWorker: (compilerOptions) =>
             typecheckProject(dir, ipcDataDir, compilerOptions, undefined, true),
+         typecheckFiles: (files, compilerOptions) => typecheckFiles(dir, files, compilerOptions),
          read,
          cleanup,
       };

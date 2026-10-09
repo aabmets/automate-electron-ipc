@@ -226,6 +226,37 @@ export class ImportsGenerator {
    }
 
    /**
+    * Binds the channel map of a schema file to a type-only import of the generated file, whose
+    * `typeof` gives the signatures of its channels. Returns the local name, which is distinct from
+    * every type and every reserved name of the file, and the import line unless an earlier call
+    * returned it. Returns null for a file that has no exported channel map.
+    */
+   public getChannelMapImport(
+      pfs: t.ParsedFileSpecs,
+   ): { local: string; declaration: string | null } | null {
+      const { channelMapExport } = pfs.specs;
+      if (channelMapExport === null) {
+         return null;
+      }
+      const filePath = this.paths.fileImportPath(pfs.fullPath);
+      const key = `${this.paths.scriptId(pfs.fullPath)}#channelMap`;
+      let binding = this.bindings.get(key);
+      if (!binding) {
+         const local = this.uniqueName("ChannelMap");
+         this.usedNames.add(local);
+         const render =
+            channelMapExport.kind === "default"
+               ? (name: string) => `import type ${name} from "${filePath}";`
+               : this.namedImport(channelMapExport.name, filePath);
+         binding = { local, render, emitted: false };
+         this.bindings.set(key, binding);
+      }
+      const declaration = binding.emitted ? null : binding.render(binding.local);
+      binding.emitted = true;
+      return { local: binding.local, declaration };
+   }
+
+   /**
     * The names that the signatures of a schema file must use instead of the names they are
     * written with, because another declaration of the generated file has the same name.
     * Maps the written name to the name that the import declares.

@@ -40,7 +40,12 @@ describe("getResolvedConfig", () => {
          );
       });
 
-      it.each(["main.ts", "preload.ts"])(
+      it("puts the types module next to the other generated files", async () => {
+         const config = await resolve({ ipcDataDir: "src/ipc" });
+         expect(config.typesFilePath).toBe("/home/user/project/src/ipc/types.ts");
+      });
+
+      it.each(["main.ts", "preload.ts", "types.ts"])(
          "refuses the path of the generated file %s",
          async (name) => {
             const path = `src/autoipc/${name}`;

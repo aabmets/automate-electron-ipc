@@ -51,9 +51,9 @@ const SURFACES: Record<string, string[]> = {
 };
 
 const FILES: Record<string, { preload: string; types: string }> = {
-   default: { preload: "preload.ts", types: "window.d.ts" },
-   settings: { preload: "preload.settings.ts", types: "window.settings.d.ts" },
-   editor: { preload: "preload.editor.ts", types: "window.editor.d.ts" },
+   default: { preload: "preload.ts", types: "types.ts" },
+   settings: { preload: "preload.settings.ts", types: "types.settings.ts" },
+   editor: { preload: "preload.editor.ts", types: "types.editor.ts" },
 };
 
 describe("fixture scoped-windows, the files of the scopes", () => {
@@ -61,10 +61,13 @@ describe("fixture scoped-windows, the files of the scopes", () => {
       const project = await fixtures.run("scoped-windows");
       const names = await fsp.readdir(path.join(project.dir, project.ipcDataDir));
 
-      expect(names.filter((name) => /^(preload|window)/.test(name)).sort()).toStrictEqual([
+      expect(names.filter((name) => /^(preload|window|types)/.test(name)).sort()).toStrictEqual([
          "preload.editor.ts",
          "preload.settings.ts",
          "preload.ts",
+         "types.editor.ts",
+         "types.settings.ts",
+         "types.ts",
          "window.d.ts",
          "window.editor.d.ts",
          "window.settings.d.ts",
@@ -105,15 +108,15 @@ describe("fixture scoped-windows, the files of the scopes", () => {
    it("imports only the types that the channels of a scope use", async () => {
       const project = await fixtures.run("scoped-windows");
 
-      expect(await project.read("window.settings.d.ts")).toContain(
+      expect(await project.read("types.settings.ts")).toContain(
          'import type { Settings } from "./schema";',
       );
-      expect(await project.read("window.settings.d.ts")).not.toContain("Document");
-      expect(await project.read("window.editor.d.ts")).toContain(
+      expect(await project.read("types.settings.ts")).not.toContain("Document");
+      expect(await project.read("types.editor.ts")).toContain(
          'import type { Document } from "./schema";',
       );
-      expect(await project.read("window.editor.d.ts")).not.toContain("Settings");
-      expect(project.generated["window.d.ts"]).not.toContain("import");
+      expect(await project.read("types.editor.ts")).not.toContain("Settings");
+      expect(project.generated["types.ts"]).not.toMatch(/import type \{ (Settings|Document) \}/);
    });
 
    it("gives the main bindings every channel, in the one file", async () => {

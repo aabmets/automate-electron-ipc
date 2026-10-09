@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { renderApiWith, renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
 import {
    VitestMainBindingsWriter,
@@ -54,7 +54,7 @@ describe("the writers for the tests", () => {
    });
 
    it("describe the same channels in every file that shares the constants", async () => {
-      const types = await renderWith(VitestRendererTypesWriter, [getUser]);
+      const types = await renderApiWith([getUser]);
 
       expect(types).toContain("getUser: {");
       expect(types).toContain("invoke");

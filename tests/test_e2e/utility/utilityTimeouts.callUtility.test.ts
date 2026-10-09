@@ -51,7 +51,7 @@ describe("fixture utility-timeouts", () => {
 
    it("declares the timeout code in window.d.ts", async () => {
       const project = await fixtures.run("utility-timeouts");
-      expect(project.generated["window.d.ts"]).toContain("'IPC_UTILITY_TIMEOUT'");
+      expect(project.generated["types.ts"]).toContain("'IPC_UTILITY_TIMEOUT'");
    });
 
    it("does not write the timers into a project without a timeout", async () => {

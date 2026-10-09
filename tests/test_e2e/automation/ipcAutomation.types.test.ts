@@ -20,15 +20,17 @@ describe("ipcAutomation, type definition edge cases", () => {
       const project = await fixtures.run("type-edge-cases");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*schema";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*schema";$/gm,
+         );
          expect(imports).toStrictEqual([
             'import type { Box } from "./schema";',
             'import type { default as Payload } from "./schema";',
          ]);
          expect(generated[file]).not.toContain("Internal");
       }
-      expect(generated["window.d.ts"]).toContain("invoke: <T>(value: T) => Promise<T>;");
+      expect(generated["types.ts"]).toContain("invoke: <T>(value: T) => Promise<T>;");
    });
 
    it("generates files that type-check", async () => {
@@ -43,8 +45,10 @@ describe("ipcAutomation, types exported by specifiers and default classes", () =
       const project = await fixtures.run("export-specifiers");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*schema";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*schema";$/gm,
+         );
          expect(imports).toStrictEqual([
             'import type { Main as Primary } from "./schema";',
             'import type { Plain } from "./schema";',
@@ -69,8 +73,9 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
       const project = await fixtures.run("qualified-names");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*";$/gm) ?? [];
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports =
+            generated[file].match(/^import type (?!.*\bChannel(?:Map|Def)\b).*";$/gm) ?? [];
          expect(imports).toContain('import type { Kind } from "./types/kind";');
          expect(imports).toContain('import type { config } from "./types/config";');
          expect(imports).toContain('import type { Mode } from "./schema";');
@@ -98,7 +103,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    // imported.
    it("imports the name of an exported import-equals alias from the schema file", async () => {
       const project = await fixtures.run("import-equals");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(project.generated[file]).toContain('import type { User } from "./schema";');
       }
       expect(await project.typecheck()).toBe("");
@@ -121,7 +126,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
       expect(generated["main.ts"]).toContain('import type * as Models from "./types/models";');
       expect(generated["main.ts"]).toContain('import type * as Models_2 from "./types/other";');
       expect(generated["main.ts"]).toContain("Promise<Models_2.User>");
-      expect(generated["window.d.ts"]).toContain("Promise<Models_2.User>");
+      expect(generated["types.ts"]).toContain("Promise<Models_2.User>");
    });
 
    it("imports the module of an import-equals require alias", async () => {
@@ -140,8 +145,10 @@ describe("ipcAutomation, typeof of values declared in the schema file", () => {
       const project = await fixtures.run("typeof-local-values");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*schema";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*schema";$/gm,
+         );
          expect(imports).toStrictEqual([
             'import type { Defaults as defaults } from "./schema";',
             'import type { config } from "./schema";',
@@ -186,7 +193,7 @@ describe("ipcAutomation, schema types named like globals", () => {
 
    it("keeps a declared Promise apart from the one that the generated code uses", async () => {
       const project = await fixtures.run("shadowed-globals");
-      const types = project.generated["window.d.ts"];
+      const types = project.generated["types.ts"];
 
       expect(importLine(types, "Promise", "./schema")).toBe(
          'import type { Promise as Promise_2 } from "./schema";',

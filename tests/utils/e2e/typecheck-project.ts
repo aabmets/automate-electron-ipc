@@ -96,6 +96,45 @@ const windowCheckFile = "window.dts-check.ts";
 /** The same for `service-worker.d.ts`, which declares the same global as `window.d.ts` does. */
 const workerCheckFile = "service-worker.dts-check.ts";
 
+/** The options of the type-check of a project: the `lib` of the process, and the paths it needs. */
+function projectCompilerOptions(
+   lib: "DOM" | "WebWorker",
+   compilerOptions: Record<string, unknown>,
+) {
+   return {
+      strict: true,
+      noEmit: true,
+      target: "ESNext",
+      lib: ["ESNext", lib],
+      module: "ESNext",
+      moduleResolution: "bundler",
+      skipLibCheck: true,
+      types: [],
+      ...compilerOptions,
+      // The path mappings of a test are added to the ones that the type-check needs.
+      paths: {
+         electron: [path.join(root, "node_modules/electron/electron.d.ts")],
+         "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
+         ...(compilerOptions.paths as Record<string, string[]> | undefined),
+      },
+   };
+}
+
+/**
+ * Compiles only the given files of the project, which are relative to it, with the options of the
+ * type-check of a page. The generated typings are not among them unless the test names them, so
+ * this is the check for a file which must not depend on the global that they declare.
+ */
+export async function typecheckFiles(
+   dir: string,
+   files: string[],
+   compilerOptions: Record<string, unknown> = {},
+): Promise<string> {
+   const tsconfig = { compilerOptions: projectCompilerOptions("DOM", compilerOptions), files };
+   await fsp.writeFile(path.join(dir, "tsconfig.json"), JSON.stringify(tsconfig));
+   return runTsc(dir);
+}
+
 /**
  * Compiles the schema files, `main.ts`, `preload.ts` and `window.d.ts` of the project
  * against the `electron` types pinned by this repo, using a tiny tsconfig in the project dir.
@@ -128,23 +167,7 @@ export async function typecheckProject(
       .filter((file) => worker || !file.startsWith(`${ipcDataDir}/schema-worker-`));
    const workerGenerated = await workerFiles(dir, ipcDataDir);
    const tsconfig = {
-      compilerOptions: {
-         strict: true,
-         noEmit: true,
-         target: "ESNext",
-         lib: worker ? ["ESNext", "WebWorker"] : ["ESNext", "DOM"],
-         module: "ESNext",
-         moduleResolution: "bundler",
-         skipLibCheck: true,
-         types: [],
-         ...compilerOptions,
-         // The path mappings of a test are added to the ones that the type-check needs.
-         paths: {
-            electron: [path.join(root, "node_modules/electron/electron.d.ts")],
-            "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
-            ...(compilerOptions.paths as Record<string, string[]> | undefined),
-         },
-      },
+      compilerOptions: projectCompilerOptions(worker ? "WebWorker" : "DOM", compilerOptions),
       files: worker
          ? [
               page.main,
@@ -159,6 +182,7 @@ export async function typecheckProject(
          : [
               page.main,
               scopedFilePath(page.preload, pageScope),
+              scopedFilePath(`${ipcDataDir}/types.ts`, pageScope),
               windowCheck,
               ...(
                  await Promise.all(extraGeneratedFiles.map((find) => find(dir, ipcDataDir)))

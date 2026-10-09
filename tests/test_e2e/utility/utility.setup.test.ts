@@ -39,8 +39,8 @@ describe("utility channels, files", () => {
       const preload = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: preload.electron });
       expect(callablePaths(preload.exposed.ipc)).toStrictEqual(["getJob.invoke"]);
-      expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual(["getJob.invoke"]);
-      expect(project.generated["window.d.ts"]).not.toContain("Summary");
+      expect(windowIpcPaths(project.generated["types.ts"])).toStrictEqual(["getJob.invoke"]);
+      expect(project.generated["types.ts"]).not.toContain("Summary");
       expect(project.generated["preload.ts"]).not.toContain("indexFile");
    });
 
@@ -65,8 +65,8 @@ describe("utility channels, files", () => {
       expect(files).not.toContain("utility.ts");
 
       expect(project.generated["preload.ts"]).not.toContain("ipcRenderer");
-      expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual([]);
-      expect(project.generated["window.d.ts"]).not.toContain("Row");
+      expect(windowIpcPaths(project.generated["types.ts"])).toStrictEqual([]);
+      expect(project.generated["types.ts"]).not.toContain("Row");
    });
 });
 

@@ -57,7 +57,7 @@ describe("ask, preload script", () => {
          "progress.once",
       ]);
       expect(callablePaths(ipc)).toStrictEqual(
-         windowIpcPaths(currentProject()?.generated["window.d.ts"] ?? ""),
+         windowIpcPaths(currentProject()?.generated["types.ts"] ?? ""),
       );
    });
 

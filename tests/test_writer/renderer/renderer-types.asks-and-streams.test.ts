@@ -9,21 +9,21 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWith } from "@testutils/writer/render-utils.js";
+import { renderApiWith } from "@testutils/writer/render-utils.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
-import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { VitestHelperTypesWriter } from "@testutils/writer/test-writers.js";
 import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-describe("RendererTypesWriter", () => {
-   mockGetTargetFilePath(VitestRendererTypesWriter);
+describe("HelperTypesWriter", () => {
+   mockGetTargetFilePath(VitestHelperTypesWriter);
 
    describe("ask channels", () => {
       const render = (
          channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => renderWith(VitestRendererTypesWriter, channels, config);
+      ) => renderApiWith(channels, config);
       const ask = {
          name: "askIt",
          kind: "Unicast",
@@ -59,7 +59,7 @@ describe("RendererTypesWriter", () => {
       const render = (
          channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => renderWith(VitestRendererTypesWriter, channels, config);
+      ) => renderApiWith(channels, config);
       const rows = {
          name: "exportRows",
          kind: "Stream",
@@ -105,7 +105,7 @@ describe("RendererTypesWriter", () => {
       it("declares IpcStream once, with next, return, cancel and the async iterator", async () => {
          const output = await render([rows, { ...rows, name: "other" }]);
 
-         expect(output.match(/^interface IpcStream<T> \{/gm)).toHaveLength(1);
+         expect(output.match(/^export interface IpcStream<T> \{/gm)).toHaveLength(1);
          expect(output).toContain("next(): Promise<IteratorResult<T, undefined>>;");
          expect(output).toContain("return(): Promise<IteratorResult<T, undefined>>;");
          expect(output).toContain("cancel(): void;");

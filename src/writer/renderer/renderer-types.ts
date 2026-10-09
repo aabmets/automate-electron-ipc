@@ -10,7 +10,6 @@
  */
 
 import type * as t from "@types";
-import utils from "../../utils.js";
 import { BaseWriter } from "../base-writer.js";
 import {
    hasRendererChannels,
@@ -24,12 +23,33 @@ import {
    renderDeclaration,
 } from "./renderer-declaration.js";
 
+/** The page channels of a schema file, which the helper types look up in its channel map. */
+export interface ChannelsOfFile {
+   pfs: t.ParsedFileSpecs;
+   names: string[];
+}
+
+/**
+ * What the writers of a page gather from its channels: the entries of the channels, the import
+ * lines of the custom types that their signatures use, in order, and the page channels of each
+ * schema file.
+ */
+export interface CollectedChannels {
+   channels: ChannelEntry[];
+   imports: string[];
+   files: ChannelsOfFile[];
+}
+
 export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.getScopedFilePath(this.config.rendererTypesFilePath);
    }
+   /** The path of the types module that the file of the global takes the types from. */
+   protected getTypesFilePath(): string {
+      return this.getScopedFilePath(this.config.typesFilePath);
+   }
    protected getReservedNames(): string[] {
-      // `IpcApi` is declared by the generated file. `Promise`, `Awaited` and `Parameters` are
+      // The names that the types module declares. `Promise`, `Awaited` and `Parameters` are
       // globals that the generated code uses.
       return [
          "IpcApi",
@@ -51,14 +71,31 @@ export class RendererTypesWriter extends BaseWriter {
       return !hasRendererChannels(this.pfsArray);
    }
    protected renderEmptyFileContents(): string {
-      return renderDeclaration([], this.getDeclarationOptions());
+      return this.renderModule({ channels: [], imports: [], files: [] });
    }
    protected renderFileContents(): string {
-      const out: string[] = [];
+      return this.renderModule(this.collectChannels());
+   }
+   /**
+    * The file of the global: it takes the types from the types module, which is written next to
+    * it for the same scope. Declares the error types only for the channels that can fail with them.
+    */
+   protected renderModule({ channels }: CollectedChannels): string {
+      return renderDeclaration(
+         channels,
+         this.getDeclarationOptions(),
+         this.importsGenerator.getFileImportPath(this.getTypesFilePath()),
+      );
+   }
+   /** Gathers the channels of the page (see `CollectedChannels`). */
+   protected collectChannels(): CollectedChannels {
+      const imports: string[] = [];
       const channels: ChannelEntry[] = [];
+      const files: ChannelsOfFile[] = [];
 
       for (const parsedFileSpecs of this.pfsArray) {
          let customTypes: Set<string> = new Set();
+         const names: string[] = [];
 
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
             const channel = this.buildChannelEntry(spec);
@@ -66,11 +103,15 @@ export class RendererTypesWriter extends BaseWriter {
                continue;
             }
             channels.push(channel);
+            names.push(spec.name);
             const specCustomTypes = new Set([
                ...spec.signature.customTypes,
                ...(spec.errors?.customTypes ?? []),
             ]);
             customTypes = customTypes.union(specCustomTypes);
+         }
+         if (names.length > 0) {
+            files.push({ pfs: parsedFileSpecs, names });
          }
          for (const customType of customTypes) {
             const importDeclaration = this.importsGenerator.getDeclaration(
@@ -78,19 +119,17 @@ export class RendererTypesWriter extends BaseWriter {
                customType,
             );
             if (importDeclaration) {
-               out.push(importDeclaration);
+               imports.push(importDeclaration);
             }
          }
       }
-      out.sort(utils.compareStrings);
-      out.push(renderDeclaration(channels, this.getDeclarationOptions()));
-      return out.join("\n");
+      return { channels, imports, files };
    }
    /** The isolated world that the API is exposed in, or `undefined` for the main world. */
    protected getWorldId(): number | undefined {
       return this.config.isolatedWorldId;
    }
-   private getDeclarationOptions(): DeclarationOptions {
+   protected getDeclarationOptions(): DeclarationOptions {
       return {
          indents: this.indents,
          exposeAs: this.getExposeAs(),

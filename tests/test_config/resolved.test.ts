@@ -56,6 +56,7 @@ describe("getResolvedConfig", () => {
          mainBindingsFilePath: `${DEFAULT_DIR}/main.ts`,
          preloadBindingsFilePath: `${DEFAULT_DIR}/preload.ts`,
          rendererTypesFilePath: `${DEFAULT_DIR}/window.d.ts`,
+         typesFilePath: `${DEFAULT_DIR}/types.ts`,
          utilityBindingsFilePath: `${DEFAULT_DIR}/utility.ts`,
          serviceWorkerPreloadFilePath: `${DEFAULT_DIR}/service-worker-preload.ts`,
          serviceWorkerTypesFilePath: `${DEFAULT_DIR}/service-worker.d.ts`,
@@ -102,6 +103,7 @@ describe("getResolvedConfig", () => {
          mainBindingsFilePath: `${dir}/main.ts`,
          preloadBindingsFilePath: `${dir}/preload.ts`,
          rendererTypesFilePath: `${dir}/window.d.ts`,
+         typesFilePath: `${dir}/types.ts`,
          ipcSchema: {
             path: `${dir}/schema`,
          },

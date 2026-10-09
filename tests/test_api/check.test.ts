@@ -51,7 +51,9 @@ describe("check", () => {
       const { stale } = await check({ cwd: project.dir });
 
       expect(stale).toEqual(
-         ["main.ts", "preload.ts", "window.d.ts"].map((n) => `${project.root}/ipc/${n}`),
+         ["main.ts", "preload.ts", "types.ts", "window.d.ts"].map(
+            (n) => `${project.root}/ipc/${n}`,
+         ),
       );
       expect(await project.list("ipc")).toEqual(["schema.ts"]);
    });
@@ -65,7 +67,9 @@ describe("check", () => {
       const { stale } = await check({ cwd: project.dir });
 
       expect(stale).toEqual(
-         ["main.ts", "preload.ts", "window.d.ts"].map((n) => `${project.root}/ipc/${n}`),
+         ["main.ts", "preload.ts", "types.ts", "window.d.ts"].map(
+            (n) => `${project.root}/ipc/${n}`,
+         ),
       );
    });
 

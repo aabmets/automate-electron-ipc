@@ -10,9 +10,9 @@
  */
 
 import { dedent } from "@testutils/text-utils.js";
-import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { renderApiSpecs, renderApiWith } from "@testutils/writer/render-utils.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
-import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { VitestHelperTypesWriter } from "@testutils/writer/test-writers.js";
 import {
    buildFileSpecs,
    parseTestSignature,
@@ -22,23 +22,23 @@ import {
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-describe("RendererTypesWriter", () => {
-   mockGetTargetFilePath(VitestRendererTypesWriter);
+describe("HelperTypesWriter", () => {
+   mockGetTargetFilePath(VitestHelperTypesWriter);
 
    it("should write send, on, onReady, onClose, onOverflow and onConnection methods for Port channels", async () => {
       const pfsArray = vitestChannelSpecs.Port_RendererToRenderer;
-      const buffer = await renderSpecs(VitestRendererTypesWriter, pfsArray);
+      const buffer = await renderApiSpecs(pfsArray);
       const expectedOutput = dedent(`
-         interface IpcPortOverflowInfo {
+         export interface IpcPortOverflowInfo {
             channel: string;
             max: number;
             dropped: number;
             warnings: number;
          }
 
-         type IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';
+         export type IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';
 
-         interface IpcApi {
+         export interface IpcApi {
             vitestChannel: {
                send: (arg1: string, arg2: string) => void;
                on: (callback: (arg1: string, arg2: string) => void) => () => void;
@@ -48,19 +48,12 @@ describe("RendererTypesWriter", () => {
                onConnection: (callback: (connection: { send: (arg1: string, arg2: string) => void; on: (callback: (arg1: string, arg2: string) => void) => () => void; onReady: (callback: () => void) => () => void; onClose: (callback: () => void) => () => void; onOverflow: (callback: (message: Parameters<(arg1: string, arg2: string) => void>, info: IpcPortOverflowInfo) => IpcPortOverflowAction) => () => void; close: () => void }) => void) => () => void;
             };
          }
-
-         declare global {
-            var ipc: IpcApi;
-         }
-
-         export {};
       `);
       expect(buffer.toString()).toStrictEqual(`${expectedOutput.trim()}\n`);
    });
 
    it("should declare the overflow types only if a port channel uses them", async () => {
-      const render = (...channels: SimpleChannel[]) =>
-         renderWith(VitestRendererTypesWriter, channels);
+      const render = (...channels: SimpleChannel[]) => renderApiWith(channels);
 
       const withPort = await render({ name: "a", kind: "Port", direction: "RendererToRenderer" });
       const without = await render({ name: "b", kind: "Broadcast", direction: "RendererToMain" });
@@ -74,7 +67,7 @@ describe("RendererTypesWriter", () => {
 
    it("should type a mainPort channel like a port channel, since the page has the same API", async () => {
       const render = (name: string, direction: "RendererToRenderer" | "MainToRenderer") =>
-         renderWith(VitestRendererTypesWriter, [{ name, kind: "Port", direction }]);
+         renderApiWith([{ name, kind: "Port", direction }]);
 
       expect(await render("alpha", "MainToRenderer")).toStrictEqual(
          await render("alpha", "RendererToRenderer"),
@@ -88,7 +81,7 @@ describe("RendererTypesWriter", () => {
          { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
          { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
       );
-      const output = await renderSpecs(VitestRendererTypesWriter, pfsArray);
+      const output = await renderApiSpecs(pfsArray);
 
       const keys = [...output.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
       expect(keys).toStrictEqual(["Beta", "alpha", "gamma", "zeta"]);
@@ -117,7 +110,7 @@ describe("RendererTypesWriter", () => {
             },
          },
       ] as t.ParsedFileSpecs[];
-      const output = await renderSpecs(VitestRendererTypesWriter, pfsArray);
+      const output = await renderApiSpecs(pfsArray);
 
       expect(output).toMatch(/^import type \{ IpcApi as IpcApi_2 \} from ".*\/schema";$/m);
       expect(output).toContain("invoke: () => Promise<IpcApi_2>;");
@@ -144,10 +137,7 @@ describe("RendererTypesWriter", () => {
             ],
          },
       });
-      const output = await renderSpecs(VitestRendererTypesWriter, [
-         pfsOf("a", "getA"),
-         pfsOf("b", "getB"),
-      ]);
+      const output = await renderApiSpecs([pfsOf("a", "getA"), pfsOf("b", "getB")]);
 
       expect(output).toMatch(/^import type \{ User \} from ".*\/a";$/m);
       expect(output).toMatch(/^import type \{ User as User_2 \} from ".*\/b";$/m);

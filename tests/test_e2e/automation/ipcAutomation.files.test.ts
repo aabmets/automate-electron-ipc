@@ -25,9 +25,9 @@ describe("ipcAutomation, single schema file", () => {
       expect(generated["main.ts"]).toContain("echoUserName");
       expect(generated["main.ts"]).toContain("windowFocused");
       expect(generated["preload.ts"]).toContain("echoUserName: {\n      send:");
-      expect(generated["window.d.ts"]).toContain("echoUserName: {\n      send:");
-      expect(generated["window.d.ts"]).toContain('import type { User } from "./schema";');
-      expect(generated["window.d.ts"]).toContain(
+      expect(generated["types.ts"]).toContain("echoUserName: {\n      send:");
+      expect(generated["types.ts"]).toContain('import type { User } from "./schema";');
+      expect(generated["types.ts"]).toContain(
          "getUser: {\n      /** @throws {IpcError} */\n      invoke: (id: number) => Promise<User>;",
       );
    });
@@ -81,7 +81,7 @@ describe("ipcAutomation, schema directory", () => {
       expect(generated["main.ts"]).toContain("renameUser");
       expect(generated["main.ts"]).toContain("windowBlurred");
       expect(generated["preload.ts"]).toContain("renameUser: {\n      send:");
-      expect(generated["window.d.ts"]).toContain("logStream");
+      expect(generated["types.ts"]).toContain("logStream");
    });
 
    // Regression for T08: a README, a JSON file and a `.d.ts` that repeats a channel name used
@@ -117,7 +117,7 @@ describe("ipcAutomation, workspace", () => {
 
       expect(project.generated["main.ts"]).toContain("getUser");
       expect(project.generated["preload.ts"]).toContain("echoUserName: {\n      send:");
-      expect(project.generated["window.d.ts"]).toContain("invoke: (id: number) =>");
+      expect(project.generated["types.ts"]).toContain("invoke: (id: number) =>");
       await expect(fsp.stat(path.join(project.root, "wrong"))).rejects.toMatchObject({
          code: "ENOENT",
       });
@@ -162,11 +162,12 @@ describe("ipcAutomation, generated file start", () => {
 
 describe("ipcAutomation, schema without channels", () => {
    // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
-   // global augmentation with TS2669.
-   it("generates an empty window.d.ts that is a module", async () => {
+   // global augmentation with TS2669. It imports `IpcApi` now, which makes it a module.
+   it("generates an empty window.d.ts that is a module, and an empty types.ts", async () => {
       const project = await fixtures.run("no-channels");
-      expect(project.generated["window.d.ts"]).toContain("export {};");
-      expect(project.generated["window.d.ts"]).toContain("interface IpcApi {}");
+      expect(project.generated["window.d.ts"]).toContain('import type { IpcApi } from "./types";');
+      expect(project.generated["types.ts"]).toContain("export interface IpcApi {}");
+      expect(project.generated["types.ts"]).toContain("export type ChannelName = never;");
    });
 
    it("generates files that type-check", async () => {
@@ -185,7 +186,7 @@ describe("ipcAutomation, schema with only port channels", () => {
       expect(generated["preload.ts"]).toContain(
          "export const api = {\n   chat: ports['chat'].api,",
       );
-      expect(generated["window.d.ts"]).toContain("interface IpcApi {\n   chat: {\n      send:");
+      expect(generated["types.ts"]).toContain("interface IpcApi {\n   chat: {\n      send:");
       expect(generated["main.ts"]).not.toMatch(/\{\s*,/);
       expect(generated["preload.ts"]).not.toMatch(/\{\s*,/);
    });

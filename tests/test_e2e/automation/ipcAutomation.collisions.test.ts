@@ -33,7 +33,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          const userB = importedAs(generated[file], "User", "./schema/b");
          const userC = importedAs(generated[file], "User", "./schema/c");
          expect(userB).not.toBe(userC);
@@ -48,7 +48,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          const imported = importedAs(generated[file], "User", "./types/user");
          const declared = importedAs(generated[file], "User", "./schema/b");
          expect(imported).not.toBe(declared);
@@ -60,7 +60,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       // Three declarations are called User: they get User, User_2 and User_3.
       const names = new Set(
          ["./types/user", "./schema/b", "./schema/c"].map((from) =>
-            importedAs(generated["window.d.ts"], "User", from),
+            importedAs(generated["types.ts"], "User", from),
          ),
       );
       expect(names).toStrictEqual(new Set(["User", "User_2", "User_3"]));
@@ -70,7 +70,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       const project = await fixtures.run("name-collisions");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          const text = generated[file];
          const aliasOf = (from: string) =>
             new RegExp(`^import type \\* as (\\w+) from "${from}";$`, "m").exec(text)?.[1];
@@ -115,7 +115,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
          `(callback: (event: IpcMainInvokeEvent, tag: \`user-\${${userC}["email"]}\`, ` +
             `shape: { User: ${userC} }) => Promise<${userC}["email"]>, options?: IpcListenOptions)`,
       );
-      expect(methodLine(project.generated["window.d.ts"], "tagUserC", "invoke")).toContain(
+      expect(methodLine(project.generated["types.ts"], "tagUserC", "invoke")).toContain(
          `(tag: \`user-\${${userC}["email"]}\`, shape: { User: ${userC} }) => `,
       );
    });
@@ -129,8 +129,10 @@ describe("ipcAutomation, type names that collide across schema files", () => {
 
    it("imports a type that two schema files import once", async () => {
       const project = await fixtures.run("name-collisions");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = project.generated[file].match(/^import type .*"\.\/types\/shared";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = project.generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*"\.\/types\/shared";$/gm,
+         );
          expect(imports).toStrictEqual(['import type { Shared } from "./types/shared";']);
       }
    });
@@ -240,7 +242,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
 
    it("imports the schema types under aliases in window.d.ts", async () => {
       const project = await fixtures.run("reserved-names");
-      const types = project.generated["window.d.ts"];
+      const types = project.generated["types.ts"];
 
       expect(importLine(types, "IpcApi", "./schema")).toBe(
          'import type { IpcApi as IpcApi_2 } from "./schema";',

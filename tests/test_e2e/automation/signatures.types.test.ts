@@ -68,7 +68,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       expect(main).toContain(
          "send: <T extends Parameters<(x: number) => void>>(target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, cb: T) =>",
       );
-      expect(project.generated["window.d.ts"]).toContain(
+      expect(project.generated["types.ts"]).toContain(
          "invoke: <T>(value: T) => Promise<Awaited<T>>;",
       );
    });
@@ -101,7 +101,7 @@ describe("ipcAutomation, async return types", () => {
    // so their invoke senders were not typed as promises.
    it("types every invoke sender as a promise of the awaited result", async () => {
       const project = await fixtures.run("async-types");
-      const windowTypes = project.generated["window.d.ts"];
+      const windowTypes = project.generated["types.ts"];
 
       const invokeOf = (channel: string) => {
          const lines = windowTypes.split("\n");
@@ -124,7 +124,7 @@ describe("ipcAutomation, results that are Promises, thenables or both", () => {
    // `Promise<void> | void` was refused for a `send` channel.
    it("types a result of `Promise<X> | X`, `Awaited` and `PromiseLike` as a promise of X", async () => {
       const project = await fixtures.run("promise-unions");
-      const windowTypes = project.generated["window.d.ts"];
+      const windowTypes = project.generated["types.ts"];
 
       const invokeOf = (channel: string) => {
          const lines = windowTypes.split("\n");

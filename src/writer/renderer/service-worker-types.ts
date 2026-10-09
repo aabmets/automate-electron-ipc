@@ -10,8 +10,10 @@
  */
 
 import type * as t from "@types";
+import utils from "../../utils.js";
 import { asRendererSpec, hasWorkerChannels, isWorkerSpec } from "../channel-kinds.js";
-import { RendererTypesWriter } from "./renderer-types.js";
+import { renderStandaloneDeclaration } from "./renderer-declaration.js";
+import { type CollectedChannels, RendererTypesWriter } from "./renderer-types.js";
 
 /**
  * Writes `service-worker.d.ts`, the declaration of the API that the preload script of a service
@@ -29,6 +31,13 @@ export class ServiceWorkerTypesWriter extends RendererTypesWriter {
    }
    protected isEmpty(): boolean {
       return !hasWorkerChannels(this.pfsArray);
+   }
+   /** The typings stand alone: they hold the types, and are not imported from a types module. */
+   protected renderModule({ channels, imports }: CollectedChannels): string {
+      return [
+         ...imports.sort(utils.compareStrings),
+         renderStandaloneDeclaration(channels, this.getDeclarationOptions()),
+      ].join("\n");
    }
    protected getWorldId(): number | undefined {
       return undefined;

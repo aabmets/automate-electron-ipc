@@ -17,9 +17,9 @@ import type { ArgumentsSchema, ChannelSignature } from "./channel-base.js";
  * @property scopes - The scopes that the channel belongs to, such as `["settings", "editor"]`:
  *    lower case words, joined by dashes, up to 32 characters. Without `scopes` the channel is open
  *    to all windows. With them, only the windows of one of these scopes have it:
- *    - `ipcgen` generates a preload script and a `.d.ts` file for each scope, as
- *      `preload.<scope>.ts` and `window.<scope>.d.ts`, with the channels of the scope and the ones
- *      without `scopes`. The usual `preload.ts` and `window.d.ts` have only the channels without
+ *    - `ipcgen` generates a preload script, a `.d.ts` file and a types module for each scope, as
+ *      `preload.<scope>.ts`, `window.<scope>.d.ts` and `types.<scope>.ts`, with the channels of the scope and the ones
+ *      without `scopes`. The usual `preload.ts`, `window.d.ts` and `types.ts` have only the channels without
  *      `scopes`, which is all of them in a schema that uses no scopes;
  *    - the generated `main.ts` exports `registerScope(window, scope)`, which puts the contents of
  *      a window, a view or contents into a scope. The main process rejects a call (`invoke`,

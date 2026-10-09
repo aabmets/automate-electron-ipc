@@ -28,7 +28,7 @@ describe("generated preload script", () => {
       async (fixture) => {
          const { exposed, project } = await loadPreload(fixture);
          expect(Object.keys(exposed)).toStrictEqual(["ipc"]);
-         const declared = windowIpcPaths(project.generated["window.d.ts"]);
+         const declared = windowIpcPaths(project.generated["types.ts"]);
          expect(declared.length).toBeGreaterThan(0);
          expect(callablePaths(exposed.ipc)).toStrictEqual(declared);
       },
@@ -57,7 +57,7 @@ describe("generated preload script", () => {
    it("exposes nothing but an empty api, and declares nothing, when there are no channels", async () => {
       const { exposed, project } = await loadPreload("no-channels");
       expect(callablePaths(exposed.ipc)).toStrictEqual([]);
-      expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual([]);
+      expect(windowIpcPaths(project.generated["types.ts"])).toStrictEqual([]);
    });
 
    it("forwards invoke channels to ipcRenderer.invoke and returns its promise", async () => {

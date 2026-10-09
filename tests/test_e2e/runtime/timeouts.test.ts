@@ -62,7 +62,7 @@ describe("fixture invoke-timeouts", () => {
 
    it("documents the timeout error in window.d.ts", async () => {
       const project = await fixtures.run("invoke-timeouts");
-      const types = project.generated["window.d.ts"];
+      const types = project.generated["types.ts"];
 
       expect(types).toContain("/** @throws {IpcError<NotFoundError | IpcTimeoutError>} */");
       expect(types).toContain("/** @throws {IpcError<IpcTimeoutError>} */");

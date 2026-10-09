@@ -64,9 +64,9 @@ describe("utility ports, files", () => {
          "windowedRows.stream",
       ];
       expect(callablePaths(preload.exposed.ipc)).toStrictEqual(paths);
-      expect(windowIpcPaths(project.generated["window.d.ts"])).toStrictEqual(paths);
+      expect(windowIpcPaths(project.generated["types.ts"])).toStrictEqual(paths);
       expect(project.generated["preload.ts"]).not.toContain("indexFile");
-      expect(project.generated["window.d.ts"]).not.toContain("indexFile");
+      expect(project.generated["types.ts"]).not.toContain("indexFile");
 
       const main = await loadMain();
       expect(callablePaths(main)).toContain("queryRows.connect");
@@ -75,9 +75,9 @@ describe("utility ports, files", () => {
 
    it("declares IpcUtilityError for the page only when a channel to a utility process exists", async () => {
       const withUtility = await fixtures.run("utility-ports");
-      expect(withUtility.generated["window.d.ts"]).toContain("type IpcUtilityError = Error & {");
+      expect(withUtility.generated["types.ts"]).toContain("type IpcUtilityError = Error & {");
 
       const project = await fixtures.run("utility-channels");
-      expect(project.generated["window.d.ts"]).not.toContain("IpcUtilityError");
+      expect(project.generated["types.ts"]).not.toContain("IpcUtilityError");
    });
 });

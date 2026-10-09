@@ -9,19 +9,19 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWith } from "@testutils/writer/render-utils.js";
+import { renderApiWith } from "@testutils/writer/render-utils.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
-import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { VitestHelperTypesWriter } from "@testutils/writer/test-writers.js";
 import { getIt, type SimpleChannel, sendIt } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
-describe("RendererTypesWriter", () => {
-   mockGetTargetFilePath(VitestRendererTypesWriter);
+describe("HelperTypesWriter", () => {
+   mockGetTargetFilePath(VitestHelperTypesWriter);
 
    describe("error types", () => {
       const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
-         renderWith(VitestRendererTypesWriter, channels, config);
+         renderApiWith(channels, config);
 
       it("documents the declared errors of an invoke", async () => {
          const output = await render([{ ...getIt, errors: "NotFoundError | AuthError" }]);
@@ -45,10 +45,13 @@ describe("RendererTypesWriter", () => {
          expect(await render([])).not.toContain("IpcError");
       });
 
-      it("declares IpcError among the globals, next to ipc", async () => {
+      it("exports IpcError from the module, which declares no global", async () => {
          const output = await render([getIt]);
 
-         expect(output).toMatch(/declare global \{\n {3}var ipc: IpcApi;\n {3}\/\*\*/);
+         expect(output).toContain(
+            "\nexport type IpcError<E extends Error = Error> = E extends unknown",
+         );
+         expect(output).not.toContain("declare global");
          expect(output).toContain("name: E['name']; message: string");
          expect(output).toContain("{ code: C }");
          expect(output).toContain("{ data: D }");
@@ -65,14 +68,14 @@ describe("RendererTypesWriter", () => {
       });
 
       it("reserves IpcTimeoutError for the declared type", () => {
-         const obj = new VitestRendererTypesWriter([]);
+         const obj = new VitestHelperTypesWriter([]);
          const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
 
          expect(names).toContain("IpcTimeoutError");
       });
 
       it("reserves IpcError and Error for the declared type", () => {
-         const obj = new VitestRendererTypesWriter([]);
+         const obj = new VitestHelperTypesWriter([]);
          const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
 
          expect(names).toEqual(expect.arrayContaining(["IpcError", "Error", "IpcApi"]));
@@ -81,7 +84,7 @@ describe("RendererTypesWriter", () => {
 
    describe("invoke timeouts", () => {
       const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
-         renderWith(VitestRendererTypesWriter, channels, config);
+         renderApiWith(channels, config);
 
       it("declares and documents nothing for a channel without a timeout", async () => {
          const output = await render([getIt]);

@@ -9,7 +9,7 @@ describe("ipcAutomation, value imports used as types", () => {
       const project = await fixtures.run("value-imports");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(generated[file]).toContain('import type { Settings } from "./types/settings";');
          expect(generated[file]).toContain('import type { Mode } from "./types/settings";');
          expect(generated[file]).toContain(
@@ -34,8 +34,10 @@ describe("ipcAutomation, namespace imports", () => {
       const project = await fixtures.run("namespace-imports");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*"\.\/types\/models";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*"\.\/types\/models";$/gm,
+         );
          expect(imports).toStrictEqual(['import type * as Models from "./types/models";']);
       }
    });
@@ -53,8 +55,10 @@ describe("ipcAutomation, import order", () => {
       const project = await fixtures.run("import-order");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = generated[file].match(/^import type .*"\.\/types\/.*";$/gm);
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports = generated[file].match(
+            /^import type (?!.*\bChannel(?:Map|Def)\b).*"\.\/types\/.*";$/gm,
+         );
          expect(imports).toStrictEqual([
             'import type { Alpha } from "./types/alpha";',
             'import type { Zeta } from "./types/zeta";',
@@ -74,7 +78,7 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
       const project = await fixtures.run("dotted-imports");
       const { generated } = project;
 
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(generated[file]).toContain('import type { User } from "./types/user.model.js";');
          expect(generated[file]).toContain('import type { Api } from "./types/api.v2.js";');
          expect(generated[file]).toContain('import type { Legacy } from "./types/legacy.js";');
@@ -96,8 +100,9 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
    // Regression for T89: the extension of `api.mts` and of `./models.mjs` was dropped (TS2307).
    it("keeps .mjs for the .mts schema files and the .mjs specifiers", async () => {
       const project = await fixtures.run("script-extensions");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports =
+            project.generated[file].match(/^import type (?!.*\bChannel(?:Map|Def)\b).*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./schema/api.mjs";');
          expect(imports).toContain('import type { Account } from "./schema/models.mjs";');
       }
@@ -116,7 +121,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
    // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
    it("keeps the specifier of a JSON module under NodeNext, without a script extension", async () => {
       const project = await fixtures.run("json-import-node-next");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(project.generated[file]).toContain('from "./settings.json";');
          expect(project.generated[file]).not.toContain("settings.json.js");
       }
@@ -127,7 +132,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
    // was copied as it is into the generated files, which are in another directory.
    it("rebases the path of an import type to the generated files", async () => {
       const project = await fixtures.run("inline-import-types");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(project.generated[file]).not.toContain('import("./models")');
          expect(project.generated[file]).toContain('import("./schema/models").User');
       }
@@ -140,8 +145,9 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // to "./models/index.ts".
    it("names the index file of a directory import under NodeNext", async () => {
       const project = await fixtures.run("directory-imports");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports =
+            project.generated[file].match(/^import type (?!.*\bChannel(?:Map|Def)\b).*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./models/index.js";');
          expect(imports).toContain('import type { Account } from "./models/index.js";');
          expect(imports).toContain('import type * as Shapes from "./shapes/index.js";');
@@ -157,8 +163,9 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // package.json of the directory comes before it. Path mappings are kept as they are written.
    it("keeps package directories and path mappings under NodeNext", async () => {
       const project = await fixtures.run("directory-packages");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports =
+            project.generated[file].match(/^import type (?!.*\bChannel(?:Map|Def)\b).*";$/gm) ?? [];
          expect(imports).toContain('import type { User } from "./models";');
          expect(imports).toContain('import type { Point } from "./plain/index.js";');
          expect(imports).toContain('import type { Circle } from "@ipc/shapes";');
@@ -175,7 +182,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
    // the schema file, so a signature reaches them through the exported namespace.
    it("uses an import-equals alias that a namespace body declares", async () => {
       const project = await fixtures.run("import-equals-namespace");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
+      for (const file of ["main.ts", "types.ts"] as const) {
          expect(project.generated[file]).toContain('import type { Api } from "./schema";');
          expect(project.generated[file]).toContain("Promise<Api.User>");
          expect(project.generated[file]).toContain("Promise<Api.Reply>");
@@ -186,8 +193,9 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
 
    it("imports a module that has 'export =' with its namespace import", async () => {
       const project = await fixtures.run("export-equals");
-      for (const file of ["main.ts", "window.d.ts"] as const) {
-         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+      for (const file of ["main.ts", "types.ts"] as const) {
+         const imports =
+            project.generated[file].match(/^import type (?!.*\bChannel(?:Map|Def)\b).*";$/gm) ?? [];
          expect(imports).toContain('import type * as Models from "./models.js";');
          expect(imports).toContain('import type * as User from "./user.js";');
          expect(imports).toContain('import type { Exported } from "./schema.js";');

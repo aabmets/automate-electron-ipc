@@ -9,16 +9,16 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWith } from "@testutils/writer/render-utils.js";
+import { renderApiWith } from "@testutils/writer/render-utils.js";
 import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
-import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { VitestHelperTypesWriter } from "@testutils/writer/test-writers.js";
 import { getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
-describe("RendererTypesWriter, utility channels", () => {
-   mockGetTargetFilePath(VitestRendererTypesWriter);
+describe("HelperTypesWriter, utility channels", () => {
+   mockGetTargetFilePath(VitestHelperTypesWriter);
 
-   const render = (...channels: SimpleChannel[]) => renderWith(VitestRendererTypesWriter, channels);
+   const render = (...channels: SimpleChannel[]) => renderApiWith(channels);
    const utility: SimpleChannel[] = [
       {
          name: "indexFile",
@@ -45,10 +45,10 @@ describe("RendererTypesWriter, utility channels", () => {
    });
 });
 
-describe("RendererTypesWriter, renderer to utility channels", () => {
-   mockGetTargetFilePath(VitestRendererTypesWriter);
+describe("HelperTypesWriter, renderer to utility channels", () => {
+   mockGetTargetFilePath(VitestHelperTypesWriter);
 
-   const render = (...channels: SimpleChannel[]) => renderWith(VitestRendererTypesWriter, channels);
+   const render = (...channels: SimpleChannel[]) => renderApiWith(channels);
    const invokeUtility = {
       name: "queryRows",
       kind: "Unicast",

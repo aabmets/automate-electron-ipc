@@ -20,6 +20,7 @@ export interface IPCResolvedConfig {
    mainBindingsFilePath: string;
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
+   typesFilePath: string;
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;

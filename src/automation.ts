@@ -31,6 +31,7 @@ import type { BaseWriter } from "./writer/base-writer.js";
 import { MainBindingsWriter } from "./writer/main/main-bindings.js";
 import { PreloadBindingsWriter } from "./writer/preload/preload-bindings.js";
 import { ServiceWorkerPreloadWriter } from "./writer/preload/service-worker-preload.js";
+import { HelperTypesWriter } from "./writer/renderer/helper-types.js";
 import { RendererTypesWriter } from "./writer/renderer/renderer-types.js";
 import { ServiceWorkerTypesWriter } from "./writer/renderer/service-worker-types.js";
 import { UtilityBindingsWriter } from "./writer/utility/utility-bindings.js";
@@ -48,7 +49,11 @@ function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): vo
       ["serviceWorkerPreloadPath", config.serviceWorkerPreloadFilePath],
    ];
    for (const scope of scopes) {
-      for (const base of [config.preloadBindingsFilePath, config.rendererTypesFilePath]) {
+      for (const base of [
+         config.preloadBindingsFilePath,
+         config.rendererTypesFilePath,
+         config.typesFilePath,
+      ]) {
          const file = scopedFilePath(base, scope);
          for (const [option, taken] of configured) {
             if (file === taken) {
@@ -90,6 +95,7 @@ function collectWriters(config: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs
       ...pageSurfaces.flatMap(([scope, surface]) => [
          new PreloadBindingsWriter(config, surface, scope),
          new RendererTypesWriter(config, surface, scope),
+         new HelperTypesWriter(config, surface, scope),
       ]),
       ...(utilityWriter.hasChannels() ? [utilityWriter] : []),
       ...workerWriters.filter((worker) => worker.hasChannels()),

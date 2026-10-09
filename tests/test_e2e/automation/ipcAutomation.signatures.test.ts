@@ -37,7 +37,7 @@ describe("ipcAutomation, handler and sender types", () => {
 
    it("types Broadcast senders as void and Unicast senders as promises", async () => {
       const project = await fixtures.run("handler-types");
-      const windowTypes = project.generated["window.d.ts"];
+      const windowTypes = project.generated["types.ts"];
 
       expect(methodLine(windowTypes, "echo", "send")).toContain(
          "send: (text: string, ...rest: number[]) => void;",
@@ -95,14 +95,14 @@ describe("ipcAutomation, non-ASCII schema source", () => {
       expect(generated["main.ts"]).toContain(
          `const handler = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => {`,
       );
-      expect(methodLine(generated["window.d.ts"], "getÜser", "invoke")).toContain(
+      expect(methodLine(generated["types.ts"], "getÜser", "invoke")).toContain(
          '(id: "ñ", size: Größe) => Promise<Üser>',
       );
-      expect(methodLine(generated["window.d.ts"], "greet", "send")).toContain(
+      expect(methodLine(generated["types.ts"], "greet", "send")).toContain(
          '(message: "héllo 😀") => void',
       );
-      expect(generated["window.d.ts"]).toContain('import type { Größe } from "./schema";');
-      expect(generated["window.d.ts"]).toContain('import type { Üser } from "./schema";');
+      expect(generated["types.ts"]).toContain('import type { Größe } from "./schema";');
+      expect(generated["types.ts"]).toContain('import type { Üser } from "./schema";');
    });
 
    it("generates files that type-check", async () => {
@@ -134,7 +134,7 @@ describe("ipcAutomation, locale-independent output order", () => {
       "zöld",
    ];
    const expected = {
-      "window.d.ts": names,
+      "types.ts": names,
       "preload.ts": names,
       "main.ts": names,
    };
@@ -168,7 +168,7 @@ describe("ipcAutomation, locale-independent output order", () => {
 describe("ipcAutomation, channel names", () => {
    it("accepts short, 'on'-prefixed, capitalized and symbol-led channel names", async () => {
       const project = await fixtures.run("short-names");
-      const { "main.ts": main, "preload.ts": preload, "window.d.ts": dts } = project.generated;
+      const { "main.ts": main, "preload.ts": preload, "types.ts": dts } = project.generated;
 
       for (const name of ["ok", "on", "onReady", "Capital", "_hidden", "$dollar", "p"]) {
          const member = new RegExp(`^ {3}${name.replace("$", "\\$")}: `, "m");

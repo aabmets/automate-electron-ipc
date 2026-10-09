@@ -44,6 +44,7 @@ describe("getResolvedConfig", () => {
          ["utilityBindingsPath", "Main.ts"],
          ["utilityBindingsPath", "PRELOAD.ts"],
          ["utilityBindingsPath", "Window.D.ts"],
+         ["utilityBindingsPath", "Types.ts"],
          ["serviceWorkerPreloadPath", "MAIN.ts"],
       ])("refuses %s as %s, a generated file under another case", async (option, name) => {
          const path = `src/autoipc/${name}`;

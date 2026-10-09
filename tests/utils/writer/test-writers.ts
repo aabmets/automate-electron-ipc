@@ -9,10 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import path from "node:path";
 import { BaseWriter } from "@src/writer/base-writer.js";
 import { MainBindingsWriter } from "@src/writer/main/main-bindings.js";
 import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
 import { ServiceWorkerPreloadWriter } from "@src/writer/preload/service-worker-preload.js";
+import { HelperTypesWriter } from "@src/writer/renderer/helper-types.js";
 import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
 import { ServiceWorkerTypesWriter } from "@src/writer/renderer/service-worker-types.js";
 import { UtilityBindingsWriter } from "@src/writer/utility/utility-bindings.js";
@@ -89,6 +91,10 @@ function createTestWriter<
       public getTargetFilePath(): string {
          return "";
       }
+      /** The types module is written next to the file, as it is in a run. */
+      protected getTypesFilePath(): string {
+         return path.join(path.dirname(this.getTargetFilePath()), "types.ts");
+      }
    }
    return TestWriter as unknown as TestWriterClass<InstanceType<W>>;
 }
@@ -96,6 +102,7 @@ function createTestWriter<
 export const VitestMainBindingsWriter = createTestWriter(MainBindingsWriter);
 export const VitestPreloadBindingsWriter = createTestWriter(PreloadBindingsWriter);
 export const VitestRendererTypesWriter = createTestWriter(RendererTypesWriter);
+export const VitestHelperTypesWriter = createTestWriter(HelperTypesWriter);
 export const VitestUtilityBindingsWriter = createTestWriter(UtilityBindingsWriter);
 export const VitestServiceWorkerPreloadWriter = createTestWriter(ServiceWorkerPreloadWriter);
 export const VitestServiceWorkerTypesWriter = createTestWriter(ServiceWorkerTypesWriter);

@@ -40,7 +40,7 @@ export function defineChannels<T extends Record<string, unknown>>(channels: T): 
  * An error that the handler throws reaches the renderer as a plain object
  * `{ name, message, code?, data? }`, which rejects the promise of `ipc.<name>.invoke`.
  * The optional second type argument lists the error types that the handler may throw. It
- * documents them in the generated `window.d.ts`. It needs the generic form of the signature.
+ * documents them in the generated `types.ts`. It needs the generic form of the signature.
  *
  * @example
  * getUser: invoke<(id: number) => Promise<User>, NotFoundError | AuthError>()

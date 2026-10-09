@@ -95,7 +95,7 @@ describe("ipcAutomation", () => {
          expect(await fsp.readFile(path.join(automation.dir, "out/preload.ts"), "utf8")).toContain(
             "export const api = {};",
          );
-         expect(await fsp.readFile(path.join(automation.dir, "out/window.d.ts"), "utf8")).toContain(
+         expect(await fsp.readFile(path.join(automation.dir, "out/types.ts"), "utf8")).toContain(
             "interface IpcApi {}",
          );
       });

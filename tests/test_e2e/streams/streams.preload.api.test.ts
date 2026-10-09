@@ -32,7 +32,7 @@ describe("stream, preload script, the API of the page", () => {
       const { api } = await loadPreload();
 
       expect(callablePaths(api)).toStrictEqual(
-         windowIpcPaths(currentProject()?.generated["window.d.ts"] ?? ""),
+         windowIpcPaths(currentProject()?.generated["types.ts"] ?? ""),
       );
    });
 
@@ -62,7 +62,7 @@ describe("stream, preload script, the API of the page", () => {
 describe("window.d.ts of stream channels", () => {
    it("declares IpcStream and the stream method of every channel", async () => {
       const project = await fixtures.run("stream-channels");
-      const types = project.generated["window.d.ts"];
+      const types = project.generated["types.ts"];
 
       expect(types).toContain("interface IpcStream<T> {");
       expect(types).toContain("stream: (table: string, limit?: number) => IpcStream<Row>;");
@@ -84,7 +84,7 @@ describe("window.d.ts of stream channels", () => {
    it("declares nothing of streams for a schema without them", async () => {
       const project = await fixtures.run("ask-channels");
 
-      expect(project.generated["window.d.ts"]).not.toContain("IpcStream");
+      expect(project.generated["types.ts"]).not.toContain("IpcStream");
       expect(project.generated["preload.ts"]).not.toContain("openStream");
       expect(project.generated["main.ts"]).not.toContain("startStream");
       expect(project.generated["main.ts"]).not.toContain("MessageChannelMain");

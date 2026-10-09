@@ -39,8 +39,8 @@ describe("the generated files of a mainPort channel", () => {
          "onReady",
          "send",
       ]);
-      expect(project.generated["window.d.ts"]).toContain("logTail: {");
-      expect(project.generated["window.d.ts"]).toContain(
+      expect(project.generated["types.ts"]).toContain("logTail: {");
+      expect(project.generated["types.ts"]).toContain(
          "send: (line: string, level?: number) => void;",
       );
    });
