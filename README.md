@@ -85,7 +85,9 @@ Config explanation:
    It can contain letters, digits and `_ . : / @ # -`, up to 64 characters. It separates channel names
    and is not a security measure: restrict who can call a channel with `allowedOrigins`.
  - `timeoutMs` - The default time in milliseconds after which the promise of an `invoke` is rejected
-   with an `IpcTimeoutError`. `0`, the default, waits for ever. See [Timeouts](#timeouts).
+   with an `IpcTimeoutError`. `0`, the default, waits for ever. It is also the default of `callUtility`,
+   `callMain` and `invokeUtility`, which reject with an `IpcUtilityError` of the code
+   `IPC_UTILITY_TIMEOUT`. See [Timeouts](#timeouts).
  - `utilityBindingsPath` - Relative path of the generated file for utility processes, `utility.ts` in
    `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
    file is written only when the schema has a channel to a utility process. See
@@ -991,6 +993,13 @@ stopped from the renderer, and its late reply is dropped. The option takes a non
 literal and applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
 `invokeWith`. With `rawErrors`, the timeout still rejects with this object, while the errors of the
 handlers stay Electron's.
+
+The calls to and from a utility process take the same option: `callUtility`, `callMain` and
+`invokeUtility` reject with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT` (for the page, the
+plain object of the same shape), and the default of the config applies to them. A `streamUtility` takes
+`timeoutMs` as well, but only as the wait for its first chunk, its end or an error, and the default of
+the config does not apply to it: a timed-out stream is cancelled in the child and fails the read of the
+page. The handler of a call is not stopped, and its late reply is dropped.
 
 #### Utility processes
 

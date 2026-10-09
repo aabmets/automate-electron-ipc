@@ -527,6 +527,73 @@ describe("PreloadBindingsWriter", () => {
       });
    });
 
+   describe("utility process timeouts", () => {
+      const invokeUtility = {
+         name: "queryRows",
+         kind: "Unicast",
+         direction: "RendererToUtility",
+      } as const;
+      const streamUtility = {
+         name: "scanRows",
+         kind: "Stream",
+         direction: "RendererToUtility",
+         returnType: "AsyncIterable<number>",
+      } as const;
+      const render = async (
+         channels: shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...channels),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("passes the timeout of a call as the last argument, and none without one", async () => {
+         const output = await render([
+            { ...invokeUtility, timeoutMs: 1200 },
+            { ...invokeUtility, name: "patient", timeoutMs: 0 },
+            { ...invokeUtility, name: "plain" },
+         ]);
+
+         expect(output).toContain("callUtilityPort(utilityClients['queryRows'], args, 1200)");
+         expect(output).toContain("callUtilityPort(utilityClients['patient'], args)");
+         expect(output).toContain("callUtilityPort(utilityClients['plain'], args)");
+      });
+
+      it("applies the default of the config to a call, but not to a stream", async () => {
+         const output = await render([invokeUtility, streamUtility], { timeoutMs: 2500 });
+
+         expect(output).toContain("callUtilityPort(utilityClients['queryRows'], args, 2500)");
+         expect(output).toMatch(/openUtilityStream\(utilityClients\['scanRows'\], args, \d+\)/);
+      });
+
+      it("passes the timeout of a stream after its window", async () => {
+         const output = await render([{ ...streamUtility, highWaterMark: 4, timeoutMs: 700 }]);
+
+         expect(output).toContain("openUtilityStream(utilityClients['scanRows'], args, 4, 700)");
+      });
+
+      it("cancels a stream in the child when it times out", async () => {
+         const output = await render([{ ...streamUtility, timeoutMs: 700 }]);
+
+         expect(output).toContain("'IPC_UTILITY_TIMEOUT'");
+         expect(output).toContain("timeoutMs = 0) {");
+         expect(output).toContain(
+            "client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id });",
+         );
+      });
+
+      it("does not write withTimeout, which is only for the invoke of the main process", async () => {
+         const output = await render([invokeUtility], { timeoutMs: 2500 });
+
+         expect(output).not.toContain("withTimeout");
+         expect(output).not.toContain("IpcTimeoutError");
+      });
+   });
+
    describe("invoke timeouts", () => {
       const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
       const other = { name: "getOther", kind: "Unicast", direction: "RendererToMain" } as const;

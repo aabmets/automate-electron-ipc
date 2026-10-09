@@ -759,13 +759,13 @@ export class PreloadBindingsWriter extends BaseWriter {
          return this.buildChannel(
             spec.name,
             "stream",
-            `(...args: any[]) => openUtilityStream(${client}, args, ${this.getHighWaterMark(spec)})`,
+            `(...args: any[]) => openUtilityStream(${client}, args, ${this.getHighWaterMark(spec)}${this.getTimeoutArgument(spec)})`,
          );
       }
       return this.buildChannel(
          spec.name,
          "invoke",
-         `(...args: any[]) => callUtilityPort(${client}, args)`,
+         `(...args: any[]) => callUtilityPort(${client}, args${this.getTimeoutArgument(spec)})`,
       );
    }
 
@@ -786,7 +786,12 @@ export class PreloadBindingsWriter extends BaseWriter {
     *   the port itself, such as when the process exits, ends it as well;
     * - errors are plain objects `{ name, message, code, data? }`, since contextBridge does not keep
     *   the fields of an `Error`. The ones of the library are `IpcUtilityError`, with the codes
-    *   `IPC_UTILITY_EXITED`, `_UNSENDABLE` and `_INVALID_REPLY`.
+    *   `IPC_UTILITY_EXITED`, `_UNSENDABLE`, `_INVALID_REPLY` and `_TIMEOUT`;
+    * - with a `timeoutMs`, a call that has had no reply, or a stream that has sent no chunk, end or
+    *   error, by then is rejected with `IPC_UTILITY_TIMEOUT`. The timer starts when the page makes
+    *   the call, so it covers the wait for the port too. The handler in the child is not stopped
+    *   and its late reply is dropped, but a timed-out stream is cancelled in the child. A stream
+    *   that has begun is not cut short, since a slow reader holds the generator back on purpose.
     * Messages that are not the library's, or are for another channel or ID, are ignored.
     */
    private buildUtilityClientComponents(streams: boolean): string {
@@ -890,22 +895,42 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i1}}`,
          "}",
          "",
-         "function callUtilityPort(client: UtilityClient, args: any[]): Promise<unknown> {",
+         "function callUtilityPort(client: UtilityClient, args: any[], timeoutMs = 0): Promise<unknown> {",
          `${i1}return new Promise<unknown>((resolve, reject) => {`,
          `${i2}if (client.closed) {`,
          `${i3}reject(utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED'));`,
          `${i3}return;`,
          `${i2}}`,
+         `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
+         `${i2}let settled = false;`,
+         `${i2}let id = 0;`,
+         `${i2}const settle = (finish: () => void) => {`,
+         `${i3}if (!settled) {`,
+         `${i4}settled = true;`,
+         `${i4}clearTimeout(timer);`,
+         `${i4}finish();`,
+         `${i3}}`,
+         `${i2}};`,
          `${i2}const start = () => {`,
-         `${i3}const id = ++lastUtilityCallId;`,
-         `${i3}client.calls.set(id, { resolve, reject });`,
+         `${i3}if (settled) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}id = ++lastUtilityCallId;`,
+         `${i3}client.calls.set(id, { resolve: (value) => settle(() => resolve(value)), reject: (error) => settle(() => reject(error)) });`,
          `${i3}try {`,
          `${i4}client.port?.postMessage({ __ipc: 'call', channel: client.channel, id, args });`,
          `${i3}} catch (error) {`,
          `${i4}client.calls.delete(id);`,
-         `${i4}reject(utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE'));`,
+         `${i4}settle(() => reject(utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE')));`,
          `${i3}}`,
          `${i2}};`,
+         `${i2}if (timeoutMs > 0) {`,
+         `${i3}// The timer covers the wait for the port too. The handler in the child is not stopped, and its late reply is dropped.`,
+         `${i3}timer = setTimeout(() => {`,
+         `${i4}client.calls.delete(id);`,
+         `${i4}settle(() => reject(utilityError(\`The channel '\${client.name}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT')));`,
+         `${i3}}, Math.min(timeoutMs, 2147483647));`,
+         `${i2}}`,
          `${i2}if (client.port) {`,
          `${i3}start();`,
          `${i2}} else {`,
@@ -916,10 +941,14 @@ export class PreloadBindingsWriter extends BaseWriter {
          "",
          ...(streams
             ? [
-                 "function openUtilityStream(client: UtilityClient, args: any[], highWaterMark: number) {",
+                 "function openUtilityStream(client: UtilityClient, args: any[], highWaterMark: number, timeoutMs = 0) {",
                  `${i1}const id = ++lastUtilityCallId;`,
+                 `${i1}let timer: ReturnType<typeof setTimeout> | undefined;`,
                  `${i1}const reader = createStreamReader(`,
-                 `${i2}() => void client.streams.delete(id),`,
+                 `${i2}() => {`,
+                 `${i3}clearTimeout(timer);`,
+                 `${i3}client.streams.delete(id);`,
+                 `${i2}},`,
                  `${i2}() => client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id }),`,
                  `${i2}highWaterMark,`,
                  `${i2}(limit) => {`,
@@ -938,7 +967,13 @@ export class PreloadBindingsWriter extends BaseWriter {
                  `${i2}if (reader.isFinished()) {`,
                  `${i3}return;`,
                  `${i2}}`,
-                 `${i2}client.streams.set(id, { push: reader.push, finish: reader.finish });`,
+                 `${i2}client.streams.set(id, {`,
+                 `${i3}push: (value) => {`,
+                 `${i4}clearTimeout(timer);`,
+                 `${i4}reader.push(value);`,
+                 `${i3}},`,
+                 `${i3}finish: reader.finish,`,
+                 `${i2}});`,
                  `${i2}try {`,
                  `${i3}client.port?.postMessage({ __ipc: 'stream', channel: client.channel, id, args });`,
                  `${i3}reader.topUp();`,
@@ -946,6 +981,17 @@ export class PreloadBindingsWriter extends BaseWriter {
                  `${i3}reader.finish({ error: utilityError(\`A call of the channel '\${client.name}' cannot be sent: \${toIpcError(error).message}\`, 'IPC_UTILITY_UNSENDABLE') });`,
                  `${i2}}`,
                  `${i1}};`,
+                 `${i1}if (timeoutMs > 0) {`,
+                 `${i2}// The wait for the first chunk, the end or an error. A stream that has begun is not cut short, since a reader that is slow holds the generator back on purpose.`,
+                 `${i2}timer = setTimeout(() => {`,
+                 `${i3}try {`,
+                 `${i4}client.port?.postMessage({ __ipc: 'cancel', channel: client.channel, id });`,
+                 `${i3}} catch {`,
+                 `${i4}// The port is gone, which stops the stream in the child as well.`,
+                 `${i3}}`,
+                 `${i3}reader.finish({ error: utilityError(\`The channel '\${client.name}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT') });`,
+                 `${i2}}, Math.min(timeoutMs, 2147483647));`,
+                 `${i1}}`,
                  `${i1}if (client.closed) {`,
                  `${i2}reader.finish({ error: utilityError(\`The utility process of the channel '\${client.name}' is gone\`, 'IPC_UTILITY_EXITED') });`,
                  `${i1}} else if (client.port) {`,

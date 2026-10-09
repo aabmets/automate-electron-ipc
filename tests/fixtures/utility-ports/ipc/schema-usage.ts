@@ -79,7 +79,8 @@ export async function failures(): Promise<void> {
             | "IPC_UTILITY_UNSENDABLE"
             | "IPC_UTILITY_INVALID_REPLY"
             | "IPC_UTILITY_NO_HANDLER"
-            | "IPC_UTILITY_NOT_ITERABLE" = failure.code;
+            | "IPC_UTILITY_NOT_ITERABLE"
+            | "IPC_UTILITY_TIMEOUT" = failure.code;
          console.log(code);
       }
    }

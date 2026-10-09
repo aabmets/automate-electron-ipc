@@ -248,6 +248,52 @@ const scenarios: Record<string, Scenario> = {
       return { read, pausedAt, stillPausedAt, more };
    },
 
+   timeouts: async (ctx) => {
+      let cancelled = 0;
+      const child = await ctx.fork(() => {
+         ipc.hangTimed.handle(() => new Promise(() => undefined));
+         ipc.hang.handle(() => new Promise(() => undefined));
+         ipc.hangStream.handle(async function* () {
+            try {
+               // A generator which is stuck in an await is stopped when it resumes.
+               await new Promise((resolve) => setTimeout(resolve, 700));
+               yield 1;
+            } finally {
+               (process as any).parentPort.postMessage({ finalized: true });
+            }
+         });
+         ipc.query.handle(async (sql: string) => [{ id: 1, label: sql }]);
+      });
+      child.on("message", (message: any) => {
+         if (message?.finalized) {
+            cancelled += 1;
+         }
+      });
+      const win = await ctx.open();
+      for (const name of ["hangTimed", "hang", "hangStream", "query"]) {
+         ctx.ipc[name].connect(child, win);
+      }
+      const page = await ctx.evaluate(win, async () => {
+         const describe = (error: any) => ({ name: error.name, code: error.code });
+         const started = Date.now();
+         const call = await ipc.hangTimed.invoke().then(() => null, describe);
+         const waited = Date.now() - started;
+         const read = await ipc.hangStream
+            .stream()
+            .next()
+            .then(() => null, describe);
+         // A connection that holds no timeout waits.
+         const patient = await Promise.race([
+            ipc.hang.invoke().then(() => "answered", describe),
+            new Promise((resolve) => setTimeout(() => resolve("still waiting"), 600)),
+         ]);
+         const later = await ipc.query.invoke("after");
+         return { call, waited, read, patient, later };
+      });
+      await ctx.waitFor(() => cancelled === 1, "the generator to be stopped in the child");
+      return { ...page, cancelled };
+   },
+
    closeConnection: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.hang.handle(() => new Promise(() => undefined));
@@ -469,6 +515,17 @@ describeElectron("utility ports in Electron", "electron-utility-ports", scenario
       expect(result.pausedAt).toBeLessThanOrEqual(7);
       expect(result.stillPausedAt).toBe(result.pausedAt);
       expect(result.more).toStrictEqual([4, 5, 6, 7, 8, 9]);
+   });
+
+   it("rejects a call and a stream whose handler does not answer in time, and stops the generator in the child", () => {
+      const result = group.value("timeouts");
+      expect(result.call).toStrictEqual({ name: "IpcUtilityError", code: "IPC_UTILITY_TIMEOUT" });
+      expect(result.waited).toBeGreaterThanOrEqual(250);
+      expect(result.waited).toBeLessThan(5000);
+      expect(result.read).toStrictEqual({ name: "IpcUtilityError", code: "IPC_UTILITY_TIMEOUT" });
+      expect(result.cancelled).toBe(1);
+      expect(result.patient).toBe("still waiting");
+      expect(result.later).toStrictEqual([{ id: 1, label: "after" }]);
    });
 
    it("fails the calls with IPC_UTILITY_EXITED when the main process closes the connection", () => {

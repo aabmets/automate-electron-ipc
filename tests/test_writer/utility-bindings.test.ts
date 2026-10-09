@@ -141,6 +141,55 @@ describe("UtilityBindingsWriter", () => {
       expect(output).toContain("callUtilityPeer(getUtilityPeer(), 'autoipc:rest', [a, ...more])");
    });
 
+   describe("timeouts", () => {
+      it("passes the timeout of a call to the main process as the last argument", async () => {
+         const output = await render([
+            { ...callMain, timeoutMs: 800, params: ["key: string"], returnType: "Promise<string>" },
+            { ...callMain, name: "plain", returnType: "boolean" },
+            { ...callMain, name: "patient", timeoutMs: 0, returnType: "boolean" },
+         ]);
+
+         expect(output).toContain(
+            "callUtilityPeer(getUtilityPeer(), 'autoipc:getSetting', [key], 800)",
+         );
+         expect(output).toContain("callUtilityPeer(getUtilityPeer(), 'autoipc:plain', [])");
+         expect(output).toContain("callUtilityPeer(getUtilityPeer(), 'autoipc:patient', [])");
+      });
+
+      it("uses the default of the config, which the option overrides", async () => {
+         const output = await render(
+            [
+               { ...callMain, timeoutMs: 100 },
+               { ...callMain, name: "plain" },
+               { ...callMain, name: "patient", timeoutMs: 0 },
+            ],
+            { timeoutMs: 2500 },
+         );
+
+         expect(output).toContain("'autoipc:getSetting', [], 100)");
+         expect(output).toContain("'autoipc:plain', [], 2500)");
+         expect(output).toContain("'autoipc:patient', [])");
+      });
+
+      it("times the call of the peer, and clears the timer when the call settles", async () => {
+         const output = await render([callMain]);
+
+         expect(output).toContain(
+            "function callUtilityPeer(peer: UtilityPeer, channel: string, args: unknown[], timeoutMs = 0): Promise<unknown> {",
+         );
+         expect(output).toContain("'IPC_UTILITY_TIMEOUT'");
+         expect(output).toContain("}, Math.min(timeoutMs, 2147483647));");
+         expect(output.match(/clearTimeout\(timer\);/g)).toHaveLength(2);
+      });
+
+      it("does not time a notification", async () => {
+         const output = await render([{ ...notifyMain, timeoutMs: 5 }], { timeoutMs: 2500 });
+
+         expect(output).toContain("sendUtilityPeer(getUtilityPeer(), 'autoipc:progress', [");
+         expect(output).not.toMatch(/sendUtilityPeer\([^)]*\), \d+\)/);
+      });
+   });
+
    it("writes send for a notification to the main process", async () => {
       const output = await render([{ ...notifyMain, params: ["done: number", "total: number"] }]);
 

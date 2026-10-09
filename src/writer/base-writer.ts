@@ -144,11 +144,21 @@ export class BaseWriter {
    }
 
    /**
-    * The time after which an `invoke` channel rejects with an `IpcTimeoutError`: the option of the
-    * channel, or else the default of the config. `0` means no timeout.
+    * The time after which a call of a channel is rejected: the option of the channel, or else the
+    * default of the config. `0` means no timeout. The default does not apply to a stream, which
+    * times out only through its own option.
     */
    protected getTimeoutMs(spec: t.ChannelSpec): number {
+      if (spec.kind === "Stream") {
+         return spec.timeoutMs ?? 0;
+      }
       return spec.timeoutMs ?? this.config.timeoutMs ?? 0;
+   }
+
+   /** `, <ms>` for the last argument of a call with a timeout, and nothing for one without. */
+   protected getTimeoutArgument(spec: t.ChannelSpec): string {
+      const timeoutMs = this.getTimeoutMs(spec);
+      return timeoutMs > 0 ? `, ${timeoutMs}` : "";
    }
 
    /**

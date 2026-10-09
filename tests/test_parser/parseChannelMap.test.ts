@@ -1135,16 +1135,51 @@ describe("stream channels", () => {
 describe("utility channels", () => {
    const verbs = ["callUtility", "notifyUtility", "callMain", "notifyMain"];
 
-   it.each(verbs)("rejects every option of %s, since it has none", (verb) => {
-      expect(
-         parseError(`export default defineChannels({ a: ${verb}<() => void>({ timeoutMs: 5 }) });`),
-      ).toBe(
-         `Schema file 'schema.ts': channel 'a': option 'timeoutMs' is not supported by '${verb}'.`,
-      );
-      expect(
-         parseError(`export default defineChannels({ a: ${verb}<() => void>({ validate: v }) });`),
-      ).toContain("option 'validate' is not supported");
+   it.each(["notifyUtility", "notifyMain"])(
+      "rejects every option of %s, since it has none",
+      (verb) => {
+         expect(
+            parseError(
+               `export default defineChannels({ a: ${verb}<() => void>({ timeoutMs: 5 }) });`,
+            ),
+         ).toBe(
+            `Schema file 'schema.ts': channel 'a': option 'timeoutMs' is not supported by '${verb}'.`,
+         );
+         expect(
+            parseError(
+               `export default defineChannels({ a: ${verb}<() => void>({ validate: v }) });`,
+            ),
+         ).toContain("option 'validate' is not supported");
+      },
+   );
+
+   it.each(["callUtility", "callMain"])("rejects the options of %s except timeoutMs", (verb) => {
+      for (const option of ["validate: v", 'allowedOrigins: ["app://."]', 'scopes: ["a"]']) {
+         expect(
+            parseError(`export default defineChannels({ a: ${verb}<() => void>({ ${option} }) });`),
+         ).toContain(`option '${option.split(":")[0]}' is not supported by '${verb}'.`);
+      }
    });
+
+   it.each(["callUtility", "callMain"])("reads the timeoutMs option of %s", (verb) => {
+      expect(parseOne(`a: ${verb}<() => void>({ timeoutMs: 1500 })`).timeoutMs).toBe(1500);
+      expect(parseOne(`a: ${verb}<() => void>({ timeoutMs: 0 })`).timeoutMs).toBe(0);
+      expect(parseOne(`a: ${verb}() as () => void`)).not.toHaveProperty("timeoutMs");
+      expect(parseOne(`a: ${verb}({ timeoutMs: 7 }) as () => void`).timeoutMs).toBe(7);
+   });
+
+   it.each(["callUtility", "callMain"])(
+      "rejects a timeoutMs of %s that is not a non-negative integer literal",
+      (verb) => {
+         for (const text of ["-1", "1.5", "ms", '"5"']) {
+            expect(
+               parseError(
+                  `export default defineChannels({ a: ${verb}<() => void>({ timeoutMs: ${text} }) });`,
+               ),
+            ).toMatch(/option 'timeoutMs'/);
+         }
+      },
+   );
 
    it.each(verbs)("rejects the error types of %s, which has one type argument", (verb) => {
       expect(
@@ -1179,8 +1214,28 @@ describe("renderer to utility channels", () => {
    const signature = (verb: string) =>
       verb === "streamUtility" ? "(t: string) => AsyncIterable<Row>" : "(t: string) => Row";
 
-   it.each(verbs)("rejects every option of %s, since it has none", (verb) => {
-      for (const option of ["timeoutMs: 5", "validate: v", 'allowedOrigins: ["app://."]']) {
+   it.each(verbs)("reads the timeoutMs option of %s", (verb) => {
+      expect(parseOne(`a: ${verb}<${signature(verb)}>({ timeoutMs: 2500 })`).timeoutMs).toBe(2500);
+      expect(parseOne(`a: ${verb}<${signature(verb)}>({ timeoutMs: 0 })`).timeoutMs).toBe(0);
+      expect(parseOne(`a: ${verb}({ timeoutMs: 9 }) as ${signature(verb)}`).timeoutMs).toBe(9);
+      expect(parseOne(`a: ${verb}<${signature(verb)}>()`)).not.toHaveProperty("timeoutMs");
+   });
+
+   it.each(verbs)(
+      "rejects a timeoutMs of %s that is not a non-negative integer literal",
+      (verb) => {
+         for (const text of ["-1", "1.5", "ms"]) {
+            expect(
+               parseError(
+                  `export default defineChannels({ a: ${verb}<${signature(verb)}>({ timeoutMs: ${text} }) });`,
+               ),
+            ).toMatch(/option 'timeoutMs'/);
+         }
+      },
+   );
+
+   it.each(verbs)("rejects the options of %s except scopes and timeoutMs", (verb) => {
+      for (const option of ["validate: v", 'allowedOrigins: ["app://."]']) {
          expect(
             parseError(
                `export default defineChannels({ a: ${verb}<${signature(verb)}>({ ${option} }) });`,

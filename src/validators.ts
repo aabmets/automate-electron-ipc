@@ -313,7 +313,10 @@ function getChannelSpecStruct(kind: t.ChannelKind, flags: SpecStructFlags = {}):
       maxQueue: bounded ? optional(number()) : optional(never()),
       highWaterMark: streaming ? optional(number()) : optional(never()),
       timeoutMs:
-         kind === "Unicast" && !asking && !utility && !brokered && !workerCall && !workerNotify
+         (kind === "Unicast" || (kind === "Stream" && brokered)) &&
+         !asking &&
+         !workerCall &&
+         !workerNotify
             ? optional(number())
             : optional(never()),
    });

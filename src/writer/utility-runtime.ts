@@ -40,6 +40,8 @@ export const UTILITY_RUNTIME_NAMES = [
    "addUtilityListener",
    "Map",
    "Set",
+   "setTimeout",
+   "clearTimeout",
    "Error",
    "TypeError",
    "Promise",
@@ -110,7 +112,10 @@ export function buildErrorEnvelope(indents: string[]): string {
  *   with `{ __ipc: 'reply', channel, id, envelope }`. The envelope is the one of `invoke` channels.
  * - A call is rejected with an `IpcUtilityError`. It carries the `name`, `message`, `code` and
  *   `data` of what the handler threw, or one of the codes `IPC_UTILITY_EXITED`,
- *   `IPC_UTILITY_NO_HANDLER`, `IPC_UTILITY_UNSENDABLE` and `IPC_UTILITY_INVALID_REPLY`.
+ *   `IPC_UTILITY_NO_HANDLER`, `IPC_UTILITY_UNSENDABLE`, `IPC_UTILITY_INVALID_REPLY` and
+ *   `IPC_UTILITY_TIMEOUT`.
+ * - A call with a `timeoutMs` above zero is rejected with `IPC_UTILITY_TIMEOUT` when no reply has
+ *   arrived by then. The handler on the other side is not stopped, and its late reply is dropped.
  *
  * Everything that arrives is untrusted: a reply counts only if its ID is pending for the same
  * channel, and a message of an unknown shape is dropped. A peer is closed when the other end is
@@ -246,19 +251,38 @@ export function buildUtilityPeer(indents: string[]): string {
       `${i1}}`,
       "}",
       "",
-      "function callUtilityPeer(peer: UtilityPeer, channel: string, args: unknown[]): Promise<unknown> {",
+      "function callUtilityPeer(peer: UtilityPeer, channel: string, args: unknown[], timeoutMs = 0): Promise<unknown> {",
       `${i1}return new Promise<unknown>((resolve, reject) => {`,
       `${i2}if (peer.closed) {`,
       `${i3}reject(new IpcUtilityError(channel, \`The other side of the channel '\${channel}' is gone\`, 'IPC_UTILITY_EXITED'));`,
       `${i3}return;`,
       `${i2}}`,
       `${i2}const id = ++lastUtilityCallId;`,
-      `${i2}peer.pending.set(id, { channel, resolve, reject });`,
+      `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
+      `${i2}peer.pending.set(id, {`,
+      `${i3}channel,`,
+      `${i3}resolve: (value) => {`,
+      `${i4}clearTimeout(timer);`,
+      `${i4}resolve(value);`,
+      `${i3}},`,
+      `${i3}reject: (error) => {`,
+      `${i4}clearTimeout(timer);`,
+      `${i4}reject(error);`,
+      `${i3}},`,
+      `${i2}});`,
       `${i2}try {`,
       `${i3}peer.post({ __ipc: 'call', channel, id, args });`,
       `${i2}} catch (error) {`,
       `${i3}peer.pending.delete(id);`,
       `${i3}reject(unsendableUtilityError(channel, error));`,
+      `${i3}return;`,
+      `${i2}}`,
+      `${i2}if (timeoutMs > 0) {`,
+      `${i3}timer = setTimeout(() => {`,
+      `${i4}// The handler goes on, and its late reply finds no pending call and is dropped.`,
+      `${i4}peer.pending.delete(id);`,
+      `${i4}reject(new IpcUtilityError(channel, \`The channel '\${channel}' did not answer within \${timeoutMs} ms\`, 'IPC_UTILITY_TIMEOUT'));`,
+      `${i3}}, Math.min(timeoutMs, 2147483647));`,
       `${i2}}`,
       `${i1}});`,
       "}",

@@ -17,6 +17,8 @@ export default defineChannels({
    rows: callUtility<(count: number) => Row[]>(),
    fail: callUtility<() => Promise<string>>(),
    hang: callUtility<() => Promise<string>>(),
+   hangTimed: callUtility<() => Promise<string>>({ timeoutMs: 300 }),
+   delayed: callUtility<(ms: number) => Promise<string>>({ timeoutMs: 300 }),
    unregistered: callUtility<() => Promise<string>>(),
    unsendable: callUtility<() => unknown>(),
    viaMain: callUtility<(key: string) => Promise<string>>(),
@@ -25,6 +27,7 @@ export default defineChannels({
    crash: notifyUtility<(code: number) => void>(),
    // The utility process calls the main process.
    getSetting: callMain<(key: string) => Promise<string>>(),
+   hangSetting: callMain<(key: string) => Promise<string>>({ timeoutMs: 300 }),
    // The utility process notifies the main process.
    progress: notifyMain<(done: number, total: number) => void>(),
 });

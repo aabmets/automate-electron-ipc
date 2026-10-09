@@ -30,7 +30,9 @@ export interface IPCOptionalConfig {
    /**
     * The default time in milliseconds after which the promise of an `invoke` is rejected with an
     * `IpcTimeoutError`, when the handler has not answered. `0`, the default, waits for ever. The
-    * `timeoutMs` option of a channel overrides it.
+    * `timeoutMs` option of a channel overrides it. It is also the default of the calls to a utility
+    * process (`callUtility`, `callMain` and `invokeUtility`), which are rejected with an
+    * `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT`, but not of `streamUtility`.
     */
    timeoutMs?: number;
    /**
@@ -250,7 +252,8 @@ export interface ChannelSpec {
     */
    highWaterMark?: number;
    /**
-    * The time in milliseconds after which an `invoke` channel rejects with an `IpcTimeoutError`.
+    * The time in milliseconds after which an `invoke` channel rejects with an `IpcTimeoutError`, or a
+    * channel to a utility process with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT`.
     * `0` means no timeout, also where the config sets a default. Absent means the default of the
     * config.
     */

@@ -1823,6 +1823,33 @@ describe("MainBindingsWriter, utility channels", () => {
       return (await fsp.readFile(writer.getTargetFilePath())).toString();
    };
 
+   it("passes the timeout of a call to the child as the last argument", async () => {
+      const output = await render(
+         [
+            { ...callUtility, timeoutMs: 1000, params: ["path: string"] },
+            { ...callUtility, name: "plain" },
+            { ...callUtility, name: "patient", timeoutMs: 0 },
+            { ...notifyUtility, timeoutMs: 5 },
+         ],
+         { timeoutMs: 2500 },
+      );
+
+      expect(output).toContain(
+         "callUtilityPeer(getUtilityPeer(child), 'autoipc:indexFile', [path], 1000)",
+      );
+      expect(output).toContain("'autoipc:plain', [], 2500)");
+      expect(output).toContain("callUtilityPeer(getUtilityPeer(child), 'autoipc:patient', [])");
+      expect(output).not.toMatch(/sendUtilityPeer\([^)]*\), \d+\)/);
+   });
+
+   it("writes the timer into the peer, with the timeout code", async () => {
+      const output = await render([callUtility]);
+
+      expect(output).toContain("timeoutMs = 0): Promise<unknown> {");
+      expect(output).toContain("'IPC_UTILITY_TIMEOUT'");
+      expect(output).toContain("}, Math.min(timeoutMs, 2147483647));");
+   });
+
    it("writes nothing of the utility protocol for a schema without such channels", async () => {
       const output = await render([renderer]);
 

@@ -1185,7 +1185,11 @@ describe("validateChannelSpecs, timeoutMs", () => {
       kind: t.ChannelKind,
       timeoutMs: unknown,
    ): Partial<t.ChannelSpec>[] => {
-      const spec = new ChannelSpecGenerator().generate(direction, kind);
+      const spec = new ChannelSpecGenerator().generate(
+         direction,
+         kind,
+         kind === "Stream" ? "AsyncIterable<number>" : "void",
+      );
       return [{ ...spec, timeoutMs } as Partial<t.ChannelSpec>];
    };
 
@@ -1215,13 +1219,37 @@ describe("validateChannelSpecs, timeoutMs", () => {
    it("rejects timeoutMs on the channels that do not wait for a reply", () => {
       for (const [direction, kind] of [
          ["RendererToMain", "Broadcast"],
+         ["RendererToMain", "Stream"],
          ["MainToRenderer", "Broadcast"],
          ["MainToRenderer", "Unicast"],
          ["RendererToRenderer", "Port"],
+         ["MainToUtility", "Broadcast"],
+         ["UtilityToMain", "Broadcast"],
       ] as const) {
          expect(() => vld.validateChannelSpecs(make(direction, kind, 5))).toThrowError(/timeoutMs/);
       }
    });
+
+   it.each([
+      ["MainToUtility", "Unicast"],
+      ["UtilityToMain", "Unicast"],
+      ["RendererToUtility", "Unicast"],
+      ["RendererToUtility", "Stream"],
+   ] as const)(
+      "accepts timeoutMs on %s %s channels, and rejects a bad value",
+      (direction, kind) => {
+         for (const timeoutMs of [0, 1, 30_000]) {
+            expect(() =>
+               vld.validateChannelSpecs(make(direction, kind, timeoutMs)),
+            ).not.toThrowError();
+         }
+         for (const timeoutMs of [-1, 1.5, Number.POSITIVE_INFINITY]) {
+            expect(() => vld.validateChannelSpecs(make(direction, kind, timeoutMs))).toThrowError(
+               /timeoutMs must be a non-negative integer/,
+            );
+         }
+      },
+   );
 });
 
 describe("validateOptionalConfig, utilityBindingsPath", () => {
@@ -1319,7 +1347,6 @@ describe("validateChannelSpecs, utility channels", () => {
             { validate: ref },
             { trigger: "focus" },
             { maxQueue: 5 },
-            { timeoutMs: 5 },
          ]) {
             const [key] = Object.keys(extra);
             const spec = { ...generate("MainToUtility", kind), ...extra };
@@ -1369,7 +1396,7 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
       );
    });
 
-   it("rejects the options of the other verbs, including the timeout", () => {
+   it("rejects the options of the other verbs", () => {
       const ref = { name: "args", exported: "args", fromPath: "./v" };
       for (const kind of ["Unicast", "Stream"] as const) {
          for (const extra of [
@@ -1377,7 +1404,6 @@ describe("validateChannelSpecs, renderer to utility channels", () => {
             { validate: ref },
             { trigger: "focus" },
             { maxQueue: 5 },
-            { timeoutMs: 5 },
          ]) {
             const [key] = Object.keys(extra);
             const base = kind === "Stream" ? chunked() : generate(kind);

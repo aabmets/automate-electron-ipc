@@ -191,19 +191,43 @@ export interface AskConfig<_S extends ChannelSignature = ChannelSignature> exten
 
 /**
  * Options of the channels between the main process and a utility process
- * (`callUtility`, `notifyUtility`, `callMain` and `notifyMain`). There are none yet.
+ * (`callUtility`, `notifyUtility`, `callMain` and `notifyMain`). See `UtilityCallConfig` for the
+ * options of the two that wait for an answer. `notifyUtility` and `notifyMain` have none.
  */
 export interface UtilityConfig<_S extends ChannelSignature = ChannelSignature> {
    [option: string]: never;
 }
 
 /**
+ * Options of `callUtility` and `callMain` channels.
+ *
+ * @property timeoutMs - A non-negative integer literal. After this many milliseconds without a
+ *    reply, the promise of the call is rejected with an `IpcUtilityError` with the code
+ *    `IPC_UTILITY_TIMEOUT`. The handler is not stopped, and its late reply is dropped. `0` turns the
+ *    timeout off for this channel, also when the `timeoutMs` of the `autoipc` config in
+ *    `package.json` sets a default.
+ */
+export interface UtilityCallConfig<_S extends ChannelSignature = ChannelSignature> {
+   timeoutMs?: number;
+}
+
+/**
  * Options of the channels between a renderer and a utility process (`invokeUtility` and
  * `streamUtility`). See `ScopedConfig` for `scopes`, which decides which windows have the channel in
  * their API. The main process pairs a window with a child in `connect`, whatever the scope is.
+ *
+ * @property timeoutMs - A non-negative integer literal. After this many milliseconds without a
+ *    reply, the promise of `ipc.<name>.invoke` is rejected with the plain object
+ *    `{ name: "IpcUtilityError", message, code: "IPC_UTILITY_TIMEOUT" }`. The timer starts when the
+ *    page makes the call, so it covers the wait for the connection too. The handler in the child
+ *    is not stopped, and its late reply is dropped. `0` turns the timeout off for this channel, also
+ *    when the `timeoutMs` of the `autoipc` config in `package.json` sets a default. On a
+ *    `streamUtility` channel, see `UtilityStreamConfig`.
  */
 export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignature>
-   extends ScopedConfig {}
+   extends ScopedConfig {
+   timeoutMs?: number;
+}
 
 /**
  * Options of `streamUtility` channels. See `UtilityPortConfig`.
@@ -211,6 +235,12 @@ export interface UtilityPortConfig<_S extends ChannelSignature = ChannelSignatur
  * @property highWaterMark - The most chunks that the generator in the child may be ahead of the
  *    page. See `StreamConfig`. The window is per call, though all the streams of a channel share
  *    one port.
+ * @property timeoutMs - A non-negative integer literal. A stream that has not sent its first
+ *    chunk, its end or an error after this many milliseconds is cancelled in the child, and the
+ *    read of the page is rejected with the plain object `{ name: "IpcUtilityError", message, code:
+ *    "IPC_UTILITY_TIMEOUT" }`. A stream that has begun is not cut short, since a slow reader holds
+ *    the generator back on purpose. Unlike for the calls, the `timeoutMs` of the config in
+ *    `package.json` is not a default for it: `0`, the default, waits for ever.
  */
 export interface UtilityStreamConfig<S extends ChannelSignature = ChannelSignature>
    extends UtilityPortConfig<S> {
@@ -433,13 +463,14 @@ export function mainPort<S extends ChannelSignature = never>(
  * The promise is rejected with an `IpcUtilityError` that carries the `name`, `message`, `code`
  * and `data` of what the handler threw. The library itself uses the codes `IPC_UTILITY_EXITED`
  * (the child exited, also while the call was pending), `IPC_UTILITY_NO_HANDLER`,
- * `IPC_UTILITY_UNSENDABLE` and `IPC_UTILITY_INVALID_REPLY`.
+ * `IPC_UTILITY_UNSENDABLE`, `IPC_UTILITY_INVALID_REPLY` and `IPC_UTILITY_TIMEOUT` (see `timeoutMs`
+ * of `UtilityCallConfig`).
  *
  * @example
  * indexFile: callUtility<(path: string) => Promise<number>>()
  */
 export function callUtility<S extends ChannelSignature = never>(
-   config?: UtilityConfig<NoInfer<S>>,
+   config?: UtilityCallConfig<NoInfer<S>>,
 ): ChannelResult<S>;
 
 /**
@@ -466,7 +497,7 @@ export function notifyUtility<S extends ChannelSignature = never>(
  * getSetting: callMain<(key: string) => Promise<string | undefined>>()
  */
 export function callMain<S extends ChannelSignature = never>(
-   config?: UtilityConfig<NoInfer<S>>,
+   config?: UtilityCallConfig<NoInfer<S>>,
 ): ChannelResult<S>;
 
 /**
@@ -498,8 +529,8 @@ export function notifyMain<S extends ChannelSignature = never>(
  * The promise is rejected with the plain object `{ name, message, code?, data? }` of what the
  * handler threw, as that of `invoke`. The library itself uses the codes `IPC_UTILITY_EXITED` (the
  * connection closed, also while the call was pending, and a call on a closed connection),
- * `IPC_UTILITY_NO_HANDLER`, `IPC_UTILITY_UNSENDABLE` and `IPC_UTILITY_INVALID_REPLY`. The
- * optional second type argument lists the error types, like that of `invoke`.
+ * `IPC_UTILITY_NO_HANDLER`, `IPC_UTILITY_UNSENDABLE`, `IPC_UTILITY_INVALID_REPLY` and
+ * `IPC_UTILITY_TIMEOUT` (see `timeoutMs` of `UtilityPortConfig`). The optional second type argument lists the error types, like that of `invoke`.
  *
  * @example
  * queryRows: invokeUtility<(sql: string) => Promise<Row[]>, DatabaseError>()

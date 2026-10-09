@@ -134,6 +134,53 @@ const scenarios: Record<string, Scenario> = {
       return { whilePending, afterwards, sendAfterwards };
    },
 
+   timeouts: async (ctx) => {
+      const describeFailure = (error: any, main: any) => ({
+         isUtilityError: error instanceof main.IpcUtilityError,
+         name: error.name,
+         code: error.code,
+         channel: error.channel,
+      });
+      const child = await ctx.fork(() => {
+         ipc.hangTimed.handle(() => new Promise(() => undefined));
+         ipc.delayed.handle(async (ms: number) => {
+            await new Promise((resolve) => setTimeout(resolve, ms));
+            return `after ${ms}`;
+         });
+         ipc.viaMain.handle(async (key: string) => {
+            try {
+               await ipc.hangSetting.invoke(key);
+               return "no error";
+            } catch (error: any) {
+               return JSON.stringify({
+                  isUtilityError: error instanceof IpcUtilityError,
+                  code: error.code,
+                  channel: error.channel,
+               });
+            }
+         });
+      });
+      const started = Date.now();
+      const hung = await ctx.ipc.hangTimed.invoke(child).then(
+         () => null,
+         (error: any) => describeFailure(error, ctx.main),
+      );
+      const waited = Date.now() - started;
+      // A call that is answered in time is not affected, and the late reply of a call that timed
+      // out is dropped without disturbing the next call.
+      const inTime = await ctx.ipc.delayed.invoke(child, 10);
+      const late = await ctx.ipc.delayed.invoke(child, 600).then(
+         () => null,
+         (error: any) => describeFailure(error, ctx.main),
+      );
+      await ctx.sleep(500);
+      const afterLate = await ctx.ipc.delayed.invoke(child, 10);
+      // The main process never answers the call of the child.
+      ctx.ipc.hangSetting.handle(child, () => new Promise(() => undefined));
+      const fromChild = JSON.parse(await ctx.ipc.viaMain.invoke(child, "theme"));
+      return { hung, waited, inTime, late, afterLate, fromChild };
+   },
+
    fromChild: async (ctx) => {
       const seen: unknown[] = [];
       let settingCalls = 0;
@@ -252,6 +299,32 @@ describeElectron("utility channels in Electron", "electron-utility", scenarios, 
       });
       expect(result.afterwards).toMatchObject({ code: "IPC_UTILITY_EXITED" });
       expect(result.sendAfterwards).toMatchObject({ code: "IPC_UTILITY_EXITED" });
+   });
+
+   it("rejects a call that the handler does not answer in time with IPC_UTILITY_TIMEOUT, and drops its late reply", () => {
+      const result = group.value("timeouts");
+      expect(result.hung).toStrictEqual({
+         isUtilityError: true,
+         name: "IpcUtilityError",
+         code: "IPC_UTILITY_TIMEOUT",
+         channel: "autoipc:hangTimed",
+      });
+      expect(result.waited).toBeGreaterThanOrEqual(250);
+      expect(result.waited).toBeLessThan(5000);
+      expect(result.inTime).toBe("after 10");
+      expect(result.late).toMatchObject({
+         code: "IPC_UTILITY_TIMEOUT",
+         channel: "autoipc:delayed",
+      });
+      expect(result.afterLate).toBe("after 10");
+   });
+
+   it("rejects a call of the child that the main process does not answer in time", () => {
+      expect(group.value("timeouts").fromChild).toStrictEqual({
+         isUtilityError: true,
+         code: "IPC_UTILITY_TIMEOUT",
+         channel: "autoipc:hangSetting",
+      });
    });
 
    it("delivers the notifications of the child, and the calls of the child to the main process", () => {

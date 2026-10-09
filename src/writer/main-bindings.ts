@@ -2260,7 +2260,7 @@ export class MainBindingsWriter extends BaseWriter {
             name: spec.name,
             members: [
                `\n${i1}invoke: ${typeParams}(${params(childParam)}): ${returned} =>`,
-               `\n${i2}callUtilityPeer(${peer}, ${wire}, ${rest}) as ${returned},`,
+               `\n${i2}callUtilityPeer(${peer}, ${wire}, ${rest}${this.getTimeoutArgument(spec)}) as ${returned},`,
             ],
          };
       }

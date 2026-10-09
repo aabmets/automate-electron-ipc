@@ -436,7 +436,7 @@ export class UtilityBindingsWriter extends BaseWriter {
             name: spec.name,
             members: [
                `\n${i1}invoke: ${typeParams}(${params}): ${returned} =>`,
-               `\n${i2}callUtilityPeer(getUtilityPeer(), ${wire}, ${rest}) as ${returned},`,
+               `\n${i2}callUtilityPeer(getUtilityPeer(), ${wire}, ${rest}${this.getTimeoutArgument(spec)}) as ${returned},`,
             ],
          };
       }

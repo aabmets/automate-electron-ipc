@@ -183,7 +183,7 @@ export class RendererTypesWriter extends BaseWriter {
               `${i0}/** The error that the library rejects a call to a utility process with, apart from the errors of the handler. */`,
               `${i0}type IpcUtilityError = Error & {`,
               `${i1}name: 'IpcUtilityError';`,
-              `${i1}code: 'IPC_UTILITY_EXITED' | 'IPC_UTILITY_UNSENDABLE' | 'IPC_UTILITY_INVALID_REPLY' | 'IPC_UTILITY_NO_HANDLER' | 'IPC_UTILITY_NOT_ITERABLE';`,
+              `${i1}code: 'IPC_UTILITY_EXITED' | 'IPC_UTILITY_UNSENDABLE' | 'IPC_UTILITY_INVALID_REPLY' | 'IPC_UTILITY_NO_HANDLER' | 'IPC_UTILITY_NOT_ITERABLE' | 'IPC_UTILITY_TIMEOUT';`,
               `${i0}};`,
            ].join("\n")
          : "";
