@@ -13,4 +13,11 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   not exported is resolved to its target.
 - **Tests:** the `it.fails` of `T90` in `tests/test_e2e/generatorFindings.test.ts` turn into
   passing tests, with the fixtures `decorators` and `import-equals`.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `parseModule` passes `decorators: true`. `import X = ...` is a new
+  `alias` kind of type spec: an exported alias (or one exported by `export { X }`) is imported from the
+  schema file, one that is not exported carries `aliasOf` and the writers use its target, so
+  `Models.User` or `Models_2.User` when the namespace is imported under another name. The require
+  form `import X = require("./m")` that is not exported is recorded as a namespace import. The
+  it.fails of T90 moved to `tests/test_e2e/ipcAutomation.test.ts`, with the fixtures
+  `import-equals-local` and `import-equals-require` added. Not covered: `import X = Ns.Y` inside a
+  namespace body, and `export =` in a schema file.

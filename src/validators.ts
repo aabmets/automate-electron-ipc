@@ -638,19 +638,35 @@ export function validateTypeSpecs(
       isExported: boolean(),
       isDefault: optional(boolean()),
       exportedAs: optional(string()),
+      aliasOf: optional(string()),
    });
    for (const spec of specs) {
       assert(spec, TypeSpecStruct);
    }
+   // An alias of `import X = Ns.Y` that is not exported is resolved to its target in the generated
+   // files, so the head of the target, and not the alias, is what a channel uses.
+   const aliasHeads = new Map<string, string>();
    for (const spec of specs as t.TypeSpec[]) {
-      if (spec.isExported) {
+      if (!spec.isExported && spec.aliasOf !== undefined) {
+         aliasHeads.set(spec.name, spec.aliasOf.split(".")[0]);
+      }
+   }
+   const usedNames = (cs: t.ChannelSpec): Set<string> => {
+      const used = new Set<string>();
+      const written = [...cs.signature.customTypes, ...(cs.errors?.customTypes ?? [])];
+      for (const name of written.map((entry) => entry.split(".")[0])) {
+         for (let n: string | undefined = name; n !== undefined && !used.has(n); ) {
+            used.add(n);
+            n = aliasHeads.get(n);
+         }
+      }
+      return used;
+   };
+   for (const spec of specs as t.TypeSpec[]) {
+      if (spec.isExported || aliasHeads.has(spec.name)) {
          continue;
       }
-      const channel = channelSpecs.find((cs) =>
-         [...cs.signature.customTypes, ...(cs.errors?.customTypes ?? [])].some(
-            (name) => name.split(".")[0] === spec.name,
-         ),
-      );
+      const channel = channelSpecs.find((cs) => usedNames(cs).has(spec.name));
       if (channel) {
          const subject =
             spec.kind === "value"

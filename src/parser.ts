@@ -58,7 +58,12 @@ export type TypeDefinitionNode =
 const BOM = 0xfeff;
 
 export function parseModule(code: string): { module: Module; src: Source } {
-   const module = parseSync(code, { syntax: "typescript", target: "esnext" });
+   const module = parseSync(code, {
+      // Decorators (an ORM entity in a model file of the schema directory) are only syntax here.
+      syntax: "typescript",
+      decorators: true,
+      target: "esnext",
+   });
    // swc spans are 1-based offsets into the source of each parse call, counted in UTF-8 bytes
    // and not in UTF-16 code units, and swc does not count a leading BOM.
    const base = 1;
@@ -173,12 +178,17 @@ export function isBuiltinType(typeName: string, locals?: ReadonlySet<string>): b
 
 /**
  * The names that a schema file binds at module level and may use as types: every import
- * (named, default and namespace) and every interface, type alias, enum, namespace and class.
+ * (named, default, namespace and `import X = ...`) and every interface, type alias, enum,
+ * namespace and class.
  */
 export function collectModuleBindings(module: Module): Set<string> {
    const names = new Set<string>();
    for (const node of module.body) {
       const item = node as AstNode;
+      if (item.type === "TsImportEqualsDeclaration") {
+         names.add(item.id.value);
+         continue;
+      }
       if (item.type === "ImportDeclaration") {
          for (const element of item.specifiers as AstNode[]) {
             names.add(element.local.value);
@@ -1488,6 +1498,43 @@ export function parseImportDeclarations(
    }
 }
 
+/** The dotted text of an entity name: `Models.User` for `Models.User`. */
+function entityNameText(name: AstNode): string {
+   return name.type === "TsQualifiedName"
+      ? `${entityNameText(name.left)}.${name.right.value}`
+      : name.value;
+}
+
+/**
+ * Records the name that `import X = Ns.Y` or `import X = require("./m")` declares. An exported
+ * alias is a declaration of the schema file, which the generated files import from it, like
+ * `export type X = ...`. One that is not exported is not visible outside of the schema file, so
+ * the generated files resolve it to its target: `Ns.Y` for the first form, and for the second
+ * the namespace import `import * as X from "./m"`.
+ */
+export function parseImportEquals(
+   item: AstNode,
+   importSpecs: t.ImportSpec[],
+   typeSpecs: t.TypeSpec[],
+): void {
+   const name: string = item.id.value;
+   const moduleRef = item.moduleRef as AstNode;
+   const isRequire = moduleRef.type === "TsExternalModuleReference";
+   if (item.isExport) {
+      typeSpecs.push({ name, kind: "alias", generics: null, isExported: true });
+   } else if (isRequire) {
+      importSpecs.push({ fromPath: moduleRef.expression.value, customTypes: [], namespace: name });
+   } else {
+      typeSpecs.push({
+         name,
+         kind: "alias",
+         generics: null,
+         isExported: false,
+         aliasOf: entityNameText(moduleRef),
+      });
+   }
+}
+
 /** The declaration of a module item, unwrapping `export` and `export default`. */
 function declarationOf(item: AstNode): AstNode {
    return item.type === "ExportDeclaration"
@@ -1660,6 +1707,8 @@ export function parseSpecs(fileData: t.RawFileContents): t.SpecsCollection {
       const item = node as AstNode;
       if (item.type === "ImportDeclaration") {
          parseImportDeclarations(item as ImportDeclaration, src, importSpecArray);
+      } else if (item.type === "TsImportEqualsDeclaration") {
+         parseImportEquals(item, importSpecArray, typeSpecArray);
       } else if (isTypeDefinition(item)) {
          parseTypeDefinitions(item as TypeDefinitionNode, src, typeSpecArray);
       } else if (item.type === "ExportDeclaration" && isTypeDefinition(item.declaration)) {
@@ -1696,6 +1745,7 @@ export default {
    parseSignature,
    parseChannelMapModule,
    parseImportDeclarations,
+   parseImportEquals,
    parseTypeDefinitions,
    parseValueDefinitions,
    applyExportSpecifiers,

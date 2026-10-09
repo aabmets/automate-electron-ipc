@@ -830,4 +830,86 @@ describe("ImportsGenerator", () => {
          expect(value.declaration).toBe('import { idArgs as idArgs_2 } from "./validators";');
       });
    });
+
+   describe("aliases of import-equals", () => {
+      const alias = (name: string, aliasOf: string): t.TypeSpec => ({
+         name,
+         kind: "alias",
+         generics: null,
+         isExported: false,
+         aliasOf,
+      });
+      const file = (
+         typeSpecArray: t.TypeSpec[],
+         namespaces: [string, string][] = [["Models", "./models"]],
+         fullPath = "/project/src/autoipc/schema.ts",
+      ): t.ParsedFileSpecs => ({
+         fullPath,
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: namespaces.map(([namespace, fromPath]) => ({
+               fromPath,
+               customTypes: [],
+               namespace,
+            })),
+            typeSpecArray,
+         },
+      });
+      const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
+
+      it("imports the head of the target, and renames the alias to the target", () => {
+         const pfs = file([alias("User", "Models.User")]);
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "User")).toBe('import type * as Models from "./models";');
+         expect(ig.getDeclaration(pfs, "Models.User")).toBeNull();
+         expect([...ig.getRenames(pfs)]).toStrictEqual([["User", "Models.User"]]);
+      });
+
+      it("follows a chain of aliases and a qualified use of an alias", () => {
+         const pfs = file([alias("Point", "Shapes.Point"), alias("Shapes", "Models.Shapes")]);
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "Point")).toBe('import type * as Models from "./models";');
+         expect(ig.getDeclaration(pfs, "Shapes.Point")).toBeNull();
+         expect(Object.fromEntries(ig.getRenames(pfs))).toStrictEqual({
+            Point: "Models.Shapes.Point",
+            Shapes: "Models.Shapes",
+         });
+      });
+
+      it("uses the local name that the namespace is imported under", () => {
+         const ig = generator();
+         const other = file([], [["Models", "./other"]], "/project/src/autoipc/other.ts");
+         ig.getDeclaration(other, "Models");
+         const pfs = file([alias("User", "Models.User")]);
+         expect(ig.getDeclaration(pfs, "User")).toBe('import type * as Models_2 from "./models";');
+         expect(Object.fromEntries(ig.getRenames(pfs))).toStrictEqual({
+            Models: "Models_2",
+            User: "Models_2.User",
+         });
+      });
+
+      it("needs no import for a target that the schema file does not bind", () => {
+         const pfs = file([alias("Env", "NodeJS.ProcessEnv")], []);
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "Env")).toBeNull();
+         expect(Object.fromEntries(ig.getRenames(pfs))).toStrictEqual({ Env: "NodeJS.ProcessEnv" });
+      });
+
+      it("imports the declaration of an alias that is exported", () => {
+         const exported = { ...alias("User", "Models.User"), isExported: true };
+         const ig = generator();
+         expect(ig.getDeclaration(file([exported]), "User")).toBe(
+            'import type { User } from "./schema";',
+         );
+      });
+
+      it("does not loop on aliases that refer to one another", () => {
+         const pfs = file([alias("A", "B.X"), alias("B", "A.Y")], []);
+         const ig = generator();
+         expect(ig.getDeclaration(pfs, "A")).toBeNull();
+         expect(() => ig.getRenames(pfs)).not.toThrow();
+      });
+   });
 });

@@ -974,6 +974,34 @@ describe("validateTypeSpecs", () => {
       ).toThrowError("Type 'VitestInterface' is used by channel 'vitestChannel'");
    });
 
+   describe("aliases of import-equals", () => {
+      const alias = (name: string, aliasOf: string, isExported = false) => ({
+         name,
+         kind: "alias" as t.TypeKind,
+         generics: null,
+         isExported,
+         aliasOf,
+      });
+
+      it("should accept an alias that is not exported, since it is resolved to its target", () => {
+         const spec = alias("User", "Models.User");
+         expect(vld.validateTypeSpecs([spec], [channelUsing("User")])).toStrictEqual([spec]);
+      });
+
+      it("should throw when the target of an alias, through a chain, is not exported", () => {
+         const specs = [alias("Point", "Shapes.Point"), alias("Shapes", "Hidden"), hiddenSpec];
+         const hidden = { ...hiddenSpec, name: "Hidden" };
+         expect(() =>
+            vld.validateTypeSpecs([...specs.slice(0, 2), hidden], [channelUsing("Point")]),
+         ).toThrowError("Type 'Hidden' is used by channel 'vitestChannel' and must be exported");
+      });
+
+      it("should accept aliases that refer to one another", () => {
+         const specs = [alias("A", "B.X"), alias("B", "A.Y")];
+         expect(vld.validateTypeSpecs(specs, [channelUsing("A")])).toStrictEqual(specs);
+      });
+   });
+
    it("should accept a type that is exported under another name", () => {
       const spec = { ...hiddenSpec, isExported: true, exportedAs: "Public" };
       expect(vld.validateTypeSpecs([spec], [channelUsing("VitestInterface")])).toStrictEqual([

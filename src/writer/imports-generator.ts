@@ -60,6 +60,8 @@ export class ImportsGenerator {
    private readonly bindings = new Map<string, Binding>();
    private readonly usedNames: Set<string>;
    private readonly resolved = new Map<string, Binding | null>();
+   /** The names being resolved, which stops aliases that refer to one another. */
+   private readonly resolving = new Set<string>();
    private readonly renames = new Map<string, Map<string, string>>();
 
    /**
@@ -224,6 +226,10 @@ export class ImportsGenerator {
       if (this.resolved.has(memoKey)) {
          return this.resolved.get(memoKey) ?? null;
       }
+      const alias = this.findAlias(pfs, name);
+      if (alias !== null) {
+         return this.resolveAlias(pfs, name, alias, memoKey);
+      }
       const target = this.findTarget(pfs, name);
       let binding: Binding | null = null;
       if (target) {
@@ -239,6 +245,50 @@ export class ImportsGenerator {
             fileRenames.set(name, binding.local);
             this.renames.set(pfs.fullPath, fileRenames);
          }
+      }
+      this.resolved.set(memoKey, binding);
+      return binding;
+   }
+
+   /**
+    * The qualified name that `name` stands for, when the schema file declares it with
+    * `import X = Ns.Y` and does not export it. Such a name cannot be imported from the schema
+    * file, so the generated files use its target in its place.
+    */
+   private findAlias(pfs: t.ParsedFileSpecs, name: string): string | null {
+      const { importSpecArray, typeSpecArray } = pfs.specs;
+      if (importSpecArray.some((spec) => spec.namespace === name)) {
+         return null;
+      }
+      const spec = typeSpecArray.find((item) => item.name === name);
+      return spec && !spec.isExported && spec.aliasOf !== undefined ? spec.aliasOf : null;
+   }
+
+   /**
+    * Resolves a name of `import X = Ns.Y` to the binding of the head of its target, and records
+    * that the signatures use the target in place of the name: `Ns.Y`, or `Ns_2.Y` when the head
+    * is imported under another name. The binding is the one of the target, since it is what the
+    * generated file imports.
+    */
+   private resolveAlias(
+      pfs: t.ParsedFileSpecs,
+      name: string,
+      target: string,
+      memoKey: string,
+   ): Binding | null {
+      if (this.resolving.has(memoKey)) {
+         return null;
+      }
+      this.resolving.add(memoKey);
+      const head = target.split(".")[0];
+      const binding = this.resolve(pfs, head);
+      this.resolving.delete(memoKey);
+      // The head may be an alias itself, which is renamed to its own target.
+      const fileRenames = this.renames.get(pfs.fullPath) ?? new Map<string, string>();
+      const replacement = `${fileRenames.get(head) ?? binding?.local ?? head}${target.slice(head.length)}`;
+      if (replacement !== name) {
+         fileRenames.set(name, replacement);
+         this.renames.set(pfs.fullPath, fileRenames);
       }
       this.resolved.set(memoKey, binding);
       return binding;

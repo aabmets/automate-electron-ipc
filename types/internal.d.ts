@@ -116,8 +116,12 @@ export interface ImportSpec {
    namespace: string | null;
 }
 
-/** "value" is a variable or function, which a signature can only refer to through `typeof`. */
-export type TypeKind = "type" | "interface" | "enum" | "class" | "namespace" | "value";
+/**
+ * "value" is a variable or function, which a signature can only refer to through `typeof`.
+ * "alias" is the name that `import X = ...` declares, which may stand for a type, a value or a
+ * namespace.
+ */
+export type TypeKind = "type" | "interface" | "enum" | "class" | "namespace" | "value" | "alias";
 
 export interface TypeSpec {
    name: string;
@@ -128,6 +132,11 @@ export interface TypeSpec {
    isDefault?: boolean;
    /** The name of `export { X as Y }`, which is imported as `Y as X`. */
    exportedAs?: string;
+   /**
+    * The qualified name that `import X = Ns.Y` makes `X` stand for: `Ns.Y`. Set for aliases of
+    * entity names. The generated files use it when the alias is not exported.
+    */
+   aliasOf?: string;
 }
 
 export interface CallableParam {

@@ -367,6 +367,55 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
    });
 });
 
+describe("ipcAutomation, decorators and import-equals in schema files", () => {
+   // Regression for T90: swc parsed without `decorators: true`, so a decorated class was a
+   // syntax error.
+   it("parses a schema file with a decorated class", async () => {
+      project = await runFixture("decorators");
+      expect(project.generated["main.ts"]).toContain("getUser");
+      expect(await project.typecheck({ experimentalDecorators: false })).toBe("");
+   });
+
+   // Regression for T90: `export import User = Models.User` bound a name that no generated file
+   // imported.
+   it("imports the name of an exported import-equals alias from the schema file", async () => {
+      project = await runFixture("import-equals");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(project.generated[file]).toContain('import type { User } from "./schema";');
+      }
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("resolves an alias that is not exported to its target", async () => {
+      project = await runFixture("import-equals-local");
+      const { generated } = project;
+      expect(generated["main.ts"]).toContain("Promise<Models.User>");
+      expect(generated["main.ts"]).toContain("point: Models.Shapes.Point");
+      // The alias is no declaration of the schema file, so the generated files cannot import it.
+      expect(generated["main.ts"]).not.toMatch(/import type \{[^}]*\bUser\b[^}]*\} from/);
+      expect(generated["main.ts"]).not.toMatch(/import type \{[^}]*\bPoint\b[^}]*\} from/);
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("keeps the aliases of two schema files apart when their targets share a name", async () => {
+      project = await runFixture("import-equals-local");
+      const { generated } = project;
+      expect(generated["main.ts"]).toContain('import type * as Models from "./types/models";');
+      expect(generated["main.ts"]).toContain('import type * as Models_2 from "./types/other";');
+      expect(generated["main.ts"]).toContain("Promise<Models_2.User>");
+      expect(generated["window.d.ts"]).toContain("Promise<Models_2.User>");
+   });
+
+   it("imports the module of an import-equals require alias", async () => {
+      project = await runFixture("import-equals-require");
+      const { generated } = project;
+      expect(generated["main.ts"]).toContain('import type * as Models from "./models.js";');
+      expect(generated["main.ts"]).toContain('import type { Exported } from "./schema.js";');
+      // The require form is not valid in an ES module, so the fixture is a CommonJS project.
+      expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
+   });
+});
+
 describe("ipcAutomation, typeof of values declared in the schema file", () => {
    // Regression for T62: `typeof config` of a value in the schema file got no import (TS2304).
    it("imports the exported values under the names that the schema exports", async () => {
