@@ -91,7 +91,9 @@ const scenarios: Record<string, Scenario> = {
    // A renderer that crashed can never answer, and its contents are not destroyed.
    askCrashedRenderer: async (ctx) => {
       const win = await ctx.open();
-      win.webContents.forcefullyCrashRenderer();
+      // Not forcefullyCrashRenderer: under the Chromium sandbox of some kernels (WSL2) the renderer
+      // hangs in its crash handler instead of exiting, and Electron never sees it go.
+      process.kill(win.webContents.getOSProcessId(), "SIGKILL");
       await ctx.waitFor(() => win.webContents.isCrashed());
       const state = { value: "pending" };
       ctx.ipc.double.invoke(win, 2).then(
