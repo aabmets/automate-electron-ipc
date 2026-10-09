@@ -234,3 +234,29 @@ describe("ImportsGenerator", () => {
       });
    });
 });
+
+describe("ImportsGenerator, getFileImportPath", () => {
+   it("writes the path of a file in the project relative to the generated file", () => {
+      const ig = new ImportsGenerator(false, "/p/src/autoipc/main.ts");
+
+      expect(ig.getFileImportPath("/p/src/autoipc/serializer.ts")).toBe("./serializer");
+      expect(ig.getFileImportPath("/p/src/lib/serializer.ts")).toBe("../lib/serializer");
+      // A module script does not resolve without its extension, under any module resolution.
+      expect(ig.getFileImportPath("/p/src/autoipc/util/wire.mts")).toBe("./util/wire.mjs");
+      expect(ig.getFileImportPath("/p/src/autoipc/util/wire.cts")).toBe("./util/wire.cjs");
+   });
+
+   it("keeps dots that belong to the name of the file", () => {
+      const ig = new ImportsGenerator(false, "/p/src/autoipc/main.ts");
+
+      expect(ig.getFileImportPath("/p/src/autoipc/wire.codec.ts")).toBe("./wire.codec");
+   });
+
+   it("writes the extension of the compiled file with NodeNext", () => {
+      const ig = new ImportsGenerator(true, "/p/src/autoipc/main.ts");
+
+      expect(ig.getFileImportPath("/p/src/lib/serializer.ts")).toBe("../lib/serializer.js");
+      expect(ig.getFileImportPath("/p/src/lib/serializer.mts")).toBe("../lib/serializer.mjs");
+      expect(ig.getFileImportPath("/p/src/lib/serializer")).toBe("../lib/serializer.js");
+   });
+});

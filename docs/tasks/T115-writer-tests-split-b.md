@@ -14,4 +14,12 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `renderer-types.test.ts` became six files (callables, ports-and-names,
+  errors-and-timeouts, api-and-scopes, asks-and-streams, utility), `service-worker-bindings.test.ts`
+  five (channels, timeouts, validation, preload, types), `serializer.test.ts` four (page-and-main,
+  workers, utility, ports-and-names), and `utility-bindings.test.ts` keeps the main-process cases while
+  the renderer cases moved to `utility-bindings.renderer.test.ts`. Shared fixtures went to
+  `tests/utils/serializer-utils.ts`, `service-worker-writer-utils.ts` and `utility-writer-utils.ts`.
+  The `getFileImportPath` block of the serializer file tested `ImportsGenerator`, not the serializer,
+  so it moved to `imports-generator.paths.test.ts`. The 485 tests of `tests/test_writer` are the same
+  before and after (no `it.fails` or `it.skip`); the four files left `size-baseline.json`.
