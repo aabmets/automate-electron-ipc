@@ -25,4 +25,14 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   `abortedNavigation`) and of `tests/test_electron/utilityPorts.test.ts` (`abortedNavigation`)
   turn into passing tests. The fakes of the unit tests fire the events in the order that Electron
   does, including the `did-finish-load` of an error page.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `watchPageLoad` listens to `did-navigate` (a main-frame commit; Electron fires it
+  only for a new document) instead of `did-start-navigation`, to reset the state. `did-finish-load`
+  and `did-stop-loading` ignore a load after a main-frame `did-fail-load`, and a failure other than
+  ERR_ABORTED (-3) also marks the page as not loaded. Electron fires no `did-navigate` for an error
+  page, which the next committed load clears. The `abortedNavigation` scenario of `ports.test.ts`
+  returned its `main` array by reference, so the close of the window at the end of the scenario
+  leaked in; it returns a copy now. The unit-test fakes got `commitNavigation`, `failLoading` and
+  `abortNavigation` (`tests/utils/runtime-utils.ts`), and `finishLoading` emits `did-navigate`. One
+  consequence: while a navigation has started but not committed, the old page still counts as
+  loaded, so a `connect` in that window pairs the old page, which the commit then replaces and the
+  load pairs again.

@@ -1865,7 +1865,9 @@ export class MainBindingsWriter extends BaseWriter {
     * `loadURL` has resolved, until `did-stop-loading`. So the page counts as loaded from every
     * `did-finish-load`, and from the `did-stop-loading` of a load that `did-finish-load` has not
     * reported, such as one that finished before the watch began. A failed main-frame load does not
-    * count. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
+    * count, nor does the error page that Electron shows for it. The state of the load resets only
+    * when a main-frame navigation commits (`did-navigate`), so one that never commits changes
+    * nothing. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
     * page and are not loading.
     */
    private buildPageLoadWatch(): string {
@@ -1882,19 +1884,27 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}// Whether the load that is going on has been reported already.`,
          `${i1}let settled = !contents.isDestroyed() && !contents.isLoading();`,
          `${i1}let failed = false;`,
-         `${i1}const start = (details?: { isMainFrame?: boolean; isSameDocument?: boolean }) => {`,
-         `${i2}if (details?.isMainFrame && !details.isSameDocument) {`,
-         `${i3}loaded = false;`,
-         `${i3}settled = false;`,
-         `${i3}failed = false;`,
-         `${i2}}`,
+         `${i1}// A main-frame navigation that commits replaces the document. One that starts and stops`,
+         `${i1}// without a commit (a prevented one, a download, a 204 response) leaves the page as it was.`,
+         `${i1}const commit = () => {`,
+         `${i2}loaded = false;`,
+         `${i2}settled = false;`,
+         `${i2}failed = false;`,
          `${i1}};`,
-         `${i1}const fail = (_event: unknown, _code: number, _description: string, _url: string, isMainFrame: boolean) => {`,
+         `${i1}// A failed load ends in the error page of Electron, which fires its own did-finish-load.`,
+         `${i1}// ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded.`,
+         `${i1}const fail = (_event: unknown, code: number, _description: string, _url: string, isMainFrame: boolean) => {`,
          `${i2}if (isMainFrame) {`,
          `${i3}failed = true;`,
+         `${i3}if (code !== -3) {`,
+         `${i4}loaded = false;`,
+         `${i3}}`,
          `${i2}}`,
          `${i1}};`,
          `${i1}const finish = () => {`,
+         `${i2}if (failed) {`,
+         `${i3}return;`,
+         `${i2}}`,
          `${i2}loaded = true;`,
          `${i2}settled = true;`,
          `${i2}onLoad();`,
@@ -1904,7 +1914,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}finish();`,
          `${i2}}`,
          `${i1}};`,
-         `${i1}contents.on('did-start-navigation', start);`,
+         `${i1}contents.on('did-navigate', commit);`,
          `${i1}contents.on('did-fail-load', fail);`,
          `${i1}contents.on('did-finish-load', finish);`,
          `${i1}contents.on('did-stop-loading', stop);`,
@@ -1913,7 +1923,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}dispose: () => {`,
          `${i3}// Destroyed contents have dropped their listeners, and cannot be reached.`,
          `${i3}if (!contents.isDestroyed()) {`,
-         `${i4}contents.off('did-start-navigation', start);`,
+         `${i4}contents.off('did-navigate', commit);`,
          `${i4}contents.off('did-fail-load', fail);`,
          `${i4}contents.off('did-finish-load', finish);`,
          `${i4}contents.off('did-stop-loading', stop);`,

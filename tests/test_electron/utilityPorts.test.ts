@@ -523,9 +523,7 @@ describeElectron("utility ports in Electron", "electron-utility-ports", scenario
       expect(failed).toStrictEqual([]);
    });
 
-   // T85: the did-stop-loading of a navigation that never committed counts as a new load, so the
-   // live page is paired again and its pending call fails as replaced.
-   it.fails("leaves the port of a page alone when a navigation of it does not commit", () => {
+   it("leaves the port of a page alone when a navigation of it does not commit", () => {
       expect(group.value("abortedNavigation")).toStrictEqual({
          before: 7,
          marker: "same document",

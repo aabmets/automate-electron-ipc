@@ -12,8 +12,10 @@
 import { EventEmitter } from "node:events";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
+   abortNavigation,
    createFakeElectron,
    createFakePreloadElectron,
+   failLoading,
    finishLoading,
    loadGenerated,
    settlePorts,
@@ -209,6 +211,81 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          expect(onReady).toHaveBeenCalledOnce();
       });
 
+      it("does not pair the error page of a failed load, and pairs the next page that loads", async () => {
+         const ipc = await loadMain();
+         const contents = createContents({ loading: true, url: "" });
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         connection.send("queued");
+
+         startLoading(contents);
+         failLoading(contents);
+         expect(onReady).not.toHaveBeenCalled();
+         expect(contents.postMessage).not.toHaveBeenCalled();
+
+         startLoading(contents);
+         finishLoading(contents);
+         expect(onReady).toHaveBeenCalledOnce();
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+      });
+
+      it("does not pair the error page of a load that fails after a page was loaded", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         onReady.mockClear();
+
+         startLoading(contents);
+         failLoading(contents);
+         expect(onReady).not.toHaveBeenCalled();
+
+         startLoading(contents);
+         finishLoading(contents);
+         expect(onReady).toHaveBeenCalledOnce();
+      });
+
+      it("leaves the page alone when a navigation of it starts and stops without a commit", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         const onClose = vi.fn();
+         connection.onReady(onReady);
+         connection.onClose(onClose);
+         onReady.mockClear();
+         const made = channelsMade.length;
+
+         abortNavigation(contents);
+         abortNavigation(contents);
+
+         expect(onReady).not.toHaveBeenCalled();
+         expect(onClose).not.toHaveBeenCalled();
+         expect(channelsMade).toHaveLength(made);
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+      });
+
+      it("keeps the page that was loaded when a navigation is aborted with a failure", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         onReady.mockClear();
+
+         startLoading(contents);
+         contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "app://x", true);
+         contents.loading = false;
+         contents.emit("did-stop-loading");
+         expect(onReady).not.toHaveBeenCalled();
+
+         startLoading(contents);
+         finishLoading(contents);
+         expect(onReady).toHaveBeenCalledOnce();
+      });
+
       it("does not pair again when only a subframe, or only the document, navigates", async () => {
          const ipc = await loadMain();
          const contents = createContents();
@@ -216,9 +293,11 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
 
          contents.loading = true;
          contents.emit("did-start-navigation", { isMainFrame: false, isSameDocument: false });
+         contents.emit("did-frame-navigate", {}, "app://frame", 200, "OK", false);
          contents.loading = false;
          contents.emit("did-stop-loading");
          contents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+         contents.emit("did-navigate-in-page", {}, "app://page#x", true);
          contents.emit("did-stop-loading");
 
          expect(contents.postMessage).toHaveBeenCalledOnce();
@@ -230,7 +309,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          ipc.logTail.connect(contents).close();
 
          for (const event of [
-            "did-start-navigation",
+            "did-navigate",
             "did-fail-load",
             "did-finish-load",
             "did-stop-loading",
@@ -633,12 +712,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
    // Regression for T78, which found that `connect` of a `port` channel leaves entries behind when
    // its second window is destroyed. A `mainPort` channel takes one target, and resolves it first.
    describe("a target that was destroyed before connect", () => {
-      const eventsOf = [
-         "did-start-navigation",
-         "did-fail-load",
-         "did-finish-load",
-         "did-stop-loading",
-      ];
+      const eventsOf = ["did-navigate", "did-fail-load", "did-finish-load", "did-stop-loading"];
 
       /** A window like the one of Electron: once it is destroyed, its `webContents` getter throws. */
       const destroyedWindow = () => ({

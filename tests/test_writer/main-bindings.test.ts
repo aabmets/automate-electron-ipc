@@ -965,19 +965,27 @@ describe("MainBindingsWriter", () => {
             // Whether the load that is going on has been reported already.
             let settled = !contents.isDestroyed() && !contents.isLoading();
             let failed = false;
-            const start = (details?: { isMainFrame?: boolean; isSameDocument?: boolean }) => {
-               if (details?.isMainFrame && !details.isSameDocument) {
-                  loaded = false;
-                  settled = false;
-                  failed = false;
-               }
+            // A main-frame navigation that commits replaces the document. One that starts and stops
+            // without a commit (a prevented one, a download, a 204 response) leaves the page as it was.
+            const commit = () => {
+               loaded = false;
+               settled = false;
+               failed = false;
             };
-            const fail = (_event: unknown, _code: number, _description: string, _url: string, isMainFrame: boolean) => {
+            // A failed load ends in the error page of Electron, which fires its own did-finish-load.
+            // ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded.
+            const fail = (_event: unknown, code: number, _description: string, _url: string, isMainFrame: boolean) => {
                if (isMainFrame) {
                   failed = true;
+                  if (code !== -3) {
+                     loaded = false;
+                  }
                }
             };
             const finish = () => {
+               if (failed) {
+                  return;
+               }
                loaded = true;
                settled = true;
                onLoad();
@@ -987,7 +995,7 @@ describe("MainBindingsWriter", () => {
                   finish();
                }
             };
-            contents.on('did-start-navigation', start);
+            contents.on('did-navigate', commit);
             contents.on('did-fail-load', fail);
             contents.on('did-finish-load', finish);
             contents.on('did-stop-loading', stop);
@@ -996,7 +1004,7 @@ describe("MainBindingsWriter", () => {
                dispose: () => {
                   // Destroyed contents have dropped their listeners, and cannot be reached.
                   if (!contents.isDestroyed()) {
-                     contents.off('did-start-navigation', start);
+                     contents.off('did-navigate', commit);
                      contents.off('did-fail-load', fail);
                      contents.off('did-finish-load', finish);
                      contents.off('did-stop-loading', stop);

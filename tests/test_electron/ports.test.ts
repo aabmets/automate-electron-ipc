@@ -277,7 +277,7 @@ const scenarios: Record<string, Scenario> = {
       return { events: await ctx.evaluate(win, () => (window as any).events), warnings };
    },
 
-   // The scenarios below find T85 and T87. They read the state after a pause, as the ones above.
+   // The scenarios below find T85 (fixed) and T87. They read the state after a pause, as the ones above.
 
    // A main-frame load fails, and Electron shows its error page, with a did-finish-load of its own.
    mainPortFailedLoad: async (ctx) => {
@@ -329,7 +329,9 @@ const scenarios: Record<string, Scenario> = {
             marker: (window as any).marker,
             events: (window as any).events,
          }));
-      return { main, log: await page(log), chatA: await page(chatA), chatB: await page(chatB) };
+      const pages = { log: await page(log), chatA: await page(chatA), chatB: await page(chatB) };
+      // A copy: the scenario is over when the result is read, and the connection closes with its window.
+      return { main: [...main], ...pages };
    },
 
    // Eleven connections of one window, such as one per channel, are normal use.
@@ -463,9 +465,7 @@ function body(group: ElectronGroup) {
          expect(group.value("mainPortBounded").events).toStrictEqual([3, 4, 5]);
       });
 
-      // T85: watchPageLoad takes the did-finish-load of the error page for a load, and pairs the
-      // error page, which flushes the queue into a port that no page reads.
-      it.fails("does not pair the error page of a failed load, and keeps the queue for the next page", () => {
+      it("does not pair the error page of a failed load, and keeps the queue for the next page", () => {
          expect(group.value("mainPortFailedLoad")).toStrictEqual({
             failure: "ERR_UNSAFE_PORT",
             afterFailure: [],
@@ -474,9 +474,7 @@ function body(group: ElectronGroup) {
       });
    });
 
-   // T85: did-start-navigation resets the state of the load, so the did-stop-loading of a
-   // navigation that never committed pairs the page again.
-   it.fails("leaves the ports of a page alone when a navigation of it does not commit", () => {
+   it("leaves the ports of a page alone when a navigation of it does not commit", () => {
       expect(group.value("abortedNavigation")).toStrictEqual({
          main: ["ready"],
          log: { marker: "same document", events: [["ready"]] },

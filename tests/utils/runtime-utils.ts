@@ -76,12 +76,40 @@ export function startLoading(contents: LoadingContents) {
    contents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
 }
 
+/** The main-frame navigation commits, which replaces the document: Electron fires `did-navigate`. */
+export function commitNavigation(contents: LoadingContents) {
+   contents.emit("did-navigate", {}, "app://page", 200, "OK");
+}
+
 /**
- * The page finishes loading the way Electron reports it: `isLoading()` is still true while
- * `did-finish-load` fires, and turns false only at `did-stop-loading`.
+ * The page finishes loading the way Electron reports it: the navigation commits, `isLoading()` is
+ * still true while `did-finish-load` fires, and turns false only at `did-stop-loading`.
  */
 export function finishLoading(contents: LoadingContents) {
+   commitNavigation(contents);
    contents.emit("did-finish-load");
+   contents.loading = false;
+   contents.emit("did-stop-loading");
+}
+
+/**
+ * A main-frame load fails the way Electron reports it: `did-fail-load`, then the
+ * `did-finish-load` of the error page, which Electron shows without a `did-navigate`, and
+ * `did-stop-loading`.
+ */
+export function failLoading(contents: LoadingContents, code = -105) {
+   contents.emit("did-fail-load", {}, code, "ERR_FAILED", "app://x", true);
+   contents.emit("did-finish-load");
+   contents.loading = false;
+   contents.emit("did-stop-loading");
+}
+
+/**
+ * A main-frame navigation starts and stops without a commit, such as one that `will-navigate`
+ * prevents, a download or a 204 response: no `did-navigate` and no `did-finish-load`.
+ */
+export function abortNavigation(contents: LoadingContents) {
+   startLoading(contents);
    contents.loading = false;
    contents.emit("did-stop-loading");
 }

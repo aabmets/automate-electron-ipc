@@ -15,10 +15,12 @@
 import { EventEmitter } from "node:events";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
+   abortNavigation,
    callablePaths,
    createFakeElectron,
    createFakePreloadElectron,
    createSource,
+   failLoading,
    finishLoading,
    loadGenerated,
    settlePorts,
@@ -248,6 +250,36 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       contents.emit("did-stop-loading");
 
       expect(channelsMade).toHaveLength(0);
+   });
+
+   it("does not pair the error page of a failed load, and pairs the next page that loads", async () => {
+      const ipc = await loadMain();
+      const child = createChild();
+      const contents = createContents({ loading: true, url: "" });
+      ipc.queryRows.connect(child, contents);
+
+      startLoading(contents);
+      failLoading(contents);
+      expect(channelsMade).toHaveLength(0);
+
+      startLoading(contents);
+      finishLoading(contents);
+      expect(channelsMade).toHaveLength(1);
+      expect(contents.postMessage).toHaveBeenCalledTimes(1);
+   });
+
+   it("leaves the page alone when a navigation of it starts and stops without a commit", async () => {
+      const ipc = await loadMain();
+      const child = createChild();
+      const contents = createContents();
+      ipc.queryRows.connect(child, contents);
+      expect(channelsMade).toHaveLength(1);
+
+      abortNavigation(contents);
+
+      expect(channelsMade).toHaveLength(1);
+      expect(child.postMessage).toHaveBeenCalledTimes(1);
+      expect(contents.postMessage).toHaveBeenCalledTimes(1);
    });
 
    it("ends the connection with close: the page is told with the key, and nothing is paired later", async () => {

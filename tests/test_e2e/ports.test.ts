@@ -12,8 +12,11 @@
 import { EventEmitter } from "node:events";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
+   abortNavigation,
+   commitNavigation,
    createFakeElectron,
    createFakePreloadElectron,
+   failLoading,
    finishLoading,
    loadGenerated,
    settlePorts,
@@ -74,7 +77,7 @@ function createStrictWindow(state: Parameters<typeof createWindow>[0] = {}) {
 }
 
 /** The events that `connect` listens to on a window and on its contents. */
-const loadEvents = ["did-start-navigation", "did-fail-load", "did-finish-load", "did-stop-loading"];
+const loadEvents = ["did-navigate", "did-fail-load", "did-finish-load", "did-stop-loading"];
 
 /** How many listeners `connect` has left on a window and on its contents. */
 function listenersOn(win: FakeWindow) {
@@ -206,6 +209,7 @@ describe("ipc.<name>.connect", () => {
       ipc.chat.connect(one, two);
 
       startLoading(two.webContents);
+      commitNavigation(two.webContents);
       finishLoading(one.webContents);
 
       expect(posted(one)).toHaveLength(1);
@@ -251,6 +255,8 @@ describe("ipc.<name>.connect", () => {
          ipc.chat.connect(one, two);
          startLoading(one.webContents);
          startLoading(two.webContents);
+         commitNavigation(one.webContents);
+         commitNavigation(two.webContents);
 
          finishLoading(one.webContents);
          expect(posted(one)).toHaveLength(1);
@@ -303,6 +309,59 @@ describe("ipc.<name>.connect", () => {
          expect(posted(failing)).toHaveLength(0);
       });
 
+      it("does not pair the error page of a failed load, and pairs when the next page loads", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const failing = createWindow();
+         startLoading(failing.webContents);
+         ipc.chat.connect(one, failing);
+
+         failLoading(failing.webContents);
+         expect(posted(one)).toHaveLength(0);
+         expect(posted(failing)).toHaveLength(0);
+
+         startLoading(failing.webContents);
+         finishLoading(failing.webContents);
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(failing)).toHaveLength(1);
+      });
+
+      it("does not pair the error page of a window that failed after it was paired", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         ipc.chat.connect(one, two);
+         expect(posted(two)).toHaveLength(1);
+
+         startLoading(two.webContents);
+         failLoading(two.webContents);
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
+
+         startLoading(two.webContents);
+         finishLoading(two.webContents);
+         expect(posted(one)).toHaveLength(2);
+         expect(posted(two)).toHaveLength(2);
+      });
+
+      it("leaves the windows alone when a navigation starts and stops without a commit", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         const connection = ipc.chat.connect(one, two);
+         const onClose = vi.fn();
+         connection.onClose?.(onClose);
+
+         abortNavigation(one.webContents);
+         abortNavigation(two.webContents);
+
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
+         expect(one.webContents.send).not.toHaveBeenCalled();
+         expect(two.webContents.send).not.toHaveBeenCalled();
+         expect(onClose).not.toHaveBeenCalled();
+      });
+
       it("pairs on the stop of a load after a subframe failed to load", async () => {
          const ipc = await loadMain();
          const one = createWindow();
@@ -329,6 +388,7 @@ describe("ipc.<name>.connect", () => {
             isMainFrame: false,
             isSameDocument: false,
          });
+         two.webContents.emit("did-frame-navigate", {}, "app://frame", 200, "OK", false);
          two.webContents.loading = false;
          two.webContents.emit("did-stop-loading");
 
@@ -343,6 +403,7 @@ describe("ipc.<name>.connect", () => {
          ipc.chat.connect(one, two);
 
          two.webContents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+         two.webContents.emit("did-navigate-in-page", {}, "app://page#x", true);
          two.webContents.emit("did-stop-loading");
 
          expect(posted(two)).toHaveLength(1);
@@ -357,7 +418,7 @@ describe("ipc.<name>.connect", () => {
          connection.close();
 
          for (const event of [
-            "did-start-navigation",
+            "did-navigate",
             "did-fail-load",
             "did-finish-load",
             "did-stop-loading",
