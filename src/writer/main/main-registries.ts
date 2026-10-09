@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { anySpec } from "../channel-kinds.js";
 
 /**
  * The registries of the generated `main.ts` which the channels from a renderer consult: the scopes
@@ -21,10 +22,9 @@ import type * as t from "@types";
  * the main process (`invoke`, `send` and `stream`) with `scopes`.
  */
 export function hasScopedGuards(pfsArray: t.ParsedFileSpecs[]): boolean {
-   return pfsArray.some((pfs) =>
-      pfs.specs.channelSpecArray.some(
-         (spec) => spec.direction === "RendererToMain" && spec.scopes !== undefined,
-      ),
+   return anySpec(
+      pfsArray,
+      (spec) => spec.direction === "RendererToMain" && spec.scopes !== undefined,
    );
 }
 

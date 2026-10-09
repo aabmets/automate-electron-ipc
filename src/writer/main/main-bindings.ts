@@ -22,23 +22,17 @@ import {
 } from "../channel-kinds.js";
 import { collectIdentifiers, uniqueName } from "../param-names.js";
 import { buildSerializerImport } from "../utility/utility-runtime.js";
+import { collectMainChannels, hasChannels, hasPorts, usesEventWatch } from "./main-collect.js";
 import {
    addScopeImports,
    addStreamImports,
    addTargetImports,
    buildImports,
-   getImportedTypes,
    getIpcMainImport,
-   importCustomTypes,
 } from "./main-imports.js";
-import { buildOffPageChannels, type OffPageUse } from "./main-off-page.js";
-import { buildPort } from "./main-ports.js";
 import { hasScopedGuards } from "./main-registries.js";
-import { buildRendererToMainChannel, getEventType, hasEnvelope } from "./main-renderer-channels.js";
 import { getMainReservedNames } from "./main-reserved-names.js";
-import { buildMainToRendererChannel, getSenderTypes } from "./main-senders.js";
 import { buildSupport } from "./main-support.js";
-import { importValidator } from "./main-validation.js";
 import { addWorkerImports } from "./main-workers.js";
 
 export interface ChannelEntry {
@@ -100,11 +94,11 @@ export class MainBindingsWriter extends BaseWriter {
    }
    protected getReservedNames(): string[] {
       return getMainReservedNames({
-         rendererPorts: this.hasPorts("RendererToRenderer"),
-         mainPorts: this.hasPorts("MainToRenderer"),
+         rendererPorts: hasPorts(this.pfsArray, "RendererToRenderer"),
+         mainPorts: hasPorts(this.pfsArray, "MainToRenderer"),
          brokered: hasBrokeredChannels(this.pfsArray),
          serializer: this.usesSerializer(),
-         eventWatch: this.usesEventWatch(),
+         eventWatch: usesEventWatch(this.pfsArray),
          utility: hasUtilityChannels(this.pfsArray),
          workers: hasWorkerChannels(this.pfsArray),
       });
@@ -124,100 +118,41 @@ export class MainBindingsWriter extends BaseWriter {
       return "export const ipc = {};";
    }
    protected renderFileContents(): string {
-      // Only the imports that the generated code uses.
-      let usesIpcMain = false;
-      const electronImportsSet = new Set<string>();
-      const electronTypeImportsSet = new Set<string>();
-      const importDeclarationsArray: string[] = [];
-      const channels: ChannelEntry[] = [];
-      let usesValidation = false;
-      let usesEnvelope = false;
-      let usesSenders = false;
-      let usesStreams = false;
-      const offPage: OffPageUse = {
-         utility: false,
-         brokers: false,
-         envelope: false,
-         workers: [],
-         validators: new Map(),
-      };
-      const eventTypes = new Set<string>();
-
-      for (const parsedFileSpecs of this.pfsArray) {
-         let customTypes: Set<string> = new Set();
-
-         for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (spec.kind === "Port") {
-               channels.push(buildPort(this.ctx, spec, electronImportsSet, electronTypeImportsSet));
-            } else if (spec.direction === "RendererToMain") {
-               usesIpcMain = true;
-               electronTypeImportsSet.add(getEventType(spec));
-               eventTypes.add(getEventType(spec));
-               usesEnvelope ||= hasEnvelope(this.ctx, spec);
-               usesStreams ||= spec.kind === "Stream";
-               const validator = importValidator(
-                  this.importsGenerator,
-                  parsedFileSpecs,
-                  spec,
-                  importDeclarationsArray,
-               );
-               usesValidation ||= validator !== null;
-               channels.push(buildRendererToMainChannel(this.ctx, spec, validator));
-            } else if (spec.direction === "MainToRenderer") {
-               usesSenders = true;
-               electronImportsSet.add("webContents as electronWebContents");
-               for (const type of getSenderTypes(spec)) {
-                  electronTypeImportsSet.add(type);
-               }
-               channels.push(buildMainToRendererChannel(this.ctx, spec));
-            } else {
-               const validator = importValidator(
-                  this.importsGenerator,
-                  parsedFileSpecs,
-                  spec,
-                  importDeclarationsArray,
-               );
-               if (validator !== null) {
-                  offPage.validators.set(spec, validator);
-               }
-               channels.push(
-                  ...buildOffPageChannels(
-                     this.ctx,
-                     spec,
-                     electronImportsSet,
-                     electronTypeImportsSet,
-                     offPage,
-                  ),
-               );
-            }
-            const specCustomTypes = new Set(getImportedTypes(spec, isBrokeredSpec(spec)));
-            customTypes = customTypes.union(specCustomTypes);
-         }
-         importCustomTypes(
-            this.importsGenerator,
-            parsedFileSpecs,
-            customTypes,
-            importDeclarationsArray,
-         );
-      }
-      usesEnvelope ||= offPage.envelope;
+      const {
+         channels,
+         electronImports,
+         electronTypeImports,
+         importDeclarations,
+         eventTypes,
+         offPage,
+         usesIpcMain,
+         usesValidation,
+         usesEnvelope,
+         usesSenders,
+         usesStreams,
+      } = collectMainChannels(
+         this.ctx,
+         this.importsGenerator,
+         this.pfsArray,
+         this.getChannelSpecs.bind(this),
+      );
       if (this.hasSerializedChannels()) {
-         importDeclarationsArray.push(buildSerializerImport(this.config, this.importsGenerator));
+         importDeclarations.push(buildSerializerImport(this.config, this.importsGenerator));
       }
-      addWorkerImports(offPage.workers, electronTypeImportsSet);
-      addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
-      addTargetImports(usesIpcMain, electronTypeImportsSet);
+      addWorkerImports(offPage.workers, electronTypeImports);
+      addStreamImports(usesStreams, electronImports, electronTypeImports);
+      addTargetImports(usesIpcMain, electronTypeImports);
       const scopes = collectScopes(this.pfsArray);
-      addScopeImports(scopes.length > 0, electronTypeImportsSet);
-      const usesAsks = this.hasChannels("Unicast");
-      const usesEmits = this.hasChannels("Broadcast");
-      const usesRendererPorts = this.hasPorts("RendererToRenderer");
-      const usesMainPorts = this.hasPorts("MainToRenderer");
+      addScopeImports(scopes.length > 0, electronTypeImports);
+      const usesAsks = hasChannels(this.pfsArray, "Unicast");
+      const usesEmits = hasChannels(this.pfsArray, "Broadcast");
+      const usesRendererPorts = hasPorts(this.pfsArray, "RendererToRenderer");
+      const usesMainPorts = hasPorts(this.pfsArray, "MainToRenderer");
       const usesPorts = usesRendererPorts || usesMainPorts;
       const out = buildImports(
-         [...getIpcMainImport(usesIpcMain || usesAsks || usesPorts), ...electronImportsSet],
-         [...electronTypeImportsSet],
-         importDeclarationsArray,
+         [...getIpcMainImport(usesIpcMain || usesAsks || usesPorts), ...electronImports],
+         [...electronTypeImports],
+         importDeclarations,
       );
       const [i0] = this.indents;
       const bindingsExpression = buildSupport(
@@ -240,7 +175,7 @@ export class MainBindingsWriter extends BaseWriter {
             workerValidators: offPage.validators,
             scopes,
             usesScopedGuards: hasScopedGuards(this.pfsArray),
-            usesEventWatch: this.usesEventWatch(),
+            usesEventWatch: usesEventWatch(this.pfsArray),
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -252,37 +187,5 @@ export class MainBindingsWriter extends BaseWriter {
 
       out.push(bindingsExpression.join(""));
       return this.joinComponents(out);
-   }
-   /** Whether any schema file declares a channel of the kind from the main process to a renderer. */
-   private hasChannels(kind: t.ChannelKind): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some(
-            (spec) => spec.direction === "MainToRenderer" && spec.kind === kind,
-         ),
-      );
-   }
-   /**
-    * Whether the generated code watches events of contents, windows or children for the calls or
-    * connections it holds open: `ask`, `stream`, `port` and `mainPort` channels, and the brokered
-    * channels of a utility process.
-    */
-   private usesEventWatch(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some(
-            (spec) =>
-               spec.kind === "Port" ||
-               (spec.kind === "Stream" && spec.direction === "RendererToMain") ||
-               (spec.kind === "Unicast" && spec.direction === "MainToRenderer") ||
-               isBrokeredSpec(spec),
-         ),
-      );
-   }
-   /** Whether any schema file declares a port channel with the direction. */
-   private hasPorts(direction: t.ChannelDirection): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some(
-            (spec) => spec.kind === "Port" && spec.direction === direction,
-         ),
-      );
    }
 }

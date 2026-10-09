@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 118 delivered, 22 remaining, 1 dropped.
+**Progress:** 119 delivered, 21 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -152,7 +152,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T124: Group the source and test modules into directories](./tasks/T124-group-modules-into-directories.md) · depends on: T123
 - [x] [T125: Named imports instead of default export objects, and dead exports](./tasks/T125-named-imports-and-dead-exports.md) · depends on: T124
 - [x] [T126: Split `src/utils.ts`, and one helper for posix paths](./tasks/T126-split-utils-and-posix-paths.md) · depends on: T124
-- [ ] [T127: Extract the channel collection of `MainBindingsWriter`, and an `anySpec` helper](./tasks/T127-main-writer-channel-collection.md) · depends on: T124
+- [x] [T127: Extract the channel collection of `MainBindingsWriter`, and an `anySpec` helper](./tasks/T127-main-writer-channel-collection.md) · depends on: T124
 - [ ] [T128: Duplication in config resolution and validation](./tasks/T128-config-resolution-duplication.md) · depends on: T126
 - [ ] [T129: One schema source loop in `ipcAutomation`](./tasks/T129-one-schema-source-loop.md) · depends on: T126
 - [ ] [T130: One prefix for errors that name a schema file](./tasks/T130-schema-file-error-prefix.md) · depends on: T124

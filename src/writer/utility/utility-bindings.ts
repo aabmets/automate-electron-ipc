@@ -13,6 +13,7 @@ import type * as t from "@types";
 import utils from "../../utils.js";
 import { BaseWriter } from "../base-writer.js";
 import {
+   allSpecs,
    hasBrokeredChannels,
    hasUtilityChannels,
    isBrokeredSpec,
@@ -176,9 +177,7 @@ export class UtilityBindingsWriter extends BaseWriter {
    }
    /** The wire names of the channels between a page and the child, and their kinds. */
    private getBrokeredSpecs(): t.ChannelSpec[] {
-      return this.pfsArray.flatMap((pfs) =>
-         pfs.specs.channelSpecArray.filter((spec) => isBrokeredSpec(spec)),
-      );
+      return allSpecs(this.pfsArray).filter(isBrokeredSpec);
    }
    private buildBrokerServer(brokered: t.ChannelSpec[]): string {
       const channels = brokered

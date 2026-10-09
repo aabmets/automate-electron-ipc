@@ -11,6 +11,19 @@
 
 import type * as t from "@types";
 
+/** Whether any channel of the schema files satisfies the predicate. */
+export function anySpec(
+   pfsArray: t.ParsedFileSpecs[],
+   predicate: (spec: t.ChannelSpec) => boolean,
+): boolean {
+   return pfsArray.some((pfs) => pfs.specs.channelSpecArray.some(predicate));
+}
+
+/** The channels of all schema files, in the order of the files. */
+export function allSpecs(pfsArray: t.ParsedFileSpecs[]): t.ChannelSpec[] {
+   return pfsArray.flatMap((pfs) => pfs.specs.channelSpecArray);
+}
+
 /** Whether the channel is between the main process and a utility process. */
 export function isUtilitySpec(spec: t.ChannelSpec): boolean {
    return spec.direction === "MainToUtility" || spec.direction === "UtilityToMain";
@@ -26,14 +39,12 @@ export function isBrokeredSpec(spec: t.ChannelSpec): boolean {
 
 /** Whether any schema file declares a channel between a renderer and a utility process. */
 export function hasBrokeredChannels(pfsArray: t.ParsedFileSpecs[]): boolean {
-   return pfsArray.some((pfs) => pfs.specs.channelSpecArray.some((spec) => isBrokeredSpec(spec)));
+   return anySpec(pfsArray, isBrokeredSpec);
 }
 
 /** Whether any schema file declares a channel that a utility process takes part in. */
 export function hasUtilityChannels(pfsArray: t.ParsedFileSpecs[]): boolean {
-   return pfsArray.some((pfs) =>
-      pfs.specs.channelSpecArray.some((spec) => isUtilitySpec(spec) || isBrokeredSpec(spec)),
-   );
+   return anySpec(pfsArray, (spec) => isUtilitySpec(spec) || isBrokeredSpec(spec));
 }
 
 /** Whether the channel is between the main process and a service worker. */
@@ -43,7 +54,7 @@ export function isWorkerSpec(spec: t.ChannelSpec): boolean {
 
 /** Whether any schema file declares a channel that a service worker takes part in. */
 export function hasWorkerChannels(pfsArray: t.ParsedFileSpecs[]): boolean {
-   return pfsArray.some((pfs) => pfs.specs.channelSpecArray.some((spec) => isWorkerSpec(spec)));
+   return anySpec(pfsArray, isWorkerSpec);
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { anySpec } from "../channel-kinds.js";
 import type { ChannelEntry, PreloadContext } from "./preload-bindings.js";
 
 /** The property of the exposed object for a channel with one method. */
@@ -128,9 +129,7 @@ export function buildSerializerComponents(indents: string[]): string {
 
 /** `withTimeout`, if any channel needs it. */
 export function getTimeoutComponents(ctx: PreloadContext, pfsArray: t.ParsedFileSpecs[]): string[] {
-   const used = pfsArray.some((parsed) =>
-      parsed.specs.channelSpecArray.some((spec) => hasTimeout(ctx, spec)),
-   );
+   const used = anySpec(pfsArray, (spec) => hasTimeout(ctx, spec));
    return used ? [buildTimeoutComponents(ctx.indents)] : [];
 }
 

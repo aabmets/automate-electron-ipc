@@ -14,6 +14,7 @@ import path from "node:path";
 import type * as t from "@types";
 import { type Scope, scopedFilePath } from "../scopes.js";
 import utils from "../utils.js";
+import { anySpec } from "./channel-kinds.js";
 import { ImportsGenerator } from "./imports-generator.js";
 import { getOriginalParams } from "./param-names.js";
 import { renameChannelSpecs } from "./rename-signatures.js";
@@ -166,9 +167,7 @@ export class BaseWriter {
 
    /** Whether any channel of the file goes through the serializer, which the file then imports. */
    protected hasSerializedChannels(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some((spec) => this.isSerializedSpec(spec)),
-      );
+      return anySpec(this.pfsArray, (spec) => this.isSerializedSpec(spec));
    }
 
    protected getCodeIndents(): string[] {

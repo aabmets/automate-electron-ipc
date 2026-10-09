@@ -15,4 +15,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   event types, with `hasChannels`, `hasPorts` and `usesEventWatch`; `renderFileContents` only
   assembles.
 - **Tests:** Generated output byte-identical; same test count; `main-bindings.ts` under 280 lines.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `anySpec` and `allSpecs` are in `channel-kinds.ts` and replace all nine `pfsArray.some(...)` sites and the one `flatMap`/`filter`. The collection is `collectMainChannels` in the new `main-collect.ts`, with `hasChannels`, `hasPorts` and `usesEventWatch`; `main-bindings.ts` went from 288 to 191 lines. 3283 tests (4 new, for the two helpers).
