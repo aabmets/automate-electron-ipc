@@ -9,6 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import type * as t from "@types";
 
@@ -29,6 +30,12 @@ const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
    cts: ".cjs",
    cjs: ".cjs",
 };
+
+/**
+ * The script extensions of the index file of a directory, in the order that TypeScript tries
+ * them. The first one that exists names the file that `./models` stands for.
+ */
+const INDEX_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 /**
  * Extensions of the files that a schema file imports as they are, such as a JSON module. A
@@ -63,6 +70,8 @@ export class ImportsGenerator {
    /** The names being resolved, which stops aliases that refer to one another. */
    private readonly resolving = new Set<string>();
    private readonly renames = new Map<string, Map<string, string>>();
+   /** The index file of a directory (null: none), by the absolute path of the specifier. */
+   private readonly directoryIndexes = new Map<string, string | null>();
 
    /**
     * `reservedNames` are the names that the generated file declares or imports itself, such as
@@ -118,7 +127,45 @@ export class ImportsGenerator {
          // Packages and aliases do not depend on where the generated file is.
          return fromPath;
       }
-      return this.adjustImportPath(this.getImportPath(fromPath), sourceFilePath);
+      // NodeNext does not resolve a directory import, so the index file is named.
+      const specifier = this.projectUsesNodeNext
+         ? this.withDirectoryIndex(fromPath, sourceFilePath)
+         : fromPath;
+      return this.adjustImportPath(this.getImportPath(specifier), sourceFilePath);
+   }
+
+   /**
+    * The name of the index file (`index.ts`) that the relative specifier `fromPath` of a source
+    * file stands for, when the specifier has no script or data extension and names a directory
+    * that has an index file. A file of the same name wins over the directory, as it does in
+    * the compiler: `./models` is `models.ts` when both exist.
+    */
+   private directoryIndex(fromPath: string, sourceFilePath: string): string | null {
+      const target = path.resolve(path.dirname(sourceFilePath), fromPath);
+      const cached = this.directoryIndexes.get(target);
+      if (cached !== undefined) {
+         return cached;
+      }
+      const isFile = (file: string) => fs.statSync(file, { throwIfNoEntry: false })?.isFile();
+      let found: string | null = null;
+      if (
+         !(SCRIPT_EXTENSION.test(target) || DATA_EXTENSION.test(target)) &&
+         fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() &&
+         !INDEX_EXTENSIONS.some((ext) => isFile(`${target}${ext}`))
+      ) {
+         const ext = INDEX_EXTENSIONS.find((candidate) =>
+            isFile(path.join(target, `index${candidate}`)),
+         );
+         found = ext ? `index${ext}` : null;
+      }
+      this.directoryIndexes.set(target, found);
+      return found;
+   }
+
+   /** `fromPath`, followed by the index file when it names a directory that has one. */
+   private withDirectoryIndex(fromPath: string, sourceFilePath: string): string {
+      const index = this.directoryIndex(fromPath, sourceFilePath);
+      return index ? `${fromPath.replace(/\/+$/, "")}/${index}` : fromPath;
    }
 
    private adjustImportPath(importPath: string, sourceFilePath: string): string {
@@ -156,7 +203,8 @@ export class ImportsGenerator {
       if (!fromPath.startsWith(".")) {
          return fromPath;
       }
-      return this.scriptId(path.join(path.dirname(sourceFilePath), fromPath)).replaceAll(
+      const specifier = this.withDirectoryIndex(fromPath, sourceFilePath);
+      return this.scriptId(path.join(path.dirname(sourceFilePath), specifier)).replaceAll(
          path.sep,
          "/",
       );

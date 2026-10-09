@@ -515,6 +515,19 @@ describe("parseChannelMapModule", () => {
          expect(msg).toContain("must be exported");
       });
 
+      // T97: `export = channels` is not an export that the generated files can import.
+      it("rejects a map that is exported with 'export ='", () => {
+         const msg = parseError(
+            "const channels = defineChannels({ chan: invoke<() => void>() });\nexport = channels;",
+         );
+         expect(msg).toContain("schema.ts");
+         expect(msg).toContain("'export =' is not supported");
+         expect(msg).toContain("export default defineChannels");
+         expect(parseError("export = defineChannels({});")).toContain(
+            "'export =' is not supported",
+         );
+      });
+
       it("rejects a non-exported let and a call inside a function", () => {
          expect(parseError("let c = defineChannels({});")).toContain("must be exported");
          expect(parseError("export function f() { return defineChannels({}); }")).toContain(

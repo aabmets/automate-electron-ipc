@@ -1,0 +1,10 @@
+{
+   "name": "fixture-directory-imports",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "projectUsesNodeNext": true
+      }
+   }
+}

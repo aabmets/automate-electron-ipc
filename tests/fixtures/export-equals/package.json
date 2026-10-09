@@ -1,0 +1,10 @@
+{
+   "name": "fixture-export-equals",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "projectUsesNodeNext": true
+      }
+   }
+}

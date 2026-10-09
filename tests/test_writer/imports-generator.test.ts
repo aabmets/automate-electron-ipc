@@ -9,9 +9,12 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { ImportsGenerator } from "@src/writer/imports-generator.js";
 import type * as t from "@types";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 describe("ImportsGenerator", () => {
    it("generates valid import statement for types internal to the IPC schema", () => {
@@ -339,6 +342,122 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(pfs, "Foo")).toStrictEqual(
             'import type { Foo } from "./schema/user.model.js";',
          );
+      });
+   });
+
+   describe("directory imports", () => {
+      let root = "";
+      beforeEach(() => {
+         root = fs.mkdtempSync(path.join(tmpdir(), "vitest-dir-imports-"));
+      });
+      afterEach(() => {
+         fs.rmSync(root, { recursive: true, force: true });
+      });
+
+      const touch = (...segments: string[]) => {
+         const file = path.join(root, "ipc", ...segments);
+         fs.mkdirSync(path.dirname(file), { recursive: true });
+         fs.writeFileSync(file, "export {};\n");
+      };
+      const pfsOf = (...imports: string[]): t.ParsedFileSpecs => ({
+         fullPath: path.join(root, "ipc/schema.ts"),
+         relativePath: "",
+         specs: {
+            channelSpecArray: [],
+            channelMapExport: null,
+            importSpecArray: imports.map((fromPath, n) => ({
+               fromPath,
+               customTypes: [`Foo${n}`],
+               namespace: null,
+            })),
+            typeSpecArray: [],
+         },
+      });
+      const importOf = (fromPath: string, nodeNext: boolean) =>
+         new ImportsGenerator(nodeNext, path.join(root, "ipc/main.ts")).getDeclaration(
+            pfsOf(fromPath),
+            "Foo0",
+         );
+
+      // Regression for T97: NodeNext does not resolve "./models.js" to "./models/index.ts".
+      it("names the index file of a directory under NodeNext", () => {
+         touch("models/index.ts");
+         expect(importOf("./models", true)).toStrictEqual(
+            'import type { Foo0 } from "./models/index.js";',
+         );
+         expect(importOf("./models/", true)).toStrictEqual(
+            'import type { Foo0 } from "./models/index.js";',
+         );
+      });
+
+      it("leaves a directory import alone when the project does not use NodeNext", () => {
+         touch("models/index.ts");
+         expect(importOf("./models", false)).toStrictEqual('import type { Foo0 } from "./models";');
+      });
+
+      it("names the module extension of the index file", () => {
+         touch("esm/index.mts");
+         touch("cjs/index.cts");
+         touch("plain/index.js");
+         expect(importOf("./esm", true)).toContain('"./esm/index.mjs"');
+         expect(importOf("./cjs", true)).toContain('"./cjs/index.cjs"');
+         expect(importOf("./plain", true)).toContain('"./plain/index.js"');
+      });
+
+      it("resolves the directory relative to the schema file", () => {
+         touch("shared/models/index.ts");
+         const generator = new ImportsGenerator(true, path.join(root, "out/main.ts"));
+         expect(generator.getDeclaration(pfsOf("./shared/models"), "Foo0")).toStrictEqual(
+            'import type { Foo0 } from "../ipc/shared/models/index.js";',
+         );
+      });
+
+      it("prefers a file over a directory of the same name", () => {
+         touch("both.ts");
+         touch("both/index.ts");
+         expect(importOf("./both", true)).toStrictEqual('import type { Foo0 } from "./both.js";');
+      });
+
+      it("keeps the specifier of a directory without an index file", () => {
+         touch("empty/other.ts");
+         expect(importOf("./empty", true)).toStrictEqual('import type { Foo0 } from "./empty.js";');
+         expect(importOf("./missing", true)).toStrictEqual(
+            'import type { Foo0 } from "./missing.js";',
+         );
+      });
+
+      it("keeps a directory whose name has a data extension", () => {
+         touch("data.json/index.ts");
+         expect(importOf("./data.json", true)).toStrictEqual(
+            'import type { Foo0 } from "./data.json";',
+         );
+      });
+
+      it("imports a directory once, however it is spelled", () => {
+         touch("models/index.ts");
+         const pfs = pfsOf("./models", "./models/index", "./models/index.js");
+         pfs.specs.importSpecArray = pfs.specs.importSpecArray.map((spec) => ({
+            ...spec,
+            customTypes: ["Foo"],
+         }));
+         const generator = new ImportsGenerator(true, path.join(root, "ipc/main.ts"));
+         expect(generator.getDeclaration(pfs, "Foo")).toStrictEqual(
+            'import type { Foo } from "./models/index.js";',
+         );
+         expect(generator.getRenames(pfs).size).toBe(0);
+      });
+
+      it("resolves the directory of a namespace import and of an import type", () => {
+         touch("shapes/index.ts");
+         const pfs = pfsOf();
+         pfs.specs.importSpecArray = [
+            { fromPath: "./shapes", customTypes: [], namespace: "Shapes" },
+         ];
+         const generator = new ImportsGenerator(true, path.join(root, "ipc/main.ts"));
+         expect(generator.getDeclaration(pfs, "Shapes.Point")).toStrictEqual(
+            'import type * as Shapes from "./shapes/index.js";',
+         );
+         expect(generator.getImportTypePath(pfs, "./shapes")).toStrictEqual("./shapes/index.js");
       });
    });
 

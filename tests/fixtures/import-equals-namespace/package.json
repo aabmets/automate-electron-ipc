@@ -1,0 +1,9 @@
+{
+   "name": "fixture-import-equals-namespace",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc"
+      }
+   }
+}

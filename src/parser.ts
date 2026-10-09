@@ -1464,6 +1464,16 @@ export function parseChannelMapModule(
    const found =
       body.map((item) => findExportedMap(item, imports)).find((map) => map !== null) ??
       findIndirectlyExportedMap(body, imports);
+   if (!found && body.some((item) => item.type === "TsExportAssignment")) {
+      // `export = X` makes the module the value of X, which has no name for the generated files
+      // to import. It is a CommonJS form of `export default`.
+      throw new SchemaError(
+         file,
+         "'export =' is not supported in a schema file. " +
+            "Export the channels with 'export default defineChannels({...})' or " +
+            "'export const <name> = defineChannels({...})'.",
+      );
+   }
    if (!found || found.call !== calls[0]) {
       throw new SchemaError(
          file,

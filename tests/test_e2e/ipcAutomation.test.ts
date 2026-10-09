@@ -416,6 +416,50 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
    });
 });
 
+describe("ipcAutomation, directory imports, import-equals in namespaces and export =", () => {
+   // Regression for T97: "./models" became "./models.js" under NodeNext, which does not resolve
+   // to "./models/index.ts".
+   it("names the index file of a directory import under NodeNext", async () => {
+      project = await runFixture("directory-imports");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+         expect(imports).toContain('import type { User } from "./models/index.js";');
+         expect(imports).toContain('import type { Account } from "./models/index.js";');
+         expect(imports).toContain('import type * as Shapes from "./shapes/index.js";');
+         // A file of the same name wins over the directory.
+         expect(imports).toContain('import type { FromFile } from "./both.js";');
+         expect(project.generated[file]).toContain('import("./models/index.js").Account');
+         expect(project.generated[file]).not.toContain("./models.js");
+      }
+      expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
+   });
+
+   // The import-equals declarations of a namespace body are resolved by the compiler inside
+   // the schema file, so a signature reaches them through the exported namespace.
+   it("uses an import-equals alias that a namespace body declares", async () => {
+      project = await runFixture("import-equals-namespace");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         expect(project.generated[file]).toContain('import type { Api } from "./schema";');
+         expect(project.generated[file]).toContain("Promise<Api.User>");
+         expect(project.generated[file]).toContain("Promise<Api.Reply>");
+         expect(project.generated[file]).not.toMatch(/import type [^;]*\bModels\b/);
+      }
+      expect(await project.typecheck()).toBe("");
+   });
+
+   it("imports a module that has 'export =' with its namespace import", async () => {
+      project = await runFixture("export-equals");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+         expect(imports).toContain('import type * as Models from "./models.js";');
+         expect(imports).toContain('import type * as User from "./user.js";');
+         expect(imports).toContain('import type { Exported } from "./schema.js";');
+      }
+      // `import X = require()` is not valid in an ES module, so the fixture is a CommonJS project.
+      expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
+   });
+});
+
 describe("ipcAutomation, typeof of values declared in the schema file", () => {
    // Regression for T62: `typeof config` of a value in the schema file got no import (TS2304).
    it("imports the exported values under the names that the schema exports", async () => {
