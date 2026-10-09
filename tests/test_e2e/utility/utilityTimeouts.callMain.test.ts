@@ -11,12 +11,9 @@
 
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 
+import { createParentPort } from "@testutils/e2e/fake-utility.js";
 import { loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import {
-   createParentPort,
-   resetTimeoutFakes,
-   track,
-} from "@testutils/e2e/utility-timeout-utils.js";
+import { resetTimeoutFakes, track } from "@testutils/e2e/utility-timeout-utils.js";
 import { ok, wire } from "@testutils/e2e/wire-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -56,7 +53,7 @@ describe("timeouts of callMain, in the utility process", () => {
       const { ipc, posted, reply } = await load();
       const call = track(ipc.slowSetting.invoke("theme"));
 
-      reply("slowSetting", posted("slowSetting")[0].id, ok("dark"));
+      reply("slowSetting", posted("call", "slowSetting")[0].id, ok("dark"));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(call).toMatchObject({ status: "resolved", value: "dark" });
@@ -67,7 +64,7 @@ describe("timeouts of callMain, in the utility process", () => {
       vi.useFakeTimers();
       const { ipc, posted, reply } = await load();
       const call = track(ipc.slowSetting.invoke("theme"));
-      const id = posted("slowSetting")[0].id;
+      const id = posted("call", "slowSetting")[0].id;
 
       await vi.advanceTimersByTimeAsync(800);
       reply("slowSetting", id, ok("dark"));

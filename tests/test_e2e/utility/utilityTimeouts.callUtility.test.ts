@@ -11,13 +11,9 @@
 
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 
+import { createChild, setAttachChild } from "@testutils/e2e/fake-utility.js";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import {
-   createChild,
-   resetTimeoutFakes,
-   setAttachChild,
-   track,
-} from "@testutils/e2e/utility-timeout-utils.js";
+import { resetTimeoutFakes, track } from "@testutils/e2e/utility-timeout-utils.js";
 import { ok, wire } from "@testutils/e2e/wire-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -101,7 +97,7 @@ describe("timeouts of callUtility, in the main process", () => {
       const call = track(ipc.slowIndex.invoke(child, "a.txt"));
 
       await vi.advanceTimersByTimeAsync(500);
-      reply("slowIndex", posted("slowIndex")[0].id, ok(7));
+      reply("slowIndex", posted("call", "slowIndex")[0].id, ok(7));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(call).toMatchObject({ status: "resolved", value: 7 });
@@ -114,7 +110,7 @@ describe("timeouts of callUtility, in the main process", () => {
       const { child, posted, reply } = createChild();
       const call = track(ipc.slowIndex.invoke(child, "a.txt"));
 
-      reply("slowIndex", posted("slowIndex")[0].id, {
+      reply("slowIndex", posted("call", "slowIndex")[0].id, {
          ok: false,
          error: { name: "RangeError", message: "out", code: "E_RANGE" },
       });
@@ -130,7 +126,7 @@ describe("timeouts of callUtility, in the main process", () => {
       const { ipc } = await load();
       const { child, posted, reply } = createChild();
       const call = track(ipc.slowIndex.invoke(child, "a.txt"));
-      const id = posted("slowIndex")[0].id;
+      const id = posted("call", "slowIndex")[0].id;
 
       await vi.advanceTimersByTimeAsync(1000);
       reply("slowIndex", id, ok(7));
@@ -188,7 +184,7 @@ describe("timeouts of callUtility, in the main process", () => {
 
       expect(first.status).toBe("rejected");
       expect(second.status).toBe("pending");
-      reply("slowIndex", posted("slowIndex")[1].id, ok(2));
+      reply("slowIndex", posted("call", "slowIndex")[1].id, ok(2));
       await vi.advanceTimersByTimeAsync(0);
       expect(second).toMatchObject({ status: "resolved", value: 2 });
       expect(vi.getTimerCount()).toBe(0);

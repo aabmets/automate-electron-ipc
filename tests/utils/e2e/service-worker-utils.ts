@@ -84,9 +84,14 @@ export function createWorker(versionId = 1, scope = "app://main/") {
    };
 }
 
-/** A `Session` stand-in, whose workers start and stop on the command of the test. */
-export function createSession() {
-   const known = new Map<number, ReturnType<typeof createWorker>>();
+/**
+ * A `Session` stand-in, whose workers start and stop on the command of the test. The workers
+ * that are given run already, without an event.
+ */
+export function createSession(...workers: ReturnType<typeof createWorker>[]) {
+   const known = new Map<number, ReturnType<typeof createWorker>>(
+      workers.map((fake) => [fake.worker.versionId, fake]),
+   );
    const serviceWorkers = Object.assign(new EventEmitter(), {
       getAllRunning: vi.fn(() => Object.fromEntries([...known.keys()].map((id) => [id, {}]))),
       getWorkerFromVersionID: vi.fn((id: number) => known.get(id)?.worker),

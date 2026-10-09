@@ -11,6 +11,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { createChild, createParentPort } from "@testutils/e2e/fake-utility.js";
 import {
    callablePaths,
    createFakeElectron,
@@ -18,12 +19,7 @@ import {
    loadGenerated,
    windowIpcPaths,
 } from "@testutils/e2e/runtime-utils.js";
-import {
-   createChild,
-   createParentPort,
-   load,
-   resetUtilityFakes,
-} from "@testutils/e2e/utility-process-utils.js";
+import { load, resetUtilityFakes } from "@testutils/e2e/utility-process-utils.js";
 import { flush, wire } from "@testutils/e2e/wire-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { afterEach, describe, expect, it } from "vitest";

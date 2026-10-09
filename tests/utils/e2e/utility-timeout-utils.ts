@@ -9,10 +9,10 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { EventEmitter } from "node:events";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { FakePagePort } from "./fake-ports.js";
+import { resetUtilityProcessFakes } from "./fake-utility.js";
 import { wire } from "./wire-utils.js";
 
 /** Starts a call and watches how it settles, so that no rejection is left unhandled. */
@@ -33,46 +33,11 @@ export function track(promise: Promise<unknown>) {
    return state;
 }
 
-/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
-let attachChild: ((child: unknown) => void) | undefined;
-
-/** Sets the `attachUtility` that `createChild` attaches the children with. */
-export function setAttachChild(attach: (child: unknown) => void) {
-   attachChild = attach;
-}
-
 /** Undoes what the helpers and the tests set up. Call it from `afterEach`. */
 export function resetTimeoutFakes() {
-   attachChild = undefined;
+   resetUtilityProcessFakes();
    vi.useRealTimers();
-   Reflect.deleteProperty(process, "parentPort");
    vi.restoreAllMocks();
-}
-
-/** A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. */
-export function createChild() {
-   const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   attachChild?.(child);
-   const posted = (channel: string) =>
-      child.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((m) => m.__ipc === "call" && m.channel === wire(channel));
-   const reply = (channel: string, id: number, envelope: unknown) =>
-      child.emit("message", { __ipc: "reply", channel: wire(channel), id, envelope });
-   return { child, posted, reply };
-}
-
-/** A `process.parentPort` stand-in, which the code in the utility process uses. */
-export function createParentPort() {
-   const port = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   (process as unknown as { parentPort: unknown }).parentPort = port;
-   const posted = (channel: string) =>
-      port.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((m) => m.__ipc === "call" && m.channel === wire(channel));
-   const reply = (channel: string, id: number, envelope: unknown) =>
-      port.emit("message", { data: { __ipc: "reply", channel: wire(channel), id, envelope } });
-   return { port, posted, reply };
 }
 
 /** Loads the generated `preload.ts` with a fake Electron, and gives the page side of the ports. */

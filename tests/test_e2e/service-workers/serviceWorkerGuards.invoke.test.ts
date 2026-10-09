@@ -10,13 +10,12 @@
  */
 
 import {
-   createSession,
-   createWorker,
    loadGuardMain,
    oneNumber,
    oneString,
    schema,
 } from "@testutils/e2e/service-worker-guard-utils.js";
+import { createSession, createWorker } from "@testutils/e2e/service-worker-utils.js";
 import { flush, ok } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject } from "@testutils/e2e-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";

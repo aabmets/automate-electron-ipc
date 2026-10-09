@@ -18,49 +18,26 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
 import { createContents } from "./fake-contents.js";
-import { channelsMade, FakeChannelMain, FakePagePort, FakePortMain } from "./fake-ports.js";
+import { channelsMade, FakeChannelMain, FakePagePort } from "./fake-ports.js";
+import {
+   createChild,
+   createParentPort,
+   resetUtilityProcessFakes,
+   setAttachChild,
+} from "./fake-utility.js";
 import { closeWire, wire } from "./wire-utils.js";
 
-/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
-let attachChild: ((child: unknown) => void) | undefined;
 const rawPorts: MessagePort[] = [];
-
-/**
- * A `UtilityProcess` stand-in, which the main process pairs the page with. It is attached to the
- * bindings like a child from `forkUtility`, unless `attached` is false.
- */
-export function createChild({ attached = true } = {}) {
-   const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   if (attached) {
-      attachChild?.(child);
-   }
-   return child;
-}
 
 export async function loadMain(channelClass: unknown = FakeChannelMain) {
    const project = await fixtures.run("utility-ports");
    channelsMade.length = 0;
    const electron = { ...createFakeElectron(), MessageChannelMain: channelClass };
    const main = loadGenerated(project.generated["main.ts"], { electron });
-   attachChild = main.attachUtility;
+   setAttachChild(main.attachUtility);
    return main.ipc;
-}
-
-/** A `process.parentPort` stand-in, which the code in the utility process uses. */
-export function createParentPort() {
-   const port = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   (process as unknown as { parentPort: unknown }).parentPort = port;
-   /** The main process posts a message to the child, with the ports it transfers. */
-   const emitFromMain = (data: unknown, ports?: unknown[]) => port.emit("message", { data, ports });
-   /** The main process hands a brokered port to the child. */
-   const broker = (channel: string, key = "1:utility", brokerPort = new FakePortMain()) => {
-      emitFromMain({ __ipc: "port", channel: wire(channel), key }, [brokerPort]);
-      return brokerPort;
-   };
-   return { port, emitFromMain, broker };
 }
 
 export async function loadUtility() {
@@ -159,7 +136,7 @@ export async function loadAll() {
    const project = await fixtures.run("utility-ports");
    const electron = { ...createFakeElectron(), MessageChannelMain: RealChannelMain };
    const mainModule = loadGenerated(project.generated["main.ts"], { electron });
-   attachChild = mainModule.attachUtility;
+   setAttachChild(mainModule.attachUtility);
    const main = mainModule.ipc;
    const parent = createParentPort();
    const utility = loadGenerated(project.generated["utility.ts"] ?? "", {}).ipc;
@@ -171,7 +148,7 @@ export async function loadAll() {
          key: unknown,
       ) => void;
 
-   const child = createChild();
+   const { child } = createChild();
    child.postMessage.mockImplementation((message: unknown, ports?: unknown[]) =>
       parent.emitFromMain(message, ports),
    );
@@ -185,8 +162,7 @@ export async function loadAll() {
 
 /** Closes what the helpers of this module opened */
 export function cleanupUtilityPorts() {
-   attachChild = undefined;
-   Reflect.deleteProperty(process, "parentPort");
+   resetUtilityProcessFakes();
    for (const port of rawPorts.splice(0)) {
       port.close();
    }

@@ -9,51 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
-import { wire } from "./wire-utils.js";
-
-/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
-let attachChild: ((child: unknown) => void) | undefined;
-
-/**
- * A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. It is
- * attached to the bindings like a child from `forkUtility`, unless `attached` is false.
- */
-export function createChild({ attached = true } = {}) {
-   const child = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   if (attached) {
-      attachChild?.(child);
-   }
-   /** The messages that the main process posted to the child, with the given tag. */
-   const posted = (tag: string, channel?: string) =>
-      child.postMessage.mock.calls
-         .map(([message]) => message as Record<string, unknown>)
-         .filter((m) => m.__ipc === tag && (channel === undefined || m.channel === wire(channel)));
-   /** The child posts a message to the main process. */
-   const emitFromChild = (message: unknown) => child.emit("message", message);
-   return { child, posted, emitFromChild };
-}
-
-/** A `process.parentPort` stand-in, which the code in the utility process uses. */
-export function createParentPort() {
-   const port = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
-   (process as unknown as { parentPort: unknown }).parentPort = port;
-   const posted = (tag: string, channel?: string) =>
-      port.postMessage.mock.calls
-         .map(([message]) => message as Record<string, unknown>)
-         .filter((m) => m.__ipc === tag && (channel === undefined || m.channel === wire(channel)));
-   /** The main process posts a message to the child, which arrives as `{ data }`. */
-   const emitFromMain = (data: unknown) => port.emit("message", { data });
-   return { port, posted, emitFromMain };
-}
+import { resetUtilityProcessFakes, setAttachChild } from "./fake-utility.js";
 
 export async function load(fixture = "utility-channels") {
    const project = await fixtures.run(fixture);
    const main = loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() });
-   attachChild = main.attachUtility;
+   setAttachChild(main.attachUtility);
    const utilitySource = project.generated["utility.ts"];
    const utility = utilitySource ? loadGenerated(utilitySource, {}) : undefined;
    return { main, utility };
@@ -61,7 +25,6 @@ export async function load(fixture = "utility-channels") {
 
 /** Undoes what `load`, `createChild` and `createParentPort` set up. Call it from `afterEach`. */
 export function resetUtilityFakes() {
-   attachChild = undefined;
-   Reflect.deleteProperty(process, "parentPort");
+   resetUtilityProcessFakes();
    vi.restoreAllMocks();
 }

@@ -14,8 +14,9 @@
 
 import { createContents } from "@testutils/e2e/fake-contents.js";
 import { channelsMade } from "@testutils/e2e/fake-ports.js";
+import { createChild } from "@testutils/e2e/fake-utility.js";
 import { finishLoading, startLoading } from "@testutils/e2e/runtime-utils.js";
-import { cleanupUtilityPorts, createChild, loadMain } from "@testutils/e2e/utility-port-utils.js";
+import { cleanupUtilityPorts, loadMain } from "@testutils/e2e/utility-port-utils.js";
 import { closeWire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -38,7 +39,7 @@ const loadEvents = ["did-navigate", "did-fail-load", "did-finish-load", "did-sto
 describe("utility ports, main process, ipc.<name>.connect", () => {
    it("ends the connection with close: the page is told with the key, and nothing is paired later", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       const link = ipc.queryRows.connect(child, contents);
       const key = child.postMessage.mock.calls[0][0].key;
@@ -59,7 +60,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
    // Node warns about more than ten listeners of one event (T87).
    it("adds one 'exit' listener to the child and one 'destroyed' listener to each page, however many connections", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const pages = Array.from({ length: 12 }, (_, id) => createContents({ id: id + 1 }));
       const links = pages.map((page) => ipc.queryRows.connect(child, page));
 
@@ -81,7 +82,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(pages[11].send).toHaveBeenCalledWith(closeWire("queryRows"), expect.any(String));
       expect(pages[11].listenerCount("destroyed")).toBe(0);
 
-      const lone = createChild();
+      const { child: lone } = createChild();
       const connection = ipc.queryRows.connect(lone, createContents());
       connection.close();
       expect(lone.listenerCount("exit")).toBe(1);
@@ -89,7 +90,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("connects many channels of one page with one listener for each event", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
 
       const links = [
@@ -113,7 +114,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("ends the connection when the child exits", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(child, contents);
       const key = child.postMessage.mock.calls[0][0].key;
@@ -126,7 +127,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("ends the connection when the contents are destroyed, without touching them", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(child, contents);
 
@@ -138,8 +139,8 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("replaces the connection of the same channel and page, which cannot fight for the port on a reload", async () => {
       const ipc = await loadMain();
-      const first = createChild();
-      const second = createChild();
+      const { child: first } = createChild();
+      const { child: second } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(first, contents);
       const oldKey = first.postMessage.mock.calls[0][0].key;
@@ -158,7 +159,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("keeps the connections of other channels and other pages apart", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const page = createContents({ id: 1 });
       const other = createContents({ id: 2 });
       const query = ipc.queryRows.connect(child, page);
@@ -178,7 +179,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("throws for contents which are destroyed already, and registers nothing", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       contents.destroyed = true;
 
@@ -191,7 +192,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("throws IPC_UTILITY_NOT_ATTACHED for a child that was never attached, and registers nothing (T86)", async () => {
       const ipc = await loadMain();
-      const child = createChild({ attached: false });
+      const { child } = createChild({ attached: false });
       const contents = createContents();
 
       expect(() => ipc.queryRows.connect(child, contents)).toThrow(
@@ -212,8 +213,8 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("throws IPC_UTILITY_EXITED for a child that exited, registers nothing and keeps the earlier connection of the page (T86)", async () => {
       const ipc = await loadMain();
-      const other = createChild();
-      const child = createChild();
+      const { child: other } = createChild();
+      const { child } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(other, contents);
       child.emit("exit", 1);
@@ -236,7 +237,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("undoes the connection and closes both ports when the first pairing fails", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       child.postMessage.mockImplementation(() => {
          throw new Error("the child is gone");
       });
@@ -253,7 +254,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("closes the ports when the page cannot be reached", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       contents.postMessage.mockImplementation(() => {
          throw new Error("no frame");
@@ -266,7 +267,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("reports a pairing which fails on a later load, instead of throwing from the event", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
       ipc.queryRows.connect(child, contents);

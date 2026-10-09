@@ -14,6 +14,7 @@
 
 import { createContents } from "@testutils/e2e/fake-contents.js";
 import { channelsMade } from "@testutils/e2e/fake-ports.js";
+import { createChild } from "@testutils/e2e/fake-utility.js";
 import {
    abortNavigation,
    failLoading,
@@ -21,7 +22,7 @@ import {
    startLoading,
    stopCommittedLoad,
 } from "@testutils/e2e/runtime-utils.js";
-import { cleanupUtilityPorts, createChild, loadMain } from "@testutils/e2e/utility-port-utils.js";
+import { cleanupUtilityPorts, loadMain } from "@testutils/e2e/utility-port-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,7 +34,7 @@ afterEach(() => {
 describe("utility ports, main process, ipc.<name>.connect", () => {
    it("pairs at once when the page has loaded: port1 to the child, port2 to the page, with one key", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
 
       const link = ipc.queryRows.connect(child, { webContents: contents });
@@ -54,7 +55,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("accepts a window, a view and contents", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const [one, two, three] = [1, 2, 3].map((id) => createContents({ id }));
 
       ipc.queryRows.connect(child, { webContents: one });
@@ -68,7 +69,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("waits for the page to load, since an earlier port arrives before the preload script listens", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents({ loading: true, url: "" });
 
       ipc.queryRows.connect(child, contents);
@@ -84,7 +85,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("pairs again on every load with the same key, so that a page that reloads gets a fresh port", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(child, contents);
 
@@ -103,7 +104,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("does not pair after a main frame fails to load", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents({ loading: true, url: "" });
       ipc.queryRows.connect(child, contents);
 
@@ -117,7 +118,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("does not pair the error page of a failed load, and pairs the next page that loads", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents({ loading: true, url: "" });
       ipc.queryRows.connect(child, contents);
 
@@ -133,7 +134,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("pairs the document that committed when its load is stopped (ERR_ABORTED after a commit)", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents({ loading: true, url: "" });
       ipc.queryRows.connect(child, contents);
       expect(channelsMade).toHaveLength(0);
@@ -147,7 +148,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
    it("leaves the page alone when a navigation of it starts and stops without a commit", async () => {
       const ipc = await loadMain();
-      const child = createChild();
+      const { child } = createChild();
       const contents = createContents();
       ipc.queryRows.connect(child, contents);
       expect(channelsMade).toHaveLength(1);
