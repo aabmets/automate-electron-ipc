@@ -13,6 +13,13 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 import {
+   getRendererSpecs,
+   hasRendererChannels,
+   isBrokeredSpec,
+   isUtilitySpec,
+   isWorkerSpec,
+} from "./channel-kinds.js";
+import {
    buildAskChannel,
    buildAskComponents,
    buildAskListener,
@@ -33,6 +40,7 @@ import {
 } from "./preload-streams.js";
 import { buildSubscriptionChannel, buildSubscriptionComponents } from "./preload-subscriptions.js";
 import { buildBrokeredChannel, buildUtilityClient } from "./preload-utility.js";
+import { buildSerializerImport } from "./utility-runtime.js";
 
 export interface ChannelEntry {
    name: string;
@@ -92,14 +100,14 @@ export class PreloadBindingsWriter extends BaseWriter {
       return this.getScopedFilePath(this.config.preloadBindingsFilePath);
    }
    protected isEmpty(): boolean {
-      return !this.hasRendererChannels();
+      return !hasRendererChannels(this.pfsArray);
    }
    /**
     * The page takes no part in the traffic between the main process and a utility process, or a
     * service worker. The worker script has its channels mapped to those of a page first.
     */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
-      return !(this.isUtilitySpec(spec) || this.isWorkerSpec(spec)) && super.isSerializedSpec(spec);
+      return !(isUtilitySpec(spec) || isWorkerSpec(spec)) && super.isSerializedSpec(spec);
    }
    protected renderEmptyFileContents(): string {
       const [i0] = this.indents;
@@ -170,7 +178,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          channels: [],
       };
       for (const parsedFileSpecs of this.pfsArray) {
-         for (const spec of this.getRendererSpecs(parsedFileSpecs)) {
+         for (const spec of getRendererSpecs(parsedFileSpecs)) {
             this.groupChannel(spec, groups);
          }
       }
@@ -186,7 +194,7 @@ export class PreloadBindingsWriter extends BaseWriter {
             name: spec.name,
             property: `\n${this.indents[0]}${spec.name}: ports['${spec.name}'].api,`,
          });
-      } else if (this.isBrokeredSpec(spec)) {
+      } else if (isBrokeredSpec(spec)) {
          brokeredSpecs.push(spec);
          channels.push(buildBrokeredChannel(this.ctx, spec));
       } else if (spec.kind === "Stream") {
@@ -213,7 +221,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          : "contextBridge, ipcRenderer";
       const out: string[] = [`import { ${imports} } from "electron";`];
       if (this.hasSerializedChannels()) {
-         out.push(this.buildSerializerImport());
+         out.push(buildSerializerImport(this.config, this.importsGenerator));
       }
       if (portSpecs.length > 0) {
          out.push(

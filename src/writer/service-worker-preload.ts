@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { asRendererSpec, hasWorkerChannels, isWorkerSpec } from "./channel-kinds.js";
 import { type ChannelGroups, PreloadBindingsWriter } from "./preload-bindings.js";
 
 /**
@@ -29,10 +30,10 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
    }
    /** Whether the schema has anything for this file, which is not written otherwise. */
    public hasChannels(): boolean {
-      return this.hasWorkerChannels();
+      return hasWorkerChannels(this.pfsArray);
    }
    protected isEmpty(): boolean {
-      return !this.hasWorkerChannels();
+      return !hasWorkerChannels(this.pfsArray);
    }
    protected getWorldId(): number | undefined {
       return undefined;
@@ -46,7 +47,7 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
     * channels of a worker decide whether the file imports the serializer.
     */
    protected hasSerializedChannels(): boolean {
-      return this.usesSerializer() && this.hasWorkerChannels();
+      return this.usesSerializer() && hasWorkerChannels(this.pfsArray);
    }
    /**
     * The preload script of a worker has no timers (`setTimeout` and `setImmediate` are not defined
@@ -66,8 +67,8 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
       };
       for (const parsedFileSpecs of this.pfsArray) {
          for (const spec of parsedFileSpecs.specs.channelSpecArray) {
-            if (this.isWorkerSpec(spec)) {
-               this.groupChannel(this.asRendererSpec(spec) as t.ChannelSpec, groups);
+            if (isWorkerSpec(spec)) {
+               this.groupChannel(asRendererSpec(spec) as t.ChannelSpec, groups);
             }
          }
       }

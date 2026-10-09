@@ -1,9 +1,4 @@
 {
-   "src/writer/base-writer.ts": 463,
-   "src/writer/imports-generator.ts": 441,
-   "src/writer/renderer-types.ts": 336,
-   "src/writer/utility-bindings.ts": 488,
-   "src/writer/utility-runtime.ts": 419,
    "tests/automation.test.ts": 631,
    "tests/config.test.ts": 581,
    "tests/test_e2e/asks.test.ts": 1333,

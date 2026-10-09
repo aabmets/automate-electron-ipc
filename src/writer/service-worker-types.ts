@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { asRendererSpec, hasWorkerChannels, isWorkerSpec } from "./channel-kinds.js";
 import { RendererTypesWriter } from "./renderer-types.js";
 
 /**
@@ -24,10 +25,10 @@ export class ServiceWorkerTypesWriter extends RendererTypesWriter {
    }
    /** Whether the schema has anything for this file, which is not written otherwise. */
    public hasChannels(): boolean {
-      return this.hasWorkerChannels();
+      return hasWorkerChannels(this.pfsArray);
    }
    protected isEmpty(): boolean {
-      return !this.hasWorkerChannels();
+      return !hasWorkerChannels(this.pfsArray);
    }
    protected getWorldId(): number | undefined {
       return undefined;
@@ -43,6 +44,6 @@ export class ServiceWorkerTypesWriter extends RendererTypesWriter {
       return this.config.rawErrors ? 0 : super.getTimeoutMs(spec);
    }
    protected buildChannelEntry(spec: t.ChannelSpec) {
-      return this.isWorkerSpec(spec) ? super.buildChannelEntry(this.asRendererSpec(spec)) : null;
+      return isWorkerSpec(spec) ? super.buildChannelEntry(asRendererSpec(spec)) : null;
    }
 }

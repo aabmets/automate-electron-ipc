@@ -15,42 +15,13 @@ import type * as t from "@types";
 import { type Scope, scopedFilePath } from "../scopes.js";
 import utils from "../utils.js";
 import { ImportsGenerator } from "./imports-generator.js";
+import { getOriginalParams } from "./param-names.js";
+import { renameChannelSpecs } from "./rename-signatures.js";
 
-/**
- * Replaces the type names of a text of a signature, such as `User` with `User_2`, and the
- * specifiers of its import types with the ones that `rebase` gives. `refs` are the type
- * references of the whole definition, which the parser took from the AST, and `offset` is
- * the position in the definition where `text` starts. Only the references inside the text are
- * replaced, so names of members, string literals, property keys and parameters stay as written.
- */
-function renameTypeReferences(
-   text: string,
-   offset: number,
-   refs: readonly t.TypeRef[],
-   renames: ReadonlyMap<string, string>,
-   rebase: (importPath: string) => string,
-): string {
-   let result = "";
-   let last = 0;
-   for (const ref of refs) {
-      const renamed =
-         ref.importPath === undefined
-            ? renames.get(ref.name)
-            : JSON.stringify(rebase(ref.importPath));
-      if (renamed !== undefined && ref.start >= offset + last && ref.end <= offset + text.length) {
-         result += text.slice(last, ref.start - offset) + renamed;
-         last = ref.end - offset;
-      }
-   }
-   return result + text.slice(last);
-}
 /** The `maxQueue` of a port channel which does not set it: how many messages a send queue holds. */
 export const DEFAULT_MAX_QUEUE = 1000;
 /** The `highWaterMark` of a stream which does not set it: how many chunks the page may not have read. */
 export const DEFAULT_HIGH_WATER_MARK = 1024;
-
-const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
-const IDENTIFIER_TOKENS = /[A-Za-z_$][\w$]*/g;
 
 export class BaseWriter {
    protected config: t.IPCResolvedConfig;
@@ -202,79 +173,6 @@ export class BaseWriter {
       );
    }
 
-   /**
-    * The import line of the serializer. The generated code refers to it through the aliases
-    * `ipcSerialize` and `ipcDeserialize`, and casts them, since the module's own types are free.
-    */
-   protected buildSerializerImport(): string {
-      const { serializer, serializerFilePath } = this.config;
-      const from =
-         serializerFilePath === undefined
-            ? serializer
-            : this.importsGenerator.getFileImportPath(serializerFilePath);
-      return `import { serialize as ipcSerialize, deserialize as ipcDeserialize } from ${JSON.stringify(from)};`;
-   }
-
-   /** Whether the channel is between the main process and a utility process. */
-   protected isUtilitySpec(spec: t.ChannelSpec): boolean {
-      return spec.direction === "MainToUtility" || spec.direction === "UtilityToMain";
-   }
-
-   /**
-    * Whether the channel is between a renderer and a utility process, over a port which the main
-    * process brokers. The page uses it like the other channels of a renderer.
-    */
-   protected isBrokeredSpec(spec: t.ChannelSpec): boolean {
-      return spec.direction === "RendererToUtility";
-   }
-
-   /** Whether any schema file declares a channel that a utility process takes part in. */
-   protected hasUtilityChannels(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some(
-            (spec) => this.isUtilitySpec(spec) || this.isBrokeredSpec(spec),
-         ),
-      );
-   }
-
-   /** Whether the channel is between the main process and a service worker. */
-   protected isWorkerSpec(spec: t.ChannelSpec): boolean {
-      return spec.direction === "ServiceWorkerToMain" || spec.direction === "MainToServiceWorker";
-   }
-
-   /** Whether any schema file declares a channel that a service worker takes part in. */
-   protected hasWorkerChannels(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some((spec) => this.isWorkerSpec(spec)),
-      );
-   }
-
-   /**
-    * The channel as the page writers see it: the API of a service worker is that of a page, so its
-    * channels are written like the ones with the same shape between the main process and a renderer.
-    * A call from a worker keeps its timeout, which the main process applies and the typings of the
-    * worker declare. A question to a worker times out in the main process on its own, so it has none here.
-    */
-   protected asRendererSpec(spec: t.ChannelSpec): t.ChannelSpec {
-      return {
-         ...spec,
-         direction: spec.direction === "ServiceWorkerToMain" ? "RendererToMain" : "MainToRenderer",
-         timeoutMs: spec.direction === "ServiceWorkerToMain" ? spec.timeoutMs : 0,
-      };
-   }
-
-   /** The channels of a schema file that a renderer takes part in. */
-   protected getRendererSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
-      return parsedFileSpecs.specs.channelSpecArray.filter(
-         (spec) => !(this.isUtilitySpec(spec) || this.isWorkerSpec(spec)),
-      );
-   }
-
-   /** Whether any schema file declares a channel that a renderer takes part in. */
-   protected hasRendererChannels(): boolean {
-      return this.pfsArray.some((pfs) => this.getRendererSpecs(pfs).length > 0);
-   }
-
    protected getCodeIndents(): string[] {
       return [1, 2, 3, 4, 5, 6].map((value) => {
          return " ".repeat(this.config.codeIndent).repeat(value);
@@ -286,57 +184,11 @@ export class BaseWriter {
     * the names that the generated imports declare (see `ImportsGenerator.getRenames`).
     */
    protected getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
-      const specs = parsedFileSpecs.specs.channelSpecArray;
-      const renames = this.importsGenerator.getRenames(parsedFileSpecs);
-      const hasImportTypes = (refs: readonly t.TypeRef[] | undefined) =>
-         !!refs?.some((ref) => ref.importPath !== undefined);
-      if (
-         renames.size === 0 &&
-         !specs.some(
-            (spec) =>
-               hasImportTypes(spec.signature.typeRefs) || hasImportTypes(spec.errors?.typeRefs),
-         )
-      ) {
-         return specs;
-      }
-      const rebase = (importPath: string) =>
-         this.importsGenerator.getImportTypePath(parsedFileSpecs, importPath);
-      return specs.map((spec) => {
-         const { definition, paramsStart, returnType, returnStart, params, chunkType, chunkStart } =
-            spec.signature;
-         const refs = spec.signature.typeRefs ?? [];
-         const rename = (text: string, offset: number | undefined) =>
-            offset === undefined ? text : renameTypeReferences(text, offset, refs, renames, rebase);
-         const errors = spec.errors && {
-            ...spec.errors,
-            definition: renameTypeReferences(
-               spec.errors.definition,
-               0,
-               spec.errors.typeRefs ?? [],
-               renames,
-               rebase,
-            ),
-            typeRefs: [],
-         };
-         return {
-            ...spec,
-            ...(errors ? { errors } : {}),
-            signature: {
-               ...spec.signature,
-               definition: rename(definition, 0),
-               // Renaming changes the length of the text before the parameter list.
-               paramsStart: rename(definition.slice(0, paramsStart), 0).length,
-               returnType: rename(returnType, returnStart),
-               ...(chunkType === undefined ? {} : { chunkType: rename(chunkType, chunkStart) }),
-               params: params.map((param) => ({
-                  ...param,
-                  type: rename(param.type, param.typeStart),
-               })),
-               // The offsets of the references refer to the text before the renaming.
-               typeRefs: [],
-            },
-         };
-      });
+      return renameChannelSpecs(
+         parsedFileSpecs.specs.channelSpecArray,
+         this.importsGenerator.getRenames(parsedFileSpecs),
+         (importPath) => this.importsGenerator.getImportTypePath(parsedFileSpecs, importPath),
+      );
    }
 
    /**
@@ -367,20 +219,9 @@ export class BaseWriter {
       return signature.definition.slice(0, signature.paramsStart - 1).trim();
    }
 
-   /**
-    * Returns the parameters of the channel signature with names that are valid identifiers.
-    * Destructured parameters, such as `{ a, b }: Foo`, cannot be forwarded by name,
-    * so they are replaced by generated names that clash with no name in the signature.
-    */
-   protected resolveParams(spec: t.ChannelSpec): t.CallableParam[] {
-      const params = spec.signature.params;
-      const taken = this.collectIdentifiers(params.map((param) => param.name));
-      return params.map((param, index) => {
-         if (IDENTIFIER_PATTERN.test(param.name)) {
-            return param;
-         }
-         return { ...param, name: this.uniqueName(`arg${index}`, taken) };
-      });
+   /** The parameters of the channel, with their types or only their names (see `resolveParams`). */
+   protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {
+      return getOriginalParams(spec, onlyNames);
    }
 
    /** The `maxQueue` of a port channel as source text: a number, or `Infinity`. */
@@ -391,40 +232,6 @@ export class BaseWriter {
    /** The `highWaterMark` of a stream channel as source text: a number, or `Infinity`. */
    protected getHighWaterMark(spec: t.ChannelSpec): string {
       return String(spec.highWaterMark ?? DEFAULT_HIGH_WATER_MARK);
-   }
-
-   protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {
-      return this.resolveParams(spec)
-         .map((param) => {
-            const rest = param.rest ? "..." : "";
-            if (onlyNames) {
-               return `${rest}${param.name}`;
-            }
-            const optional = param.optional ? "?" : "";
-            return `${rest}${param.name}${optional}: ${param.type || "any"}`;
-         })
-         .join(", ");
-   }
-
-   /**
-    * Collects every identifier-like token of the given source snippets.
-    * Names that are absent from the result cannot clash with anything in the snippets.
-    */
-   protected collectIdentifiers(snippets: string[]): Set<string> {
-      return new Set(snippets.flatMap((snippet) => snippet.match(IDENTIFIER_TOKENS) ?? []));
-   }
-
-   /**
-    * Returns `base`, with underscores prepended until it is absent from `taken`,
-    * and adds the result to `taken`.
-    */
-   protected uniqueName(base: string, taken: Set<string>): string {
-      let name = base;
-      while (taken.has(name)) {
-         name = `_${name}`;
-      }
-      taken.add(name);
-      return name;
    }
 
    /**

@@ -12,22 +12,17 @@
 import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
-
-export interface ChannelEntry {
-   name: string;
-   /** Whether the promise of the channel can be rejected with an `IpcError`. */
-   throws?: boolean;
-   /** Whether the channel has an overflow callback, which uses the types of the overflow. */
-   overflows?: boolean;
-   /** Whether the promise of the channel can be rejected with an `IpcTimeoutError`. */
-   times?: boolean;
-   /** Whether the channel returns an `IpcStream`. */
-   streams?: boolean;
-   /** Whether the promise of the channel can be rejected with an `IpcUtilityError`. */
-   utility?: boolean;
-   /** The methods of the channel, one per line, starting with a newline. */
-   methods: string[];
-}
+import {
+   hasRendererChannels,
+   isBrokeredSpec,
+   isUtilitySpec,
+   isWorkerSpec,
+} from "./channel-kinds.js";
+import {
+   type ChannelEntry,
+   type DeclarationOptions,
+   renderDeclaration,
+} from "./renderer-declaration.js";
 
 export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
@@ -53,10 +48,10 @@ export class RendererTypesWriter extends BaseWriter {
       ];
    }
    protected isEmpty(): boolean {
-      return !this.hasRendererChannels();
+      return !hasRendererChannels(this.pfsArray);
    }
    protected renderEmptyFileContents(): string {
-      return this.renderDeclaration([]);
+      return renderDeclaration([], this.getDeclarationOptions());
    }
    protected renderFileContents(): string {
       const out: string[] = [];
@@ -88,21 +83,30 @@ export class RendererTypesWriter extends BaseWriter {
          }
       }
       out.sort(utils.compareStrings);
-      out.push(this.renderDeclaration(channels));
+      out.push(renderDeclaration(channels, this.getDeclarationOptions()));
       return out.join("\n");
    }
    /** The isolated world that the API is exposed in, or `undefined` for the main world. */
    protected getWorldId(): number | undefined {
       return this.config.isolatedWorldId;
    }
+   private getDeclarationOptions(): DeclarationOptions {
+      return {
+         indents: this.indents,
+         exposeAs: this.getExposeAs(),
+         worldId: this.getWorldId(),
+         scope: this.scope,
+         pathForFile: this.getPathForFileEnabled(),
+      };
+   }
    /** The entry of a channel of the page, or `null` for the channels that the page has no part in. */
    protected buildChannelEntry(spec: t.ChannelSpec): ChannelEntry | null {
-      if (this.isUtilitySpec(spec) || this.isWorkerSpec(spec)) {
+      if (isUtilitySpec(spec) || isWorkerSpec(spec)) {
          return null;
       } else if (spec.kind === "Port") {
          // The page has the same API for both peers: another page, or the main process.
          return this.buildPortChannel(spec);
-      } else if (this.isBrokeredSpec(spec)) {
+      } else if (isBrokeredSpec(spec)) {
          return this.buildBrokeredChannel(spec);
       } else if (spec.kind === "Stream") {
          return this.buildStreamChannel(spec);
@@ -110,121 +114,6 @@ export class RendererTypesWriter extends BaseWriter {
          return this.buildRendererToMainChannel(spec);
       }
       return spec.direction === "MainToRenderer" ? this.buildMainToRendererChannel(spec) : null;
-   }
-   /**
-    * The API is declared as a global variable, which types the bare name, `window.<name>` and
-    * `globalThis.<name>` alike. The name is `exposeAs` of the config, `ipc` by default. The empty export makes the file a module, which `declare global`
-    * requires.
-    */
-   private renderDeclaration(channels: ChannelEntry[]): string {
-      const i0 = this.indents[0];
-      const [, i1, i2] = this.indents;
-      const exposeAs = this.getExposeAs();
-      const worldId = this.getWorldId();
-      const members = this.sortChannels([
-         ...channels.map((channel) => ({
-            name: channel.name,
-            lines: [`\n${i0}${channel.name}: {`, ...channel.methods, `\n${i0}};`],
-         })),
-         ...(this.getPathForFileEnabled()
-            ? [
-                 {
-                    name: "getPathForFile",
-                    lines: [
-                       `\n${i0}/** The path of a file that the user dropped or picked. It is empty for a file that is not on the disk. */`,
-                       `\n${i0}getPathForFile: (file: File) => string;`,
-                    ],
-                 },
-              ]
-            : []),
-      ]).flatMap((member) => member.lines);
-      const body = members.length > 0 ? `${members.join("")}\n` : "";
-      // The error type is declared only if a rejected invoke can carry one.
-      const errorType = channels.some((channel) => channel.throws)
-         ? [
-              `${i0}/**`,
-              `${i0} * The object that the promise of \`${exposeAs}.<name>.invoke\` is rejected with when the handler`,
-              `${i0} * throws, and that a read of \`${exposeAs}.<name>.stream\` is rejected with when the stream fails.`,
-              `${i0} * It is a plain object, since contextBridge does not keep the fields of an \`Error\`.`,
-              `${i0} */`,
-              `${i0}type IpcError<E extends Error = Error> = E extends unknown`,
-              `${i1}? { name: E['name']; message: string } & (E extends { code: infer C extends string | number }`,
-              `${i2}? { code: C }`,
-              `${i2}: { code?: string | number }) & (E extends { data: infer D }`,
-              `${i2}? { data: D }`,
-              `${i2}: { data?: unknown })`,
-              `${i1}: never;`,
-           ].join("\n")
-         : "";
-      // The stream type is declared only if a stream channel uses it.
-      const streamType = channels.some((channel) => channel.streams)
-         ? [
-              `\ninterface IpcStream<T> {`,
-              `${i0}/** The next chunk. The promise is rejected with the error of the stream, if it fails. */`,
-              `${i0}next(): Promise<IteratorResult<T, undefined>>;`,
-              `${i0}/** Stops the stream and the generator of its handler. */`,
-              `${i0}return(): Promise<IteratorResult<T, undefined>>;`,
-              `${i0}/** Stops the stream and the generator of its handler, like \`return()\` does. */`,
-              `${i0}cancel(): void;`,
-              `${i0}[Symbol.asyncIterator](): IpcStream<T>;`,
-              "}",
-           ]
-         : [];
-      // The timeout error is declared only if a channel can time out.
-      const timeoutType = channels.some((channel) => channel.times)
-         ? [
-              `${i0}/** The error that the promise of an \`invoke\` is rejected with after its \`timeoutMs\`. */`,
-              `${i0}type IpcTimeoutError = Error & { name: 'IpcTimeoutError'; code: 'IPC_TIMEOUT' };`,
-           ].join("\n")
-         : "";
-      // The error of the utility process is declared only if a channel to one can fail with it.
-      const utilityType = channels.some((channel) => channel.utility)
-         ? [
-              `${i0}/** The error that the library rejects a call to a utility process with, apart from the errors of the handler. */`,
-              `${i0}type IpcUtilityError = Error & {`,
-              `${i1}name: 'IpcUtilityError';`,
-              `${i1}code: 'IPC_UTILITY_EXITED' | 'IPC_UTILITY_UNSENDABLE' | 'IPC_UTILITY_INVALID_REPLY' | 'IPC_UTILITY_NO_HANDLER' | 'IPC_UTILITY_NOT_ITERABLE' | 'IPC_UTILITY_TIMEOUT';`,
-              `${i0}};`,
-           ].join("\n")
-         : "";
-      const globals = [
-         ...(this.scope === null
-            ? []
-            : [
-                 `${i0}/**`,
-                 `${i0} * The API of the scope '${this.scope}': its own channels and the ones that have no scope.`,
-                 `${i0} * Every window.*.d.ts declares this variable, so a project includes only one of them.`,
-                 `${i0} */`,
-              ]),
-         ...(worldId === undefined
-            ? []
-            : [
-                 `${i0}/** Exposed in the isolated world ${worldId}, so only scripts of that world can use it. */`,
-              ]),
-         `${i0}var ${exposeAs}: IpcApi;`,
-         ...(errorType ? [errorType] : []),
-         ...(timeoutType ? [timeoutType] : []),
-         ...(utilityType ? [utilityType] : []),
-      ];
-      // The types of the overflow callbacks, declared only if a port channel has them.
-      const overflowTypes = channels.some((channel) => channel.overflows)
-         ? [
-              `\ninterface IpcPortOverflowInfo {`,
-              `${i0}channel: string;`,
-              `${i0}max: number;`,
-              `${i0}dropped: number;`,
-              `${i0}warnings: number;`,
-              "}",
-              `\ntype IpcPortOverflowAction = 'dropOldest' | 'dropNewest' | 'clear';`,
-           ]
-         : [];
-      return [
-         ...overflowTypes,
-         ...streamType,
-         `\ninterface IpcApi {${body}}`,
-         `\ndeclare global {\n${globals.join("\n")}\n}`,
-         "\nexport {};\n",
-      ].join("\n");
    }
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       let ipcSignature = spec.signature.definition;

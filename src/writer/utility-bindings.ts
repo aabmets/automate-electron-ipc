@@ -13,9 +13,18 @@ import type * as t from "@types";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 import {
+   hasBrokeredChannels,
+   hasUtilityChannels,
+   isBrokeredSpec,
+   isUtilitySpec,
+} from "./channel-kinds.js";
+import { collectIdentifiers, uniqueName } from "./param-names.js";
+import { buildBrokerServer } from "./utility-broker.js";
+import { buildUtilityPeer } from "./utility-peer.js";
+import {
    buildErrorEnvelope,
+   buildSerializerImport,
    buildSerializerRuntime,
-   buildUtilityPeer,
    UTILITY_RUNTIME_NAMES,
 } from "./utility-runtime.js";
 
@@ -55,7 +64,7 @@ export class UtilityBindingsWriter extends BaseWriter {
               ]
             : []),
          // The code which serves the ports that the main process brokers for pages.
-         ...(this.hasBrokeredChannels()
+         ...(hasBrokeredChannels(this.pfsArray)
             ? [
                  "BrokerPort",
                  "BrokerStream",
@@ -76,19 +85,13 @@ export class UtilityBindingsWriter extends BaseWriter {
             : []),
       ];
    }
-   /** Whether any schema file declares a channel between a renderer and a utility process. */
-   private hasBrokeredChannels(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some((spec) => this.isBrokeredSpec(spec)),
-      );
-   }
    /** The file only holds the channels with the main process and with the pages over brokered ports. */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
-      return this.usesSerializer() && (this.isUtilitySpec(spec) || this.isBrokeredSpec(spec));
+      return this.usesSerializer() && (isUtilitySpec(spec) || isBrokeredSpec(spec));
    }
    /** Whether the schema has anything for this file, which is not written otherwise. */
    public hasChannels(): boolean {
-      return this.hasUtilityChannels();
+      return hasUtilityChannels(this.pfsArray);
    }
    protected renderEmptyFileContents(): string {
       return "export const ipc = {};";
@@ -99,7 +102,7 @@ export class UtilityBindingsWriter extends BaseWriter {
       for (const parsedFileSpecs of this.pfsArray) {
          const customTypes = new Set<string>();
          for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (!(this.isUtilitySpec(spec) || this.isBrokeredSpec(spec))) {
+            if (!(isUtilitySpec(spec) || isBrokeredSpec(spec))) {
                continue;
             }
             channels.push(this.buildChannel(spec));
@@ -117,7 +120,7 @@ export class UtilityBindingsWriter extends BaseWriter {
       const out = importDeclarations.sort(utils.compareStrings);
       const brokered = this.getBrokeredSpecs();
       if (this.hasSerializedChannels()) {
-         out.push(this.buildSerializerImport());
+         out.push(buildSerializerImport(this.config, this.importsGenerator));
       }
       out.push(
          ...(this.hasSerializedChannels() ? [buildSerializerRuntime(this.indents)] : []),
@@ -174,40 +177,10 @@ export class UtilityBindingsWriter extends BaseWriter {
    /** The wire names of the channels between a page and the child, and their kinds. */
    private getBrokeredSpecs(): t.ChannelSpec[] {
       return this.pfsArray.flatMap((pfs) =>
-         pfs.specs.channelSpecArray.filter((spec) => this.isBrokeredSpec(spec)),
+         pfs.specs.channelSpecArray.filter((spec) => isBrokeredSpec(spec)),
       );
    }
-   /**
-    * The ports that the main process brokers between a page and this process, one per
-    * `ipc.<name>.connect` of `invokeUtility` and `streamUtility` channels. A port arrives as
-    * `{ __ipc: 'port', channel, key }` on `process.parentPort`, with the port in `event.ports`.
-    * Only the channels of this file are accepted, and any other port is closed. A port serves
-    * the one channel it was made for, and ignores messages of other channels.
-    *
-    * The messages of the page are handled like those of the main process: a `call` is answered by
-    * the shared peer code, with the single handler of the channel. A `stream` message starts the
-    * handler, which returns an async iterable, and the iterator is pumped to the page as `chunk`
-    * messages and then `end`, or `error`. All the streams of a port share it, told apart by the ID
-    * of the call. A `cancel` message, and the close of the port, stop the iterator once with
-    * `return()`, so the generator runs its `finally` blocks, and no chunk is sent after it. Everything
-    * that goes wrong before the first chunk is sent as the `error` message of the call. A chunk that
-    * cannot be cloned stops the iterator and fails the stream.
-    *
-    * With a serializer, the arguments of a `stream` message are a list of one value, as in the
-    * shared peer code, and read before the handler runs: arguments that cannot be read fail the
-    * stream like any error before the first chunk. A chunk is serialized as it is sent, and one that
-    * cannot be fails the stream with the `IpcSerializationError`.
-    *
-    * The flow is controlled by credits, per call, as in `startStream` of `main.ts`. A call starts
-    * with a `limit` of the `highWaterMark` of its channel, and the pump does not pull from the
-    * generator once it has sent that many chunks. The page raises the limit with `{ __ipc: 'credit',
-    * channel, id, limit }`, the total number of chunks that it allows so far, as it reads. A
-    * cancel, a closed port and an error wake a paused pump, so they work while the generator is
-    * paused.
-    */
    private buildBrokerServer(brokered: t.ChannelSpec[]): string {
-      const [i1, i2, i3, i4, i5] = this.indents;
-      const serialized = this.usesSerializer();
       const channels = brokered
          .map((spec) => this.wireName(spec.name))
          .sort(utils.compareStrings)
@@ -218,206 +191,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          .sort(([a], [b]) => utils.compareStrings(a, b))
          .map(([wire, mark]) => `[${wire}, ${mark}]`)
          .join(", ");
-      return [
-         "interface BrokerPort {",
-         `${i1}on: (event: 'message' | 'close', listener: (event: { data: unknown }) => void) => unknown;`,
-         `${i1}start: () => void;`,
-         `${i1}postMessage: (message: unknown) => void;`,
-         `${i1}close: () => void;`,
-         "}",
-         "",
-         "interface BrokerStream {",
-         `${i1}iterator?: AsyncIterator<unknown>;`,
-         `${i1}cancelled: boolean;`,
-         `${i1}limit: number;`,
-         `${i1}wake?: () => void;`,
-         "}",
-         "",
-         `const brokerChannels = new Set<string>([${channels}]);`,
-         `const brokerWindows = new Map<string, number>([${windows}]);`,
-         "const brokerCalls = new Map<string, UtilityCallback>();",
-         "const brokerStreams = new Map<string, UtilityCallback>();",
-         "",
-         "function setBrokerCall(channel: string, callback: UtilityCallback): () => void {",
-         `${i1}getUtilityPeer();`,
-         `${i1}brokerCalls.set(channel, callback);`,
-         `${i1}return () => {`,
-         `${i2}if (brokerCalls.get(channel) === callback) {`,
-         `${i3}brokerCalls.delete(channel);`,
-         `${i2}}`,
-         `${i1}};`,
-         "}",
-         "",
-         "function setBrokerStream(channel: string, callback: UtilityCallback): () => void {",
-         `${i1}getUtilityPeer();`,
-         `${i1}brokerStreams.set(channel, callback);`,
-         `${i1}return () => {`,
-         `${i2}if (brokerStreams.get(channel) === callback) {`,
-         `${i3}brokerStreams.delete(channel);`,
-         `${i2}}`,
-         `${i1}};`,
-         "}",
-         "",
-         "function stopBrokerIterator(iterator: AsyncIterator<unknown>): void {",
-         `${i1}try {`,
-         `${i2}Promise.resolve(iterator.return?.()).catch((error: unknown) => console.error(error));`,
-         `${i1}} catch (error) {`,
-         `${i2}console.error(error);`,
-         `${i1}}`,
-         "}",
-         "",
-         "async function runBrokeredStream(",
-         `${i1}channel: string,`,
-         `${i1}peer: UtilityPeer,`,
-         `${i1}streams: Map<number, BrokerStream>,`,
-         `${i1}id: number,`,
-         `${i1}args: unknown[],`,
-         "): Promise<void> {",
-         `${i1}const entry: BrokerStream = { cancelled: false, limit: brokerWindows.get(channel) ?? 0 };`,
-         `${i1}streams.set(id, entry);`,
-         `${i1}const fail = (error: unknown): void => {`,
-         `${i2}entry.cancelled = true;`,
-         `${i2}streams.delete(id);`,
-         `${i2}try {`,
-         `${i3}peer.post({ __ipc: 'error', channel, id, error: toIpcError(error) });`,
-         `${i2}} catch (cause) {`,
-         `${i3}console.error(cause);`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}let iterator: AsyncIterator<unknown>;`,
-         `${i1}try {`,
-         `${i2}const handler = brokerStreams.get(channel);`,
-         `${i2}if (!handler) {`,
-         `${i3}throw { name: 'IpcUtilityError', message: \`The utility process has no stream handler for the channel '\${channel}'\`, code: 'IPC_UTILITY_NO_HANDLER' };`,
-         `${i2}}`,
-         `${i2}const source = (await handler(...${serialized ? "readArguments(channel, args)" : "args"})) as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> } | null | undefined;`,
-         `${i2}const open = source ? source[Symbol.asyncIterator] : undefined;`,
-         `${i2}if (!source || typeof open !== 'function') {`,
-         `${i3}throw { name: 'IpcUtilityError', message: \`The handler of the channel '\${channel}' did not return an async iterable\`, code: 'IPC_UTILITY_NOT_ITERABLE' };`,
-         `${i2}}`,
-         `${i2}iterator = open.call(source);`,
-         `${i1}} catch (error) {`,
-         `${i2}if (!entry.cancelled) {`,
-         `${i3}fail(error);`,
-         `${i2}}`,
-         `${i2}return;`,
-         `${i1}}`,
-         `${i1}// A cancel that arrived while the handler was starting.`,
-         `${i1}if (entry.cancelled) {`,
-         `${i2}stopBrokerIterator(iterator);`,
-         `${i2}return;`,
-         `${i1}}`,
-         `${i1}entry.iterator = iterator;`,
-         `${i1}let sent = 0;`,
-         `${i1}while (!entry.cancelled) {`,
-         `${i2}if (sent >= entry.limit) {`,
-         `${i3}// The page has not read enough chunks: the generator waits for credit or a cancel.`,
-         `${i3}await new Promise<void>((resolve) => {`,
-         `${i4}entry.wake = resolve;`,
-         `${i3}});`,
-         `${i3}continue;`,
-         `${i2}}`,
-         `${i2}let step: IteratorResult<unknown>;`,
-         `${i2}try {`,
-         `${i3}step = await iterator.next();`,
-         `${i2}} catch (error) {`,
-         `${i3}if (!entry.cancelled) {`,
-         `${i4}fail(error);`,
-         `${i3}}`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}if (entry.cancelled) {`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}if (step.done) {`,
-         `${i3}entry.cancelled = true;`,
-         `${i3}streams.delete(id);`,
-         `${i3}try {`,
-         `${i4}peer.post({ __ipc: 'end', channel, id });`,
-         `${i3}} catch (cause) {`,
-         `${i4}console.error(cause);`,
-         `${i3}}`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}try {`,
-         `${i3}peer.post({ __ipc: 'chunk', channel, id, value: ${serialized ? "encodeValue(channel, step.value)" : "step.value"} });`,
-         `${i3}sent += 1;`,
-         `${i2}} catch (error) {`,
-         `${i3}stopBrokerIterator(iterator);`,
-         ...(serialized
-            ? [
-                 `${i3}fail(error instanceof IpcSerializationError ? error : { name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
-              ]
-            : [
-                 `${i3}fail({ name: 'IpcUtilityError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_UTILITY_UNSENDABLE' });`,
-              ]),
-         `${i3}return;`,
-         `${i2}}`,
-         `${i1}}`,
-         "}",
-         "",
-         "function serveBrokeredPort(channel: string, port: BrokerPort): void {",
-         `${i1}const peer = createUtilityPeer((message) => port.postMessage(message));`,
-         `${i1}peer.handlers = brokerCalls;`,
-         `${i1}const streams = new Map<number, BrokerStream>();`,
-         `${i1}port.on('message', (event) => {`,
-         `${i2}const source = typeof event.data === 'object' && event.data !== null ? (event.data as { [key: string]: unknown }) : null;`,
-         `${i2}if (!source || source.channel !== channel) {`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}if (source.__ipc === 'stream' && typeof source.id === 'number' && Array.isArray(source.args)) {`,
-         `${i3}if (!streams.has(source.id)) {`,
-         `${i4}void runBrokeredStream(channel, peer, streams, source.id, source.args);`,
-         `${i3}}`,
-         `${i2}} else if (source.__ipc === 'credit' && typeof source.id === 'number') {`,
-         `${i3}const entry = streams.get(source.id);`,
-         `${i3}if (entry && typeof source.limit === 'number' && source.limit > entry.limit) {`,
-         `${i4}entry.limit = source.limit;`,
-         `${i4}entry.wake?.();`,
-         `${i3}}`,
-         `${i2}} else if (source.__ipc === 'cancel' && typeof source.id === 'number') {`,
-         `${i3}const entry = streams.get(source.id);`,
-         `${i3}if (entry) {`,
-         `${i4}entry.cancelled = true;`,
-         `${i4}streams.delete(source.id);`,
-         `${i4}entry.wake?.();`,
-         `${i4}if (entry.iterator) {`,
-         `${i5}stopBrokerIterator(entry.iterator);`,
-         `${i4}}`,
-         `${i3}}`,
-         `${i2}} else {`,
-         `${i3}receiveUtilityMessage(peer, source);`,
-         `${i2}}`,
-         `${i1}});`,
-         `${i1}port.on('close', () => {`,
-         `${i2}closeUtilityPeer(peer, 'The page closed the connection');`,
-         `${i2}for (const entry of [...streams.values()]) {`,
-         `${i3}entry.cancelled = true;`,
-         `${i3}entry.wake?.();`,
-         `${i3}if (entry.iterator) {`,
-         `${i4}stopBrokerIterator(entry.iterator);`,
-         `${i3}}`,
-         `${i2}}`,
-         `${i2}streams.clear();`,
-         `${i1}});`,
-         `${i1}port.start();`,
-         "}",
-         "",
-         "function acceptBrokeredPort(event: { data: unknown; ports?: BrokerPort[] }): boolean {",
-         `${i1}const source = typeof event.data === 'object' && event.data !== null ? (event.data as { [key: string]: unknown }) : null;`,
-         `${i1}if (!source || source.__ipc !== 'port') {`,
-         `${i2}return false;`,
-         `${i1}}`,
-         `${i1}const port = event.ports?.[0];`,
-         `${i1}if (port && typeof source.channel === 'string' && brokerChannels.has(source.channel)) {`,
-         `${i2}serveBrokeredPort(source.channel, port);`,
-         `${i1}} else {`,
-         `${i2}port?.close();`,
-         `${i1}}`,
-         `${i1}return true;`,
-         "}",
-         "",
-      ].join("\n");
+      return buildBrokerServer(this.indents, this.usesSerializer(), channels, windows);
    }
    private buildBindings(channels: ChannelEntry[]): string {
       const [i0] = this.indents;
@@ -437,8 +211,8 @@ export class UtilityBindingsWriter extends BaseWriter {
     */
    private buildChannel(spec: t.ChannelSpec): ChannelEntry {
       const [, i1, i2] = this.indents;
-      const taken = this.collectIdentifiers([spec.signature.definition]);
-      const callbackName = this.uniqueName("callback", taken);
+      const taken = collectIdentifiers([spec.signature.definition]);
+      const callbackName = uniqueName("callback", taken);
       const wire = this.wireName(spec.name);
       const typeParams = this.getTypeParams(spec.signature);
       const params = this.getOriginalParams(spec, false);

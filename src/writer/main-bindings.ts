@@ -14,6 +14,13 @@ import { collectScopes } from "../scopes.js";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
 import {
+   hasBrokeredChannels,
+   hasUtilityChannels,
+   hasWorkerChannels,
+   isBrokeredSpec,
+   isUtilitySpec,
+} from "./channel-kinds.js";
+import {
    addScopeImports,
    addStreamImports,
    addTargetImports,
@@ -31,6 +38,8 @@ import { buildMainToRendererChannel, getSenderTypes } from "./main-senders.js";
 import { buildSupport } from "./main-support.js";
 import { importValidator } from "./main-validation.js";
 import { addWorkerImports } from "./main-workers.js";
+import { collectIdentifiers, uniqueName } from "./param-names.js";
+import { buildSerializerImport } from "./utility-runtime.js";
 
 export interface ChannelEntry {
    name: string;
@@ -74,10 +83,10 @@ export class MainBindingsWriter extends BaseWriter {
       usesSerializer: this.usesSerializer(),
       wireName: this.wireName.bind(this),
       isSerializedSpec: this.isSerializedSpec.bind(this),
-      isUtilitySpec: this.isUtilitySpec.bind(this),
-      isBrokeredSpec: this.isBrokeredSpec.bind(this),
-      collectIdentifiers: this.collectIdentifiers.bind(this),
-      uniqueName: this.uniqueName.bind(this),
+      isUtilitySpec,
+      isBrokeredSpec,
+      collectIdentifiers,
+      uniqueName,
       getOriginalParams: this.getOriginalParams.bind(this),
       getTypeParams: this.getTypeParams.bind(this),
       injectEventTypehint: this.injectEventTypehint.bind(this),
@@ -93,11 +102,11 @@ export class MainBindingsWriter extends BaseWriter {
       return getMainReservedNames({
          rendererPorts: this.hasPorts("RendererToRenderer"),
          mainPorts: this.hasPorts("MainToRenderer"),
-         brokered: this.hasBrokeredChannels(),
+         brokered: hasBrokeredChannels(this.pfsArray),
          serializer: this.usesSerializer(),
          eventWatch: this.usesEventWatch(),
-         utility: this.hasUtilityChannels(),
-         workers: this.hasWorkerChannels(),
+         utility: hasUtilityChannels(this.pfsArray),
+         workers: hasWorkerChannels(this.pfsArray),
       });
    }
    /**
@@ -181,7 +190,7 @@ export class MainBindingsWriter extends BaseWriter {
                   ),
                );
             }
-            const specCustomTypes = new Set(getImportedTypes(spec, this.isBrokeredSpec(spec)));
+            const specCustomTypes = new Set(getImportedTypes(spec, isBrokeredSpec(spec)));
             customTypes = customTypes.union(specCustomTypes);
          }
          importCustomTypes(
@@ -193,7 +202,7 @@ export class MainBindingsWriter extends BaseWriter {
       }
       usesEnvelope ||= offPage.envelope;
       if (this.hasSerializedChannels()) {
-         importDeclarationsArray.push(this.buildSerializerImport());
+         importDeclarationsArray.push(buildSerializerImport(this.config, this.importsGenerator));
       }
       addWorkerImports(offPage.workers, electronTypeImportsSet);
       addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
@@ -264,14 +273,8 @@ export class MainBindingsWriter extends BaseWriter {
                spec.kind === "Port" ||
                (spec.kind === "Stream" && spec.direction === "RendererToMain") ||
                (spec.kind === "Unicast" && spec.direction === "MainToRenderer") ||
-               this.isBrokeredSpec(spec),
+               isBrokeredSpec(spec),
          ),
-      );
-   }
-   /** Whether any schema file declares a channel between a renderer and a utility process. */
-   private hasBrokeredChannels(): boolean {
-      return this.pfsArray.some((pfs) =>
-         pfs.specs.channelSpecArray.some((spec) => this.isBrokeredSpec(spec)),
       );
    }
    /** Whether any schema file declares a port channel with the direction. */

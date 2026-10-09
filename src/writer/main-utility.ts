@@ -11,7 +11,7 @@
 
 import type * as t from "@types";
 import type { ChannelEntry, MainContext } from "./main-bindings.js";
-import { buildUtilityPeer } from "./utility-runtime.js";
+import { buildUtilityPeer } from "./utility-peer.js";
 
 /** The channels with a utility process, and the ones between a page and a utility process. */
 

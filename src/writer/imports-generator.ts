@@ -9,53 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import type * as t from "@types";
-
-const SCRIPT_EXTENSION = /\.(tsx?|mts|cts|jsx?|mjs|cjs)$/;
-
-/**
- * The extension of the compiled file for each script extension. A specifier needs it under
- * NodeNext for every script, and under every resolution for the module scripts: `./a.mjs` is the
- * only spelling of `a.mts` that resolves.
- */
-const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
-   ts: ".js",
-   tsx: ".js",
-   js: ".js",
-   jsx: ".js",
-   mts: ".mjs",
-   mjs: ".mjs",
-   cts: ".cjs",
-   cjs: ".cjs",
-};
-
-/**
- * The script extensions of the index file of a directory, in the order that TypeScript tries
- * them. The first one that exists names the file that `./models` stands for.
- */
-const INDEX_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-
-/**
- * The fields of the `package.json` of a directory that the compiler or Node resolve the directory
- * through, before its index file.
- */
-const PACKAGE_ENTRY_FIELDS = ["types", "typings", "typesVersions", "main"];
-
-/** A directory whose `package.json` names its entry point. */
-const PACKAGE_DIRECTORY = Symbol("package directory");
-
-/** What a directory specifier stands for: an index file, a package directory, or nothing. */
-type DirectoryEntry = string | typeof PACKAGE_DIRECTORY | null;
-
-/**
- * Extensions of the files that a schema file imports as they are, such as a JSON module. A
- * specifier with one is not extensionless, so NodeNext does not add `.js` to it. Other dots in
- * the file name, as in `user.model`, belong to the name.
- */
-const DATA_EXTENSION =
-   /\.(json|node|wasm|css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|ico|html?|txt|md|csv|ya?ml|toml)$/i;
+import { ImportPathResolver } from "./import-paths.js";
 
 /** One import line of a generated file, shared by every schema file that refers to the type. */
 interface Binding {
@@ -74,16 +29,13 @@ interface Target {
 }
 
 export class ImportsGenerator {
-   private readonly projectUsesNodeNext: boolean;
-   private readonly targetFilePath: string;
+   private readonly paths: ImportPathResolver;
    private readonly bindings = new Map<string, Binding>();
    private readonly usedNames: Set<string>;
    private readonly resolved = new Map<string, Binding | null>();
    /** The names being resolved, which stops aliases that refer to one another. */
    private readonly resolving = new Set<string>();
    private readonly renames = new Map<string, Map<string, string>>();
-   /** What a directory specifier stands for (see `directoryEntry`), by its absolute path. */
-   private readonly directoryEntries = new Map<string, DirectoryEntry>();
 
    /**
     * `reservedNames` are the names that the generated file declares or imports itself, such as
@@ -94,36 +46,8 @@ export class ImportsGenerator {
       targetFilePath: string,
       reservedNames: Iterable<string> = [],
    ) {
-      this.projectUsesNodeNext = projectUsesNodeNext;
-      this.targetFilePath = targetFilePath;
+      this.paths = new ImportPathResolver(projectUsesNodeNext, targetFilePath);
       this.usedNames = new Set(reservedNames);
-   }
-
-   /**
-    * Splits a source file path into its base name and its script extension, if it has one.
-    * Dots in a file name such as `user.model` belong to the name and are kept.
-    */
-   private splitScriptExtension(filePath: string): { base: string; ext: string | null } {
-      const normalizedPath = filePath.replaceAll(path.sep, "/");
-      const match = SCRIPT_EXTENSION.exec(normalizedPath);
-      return match
-         ? { base: normalizedPath.slice(0, match.index), ext: match[1] }
-         : { base: normalizedPath, ext: null };
-   }
-
-   /**
-    * Turns the path of a source file into an import specifier. Only script extensions are
-    * replaced, by the extension of the compiled file. `.ts`, `.tsx`, `.js` and `.jsx` are
-    * dropped unless the project uses NodeNext, which also adds `.js` to a path without an
-    * extension. `.mts`, `.mjs`, `.cts` and `.cjs` are never dropped: they do not resolve without.
-    */
-   private getImportPath(...paths: string[]): string {
-      const { base, ext } = this.splitScriptExtension(path.join(...paths));
-      if (ext) {
-         const output = SCRIPT_OUTPUT_EXTENSIONS[ext];
-         return this.projectUsesNodeNext || output !== ".js" ? `${base}${output}` : base;
-      }
-      return this.projectUsesNodeNext && !DATA_EXTENSION.test(base) ? `${base}.js` : base;
    }
 
    /**
@@ -131,100 +55,7 @@ export class ImportsGenerator {
     * generated file. Packages and aliases are kept.
     */
    public getImportTypePath(pfs: t.ParsedFileSpecs, fromPath: string): string {
-      return this.resolveImportPath(fromPath, pfs.fullPath);
-   }
-
-   private resolveImportPath(fromPath: string, sourceFilePath: string): string {
-      if (!fromPath.startsWith(".")) {
-         // Packages and aliases do not depend on where the generated file is.
-         return fromPath;
-      }
-      if (!this.projectUsesNodeNext) {
-         return this.adjustImportPath(this.getImportPath(fromPath), sourceFilePath);
-      }
-      if (this.directoryEntry(fromPath, sourceFilePath) === PACKAGE_DIRECTORY) {
-         // No one file path spells both the types and the code of the directory, so it is kept.
-         return this.adjustImportPath(fromPath, sourceFilePath);
-      }
-      // NodeNext does not resolve a directory import, so the index file is named.
-      const specifier = this.withDirectoryIndex(fromPath, sourceFilePath);
-      return this.adjustImportPath(this.getImportPath(specifier), sourceFilePath);
-   }
-
-   /**
-    * What the relative specifier `fromPath` of a source file stands for, when it has no script or
-    * data extension and names a directory: the name of its index file (`index.ts`), or
-    * `PACKAGE_DIRECTORY` when its `package.json` names the entry point. A file of the same name
-    * wins over the directory, as it does in the compiler: `./models` is `models.ts` when both
-    * exist. Returns null for anything else.
-    *
-    * The compiler and Node resolve a directory through its `package.json` before its index file,
-    * but only in a CommonJS module, the only kind in which the schema file can import a directory.
-    * The generated files resolve the specifier the same way there, the types through `types` and
-    * the code through `main`, so it is kept. `exports` does not apply to a relative specifier.
-    */
-   private directoryEntry(fromPath: string, sourceFilePath: string): DirectoryEntry {
-      const target = path.resolve(path.dirname(sourceFilePath), fromPath);
-      const cached = this.directoryEntries.get(target);
-      if (cached !== undefined) {
-         return cached;
-      }
-      const isFile = (file: string) => fs.statSync(file, { throwIfNoEntry: false })?.isFile();
-      let found: DirectoryEntry = null;
-      if (
-         !(SCRIPT_EXTENSION.test(target) || DATA_EXTENSION.test(target)) &&
-         fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() &&
-         !INDEX_EXTENSIONS.some((ext) => isFile(`${target}${ext}`))
-      ) {
-         if (this.hasPackageEntry(target)) {
-            found = PACKAGE_DIRECTORY;
-         } else {
-            const ext = INDEX_EXTENSIONS.find((candidate) =>
-               isFile(path.join(target, `index${candidate}`)),
-            );
-            found = ext ? `index${ext}` : null;
-         }
-      }
-      this.directoryEntries.set(target, found);
-      return found;
-   }
-
-   /**
-    * Whether the `package.json` of the directory has a field that the compiler or Node resolves
-    * the directory through. One that cannot be read is ignored, as the compiler ignores it.
-    */
-   private hasPackageEntry(directory: string): boolean {
-      let manifest: unknown;
-      try {
-         manifest = JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8"));
-      } catch {
-         return false;
-      }
-      return (
-         typeof manifest === "object" &&
-         manifest !== null &&
-         PACKAGE_ENTRY_FIELDS.some((field) => field in manifest)
-      );
-   }
-
-   /** `fromPath`, followed by the index file when it names a directory that has one. */
-   private withDirectoryIndex(fromPath: string, sourceFilePath: string): string {
-      const entry = this.directoryEntry(fromPath, sourceFilePath);
-      return entry && entry !== PACKAGE_DIRECTORY
-         ? `${fromPath.replace(/\/+$/, "")}/${entry}`
-         : fromPath;
-   }
-
-   private adjustImportPath(importPath: string, sourceFilePath: string): string {
-      const sourceDir = path.dirname(sourceFilePath);
-      const targetDir = path.dirname(this.targetFilePath);
-      const importAbsolutePath = path.normalize(path.join(sourceDir, importPath));
-      let adjustedPath = path.relative(targetDir, importAbsolutePath);
-      adjustedPath = adjustedPath.replace(/\\/g, "/");
-      if (!["..", "./"].includes(adjustedPath.slice(0, 2))) {
-         adjustedPath = `./${adjustedPath}`;
-      }
-      return adjustedPath;
+      return this.paths.resolveImportPath(fromPath, pfs.fullPath);
    }
 
    /**
@@ -232,29 +63,7 @@ export class ImportsGenerator {
     * relative, and with the extension that the project's module resolution needs.
     */
    public getFileImportPath(filePath: string): string {
-      return this.adjustImportPath(this.getImportPath(path.basename(filePath)), filePath);
-   }
-
-   /**
-    * The base name of a script together with the kind of module it is, which spellings of the
-    * same file share: `./a`, `./a.ts` and `./a.js`; `./a.mts` and `./a.mjs`; `./a.cts` and `./a.cjs`.
-    */
-   private scriptId(filePath: string): string {
-      const { base, ext } = this.splitScriptExtension(filePath);
-      const output = ext ? SCRIPT_OUTPUT_EXTENSIONS[ext] : ".js";
-      return output === ".js" ? base : `${base}${output}`;
-   }
-
-   /** Identifies a module independently of how it is spelled. */
-   private moduleId(fromPath: string, sourceFilePath: string): string {
-      if (!fromPath.startsWith(".")) {
-         return fromPath;
-      }
-      const specifier = this.withDirectoryIndex(fromPath, sourceFilePath);
-      return this.scriptId(path.join(path.dirname(sourceFilePath), specifier)).replaceAll(
-         path.sep,
-         "/",
-      );
+      return this.paths.fileImportPath(filePath);
    }
 
    /**
@@ -265,18 +74,17 @@ export class ImportsGenerator {
       const { importSpecArray, typeSpecArray } = pfs.specs;
       const nsSpec = importSpecArray.find((spec) => spec.namespace === name);
       if (nsSpec) {
-         const nsPath = this.resolveImportPath(nsSpec.fromPath, pfs.fullPath);
+         const nsPath = this.paths.resolveImportPath(nsSpec.fromPath, pfs.fullPath);
          return {
-            key: `${this.moduleId(nsSpec.fromPath, pfs.fullPath)}*`,
+            key: `${this.paths.moduleId(nsSpec.fromPath, pfs.fullPath)}*`,
             render: (local) => `import type * as ${local} from "${nsPath}";`,
          };
       }
       const typeSpec = typeSpecArray.find((spec) => spec.name === name);
       if (typeSpec) {
          const exported = typeSpec.isDefault ? "default" : (typeSpec.exportedAs ?? name);
-         const fileName = path.basename(pfs.fullPath);
-         const filePath = this.adjustImportPath(this.getImportPath(fileName), pfs.fullPath);
-         const fileId = this.scriptId(pfs.fullPath);
+         const filePath = this.paths.fileImportPath(pfs.fullPath);
+         const fileId = this.paths.scriptId(pfs.fullPath);
          return { key: `${fileId}#${exported}`, render: this.namedImport(exported, filePath) };
       }
       // Entries are `Foo`, `Foo as Bar` or `default as Foo`. The local name is what signatures use.
@@ -284,8 +92,8 @@ export class ImportsGenerator {
          for (const entry of spec.customTypes) {
             const [exported, local = exported] = entry.split(" as ");
             if (local === name) {
-               const fromPath = this.resolveImportPath(spec.fromPath, pfs.fullPath);
-               const key = `${this.moduleId(spec.fromPath, pfs.fullPath)}#${exported}`;
+               const fromPath = this.paths.resolveImportPath(spec.fromPath, pfs.fullPath);
+               const key = `${this.paths.moduleId(spec.fromPath, pfs.fullPath)}#${exported}`;
                return { key, render: this.namedImport(exported, fromPath) };
             }
          }
@@ -399,12 +207,12 @@ export class ImportsGenerator {
       pfs: t.ParsedFileSpecs,
       ref: t.ValidatorRef,
    ): { local: string; declaration: string | null } {
-      const key = `${this.moduleId(ref.fromPath, pfs.fullPath)}#value:${ref.exported}`;
+      const key = `${this.paths.moduleId(ref.fromPath, pfs.fullPath)}#value:${ref.exported}`;
       let binding = this.bindings.get(key);
       if (!binding) {
          const local = this.uniqueName(ref.name);
          this.usedNames.add(local);
-         const fromPath = this.resolveImportPath(ref.fromPath, pfs.fullPath);
+         const fromPath = this.paths.resolveImportPath(ref.fromPath, pfs.fullPath);
          const render = (name: string) =>
             ref.exported === "default"
                ? `import ${name} from "${fromPath}";`
