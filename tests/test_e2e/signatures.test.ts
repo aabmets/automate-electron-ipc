@@ -268,7 +268,9 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
          "(_event: IpcMainEvent, event: string, callback: number, args: boolean) => {",
       );
       expect(main).toContain("return _callback(_event, event, callback, args);");
-      expect(main).toContain("on: (callback: (event: IpcMainEvent) => void)");
+      expect(main).toContain(
+         "on: (callback: (event: IpcMainEvent) => void, options?: IpcListenOptions)",
+      );
    });
 
    it("inserts the event parameter after the type parameters of generic signatures", async () => {
@@ -276,7 +278,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         "(callback: <T extends Parameters<(x: number) => void>>(event: IpcMainEvent, cb: T) => void)",
+         "(callback: <T extends Parameters<(x: number) => void>>(event: IpcMainEvent, cb: T) => void, options?: IpcListenOptions)",
       );
       expect(main).toContain(
          "<T extends Parameters<(x: number) => void>>(event: IpcMainEvent, cb: T) => {",

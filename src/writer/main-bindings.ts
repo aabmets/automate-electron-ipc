@@ -60,6 +60,12 @@ export class MainBindingsWriter extends BaseWriter {
          "IpcMainInvokeEvent",
          // Declared by the generated code.
          "registeredHandlers",
+         "IpcMain",
+         "IpcListenOptions",
+         "IpcTarget",
+         "IpcContentsRecord",
+         "contentsIpcRegistry",
+         "resolveIpcTarget",
          "IpcForbiddenError",
          "IpcConfig",
          "ipcConfig",
@@ -159,7 +165,6 @@ export class MainBindingsWriter extends BaseWriter {
       const electronTypeImportsSet = new Set<string>();
       const importDeclarationsArray: string[] = [];
       const channels: ChannelEntry[] = [];
-      let usesHandlers = false;
       let usesValidation = false;
       let usesEnvelope = false;
       let usesSenders = false;
@@ -178,7 +183,6 @@ export class MainBindingsWriter extends BaseWriter {
                usesIpcMain = true;
                electronTypeImportsSet.add(this.getEventType(spec));
                eventTypes.add(this.getEventType(spec));
-               usesHandlers ||= spec.kind !== "Broadcast";
                usesEnvelope ||= this.usesEnvelope(spec);
                usesStreams ||= spec.kind === "Stream";
                const validator = this.importValidator(
@@ -212,6 +216,7 @@ export class MainBindingsWriter extends BaseWriter {
          this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
       }
       this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
+      this.addTargetImports(usesIpcMain, electronTypeImportsSet);
       const scopes = this.getScopes();
       this.addScopeImports(scopes.length > 0, electronTypeImportsSet);
       const usesAsks = this.hasChannels("Unicast");
@@ -228,7 +233,6 @@ export class MainBindingsWriter extends BaseWriter {
       const bindingsExpression = this.buildSupport(
          {
             usesIpcMain,
-            usesHandlers,
             usesValidation,
             usesEnvelope,
             usesSenders,
@@ -286,6 +290,13 @@ export class MainBindingsWriter extends BaseWriter {
          for (const type of ["MessagePortMain", "WebContents", "WebFrameMain"]) {
             types.add(type);
          }
+      }
+   }
+   /** Adds the electron types that `resolveIpcTarget` uses: the `IpcMain` of the app or of some contents. */
+   private addTargetImports(used: boolean, types: Set<string>): void {
+      if (used) {
+         types.add("IpcMain");
+         types.add("WebContents");
       }
    }
    /** Adds the electron types that `registerScope` uses. */
@@ -352,7 +363,6 @@ export class MainBindingsWriter extends BaseWriter {
    private buildSupport(
       uses: {
          usesIpcMain: boolean;
-         usesHandlers: boolean;
          usesValidation: boolean;
          usesEnvelope: boolean;
          usesSenders: boolean;
@@ -376,6 +386,7 @@ export class MainBindingsWriter extends BaseWriter {
       if (uses.usesIpcMain) {
          support.push(
             this.buildSenderValidation(eventTypes, uses.usesValidation, uses.usesScopedGuards),
+            this.buildTargetResolver(),
          );
       }
       if (uses.usesValidation) {
@@ -410,13 +421,6 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesMainPorts) {
          support.push(this.buildMainPortHelpers());
-      }
-      if (uses.usesHandlers) {
-         // The handler that each invoke channel has now, which its disposer compares against.
-         // It uses no global, which a schema type could shadow, and has no prototype.
-         support.push(
-            "\nconst registeredHandlers: { [channel: string]: unknown } = { __proto__: null };\n",
-         );
       }
       return support;
    }
@@ -487,6 +491,86 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}scopeRegistry[id] = entry;`,
          `${i1}contents.once('destroyed', remove);`,
          `${i1}return remove;`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
+    * Where a listener or handler is registered: `resolveIpcTarget` returns the global `ipcMain`, or
+    * with `options.webContents` the `ipc` of those contents, which Electron dispatches to before
+    * `ipcMain` and which only gets the messages of that page. It also gives the registry of the
+    * handlers that the target has now, which a disposer compares against (it uses no global, which
+    * a schema type could shadow, and has no prototype), and `watch`, which disposes the
+    * registration when the contents are destroyed. The registry of the contents and the single
+    * `destroyed` listener are made once per contents, so any number of channels does not hit the
+    * limit of listeners, and both are dropped when the contents are destroyed. Contents which are
+    * already destroyed throw, since `ipc` would never receive anything.
+    */
+   private buildTargetResolver(): string {
+      const [i1, i2, i3, i4] = this.indents;
+      return [
+         "",
+         "export interface IpcListenOptions {",
+         `${i1}/**`,
+         `${i1} * Registers on the \`ipc\` of these contents instead of the global \`ipcMain\`: only the`,
+         `${i1} * messages of this page arrive, an \`invoke\` handler wins over the global one, and the`,
+         `${i1} * registration is removed when the contents are destroyed.`,
+         `${i1} */`,
+         `${i1}webContents?: WebContents;`,
+         "}",
+         "",
+         "interface IpcTarget {",
+         `${i1}ipc: IpcMain;`,
+         `${i1}handlers: { [channel: string]: unknown };`,
+         `${i1}watch: (remove: () => void) => () => void;`,
+         "}",
+         "",
+         "interface IpcContentsRecord {",
+         `${i1}handlers: { [channel: string]: unknown };`,
+         `${i1}removers: (() => void)[];`,
+         "}",
+         "",
+         "const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };",
+         "",
+         "const contentsIpcRegistry: { [id: string]: unknown } = { __proto__: null };",
+         "",
+         "function resolveIpcTarget(options?: IpcListenOptions): IpcTarget {",
+         `${i1}const contents = options?.webContents;`,
+         `${i1}if (!contents) {`,
+         `${i2}return { ipc: electronIpcMain, handlers: registeredHandlers, watch: () => () => {} };`,
+         `${i1}}`,
+         `${i1}if (contents.isDestroyed()) {`,
+         `${i2}throw new TypeError('Object has been destroyed');`,
+         `${i1}}`,
+         `${i1}const id = contents.id;`,
+         `${i1}let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;`,
+         `${i1}if (!record) {`,
+         `${i2}const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };`,
+         `${i2}record = created;`,
+         `${i2}contentsIpcRegistry[id] = created;`,
+         `${i2}contents.once('destroyed', () => {`,
+         `${i3}delete contentsIpcRegistry[id];`,
+         `${i3}for (const remove of created.removers.slice()) {`,
+         `${i4}remove();`,
+         `${i3}}`,
+         `${i2}});`,
+         `${i1}}`,
+         `${i1}const { handlers, removers } = record;`,
+         `${i1}return {`,
+         `${i2}ipc: contents.ipc,`,
+         `${i2}handlers,`,
+         `${i2}watch: (remove) => {`,
+         `${i3}removers.push(remove);`,
+         `${i3}return () => {`,
+         `${i4}for (let at = 0; at < removers.length; at++) {`,
+         `${i4}${i1}if (removers[at] === remove) {`,
+         `${i4}${i2}removers.splice(at, 1);`,
+         `${i4}${i2}return;`,
+         `${i4}${i1}}`,
+         `${i4}}`,
+         `${i3}};`,
+         `${i2}},`,
+         `${i1}};`,
          "}",
          "",
       ].join("\n");
@@ -761,12 +845,15 @@ export class MainBindingsWriter extends BaseWriter {
               `${i3}}`,
               `${i2}};`,
            ];
+      const targetName = this.uniqueName("target", taken);
+      const optionsName = this.uniqueName("options", taken);
+      const unwatchName = this.uniqueName("unwatch", taken);
       const unregister = isBroadcast
-         ? [`${i3}electronIpcMain.off(${wire}, ${listenerName});`]
+         ? [`${i3}${targetName}.ipc.off(${wire}, ${listenerName});`]
          : [
-              `${i3}if (registeredHandlers[${channel}] === ${listenerName}) {`,
-              `${i4}delete registeredHandlers[${channel}];`,
-              `${i4}electronIpcMain.removeHandler(${wire});`,
+              `${i3}if (${targetName}.handlers[${channel}] === ${listenerName}) {`,
+              `${i4}delete ${targetName}.handlers[${channel}];`,
+              `${i4}${targetName}.ipc.removeHandler(${wire});`,
               `${i3}}`,
            ];
       const names: ListenerNames = {
@@ -819,23 +906,29 @@ export class MainBindingsWriter extends BaseWriter {
                 ]
               : inner;
          const lines = [
-            `\n${i1}${method}: (${callbackName}: ${modSigDef}) => {`,
+            `\n${i1}${method}: (${callbackName}: ${modSigDef}, ${optionsName}?: IpcListenOptions) => {`,
             ...guard,
+            `${i2}const ${targetName} = resolveIpcTarget(${optionsName});`,
             `${i2}const ${removeName} = () => {`,
+            `${i3}${unwatchName}();`,
             ...unregister,
             `${i2}};`,
             ...listener,
          ];
          if (isBroadcast) {
-            lines.push(`${i2}electronIpcMain.on(${wire}, ${listenerName});`);
+            lines.push(`${i2}${targetName}.ipc.on(${wire}, ${listenerName});`);
          } else {
             lines.push(
-               `${i2}electronIpcMain.removeHandler(${wire});`,
-               `${i2}electronIpcMain.handle(${wire}, ${listenerName});`,
-               `${i2}registeredHandlers[${channel}] = ${listenerName};`,
+               `${i2}${targetName}.ipc.removeHandler(${wire});`,
+               `${i2}${targetName}.ipc.handle(${wire}, ${listenerName});`,
+               `${i2}${targetName}.handlers[${channel}] = ${listenerName};`,
             );
          }
-         lines.push(`${i2}return ${removeName};`, `${i1}},`);
+         lines.push(
+            `${i2}const ${unwatchName} = ${targetName}.watch(${removeName});`,
+            `${i2}return ${removeName};`,
+            `${i1}},`,
+         );
          return lines.join("\n");
       };
       // A stream has no `handleOnce`: a call does not use up a handler that is a generator.

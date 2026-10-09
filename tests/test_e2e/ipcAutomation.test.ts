@@ -428,7 +428,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       expect(userC).not.toBe("User");
 
       expect(methodLine(main, "findUserC", "handle")).toContain(
-         `(callback: <T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => Promise<T>)`,
+         `(callback: <T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => Promise<T>, options?: IpcListenOptions)`,
       );
       expect(main).toContain(`<T extends ${userC}>(event: IpcMainInvokeEvent, user: T) => {`);
       expect(main).toContain("return callback(event, user);");
@@ -446,7 +446,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
 
       expect(methodLine(main, "tagUserC", "handle")).toContain(
          `(callback: (event: IpcMainInvokeEvent, tag: \`user-\${${userC}["email"]}\`, ` +
-            `shape: { User: ${userC} }) => Promise<${userC}["email"]>)`,
+            `shape: { User: ${userC} }) => Promise<${userC}["email"]>, options?: IpcListenOptions)`,
       );
       expect(methodLine(project.generated["window.d.ts"], "tagUserC", "invoke")).toContain(
          `(tag: \`user-\${${userC}["email"]}\`, shape: { User: ${userC} }) => `,
@@ -487,7 +487,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
       const main = project.generated["main.ts"];
 
       expect(main).toContain(
-         'import type { IpcMainInvokeEvent, IpcMainEvent, BrowserWindow, WebContents, WebContentsView, WebFrameMain } from "electron";',
+         'import type { IpcMainInvokeEvent, IpcMainEvent, BrowserWindow, WebContents, WebContentsView, WebFrameMain, IpcMain } from "electron";',
       );
       // The helpers and imports of the senders are reserved too.
       expect(importLine(main, "WebContents", "./schema")).toBe(
@@ -539,11 +539,36 @@ describe("ipcAutomation, schema types named like generated names", () => {
          'import type { IpcMainEvent as IpcMainEvent_2 } from "./types/events";',
       );
       // The schema type is used in the signatures, the Electron type in the generated wrapper.
-      expect(main).toContain("(callback: (event: IpcMainEvent, options: BrowserWindow_2) => void)");
+      expect(main).toContain(
+         "(callback: (event: IpcMainEvent, options: BrowserWindow_2) => void, _options?: IpcListenOptions)",
+      );
       expect(main).toContain(
          "(target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, event: IpcMainEvent_2)",
       );
-      expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent) => Promise<ipc_2>)");
+      expect(main).toContain(
+         "handle: (callback: (event: IpcMainInvokeEvent) => Promise<ipc_2>, options?: IpcListenOptions)",
+      );
+   });
+
+   it("imports the schema types that are named like the helpers of scoped registration under aliases", async () => {
+      project = await runFixture("reserved-names");
+      const main = project.generated["main.ts"];
+
+      for (const name of [
+         "IpcListenOptions",
+         "IpcTarget",
+         "IpcMain",
+         "IpcContentsRecord",
+         "contentsIpcRegistry",
+         "resolveIpcTarget",
+      ]) {
+         expect(importLine(main, name, "./schema")).toBe(
+            `import type { ${name} as ${name}_2 } from "./schema";`,
+         );
+      }
+      expect(main).toContain("export interface IpcListenOptions {");
+      expect(main).toContain("Promise<IpcListenOptions_2>");
+      expect(main).toContain("Promise<IpcMain_2>");
    });
 
    it("imports the schema types under aliases in window.d.ts", async () => {
@@ -595,7 +620,9 @@ describe("ipcAutomation, schema types named like globals", () => {
       expect(importLine(main, "Map", "./types/map")).toBe(
          'import type { Map } from "./types/map";',
       );
-      expect(main).toContain("(callback: (event: IpcMainEvent, error: Error_2) => void)");
+      expect(main).toContain(
+         "(callback: (event: IpcMainEvent, error: Error_2) => void, options?: IpcListenOptions)",
+      );
       // The global `Date` has no local binding and needs no import.
       expect(main).not.toMatch(/import type \{[^}]*\bDate\b/);
    });
@@ -693,7 +720,9 @@ describe("ipcAutomation, handler and sender types", () => {
       project = await runFixture("handler-types");
       const main = project.generated["main.ts"];
 
-      expect(main).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
+      expect(main).toContain(
+         'import type { IpcMainInvokeEvent, IpcMainEvent, IpcMain, WebContents } from "electron";',
+      );
       expect(main).toContain("handle: (callback: (event: IpcMainInvokeEvent, id: number)");
       expect(main).toContain("(event: IpcMainInvokeEvent, id: number) => {");
       expect(main).toContain("return callback(event, id);");
@@ -759,7 +788,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
       );
 
       expect(methodLine(generated["main.ts"], "getÜser", "handle")).toContain(
-         '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>)',
+         '(callback: (event: IpcMainInvokeEvent, id: "ñ", size: Größe) => Promise<Üser>, options?: IpcListenOptions)',
       );
       expect(generated["main.ts"]).toContain(
          `const handler = <T extends "ü" = "ü">(event: IpcMainInvokeEvent, arg: T) => {`,

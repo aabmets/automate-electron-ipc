@@ -32,7 +32,7 @@ afterEach(async () => {
  */
 function wireNames(text: string): string[] {
    const calls =
-      /(?:electronIpcMain|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage|connectPorts)\(\s*'([^']+)'/g;
+      /(?:electronIpcMain|target\.ipc|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage|connectPorts)\(\s*'([^']+)'/g;
    const names = Array.from(text.matchAll(calls), (match) =>
       (match[1] ?? match[2]).replace(/:close$/, ""),
    );

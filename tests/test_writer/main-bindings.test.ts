@@ -34,7 +34,7 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainInvokeEvent } from "electron";
+         import type { IpcMainInvokeEvent, IpcMain, WebContents } from "electron";
 
          export class IpcForbiddenError extends Error {
             readonly code = 'IPC_FORBIDDEN';
@@ -83,6 +83,69 @@ describe("MainBindingsWriter", () => {
             return allowed;
          }
 
+         export interface IpcListenOptions {
+            /**
+             * Registers on the \`ipc\` of these contents instead of the global \`ipcMain\`: only the
+             * messages of this page arrive, an \`invoke\` handler wins over the global one, and the
+             * registration is removed when the contents are destroyed.
+             */
+            webContents?: WebContents;
+         }
+
+         interface IpcTarget {
+            ipc: IpcMain;
+            handlers: { [channel: string]: unknown };
+            watch: (remove: () => void) => () => void;
+         }
+
+         interface IpcContentsRecord {
+            handlers: { [channel: string]: unknown };
+            removers: (() => void)[];
+         }
+
+         const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
+
+         const contentsIpcRegistry: { [id: string]: unknown } = { __proto__: null };
+
+         function resolveIpcTarget(options?: IpcListenOptions): IpcTarget {
+            const contents = options?.webContents;
+            if (!contents) {
+               return { ipc: electronIpcMain, handlers: registeredHandlers, watch: () => () => {} };
+            }
+            if (contents.isDestroyed()) {
+               throw new TypeError('Object has been destroyed');
+            }
+            const id = contents.id;
+            let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;
+            if (!record) {
+               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };
+               record = created;
+               contentsIpcRegistry[id] = created;
+               contents.once('destroyed', () => {
+                  delete contentsIpcRegistry[id];
+                  for (const remove of created.removers.slice()) {
+                     remove();
+                  }
+               });
+            }
+            const { handlers, removers } = record;
+            return {
+               ipc: contents.ipc,
+               handlers,
+               watch: (remove) => {
+                  removers.push(remove);
+                  return () => {
+                     for (let at = 0; at < removers.length; at++) {
+                        if (removers[at] === remove) {
+                           removers.splice(at, 1);
+                           return;
+                        }
+                     }
+                  };
+               },
+            };
+         }
+
          interface IpcErrorInfo {
             name: string;
             message: string;
@@ -122,20 +185,20 @@ describe("MainBindingsWriter", () => {
             }
          }
 
-         const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
-
          export const ipc = {
             vitestChannel: {
-               handle: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => {
+               handle: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>, options?: IpcListenOptions) => {
                   const guard = (event: IpcMainInvokeEvent) => {
                      if (!isSenderAllowed(event, 'vitestChannel')) {
                         throw new IpcForbiddenError('vitestChannel');
                      }
                   };
+                  const target = resolveIpcTarget(options);
                   const remove = () => {
-                     if (registeredHandlers['vitestChannel'] === listener) {
-                        delete registeredHandlers['vitestChannel'];
-                        electronIpcMain.removeHandler('vitestChannel');
+                     unwatch();
+                     if (target.handlers['vitestChannel'] === listener) {
+                        delete target.handlers['vitestChannel'];
+                        target.ipc.removeHandler('vitestChannel');
                      }
                   };
                   const handler = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
@@ -144,21 +207,24 @@ describe("MainBindingsWriter", () => {
                   };
                   const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>
                      settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));
-                  electronIpcMain.removeHandler('vitestChannel');
-                  electronIpcMain.handle('vitestChannel', listener);
-                  registeredHandlers['vitestChannel'] = listener;
+                  target.ipc.removeHandler('vitestChannel');
+                  target.ipc.handle('vitestChannel', listener);
+                  target.handlers['vitestChannel'] = listener;
+                  const unwatch = target.watch(remove);
                   return remove;
                },
-               handleOnce: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>) => {
+               handleOnce: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>, options?: IpcListenOptions) => {
                   const guard = (event: IpcMainInvokeEvent) => {
                      if (!isSenderAllowed(event, 'vitestChannel')) {
                         throw new IpcForbiddenError('vitestChannel');
                      }
                   };
+                  const target = resolveIpcTarget(options);
                   const remove = () => {
-                     if (registeredHandlers['vitestChannel'] === listener) {
-                        delete registeredHandlers['vitestChannel'];
-                        electronIpcMain.removeHandler('vitestChannel');
+                     unwatch();
+                     if (target.handlers['vitestChannel'] === listener) {
+                        delete target.handlers['vitestChannel'];
+                        target.ipc.removeHandler('vitestChannel');
                      }
                   };
                   const handler = (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => {
@@ -168,9 +234,10 @@ describe("MainBindingsWriter", () => {
                   };
                   const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>
                      settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));
-                  electronIpcMain.removeHandler('vitestChannel');
-                  electronIpcMain.handle('vitestChannel', listener);
-                  registeredHandlers['vitestChannel'] = listener;
+                  target.ipc.removeHandler('vitestChannel');
+                  target.ipc.handle('vitestChannel', listener);
+                  target.handlers['vitestChannel'] = listener;
+                  const unwatch = target.watch(remove);
                   return remove;
                },
             },
@@ -186,7 +253,7 @@ describe("MainBindingsWriter", () => {
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       const expectedOutput = utils.dedent(`
          import { ipcMain as electronIpcMain } from "electron";
-         import type { IpcMainEvent } from "electron";
+         import type { IpcMainEvent, IpcMain, WebContents } from "electron";
 
          export class IpcForbiddenError extends Error {
             readonly code = 'IPC_FORBIDDEN';
@@ -235,12 +302,77 @@ describe("MainBindingsWriter", () => {
             return allowed;
          }
 
+         export interface IpcListenOptions {
+            /**
+             * Registers on the \`ipc\` of these contents instead of the global \`ipcMain\`: only the
+             * messages of this page arrive, an \`invoke\` handler wins over the global one, and the
+             * registration is removed when the contents are destroyed.
+             */
+            webContents?: WebContents;
+         }
+
+         interface IpcTarget {
+            ipc: IpcMain;
+            handlers: { [channel: string]: unknown };
+            watch: (remove: () => void) => () => void;
+         }
+
+         interface IpcContentsRecord {
+            handlers: { [channel: string]: unknown };
+            removers: (() => void)[];
+         }
+
+         const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
+
+         const contentsIpcRegistry: { [id: string]: unknown } = { __proto__: null };
+
+         function resolveIpcTarget(options?: IpcListenOptions): IpcTarget {
+            const contents = options?.webContents;
+            if (!contents) {
+               return { ipc: electronIpcMain, handlers: registeredHandlers, watch: () => () => {} };
+            }
+            if (contents.isDestroyed()) {
+               throw new TypeError('Object has been destroyed');
+            }
+            const id = contents.id;
+            let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;
+            if (!record) {
+               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };
+               record = created;
+               contentsIpcRegistry[id] = created;
+               contents.once('destroyed', () => {
+                  delete contentsIpcRegistry[id];
+                  for (const remove of created.removers.slice()) {
+                     remove();
+                  }
+               });
+            }
+            const { handlers, removers } = record;
+            return {
+               ipc: contents.ipc,
+               handlers,
+               watch: (remove) => {
+                  removers.push(remove);
+                  return () => {
+                     for (let at = 0; at < removers.length; at++) {
+                        if (removers[at] === remove) {
+                           removers.splice(at, 1);
+                           return;
+                        }
+                     }
+                  };
+               },
+            };
+         }
+
          export const ipc = {
             vitestChannel: {
-               on: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => {
+               on: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void, options?: IpcListenOptions) => {
                   const guard = (event: IpcMainEvent) => isSenderAllowed(event, 'vitestChannel');
+                  const target = resolveIpcTarget(options);
                   const remove = () => {
-                     electronIpcMain.off('vitestChannel', listener);
+                     unwatch();
+                     target.ipc.off('vitestChannel', listener);
                   };
                   const listener = (event: IpcMainEvent, arg1: string, arg2: string) => {
                      if (!guard(event)) {
@@ -248,13 +380,16 @@ describe("MainBindingsWriter", () => {
                      }
                      return callback(event, arg1, arg2);
                   };
-                  electronIpcMain.on('vitestChannel', listener);
+                  target.ipc.on('vitestChannel', listener);
+                  const unwatch = target.watch(remove);
                   return remove;
                },
-               once: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void) => {
+               once: (callback: (event: IpcMainEvent, arg1: string, arg2: string) => void, options?: IpcListenOptions) => {
                   const guard = (event: IpcMainEvent) => isSenderAllowed(event, 'vitestChannel');
+                  const target = resolveIpcTarget(options);
                   const remove = () => {
-                     electronIpcMain.off('vitestChannel', listener);
+                     unwatch();
+                     target.ipc.off('vitestChannel', listener);
                   };
                   const listener = (event: IpcMainEvent, arg1: string, arg2: string) => {
                      if (!guard(event)) {
@@ -263,7 +398,8 @@ describe("MainBindingsWriter", () => {
                      remove();
                      return callback(event, arg1, arg2);
                   };
-                  electronIpcMain.on('vitestChannel', listener);
+                  target.ipc.on('vitestChannel', listener);
+                  const unwatch = target.watch(remove);
                   return remove;
                },
             },
@@ -347,9 +483,13 @@ describe("MainBindingsWriter", () => {
       const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
 
       const both = await render(unicast, broadcast);
-      expect(both).toContain('import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";');
+      expect(both).toContain(
+         'import type { IpcMainInvokeEvent, IpcMainEvent, IpcMain, WebContents } from "electron";',
+      );
       const onlyUnicast = await render(unicast);
-      expect(onlyUnicast).toContain('import type { IpcMainInvokeEvent } from "electron";');
+      expect(onlyUnicast).toContain(
+         'import type { IpcMainInvokeEvent, IpcMain, WebContents } from "electron";',
+      );
       expect(onlyUnicast).not.toContain("IpcMainEvent");
       const none = await render();
       expect(none).not.toContain("import type");
@@ -390,7 +530,7 @@ describe("MainBindingsWriter", () => {
       const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
       expect(output).toContain(
-         "on: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void)",
+         "on: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void, options?: IpcListenOptions)",
       );
       expect(output).toContain(
          "const listener = (_event: IpcMainEvent, callback: string, event: number) => {",
@@ -483,7 +623,7 @@ describe("MainBindingsWriter", () => {
          );
          // The callback keeps the declared signature.
          expect(output).toContain(
-            "handle: (callback: (event: IpcMainInvokeEvent, id: number) => Promise<string>)",
+            "handle: (callback: (event: IpcMainInvokeEvent, id: number) => Promise<string>, options?: IpcListenOptions)",
          );
       });
 
@@ -684,11 +824,11 @@ describe("MainBindingsWriter", () => {
 
       expect(output).toContain("const handler = (event: IpcMainInvokeEvent, listener: string)");
       expect(output).toContain("const _listener = (event: IpcMainInvokeEvent, ...rest: unknown[])");
-      expect(output).toContain("electronIpcMain.handle('clashIt', _listener);");
-      expect(output).toContain("if (registeredHandlers['clashIt'] === _listener) {");
+      expect(output).toContain("target.ipc.handle('clashIt', _listener);");
+      expect(output).toContain("if (target.handlers['clashIt'] === _listener) {");
    });
 
-   it("should declare the handler registry only for invoke channels", async () => {
+   it("should register the handlers of invoke channels in the registry of the target only", async () => {
       const render = async (...channels: shared.SimpleChannel[]) => {
          const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
          await obj.write(false);
@@ -697,9 +837,9 @@ describe("MainBindingsWriter", () => {
       const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
       const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
 
-      expect(await render(unicast)).toContain("const registeredHandlers");
-      expect(await render(broadcast)).not.toContain("registeredHandlers");
-      expect(await render(broadcast)).not.toContain("removeHandler");
+      expect(await render(unicast)).toContain("target.handlers['getIt'] = listener;");
+      expect(await render(broadcast)).not.toContain("handlers[");
+      expect(await render(broadcast)).not.toContain("removeHandler(");
    });
 
    it("should write an immediate sender and a separate binder for triggered channels", async () => {
@@ -1165,14 +1305,14 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain(
             "settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));",
          );
-         expect(output).toContain("electronIpcMain.handle('getIt', listener);");
-         expect(output).toContain("registeredHandlers['getIt'] = listener;");
+         expect(output).toContain("target.ipc.handle('getIt', listener);");
+         expect(output).toContain("target.handlers['getIt'] = listener;");
       });
 
       it("registers the wrapper, not the inner handler, so the disposer compares the right function", async () => {
          const output = await render([unicast]);
 
-         expect(output).toContain("if (registeredHandlers['getIt'] === listener) {");
+         expect(output).toContain("if (target.handlers['getIt'] === listener) {");
          expect(output).not.toContain("=== handler");
       });
 
@@ -1195,7 +1335,7 @@ describe("MainBindingsWriter", () => {
       it("leaves the listener of a send channel without the envelope", async () => {
          const output = await render([unicast, broadcast]);
 
-         expect(output).toContain("electronIpcMain.on('sendIt', listener);");
+         expect(output).toContain("target.ipc.on('sendIt', listener);");
          expect(output.match(/settleInvoke\(\(\) =>/g)).toHaveLength(2);
       });
 
@@ -1205,7 +1345,7 @@ describe("MainBindingsWriter", () => {
          expect(output).not.toContain("settleInvoke");
          expect(output).not.toContain("toIpcError");
          expect(output).toContain("const listener = (event: IpcMainInvokeEvent) => {");
-         expect(output).toContain("electronIpcMain.handle('getIt', listener);");
+         expect(output).toContain("target.ipc.handle('getIt', listener);");
       });
 
       it("treats rawErrors: false like the default", async () => {
@@ -1282,10 +1422,10 @@ describe("MainBindingsWriter", () => {
       it("puts the prefix in front of every name that is passed to Electron", async () => {
          const output = await render({ channelPrefix: "app:" });
 
-         expect(output).toContain("electronIpcMain.handle('app:getIt', listener);");
-         expect(output).toContain("electronIpcMain.removeHandler('app:getIt');");
-         expect(output).toContain("electronIpcMain.on('app:sendIt', listener);");
-         expect(output).toContain("electronIpcMain.off('app:sendIt', listener);");
+         expect(output).toContain("target.ipc.handle('app:getIt', listener);");
+         expect(output).toContain("target.ipc.removeHandler('app:getIt');");
+         expect(output).toContain("target.ipc.on('app:sendIt', listener);");
+         expect(output).toContain("target.ipc.off('app:sendIt', listener);");
          expect(output).toContain("webContents.send('app:pushIt', ");
          expect(output).toContain("connectPorts('app:chatIt', winA, winB)");
          expect(output).toContain("ends[0].contents.postMessage(channel, ends[0].key, [port1]);");
@@ -1298,15 +1438,15 @@ describe("MainBindingsWriter", () => {
 
          expect(output).toContain("isSenderAllowed(event, 'getIt')");
          expect(output).toContain("new IpcForbiddenError('getIt')");
-         expect(output).toContain("registeredHandlers['getIt'] = listener;");
+         expect(output).toContain("target.handlers['getIt'] = listener;");
          expect(output).not.toMatch(/'app:(getIt|sendIt)'\)\)/);
-         expect(output).not.toContain("registeredHandlers['app:");
+         expect(output).not.toContain("handlers['app:");
       });
 
       it("writes the names as they are without a prefix, and when the config has none", async () => {
          const bare = await render({ channelPrefix: "" });
 
-         expect(bare).toContain("electronIpcMain.handle('getIt', listener);");
+         expect(bare).toContain("target.ipc.handle('getIt', listener);");
          expect(bare).toContain("webContents.send('pushIt', ");
          expect(await render({})).toBe(bare);
       });
@@ -1470,19 +1610,19 @@ describe("MainBindingsWriter", () => {
          const output = await render([rows]);
 
          expect(output).toContain(
-            "handle: (callback: (event: IpcMainInvokeEvent, table: string, limit?: number) => AsyncIterable<Row>) => {",
+            "handle: (callback: (event: IpcMainInvokeEvent, table: string, limit?: number) => AsyncIterable<Row>, options?: IpcListenOptions) => {",
          );
          expect(output).not.toContain("handleOnce");
-         expect(output).toContain("electronIpcMain.handle('exportRows', listener);");
-         expect(output).toContain("registeredHandlers['exportRows'] = listener;");
-         expect(output).toContain("electronIpcMain.removeHandler('exportRows');");
+         expect(output).toContain("target.ipc.handle('exportRows', listener);");
+         expect(output).toContain("target.handlers['exportRows'] = listener;");
+         expect(output).toContain("target.ipc.removeHandler('exportRows');");
       });
 
       it("keeps the type of an AsyncGenerator return as written", async () => {
          const output = await render([tokens]);
 
          expect(output).toContain(
-            "handle: (callback: (event: IpcMainInvokeEvent) => AsyncGenerator<string, void, undefined>) => {",
+            "handle: (callback: (event: IpcMainInvokeEvent) => AsyncGenerator<string, void, undefined>, options?: IpcListenOptions) => {",
          );
       });
 
@@ -1506,7 +1646,7 @@ describe("MainBindingsWriter", () => {
             'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
          );
          expect(output).toContain(
-            'import type { IpcMainInvokeEvent, MessagePortMain, WebContents, WebFrameMain } from "electron";',
+            'import type { IpcMainInvokeEvent, MessagePortMain, WebContents, WebFrameMain, IpcMain } from "electron";',
          );
       });
 
@@ -1574,7 +1714,7 @@ describe("MainBindingsWriter", () => {
          const both = await render([rows, invoke]);
 
          expect(both).toContain(
-            "handleOnce: (callback: (event: IpcMainInvokeEvent) => Promise<string>)",
+            "handleOnce: (callback: (event: IpcMainInvokeEvent) => Promise<string>, options?: IpcListenOptions)",
          );
          expect(both).toContain(
             "const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>",
@@ -1585,7 +1725,7 @@ describe("MainBindingsWriter", () => {
       it("puts the prefix in front of the request and the port channel", async () => {
          const output = await render([rows], { channelPrefix: "app:" });
 
-         expect(output).toContain("electronIpcMain.handle('app:exportRows', listener);");
+         expect(output).toContain("target.ipc.handle('app:exportRows', listener);");
          expect(output).toContain("startStream(event, 'exportRows', 'app:exportRows', id, ");
          const bare = await render([rows], { channelPrefix: "" });
          expect(bare).toContain("startStream(event, 'exportRows', 'exportRows', id, ");
@@ -1669,7 +1809,7 @@ describe("MainBindingsWriter, utility channels", () => {
 
       expect(output.split("function toIpcError(").length).toBe(2);
       expect(output).toContain(
-         'import type { IpcMainInvokeEvent, UtilityProcess } from "electron";',
+         'import type { IpcMainInvokeEvent, UtilityProcess, IpcMain, WebContents } from "electron";',
       );
    });
 

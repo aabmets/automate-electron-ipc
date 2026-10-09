@@ -334,6 +334,39 @@ An `invoke` channel has one handler. Registering `handle` or `handleOnce` again 
 previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
 hot-restarting the main process works. The disposer of a replaced handler does nothing.
 
+#### Handlers for one window
+
+Every `on`, `once`, `handle` and `handleOnce` of a channel that a page calls (also the `handle` of a
+`stream` channel) takes a second argument, `{ webContents }`. With it, the registration is made on
+`webContents.ipc` of those contents instead of on the global `ipcMain`, so a window that keeps its own
+state does not have to look it up by `event.sender.id`:
+
+```typescript
+function openDocument(win: BrowserWindow, doc: Document) {
+   ipc.getDocument.handle(async () => doc, { webContents: win.webContents });
+   ipc.documentEdited.on((_event, text) => doc.update(text), { webContents: win.webContents });
+}
+```
+
+The registration returns a disposer as usual, and removes itself when the contents are destroyed
+(the disposer can be called afterwards without harm). Contents that are already destroyed throw a
+`TypeError`, because nothing would ever reach them. All the registrations of some contents share one
+`destroyed` listener.
+
+Electron dispatches a message from a page first to `webContents.ipc` and then to `ipcMain`:
+
+- An `invoke` is answered by the first of the two that has a handler, so a handler of the contents
+  wins over the global one for that page, and the global handler still serves the other pages. A
+  channel can have one handler on each target, and `handle` replaces only the handler of its own
+  target.
+- A `send` goes to the listeners of both, so a global `on` still hears a message that a listener of
+  the contents heard. Register on the contents only when the global listener does not need to run
+  for that page.
+
+The checks that apply to the channel (`allowedOrigins`, `scopes`, `configureIpc`, `validate`) run
+for the registrations of the contents as well. Frame-scoped handlers (`webFrameMain.ipc`) are not
+generated.
+
 #### Sending to windows
 
 `ipc.<name>.send(target, ...args)` of an `emit` channel takes a `BrowserWindow`, a `WebContentsView`,

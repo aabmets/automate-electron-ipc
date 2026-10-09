@@ -36,6 +36,20 @@ export type askRenderer = { asked: boolean };
 export type PendingAsk = { id: number };
 export type Awaited = { value: number };
 
+// Names that the generated code uses to register a listener on the contents of a window.
+export interface IpcListenOptions {
+   open: boolean;
+}
+export interface IpcTarget {
+   target: string;
+}
+export interface IpcMain {
+   name: string;
+}
+export type IpcContentsRecord = { removers: number };
+export type contentsIpcRegistry = { size: number };
+export type resolveIpcTarget = { resolved: boolean };
+
 export default defineChannels({
    getApi: invoke<() => Promise<IpcApi>>(),
    getIpc: invoke<() => Promise<ipc>>(),
@@ -48,5 +62,8 @@ export default defineChannels({
    askError: ask<(options: IpcAskOptions) => IpcAskError>(),
    askWho: ask<() => Promise<askRenderer>>(),
    askPending: ask<(pending: PendingAsk) => Awaited>(),
+   getListenOptions: invoke<() => Promise<IpcListenOptions>>(),
+   getTarget: invoke<(target: IpcTarget) => Promise<IpcMain>>(),
+   getRecord: invoke<() => Promise<[IpcContentsRecord, contentsIpcRegistry, resolveIpcTarget]>>(),
    eventHappened: emit<(event: IpcMainEvent) => void>({ trigger: "focus" }),
 });

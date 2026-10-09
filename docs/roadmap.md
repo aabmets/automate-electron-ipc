@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 63 delivered, 16 remaining, 1 dropped.
+**Progress:** 64 delivered, 15 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -90,7 +90,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T31: Configurable exposure key and isolated worlds](./tasks/T31-configurable-exposure-key-and-isolated.md) · depends on: T13
 - [x] [T32: Composable preload output](./tasks/T32-composable-preload-output.md) · depends on: T31
 - [x] [T33: Per-window API scopes (least privilege)](./tasks/T33-per-window-api-scopes.md) · depends on: T16, T32
-- [ ] [T34: Per-window scoped handlers (`webContents.ipc`)](./tasks/T34-per-window-scoped-handlers.md) · depends on: T15
+- [x] [T34: Per-window scoped handlers (`webContents.ipc`)](./tasks/T34-per-window-scoped-handlers.md) · depends on: T15
 - [ ] [T35: `getPathForFile` helper](./tasks/T35-getpathforfile-helper.md) · depends on: T32
 - [ ] [T36: Service worker IPC (Electron ≥ 35, experimental)](./tasks/T36-service-worker-ipc.md) · depends on: T15, T16
 - [ ] [T37: Custom serializers](./tasks/T37-custom-serializers.md) · depends on: T18
