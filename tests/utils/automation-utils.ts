@@ -9,13 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import cfg from "@src/config.js";
 import type * as t from "@types";
-import { vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 /** Makes `getResolvedConfig` resolve a config whose generated files are written under `dir/out`. */
-export function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolvedConfig>): void {
+function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolvedConfig>): void {
    vi.spyOn(cfg, "getResolvedConfig").mockResolvedValue({
       codeIndent: 3,
       projectUsesNodeNext: false,
@@ -28,4 +30,27 @@ export function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolv
       serviceWorkerTypesFilePath: path.join(dir, "out/service-worker.d.ts"),
       ...overrides,
    } as t.IPCResolvedConfig);
+}
+
+/**
+ * A temp directory for each test of the file or the `describe` block that calls it. It registers its
+ * own hooks: the directory is made before each test, and removed after it, with the mocks restored.
+ * `dir` is the directory of the running test, and `mockConfig` resolves a config whose generated
+ * files go to `dir/out` (see `mockAutomationConfig`).
+ */
+export function withAutomationDir(prefix = "vitest-automation-") {
+   let dir = "";
+   beforeEach(async () => {
+      dir = await fsp.mkdtemp(path.join(tmpdir(), prefix));
+   });
+   afterEach(async () => {
+      vi.restoreAllMocks();
+      await fsp.rm(dir, { recursive: true, force: true });
+   });
+   return {
+      get dir() {
+         return dir;
+      },
+      mockConfig: (overrides: Partial<t.IPCResolvedConfig>) => mockAutomationConfig(dir, overrides),
+   };
 }

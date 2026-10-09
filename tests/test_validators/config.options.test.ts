@@ -10,16 +10,13 @@
  */
 
 import { validateOptionalConfig } from "@src/validation/config-validation.js";
+import { baseConfig } from "@testutils/validator-utils.js";
 import * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("validateOptionalConfig", () => {
    it("should throw an error if ipcDataDir path is absolute", () => {
-      const config: t.IPCOptionalConfig = {
-         projectUsesNodeNext: false,
-         ipcDataDir: "/absolute/path/auto-ipc",
-         codeIndent: 3,
-      };
+      const config: t.IPCOptionalConfig = { ...baseConfig, ipcDataDir: "/absolute/path/auto-ipc" };
       expect(() => validateOptionalConfig(config)).toThrowError(
          "ipcDataDir must be relative to the project root",
       );
@@ -27,23 +24,23 @@ describe("validateOptionalConfig", () => {
 
    it("should throw an error if codeIndent is not an integer", () => {
       // Regression for T58: 2.5 was accepted and silently rounded down by `repeat`.
-      const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
-      expect(() => validateOptionalConfig({ ...config, codeIndent: 2.5 })).toThrowError(/integer/);
-      expect(() => validateOptionalConfig({ ...config, codeIndent: 3.999 })).toThrowError(
+      expect(() => validateOptionalConfig({ ...baseConfig, codeIndent: 2.5 })).toThrowError(
          /integer/,
       );
-      expect(() => validateOptionalConfig({ ...config, codeIndent: 1 })).toThrowError(
+      expect(() => validateOptionalConfig({ ...baseConfig, codeIndent: 3.999 })).toThrowError(
+         /integer/,
+      );
+      expect(() => validateOptionalConfig({ ...baseConfig, codeIndent: 1 })).toThrowError(
          /cannot be less than 2 or greater than 4/,
       );
       for (const codeIndent of [2, 3, 4]) {
-         expect(() => validateOptionalConfig({ ...config, codeIndent })).not.toThrowError();
+         expect(() => validateOptionalConfig({ ...baseConfig, codeIndent })).not.toThrowError();
       }
    });
 
    it("should throw errors if codeIndent value is out of range", () => {
-      const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc" };
       for (const codeIndent of [1, 5]) {
-         expect(() => validateOptionalConfig({ ...config, codeIndent })).toThrowError(
+         expect(() => validateOptionalConfig({ ...baseConfig, codeIndent })).toThrowError(
             "value cannot be less than 2 or greater than 4",
          );
       }
@@ -51,34 +48,30 @@ describe("validateOptionalConfig", () => {
 });
 
 describe("validateOptionalConfig, rawErrors", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
-
    it("accepts a boolean, and no value at all", () => {
       for (const rawErrors of [true, false, undefined]) {
-         expect(() => validateOptionalConfig({ ...config, rawErrors })).not.toThrowError();
+         expect(() => validateOptionalConfig({ ...baseConfig, rawErrors })).not.toThrowError();
       }
    });
 
    it.each(["true", 1, null, {}])("rejects %j, since it is not a boolean", (rawErrors) => {
       const value = rawErrors as unknown as boolean;
-      expect(() => validateOptionalConfig({ ...config, rawErrors: value })).toThrowError(
+      expect(() => validateOptionalConfig({ ...baseConfig, rawErrors: value })).toThrowError(
          /rawErrors/,
       );
    });
 });
 
 describe("validateOptionalConfig, timeoutMs", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
-
    it.each([0, 1, 30_000, Number.MAX_SAFE_INTEGER, undefined])("accepts %s", (timeoutMs) => {
-      expect(() => validateOptionalConfig({ ...config, timeoutMs })).not.toThrowError();
+      expect(() => validateOptionalConfig({ ...baseConfig, timeoutMs })).not.toThrowError();
    });
 
    it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "10", null])(
       "rejects %j, since it is not a non-negative integer",
       (timeoutMs) => {
          const value = timeoutMs as unknown as number;
-         expect(() => validateOptionalConfig({ ...config, timeoutMs: value })).toThrowError(
+         expect(() => validateOptionalConfig({ ...baseConfig, timeoutMs: value })).toThrowError(
             /timeoutMs/,
          );
       },
@@ -86,9 +79,8 @@ describe("validateOptionalConfig, timeoutMs", () => {
 });
 
 describe("validateOptionalConfig, channelPrefix", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (channelPrefix: unknown) =>
-      validateOptionalConfig({ ...config, channelPrefix: channelPrefix as string });
+      validateOptionalConfig({ ...baseConfig, channelPrefix: channelPrefix as string });
 
    it.each(["", "autoipc:", "my-app/v1:", "app_2.", "@scope/app#", "A".repeat(64)])(
       "accepts '%s'",
@@ -98,7 +90,7 @@ describe("validateOptionalConfig, channelPrefix", () => {
    );
 
    it("accepts a config without a prefix", () => {
-      expect(() => validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(baseConfig)).not.toThrowError();
    });
 
    it.each([
@@ -125,9 +117,8 @@ describe("validateOptionalConfig, channelPrefix", () => {
 });
 
 describe("validateOptionalConfig, exposeAs", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (exposeAs: unknown) =>
-      validateOptionalConfig({ ...config, exposeAs: exposeAs as string });
+      validateOptionalConfig({ ...baseConfig, exposeAs: exposeAs as string });
 
    it.each(["ipc", "api", "myApp", "_bridge", "$ipc", "ipc2", "IpcApi", "electronApi"])(
       "accepts '%s'",
@@ -170,16 +161,15 @@ describe("validateOptionalConfig, exposeAs", () => {
 });
 
 describe("validateOptionalConfig, isolatedWorldId", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (isolatedWorldId: unknown) =>
-      validateOptionalConfig({ ...config, isolatedWorldId: isolatedWorldId as number });
+      validateOptionalConfig({ ...baseConfig, isolatedWorldId: isolatedWorldId as number });
 
    it.each([1000, 1001, 5000, 2 ** 31 - 1])("accepts %d", (id) => {
       expect(() => check(id)).not.toThrowError();
    });
 
    it("accepts a config without a world", () => {
-      expect(() => validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(baseConfig)).not.toThrowError();
    });
 
    it.each([0, 1, 999, -1000, 1000.5, 2 ** 31, Number.POSITIVE_INFINITY])("rejects %d", (id) => {
@@ -195,9 +185,8 @@ describe("validateOptionalConfig, isolatedWorldId", () => {
 });
 
 describe("validateOptionalConfig, getPathForFile", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (getPathForFile: unknown) =>
-      validateOptionalConfig({ ...config, getPathForFile: getPathForFile as boolean });
+      validateOptionalConfig({ ...baseConfig, getPathForFile: getPathForFile as boolean });
 
    it.each([true, false])("accepts %s", (value) => {
       expect(() => check(value)).not.toThrowError();

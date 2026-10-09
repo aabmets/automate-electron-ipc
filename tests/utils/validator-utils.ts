@@ -12,6 +12,9 @@
 import type * as t from "@types";
 import { parseTestSignature } from "./writer/writer-utils.js";
 
+/** The smallest config that the validator of the optional config accepts, which tests extend. */
+export const baseConfig = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+
 export class ChannelSpecGenerator {
    private index: number;
 

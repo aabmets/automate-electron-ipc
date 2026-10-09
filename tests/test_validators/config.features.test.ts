@@ -10,12 +10,12 @@
  */
 
 import { validateOptionalConfig } from "@src/validation/config-validation.js";
+import { baseConfig } from "@testutils/validator-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("validateOptionalConfig, serializer", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (serializer: unknown) =>
-      validateOptionalConfig({ ...config, serializer: serializer as string });
+      validateOptionalConfig({ ...baseConfig, serializer: serializer as string });
 
    it.each([
       "superjson",
@@ -30,7 +30,7 @@ describe("validateOptionalConfig, serializer", () => {
    });
 
    it("accepts a config without a serializer", () => {
-      expect(() => validateOptionalConfig(config)).not.toThrowError();
+      expect(() => validateOptionalConfig(baseConfig)).not.toThrowError();
    });
 
    it.each([
@@ -54,9 +54,8 @@ describe("validateOptionalConfig, serializer", () => {
 });
 
 describe("validateOptionalConfig, autoExpose", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (autoExpose: unknown) =>
-      validateOptionalConfig({ ...config, autoExpose: autoExpose as boolean });
+      validateOptionalConfig({ ...baseConfig, autoExpose: autoExpose as boolean });
 
    it.each([true, false])("accepts %s", (value) => {
       expect(() => check(value)).not.toThrowError();
@@ -68,20 +67,18 @@ describe("validateOptionalConfig, autoExpose", () => {
 });
 
 describe("validateOptionalConfig, utilityBindingsPath", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
-
    it.each(["utility.ts", "src/worker/ipc.ts", "worker/ipc.mts", "worker/ipc.cts", undefined])(
       "accepts %s",
       (utilityBindingsPath) => {
          expect(() =>
-            validateOptionalConfig({ ...config, utilityBindingsPath }),
+            validateOptionalConfig({ ...baseConfig, utilityBindingsPath }),
          ).not.toThrowError();
       },
    );
 
    it("rejects an absolute path", () => {
       expect(() =>
-         validateOptionalConfig({ ...config, utilityBindingsPath: "/srv/ipc.ts" }),
+         validateOptionalConfig({ ...baseConfig, utilityBindingsPath: "/srv/ipc.ts" }),
       ).toThrowError("utilityBindingsPath must be relative to the project root");
    });
 
@@ -93,22 +90,20 @@ describe("validateOptionalConfig, utilityBindingsPath", () => {
       "worker/ipc.d.cts",
       "",
    ])("rejects %j, since it is not the path of a .ts file", (utilityBindingsPath) => {
-      expect(() => validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
+      expect(() => validateOptionalConfig({ ...baseConfig, utilityBindingsPath })).toThrowError(
          "utilityBindingsPath must be the path of a .ts file",
       );
    });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;
-      expect(() => validateOptionalConfig({ ...config, utilityBindingsPath: value })).toThrowError(
-         /utilityBindingsPath/,
-      );
+      expect(() =>
+         validateOptionalConfig({ ...baseConfig, utilityBindingsPath: value }),
+      ).toThrowError(/utilityBindingsPath/);
    });
 });
 
 describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
-   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
-
    it.each([
       "sw-preload.ts",
       "src/worker/preload.ts",
@@ -117,13 +112,13 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       undefined,
    ])("accepts %s", (serviceWorkerPreloadPath) => {
       expect(() =>
-         validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
+         validateOptionalConfig({ ...baseConfig, serviceWorkerPreloadPath }),
       ).not.toThrowError();
    });
 
    it("rejects an absolute path", () => {
       expect(() =>
-         validateOptionalConfig({ ...config, serviceWorkerPreloadPath: "/srv/sw.ts" }),
+         validateOptionalConfig({ ...baseConfig, serviceWorkerPreloadPath: "/srv/sw.ts" }),
       ).toThrowError("serviceWorkerPreloadPath must be relative to the project root");
    });
 
@@ -135,15 +130,15 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       "worker/preload.d.cts",
       "",
    ])("rejects %j, since it is not the path of a .ts file", (serviceWorkerPreloadPath) => {
-      expect(() => validateOptionalConfig({ ...config, serviceWorkerPreloadPath })).toThrowError(
-         "serviceWorkerPreloadPath must be the path of a .ts file",
-      );
+      expect(() =>
+         validateOptionalConfig({ ...baseConfig, serviceWorkerPreloadPath }),
+      ).toThrowError("serviceWorkerPreloadPath must be the path of a .ts file");
    });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;
       expect(() =>
-         validateOptionalConfig({ ...config, serviceWorkerPreloadPath: value }),
+         validateOptionalConfig({ ...baseConfig, serviceWorkerPreloadPath: value }),
       ).toThrowError(/serviceWorkerPreloadPath/);
    });
 });

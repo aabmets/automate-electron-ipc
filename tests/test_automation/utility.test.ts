@@ -10,31 +10,18 @@
  */
 
 import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import logger from "@src/logger.js";
-import { mockAutomationConfig } from "@testutils/automation-utils.js";
-import type * as t from "@types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { withAutomationDir } from "@testutils/automation-utils.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation", () => {
-   let dir: string;
-
-   beforeEach(async () => {
-      dir = await fsp.mkdtemp(path.join(tmpdir(), "vitest-automation-"));
-   });
-   afterEach(async () => {
-      vi.restoreAllMocks();
-      await fsp.rm(dir, { recursive: true, force: true });
-   });
-
-   const mockConfig = (overrides: Partial<t.IPCResolvedConfig>) =>
-      mockAutomationConfig(dir, overrides);
+   const automation = withAutomationDir();
 
    describe("the file for utility processes", () => {
       const generate = async (channels: string) => {
-         const schemaPath = path.join(dir, "schema.ts");
+         const schemaPath = path.join(automation.dir, "schema.ts");
          await fsp.writeFile(
             schemaPath,
             [
@@ -42,7 +29,7 @@ describe("ipcAutomation", () => {
                `export default defineChannels({ ${channels} });`,
             ].join("\n"),
          );
-         mockConfig({
+         automation.mockConfig({
             ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
          } as never);
          vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
@@ -52,17 +39,17 @@ describe("ipcAutomation", () => {
       it("is written when the schema has a channel to the utility process", async () => {
          await generate("getUser: invoke<() => Promise<string>>(), run: callUtility<() => void>()");
 
-         const utility = await fsp.readFile(path.join(dir, "out/utility.ts"), "utf8");
+         const utility = await fsp.readFile(path.join(automation.dir, "out/utility.ts"), "utf8");
          expect(utility).toContain("ANY CHANGES TO THIS FILE WILL NOT PERSIST");
          expect(utility).toContain("   run: {");
-         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).toContain(
+         expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).toContain(
             "attachUtility",
          );
       });
 
       it("is written to the configured path, whose directories are created", async () => {
-         const utilityBindingsFilePath = path.join(dir, "worker/generated/ipc.ts");
-         const schemaPath = path.join(dir, "schema.ts");
+         const utilityBindingsFilePath = path.join(automation.dir, "worker/generated/ipc.ts");
+         const schemaPath = path.join(automation.dir, "schema.ts");
          await fsp.writeFile(
             schemaPath,
             [
@@ -70,7 +57,7 @@ describe("ipcAutomation", () => {
                "export default defineChannels({ run: callUtility<() => void>() });",
             ].join("\n"),
          );
-         mockConfig({
+         automation.mockConfig({
             utilityBindingsFilePath,
             ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
          } as never);
@@ -84,11 +71,11 @@ describe("ipcAutomation", () => {
       it("is written for a schema which has only a channel from a page to the utility process", async () => {
          await generate("run: invokeUtility<() => Promise<number>>()");
 
-         const utility = await fsp.readFile(path.join(dir, "out/utility.ts"), "utf8");
+         const utility = await fsp.readFile(path.join(automation.dir, "out/utility.ts"), "utf8");
          expect(utility).toContain("   run: {\n      handle:");
-         const main = await fsp.readFile(path.join(dir, "out/main.ts"), "utf8");
+         const main = await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8");
          expect(main).toContain("connectUtilityPort('run', child, target)");
-         expect(await fsp.readFile(path.join(dir, "out/preload.ts"), "utf8")).toContain(
+         expect(await fsp.readFile(path.join(automation.dir, "out/preload.ts"), "utf8")).toContain(
             "callUtilityPort(utilityClients['run'], args)",
          );
       });
@@ -96,10 +83,10 @@ describe("ipcAutomation", () => {
       it("is not written for a schema without such a channel", async () => {
          await generate("getUser: invoke<() => Promise<string>>()");
 
-         await expect(fsp.stat(path.join(dir, "out/utility.ts"))).rejects.toMatchObject({
+         await expect(fsp.stat(path.join(automation.dir, "out/utility.ts"))).rejects.toMatchObject({
             code: "ENOENT",
          });
-         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).not.toContain(
+         expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).not.toContain(
             "UtilityProcess",
          );
       });

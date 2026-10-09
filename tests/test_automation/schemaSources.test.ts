@@ -11,22 +11,13 @@
 
 import fs from "node:fs";
 import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadSchemaSources } from "@src/schema-sources.js";
+import { withAutomationDir } from "@testutils/automation-utils.js";
 import type * as t from "@types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-let dir: string;
-
-beforeEach(() => {
-   dir = fs.mkdtempSync(path.join(tmpdir(), "schema-sources-"));
-});
-
-afterEach(() => {
-   vi.restoreAllMocks();
-   fs.rmSync(dir, { recursive: true, force: true });
-});
+const automation = withAutomationDir("schema-sources-");
 
 /** A config whose schema path is `schemaPath`, with the stats that the config resolution reads. */
 function configFor(schemaPath: string, ipcDataDir = "src\\ipc"): t.IPCResolvedConfig {
@@ -36,7 +27,7 @@ function configFor(schemaPath: string, ipcDataDir = "src\\ipc"): t.IPCResolvedCo
 
 describe("loadSchemaSources", () => {
    it("reads the schema file and names it with 'schema.ts' in the data directory", async () => {
-      const file = path.join(dir, "schema.ts");
+      const file = path.join(automation.dir, "schema.ts");
       fs.writeFileSync(file, "export const a = 1;");
       expect(await loadSchemaSources(configFor(file))).toStrictEqual([
          { fullPath: file, relativePath: "src/ipc/schema.ts", contents: "export const a = 1;" },
@@ -44,7 +35,7 @@ describe("loadSchemaSources", () => {
    });
 
    it("reads the source files of a schema directory in the order of their relative paths", async () => {
-      const schemaDir = path.join(dir, "schema");
+      const schemaDir = path.join(automation.dir, "schema");
       fs.mkdirSync(path.join(schemaDir, "nested"), { recursive: true });
       fs.writeFileSync(path.join(schemaDir, "b.ts"), "b");
       fs.writeFileSync(path.join(schemaDir, "a.mts"), "a");
@@ -61,7 +52,7 @@ describe("loadSchemaSources", () => {
    });
 
    it("sorts the files whatever the order in which the directory lists them", async () => {
-      const schemaDir = path.join(dir, "schema");
+      const schemaDir = path.join(automation.dir, "schema");
       fs.mkdirSync(schemaDir);
       for (const name of ["a.ts", "b.ts", "c.ts"]) {
          fs.writeFileSync(path.join(schemaDir, name), name);
@@ -72,7 +63,7 @@ describe("loadSchemaSources", () => {
    });
 
    it("skips files that are not schema sources, and directories named like them", async () => {
-      const schemaDir = path.join(dir, "schema");
+      const schemaDir = path.join(automation.dir, "schema");
       fs.mkdirSync(path.join(schemaDir, "folder.ts"), { recursive: true });
       fs.writeFileSync(path.join(schemaDir, "types.d.ts"), "declare const x: number;");
       fs.writeFileSync(path.join(schemaDir, "notes.md"), "notes");
@@ -82,6 +73,8 @@ describe("loadSchemaSources", () => {
    });
 
    it("has no sources when the schema path is neither a file nor a directory", async () => {
-      expect(await loadSchemaSources(configFor(path.join(dir, "missing")))).toStrictEqual([]);
+      expect(
+         await loadSchemaSources(configFor(path.join(automation.dir, "missing"))),
+      ).toStrictEqual([]);
    });
 });

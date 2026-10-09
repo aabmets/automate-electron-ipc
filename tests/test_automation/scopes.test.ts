@@ -10,27 +10,15 @@
  */
 
 import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import logger from "@src/logger.js";
-import { mockAutomationConfig } from "@testutils/automation-utils.js";
+import { withAutomationDir } from "@testutils/automation-utils.js";
 import type * as t from "@types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation", () => {
-   let dir: string;
-
-   beforeEach(async () => {
-      dir = await fsp.mkdtemp(path.join(tmpdir(), "vitest-automation-"));
-   });
-   afterEach(async () => {
-      vi.restoreAllMocks();
-      await fsp.rm(dir, { recursive: true, force: true });
-   });
-
-   const mockConfig = (overrides: Partial<t.IPCResolvedConfig>) =>
-      mockAutomationConfig(dir, overrides);
+   const automation = withAutomationDir();
 
    describe("the files of the scopes", () => {
       const SCHEMA = [
@@ -42,17 +30,17 @@ describe("ipcAutomation", () => {
          "});",
       ].join("\n");
       const generate = async (schema: string, overrides: Partial<t.IPCResolvedConfig> = {}) => {
-         const schemaPath = path.join(dir, "schema.ts");
+         const schemaPath = path.join(automation.dir, "schema.ts");
          await fsp.writeFile(schemaPath, schema);
-         mockConfig({
-            projectRoot: dir,
+         automation.mockConfig({
+            projectRoot: automation.dir,
             ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
             ...overrides,
          } as never);
          vi.spyOn(logger, "reportSuccess").mockImplementation(() => undefined);
          await ipcAutomation();
       };
-      const written = async () => (await fsp.readdir(path.join(dir, "out"))).sort();
+      const written = async () => (await fsp.readdir(path.join(automation.dir, "out"))).sort();
 
       it("writes a preload script and a declaration file for each scope, next to the usual ones", async () => {
          await generate(SCHEMA);
@@ -70,7 +58,8 @@ describe("ipcAutomation", () => {
 
       it("gives each file the channels of its surface", async () => {
          await generate(SCHEMA);
-         const read = (name: string) => fsp.readFile(path.join(dir, "out", name), "utf8");
+         const read = (name: string) =>
+            fsp.readFile(path.join(automation.dir, "out", name), "utf8");
          const channelsOf = (text: string) =>
             [...text.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
 
@@ -111,7 +100,8 @@ describe("ipcAutomation", () => {
                'export default defineChannels({ a: invoke<() => void>({ scopes: ["one"] }) });',
             ].join("\n"),
          );
-         const read = (name: string) => fsp.readFile(path.join(dir, "out", name), "utf8");
+         const read = (name: string) =>
+            fsp.readFile(path.join(automation.dir, "out", name), "utf8");
 
          expect(await read("preload.ts")).toContain("export const api = {};");
          expect(await read("window.d.ts")).toContain("interface IpcApi {}");
@@ -121,18 +111,18 @@ describe("ipcAutomation", () => {
       it("rejects a utility path which is the file of a scope, and writes nothing", async () => {
          await expect(
             generate(SCHEMA, {
-               utilityBindingsFilePath: path.join(dir, "out/preload.settings.ts"),
+               utilityBindingsFilePath: path.join(automation.dir, "out/preload.settings.ts"),
             }),
          ).rejects.toThrowError(
             /'utilityBindingsPath' \(.*preload\.settings\.ts'\) is the file that the scope 'settings' is generated to/,
          );
-         expect(await fsp.readdir(dir)).toStrictEqual(["schema.ts"]);
+         expect(await fsp.readdir(automation.dir)).toStrictEqual(["schema.ts"]);
       });
 
       it("rejects a utility path which is the declaration file of a scope", async () => {
          await expect(
             generate(SCHEMA, {
-               utilityBindingsFilePath: path.join(dir, "out/window.plugin-host.d.ts"),
+               utilityBindingsFilePath: path.join(automation.dir, "out/window.plugin-host.d.ts"),
             }),
          ).rejects.toThrowError(/is the file that the scope 'plugin-host' is generated to/);
       });

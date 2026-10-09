@@ -10,27 +10,14 @@
  */
 
 import fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { ipcAutomation } from "@src/automation.js";
 import logger from "@src/logger.js";
-import { mockAutomationConfig } from "@testutils/automation-utils.js";
-import type * as t from "@types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { withAutomationDir } from "@testutils/automation-utils.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation", () => {
-   let dir: string;
-
-   beforeEach(async () => {
-      dir = await fsp.mkdtemp(path.join(tmpdir(), "vitest-automation-"));
-   });
-   afterEach(async () => {
-      vi.restoreAllMocks();
-      await fsp.rm(dir, { recursive: true, force: true });
-   });
-
-   const mockConfig = (overrides: Partial<t.IPCResolvedConfig>) =>
-      mockAutomationConfig(dir, overrides);
+   const automation = withAutomationDir();
 
    describe("structured clone", () => {
       const schema = (signature: string) =>
@@ -44,10 +31,10 @@ describe("ipcAutomation", () => {
          ].join("\n");
 
       const run = async (contents: string) => {
-         const schemaPath = path.join(dir, "ipc/schema.ts");
+         const schemaPath = path.join(automation.dir, "ipc/schema.ts");
          await fsp.mkdir(path.dirname(schemaPath), { recursive: true });
          await fsp.writeFile(schemaPath, contents);
-         mockConfig({
+         automation.mockConfig({
             ipcDataDir: "ipc",
             ipcSchema: { path: schemaPath, stats: await fsp.stat(schemaPath) },
          } as never);
@@ -66,7 +53,9 @@ describe("ipcAutomation", () => {
                "Schema file 'ipc/schema.ts': Channel 'save': parameter 'user'",
             ),
          ]);
-         expect(await fsp.readFile(path.join(dir, "out/main.ts"), "utf8")).toContain("save");
+         expect(await fsp.readFile(path.join(automation.dir, "out/main.ts"), "utf8")).toContain(
+            "save",
+         );
       });
 
       it("rejects a function parameter and writes nothing", async () => {
@@ -77,7 +66,7 @@ describe("ipcAutomation", () => {
             /Channel 'save': parameter 'cb' contains a function \('\(\) => void'\)/,
          );
 
-         await expect(fsp.stat(path.join(dir, "out/main.ts"))).rejects.toMatchObject({
+         await expect(fsp.stat(path.join(automation.dir, "out/main.ts"))).rejects.toMatchObject({
             code: "ENOENT",
          });
       });
