@@ -9,13 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupAsks,
-   createContents,
-   createFrame,
-   loadMain,
-   questions,
-} from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks, createFrame, loadMain, questions } from "@testutils/e2e/ask-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,7 +26,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("rejects at once for contents that are destroyed, without sending", async () => {
       const { ipc, electron } = await loadMain();
-      const contents = createContents(1, { destroyed: true });
+      const contents = createContents({ id: 1, destroyed: true });
 
       await expect(ipc.hasUnsavedChanges.invoke(contents, 7)).rejects.toMatchObject(
          gone("hasUnsavedChanges"),
@@ -45,7 +40,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("rejects at once when the contents cannot be inspected", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       contents.isDestroyed = () => {
          throw new Error("Object has been destroyed");
       };
@@ -58,7 +53,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("rejects at once for a BrowserWindow whose webContents throws after destroy()", async () => {
       const { ipc, electron } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const win = {
          destroyed: false,
          isDestroyed: () => win.destroyed,
@@ -97,7 +92,7 @@ describe("ask, main process, a target that is gone", () => {
       async (event) => {
          const { ipc, reply } = await loadMain();
          vi.useFakeTimers();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
          const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 5000 }, 7);
          const second = ipc.describe.invoke(contents);
          const rejected = [
@@ -118,7 +113,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("rejects at once for contents whose renderer crashed before the question", async () => {
       const { ipc, electron } = await loadMain();
-      const contents = createContents(1, { crashed: true });
+      const contents = createContents({ id: 1, crashed: true });
 
       await expect(ipc.hasUnsavedChanges.invoke(contents, 7)).rejects.toMatchObject(
          gone("hasUnsavedChanges"),
@@ -131,7 +126,7 @@ describe("ask, main process, a target that is gone", () => {
    });
 
    it("rejects at once for a frame of contents whose renderer crashed", async () => {
-      const contents = createContents(1, { crashed: true });
+      const contents = createContents({ id: 1, crashed: true });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
 
@@ -143,7 +138,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("asks contents which are alive again after a crash", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1, { crashed: true });
+      const contents = createContents({ id: 1, crashed: true });
       contents.crashed = false;
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
@@ -155,7 +150,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("lets go of the contents once the question is answered", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       expect(contents.listenerCount("destroyed")).toBe(1);
@@ -172,7 +167,7 @@ describe("ask, main process, a target that is gone", () => {
    // Node warns about more than ten listeners of one event (T87).
    it("keeps one listener per event on the contents, however many questions are pending", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answers = Array.from({ length: 12 }, (_, n) =>
          ipc.hasUnsavedChanges.invoke(contents, n),
@@ -200,7 +195,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("settles every pending question when the contents go away, with one listener", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answers = Array.from({ length: 12 }, (_, n) =>
          ipc.hasUnsavedChanges.invoke(contents, n).then(
@@ -220,7 +215,7 @@ describe("ask, main process, a target that is gone", () => {
 
    it("keeps one listener of the commit for the questions of the frames of one contents", async () => {
       const frames = [1, 2, 3].map((routingId) => createFrame({ processId: 4, routingId }));
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc, reply } = await loadMain("ask-channels", () => contents);
 
       const answers = frames.map((frame) => ipc.hasUnsavedChanges.invoke(frame as any, 1));
@@ -244,7 +239,7 @@ describe("ask, main process, a target that is gone", () => {
    it("rejects with the error of the send, and leaves nothing behind", async () => {
       const { ipc, reply } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       contents.send.mockImplementation(() => {
          throw new Error("An object could not be cloned.");
       });

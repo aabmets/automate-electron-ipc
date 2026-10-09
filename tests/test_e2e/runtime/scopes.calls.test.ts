@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { callFrom, createContents, forbidden, loadMain } from "@testutils/e2e/scopes-main-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
+import { callFrom, forbidden, loadMain } from "@testutils/e2e/scopes-main-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -48,7 +49,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
       const handler = vi.fn(async () => ({ theme: "dark" }));
       ipc.getSettings.handle(handler);
 
-      await expect(call("getSettings", callFrom(createContents(1)))).resolves.toStrictEqual(
+      await expect(call("getSettings", callFrom(createContents({ id: 1 })))).resolves.toStrictEqual(
          forbidden("getSettings"),
       );
       expect(handler).not.toHaveBeenCalled();
@@ -56,8 +57,8 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("lets contents call the channels of the scope that they are registered in", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
-      const editor = createContents(2);
+      const settings = createContents({ id: 1 });
+      const editor = createContents({ id: 2 });
       generated.registerScope(settings, "settings");
       generated.registerScope(editor, "editor");
       ipc.getSettings.handle(async () => ({ theme: "dark" }));
@@ -75,8 +76,8 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("rejects the channels of another scope, and does not run their handlers", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
-      const editor = createContents(2);
+      const settings = createContents({ id: 1 });
+      const editor = createContents({ id: 2 });
       generated.registerScope(settings, "settings");
       generated.registerScope(editor, "editor");
       const getSettings = vi.fn(async () => ({ theme: "dark" }));
@@ -96,9 +97,9 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("lets the contents of each scope in the list call a channel of several scopes, and drops the sends of others", async () => {
       const { generated, ipc, emitter } = await loadMain();
-      const settings = createContents(1);
-      const editor = createContents(2);
-      const other = createContents(3);
+      const settings = createContents({ id: 1 });
+      const editor = createContents({ id: 2 });
+      const other = createContents({ id: 3 });
       generated.registerScope(settings, "settings");
       generated.registerScope(editor, "editor");
       const notify = vi.fn();
@@ -116,13 +117,13 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("drops a send from contents of another scope, and tells onRejected", async () => {
       const { generated, ipc, emitter } = await loadMain();
-      const editor = createContents(2);
+      const editor = createContents({ id: 2 });
       generated.registerScope(editor, "editor");
       const onRejected = vi.fn();
       generated.configureIpc({ onRejected });
       const notify = vi.fn();
       ipc.notify.on(notify);
-      const stray = createContents(5);
+      const stray = createContents({ id: 5 });
 
       expect(() => emitter.emit("autoipc:notify", callFrom(stray), "text")).not.toThrow();
 
@@ -133,20 +134,22 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("tells the contents apart by their ID", async () => {
       const { generated, ipc, call } = await loadMain();
-      generated.registerScope(createContents(1), "settings");
+      generated.registerScope(createContents({ id: 1 }), "settings");
       ipc.getSettings.handle(async () => ({ theme: "dark" }));
 
-      await expect(call("getSettings", callFrom(createContents(1)))).resolves.toMatchObject({
-         ok: true,
-      });
-      await expect(call("getSettings", callFrom(createContents(2)))).resolves.toStrictEqual(
+      await expect(call("getSettings", callFrom(createContents({ id: 1 })))).resolves.toMatchObject(
+         {
+            ok: true,
+         },
+      );
+      await expect(call("getSettings", callFrom(createContents({ id: 2 })))).resolves.toStrictEqual(
          forbidden("getSettings"),
       );
    });
 
    it("rejects a call without a frame, also from registered contents", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
+      const settings = createContents({ id: 1 });
       generated.registerScope(settings, "settings");
       ipc.getSettings.handle(async () => ({ theme: "dark" }));
 
@@ -157,7 +160,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("rejects a call without a sender, as a call of unknown contents", async () => {
       const { generated, ipc, call } = await loadMain();
-      generated.registerScope(createContents(1), "settings");
+      generated.registerScope(createContents({ id: 1 }), "settings");
       ipc.getSettings.handle(async () => ({ theme: "dark" }));
 
       await expect(call("getSettings", callFrom(null))).resolves.toStrictEqual(
@@ -167,8 +170,8 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("checks the origin as well as the scope", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
-      const editor = createContents(2);
+      const settings = createContents({ id: 1 });
+      const editor = createContents({ id: 2 });
       generated.registerScope(settings, "settings");
       generated.registerScope(editor, "editor");
       ipc.vault.handle(async () => "secret");
@@ -185,8 +188,8 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("asks validateSender only for the calls that are in the scope", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
-      const editor = createContents(2);
+      const settings = createContents({ id: 1 });
+      const editor = createContents({ id: 2 });
       generated.registerScope(settings, "settings");
       generated.registerScope(editor, "editor");
       const validateSender = vi.fn(() => true);
@@ -203,7 +206,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
    it("lets validateSender reject a call that is in the scope", async () => {
       const { generated, ipc, call } = await loadMain();
-      const settings = createContents(1);
+      const settings = createContents({ id: 1 });
       generated.registerScope(settings, "settings");
       generated.configureIpc({ validateSender: () => false });
       ipc.getSettings.handle(async () => ({ theme: "dark" }));

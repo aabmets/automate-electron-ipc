@@ -12,13 +12,13 @@
 import { EventEmitter } from "node:events";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import {
-   createContents,
    createEvent,
    createFrame,
    currentProject,
    loadMainWith,
    rawPorts,
 } from "@testutils/e2e/stream-main-utils.js";
+import { createContents } from "./fake-contents.js";
 
 /** A `MessagePortMain` on top of a real `MessagePort`, so that the ports really carry messages. */
 export class RealPortMain extends EventEmitter {

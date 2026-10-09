@@ -11,13 +11,12 @@
 
 import {
    cleanupAsks,
-   createContents,
    currentProject,
-   type FakeContents,
    loadMain,
    questions,
    replyOf,
 } from "@testutils/e2e/ask-utils.js";
+import { createContents, FakeContents } from "@testutils/e2e/fake-contents.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +25,7 @@ afterEach(cleanupAsks);
 describe("ask, main process, asking", () => {
    it("sends the question with an ID in front of the arguments, and resolves with the answer", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke({ webContents: contents }, 7);
 
@@ -44,8 +43,8 @@ describe("ask, main process, asking", () => {
       ["WebContents", (contents: FakeContents) => contents],
    ])("asks %s", async (_name, target) => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
-      const other = createContents(2);
+      const contents = createContents({ id: 1 });
+      const other = createContents({ id: 2 });
 
       const answer = ipc.hasUnsavedChanges.invoke(target(contents), 7);
 
@@ -57,7 +56,7 @@ describe("ask, main process, asking", () => {
 
    it("spreads rest arguments, and sends none for a signature without parameters", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const closed = ipc.confirmClose.invoke(contents, "quit", true, false);
       const state = ipc.getEditorState.invoke(contents);
@@ -74,7 +73,7 @@ describe("ask, main process, asking", () => {
 
    it("gives every question its own ID", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       ipc.hasUnsavedChanges.invoke(contents, 1);
       ipc.hasUnsavedChanges.invoke(contents, 2);
@@ -86,7 +85,7 @@ describe("ask, main process, asking", () => {
 
    it("listens for the replies of a channel once, at its first question", async () => {
       const { ipc, electron } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       expect(electron.ipcMain.on).not.toHaveBeenCalled();
 
       ipc.hasUnsavedChanges.invoke(contents, 1);
@@ -105,8 +104,8 @@ describe("ask, main process, asking", () => {
 
    it("resolves concurrent questions with their own answers, whatever the order", async () => {
       const { ipc, reply } = await loadMain();
-      const first = createContents(1);
-      const second = createContents(2);
+      const first = createContents({ id: 1 });
+      const second = createContents({ id: 2 });
 
       const a = ipc.hasUnsavedChanges.invoke(first, 1);
       const b = ipc.hasUnsavedChanges.invoke(second, 2);
@@ -132,7 +131,7 @@ describe("ask, main process, asking", () => {
 
    it("names the generated parameters apart from the ones of the signature", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const plain = ipc.nameClash.invoke(contents, "a", 1, true);
       const timed = ipc.nameClash.invokeWith(contents, { timeoutMs: 1000 }, "b", 2, false);
@@ -150,7 +149,7 @@ describe("ask, main process, asking", () => {
 
    it("keeps the generic signature of a channel", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.genericAsk.invoke(contents, 5);
 
@@ -165,7 +164,7 @@ describe("ask, main process, timeout", () => {
    it("rejects when the renderer has not answered in time, and ignores a late answer", async () => {
       const { ipc, IpcAskError, reply } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 100 }, 7);
       const rejected = expect(answer).rejects.toMatchObject({
@@ -189,7 +188,7 @@ describe("ask, main process, timeout", () => {
    it("stops the timer when the answer comes first", async () => {
       const { ipc, reply } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 100 }, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -203,7 +202,7 @@ describe("ask, main process, timeout", () => {
    it("waits for ever without a timeout, which is the default", async () => {
       const { ipc } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       ipc.hasUnsavedChanges.invoke(contents, 1);
       ipc.hasUnsavedChanges.invokeWith(contents, {}, 2);
@@ -216,7 +215,7 @@ describe("ask, main process, timeout", () => {
    it("keeps the timer of a long timeout from firing at once", async () => {
       const { ipc } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 1e12 }, 7);
       const rejected = expect(answer).rejects.toMatchObject({ code: "IPC_ASK_TIMEOUT" });
@@ -230,7 +229,7 @@ describe("ask, main process, timeout", () => {
       "rejects the timeout %j, and asks nothing",
       async (timeoutMs) => {
          const { ipc } = await loadMain();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
 
          await expect(
             ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs }, 7),

@@ -12,11 +12,11 @@
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 // biome-ignore-all lint/style/useThrowOnlyError: a plain object is what a handler may throw, and the library reduces it
 
+import { FakePortMain } from "@testutils/e2e/fake-ports.js";
 import { createSource } from "@testutils/e2e/runtime-utils.js";
 import {
    cancel,
    cleanupUtilityPorts,
-   FakeBrokerPort,
    loadUtility,
    startStream,
 } from "@testutils/e2e/utility-port-utils.js";
@@ -42,7 +42,7 @@ describe("utility ports, the utility process, flow control", () => {
       }
    };
    /** The values of the chunks of one call that were sent to the page. */
-   const sentValues = (port: FakeBrokerPort, id: number) =>
+   const sentValues = (port: FakePortMain, id: number) =>
       port
          .posted("chunk")
          .filter((message) => message.id === id)

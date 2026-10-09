@@ -9,9 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { createContents } from "@testutils/e2e/fake-contents.js";
 import {
    cleanupStreams,
-   createContents,
    createEvent,
    fromPage,
    lastChannel,

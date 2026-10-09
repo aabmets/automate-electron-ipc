@@ -9,10 +9,11 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { EventEmitter } from "node:events";
 import { createFakeElectron, createSource, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
+import { createContents, FakeContents } from "./fake-contents.js";
+import { channelsMade, FakeChannelMain } from "./fake-ports.js";
 import { wire } from "./wire-utils.js";
 
 export const portWire = (name: string) => `autoipc:${name}:port`;
@@ -31,17 +32,6 @@ export function cleanupStreams() {
    }
 }
 
-/** A WebContents stand-in: an emitter that announces its end, as the real one does. */
-export function createContents(id = 1) {
-   const contents = Object.assign(new EventEmitter(), {
-      id,
-      postMessage: vi.fn(),
-      isDestroyed: () => false,
-   });
-   return contents;
-}
-export type FakeContents = ReturnType<typeof createContents>;
-
 /** A WebFrameMain stand-in, which can be told to be destroyed or detached. */
 export function createFrame(
    state: { origin?: string; destroyed?: boolean; detached?: boolean } = {},
@@ -57,24 +47,6 @@ export function createFrame(
 /** The event of a call, as `ipcMain.handle` gives it to the handler. */
 export function createEvent(sender: FakeContents, frame: object | null = createFrame()) {
    return { sender, senderFrame: frame };
-}
-
-/** A `MessagePortMain`: an emitter with the methods of the generated code, and records of them. */
-export class FakePortMain extends EventEmitter {
-   readonly postMessage = vi.fn();
-   readonly start = vi.fn();
-   readonly close = vi.fn();
-}
-
-/** The channels the generated main process made, in order. */
-export const channelsMade: { port1: FakePortMain; port2: object }[] = [];
-
-export class FakeChannelMain {
-   port1 = new FakePortMain();
-   port2 = { name: `port2 of ${channelsMade.length + 1}` };
-   constructor() {
-      channelsMade.push(this);
-   }
 }
 
 export async function loadMainWith(channelClass: unknown, fixture = "stream-channels") {

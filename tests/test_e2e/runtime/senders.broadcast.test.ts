@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { createContents, mainLoader } from "@testutils/e2e/sender-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
+import { mainLoader } from "@testutils/e2e/sender-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,7 +18,11 @@ const loadMain = mainLoader(fixtures.run);
 
 describe("broadcast", () => {
    it("sends to every contents, with the arguments of the signature", async () => {
-      const [a, b, c] = [createContents(1), createContents(2), createContents(3)];
+      const [a, b, c] = [
+         createContents({ id: 1 }),
+         createContents({ id: 2 }),
+         createContents({ id: 3 }),
+      ];
       const { ipc } = await loadMain([a, b, c]);
 
       ipc.progress.broadcast(50, "half");
@@ -30,9 +35,9 @@ describe("broadcast", () => {
 
    it("skips destroyed contents instead of throwing", async () => {
       const [alive, destroyed, aliveToo] = [
-         createContents(1),
-         createContents(2, true),
-         createContents(3),
+         createContents({ id: 1 }),
+         createContents({ id: 2, destroyed: true }),
+         createContents({ id: 3 }),
       ];
       const { ipc } = await loadMain([alive, destroyed, aliveToo]);
 
@@ -44,7 +49,7 @@ describe("broadcast", () => {
    });
 
    it("spreads rest arguments, and sends no argument for a channel without any", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain([contents]);
 
       ipc.titleChanged.broadcast("title");
@@ -57,12 +62,12 @@ describe("broadcast", () => {
    });
 
    it("asks for the open contents again on every call", async () => {
-      const first = createContents(1);
+      const first = createContents({ id: 1 });
       const open = [first];
       const { ipc, getAllWebContents } = await loadMain(open);
 
       ipc.progress.broadcast(1);
-      const late = createContents(2);
+      const late = createContents({ id: 2 });
       open.push(late);
       ipc.progress.broadcast(2);
 
@@ -78,7 +83,7 @@ describe("broadcast", () => {
    });
 
    it("has no broadcast on invoke and send channels", async () => {
-      const { ipc } = await loadMain([createContents(1)]);
+      const { ipc } = await loadMain([createContents({ id: 1 })]);
 
       expect(ipc.getUser.broadcast).toBeUndefined();
       expect(ipc.logLine.broadcast).toBeUndefined();
@@ -87,7 +92,11 @@ describe("broadcast", () => {
 
 describe("broadcastTo", () => {
    it("sends only to the contents that the filter accepts", async () => {
-      const [a, b, c] = [createContents(1), createContents(2), createContents(3)];
+      const [a, b, c] = [
+         createContents({ id: 1 }),
+         createContents({ id: 2 }),
+         createContents({ id: 3 }),
+      ];
       const { ipc } = await loadMain([a, b, c]);
 
       ipc.progress.broadcastTo((contents: { id: number }) => contents.id !== 2, 50, "half");
@@ -98,7 +107,10 @@ describe("broadcastTo", () => {
    });
 
    it("gives the filter each live contents once, and never a destroyed one", async () => {
-      const [alive, destroyed] = [createContents(1), createContents(2, true)];
+      const [alive, destroyed] = [
+         createContents({ id: 1 }),
+         createContents({ id: 2, destroyed: true }),
+      ];
       const { ipc } = await loadMain([alive, destroyed]);
       const filter = vi.fn(() => true);
 
@@ -109,7 +121,7 @@ describe("broadcastTo", () => {
    });
 
    it("sends to nobody when the filter rejects everything", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain([contents]);
 
       ipc.progress.broadcastTo(() => false, 1);
@@ -118,7 +130,7 @@ describe("broadcastTo", () => {
    });
 
    it("lets an error of the filter through, and sends nothing after it", async () => {
-      const [a, b] = [createContents(1), createContents(2)];
+      const [a, b] = [createContents({ id: 1 }), createContents({ id: 2 })];
       const { ipc } = await loadMain([a, b]);
 
       expect(() =>

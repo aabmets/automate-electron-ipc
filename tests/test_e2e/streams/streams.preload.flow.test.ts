@@ -9,8 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { FakePagePort } from "@testutils/e2e/fake-ports.js";
 import { cleanupStreams } from "@testutils/e2e/stream-main-utils.js";
-import { FakePagePort, loadPreload } from "@testutils/e2e/stream-preload-utils.js";
+import { loadPreload } from "@testutils/e2e/stream-preload-utils.js";
 import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 

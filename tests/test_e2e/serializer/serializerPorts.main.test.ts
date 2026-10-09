@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { createContents } from "@testutils/e2e/fake-contents.js";
 import {
    createFakeElectron,
    createFakePreloadElectron,
@@ -67,18 +68,6 @@ class RealChannelMain {
       this.port2 = channel.port2;
       rawPorts.push(channel.port2);
    }
-}
-
-function createContents(state: { loading?: boolean } = {}) {
-   const contents = Object.assign(new EventEmitter(), {
-      loading: state.loading ?? false,
-      postMessage: vi.fn(),
-      send: vi.fn(),
-      isLoading: () => contents.loading,
-      getURL: () => "app://.",
-      isDestroyed: () => false,
-   });
-   return contents;
 }
 
 /** The generated main process and preload script of the fixture, wired to each other for one page. */

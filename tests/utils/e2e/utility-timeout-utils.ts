@@ -12,6 +12,7 @@
 import { EventEmitter } from "node:events";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
+import { FakePagePort } from "./fake-ports.js";
 import { wire } from "./wire-utils.js";
 
 /** Starts a call and watches how it settles, so that no rejection is left unhandled. */
@@ -72,32 +73,6 @@ export function createParentPort() {
    const reply = (channel: string, id: number, envelope: unknown) =>
       port.emit("message", { data: { __ipc: "reply", channel: wire(channel), id, envelope } });
    return { port, posted, reply };
-}
-
-/** A `MessagePort` of the page: records what is posted, and delivers what the test says. */
-export class FakePagePort {
-   onmessage: ((event: { data: unknown }) => void) | null = null;
-   readonly postMessage = vi.fn();
-   readonly close = vi.fn();
-   private readonly closeListeners: (() => void)[] = [];
-   addEventListener(type: string, listener: () => void) {
-      if (type === "close") {
-         this.closeListeners.push(listener);
-      }
-   }
-   deliver(data: unknown) {
-      this.onmessage?.({ data });
-   }
-   emitClose() {
-      for (const listener of this.closeListeners) {
-         listener();
-      }
-   }
-   posted(tag: string) {
-      return this.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((message) => message.__ipc === tag);
-   }
 }
 
 /** Loads the generated `preload.ts` with a fake Electron, and gives the page side of the ports. */

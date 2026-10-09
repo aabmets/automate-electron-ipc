@@ -13,26 +13,11 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { expect } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
+import type { FakeContents } from "./fake-contents.js";
 import { wire } from "./wire-utils.js";
 
-/** A WebContents stand-in: an emitter with an ID, which can be destroyed. */
-export function createContents(id: number) {
-   const contents = Object.assign(new EventEmitter(), {
-      id,
-      destroyed: false,
-      isDestroyed: () => contents.destroyed,
-      destroy() {
-         contents.destroyed = true;
-         contents.emit("destroyed");
-      },
-   });
-   return contents;
-}
-
-export type Contents = ReturnType<typeof createContents>;
-
 /** The event of a call from a frame of the contents. */
-export const callFrom = (sender: Contents | null, origin: string | null = "app://.") => ({
+export const callFrom = (sender: FakeContents | null, origin: string | null = "app://.") => ({
    sender,
    senderFrame: origin === null ? null : { origin },
 });

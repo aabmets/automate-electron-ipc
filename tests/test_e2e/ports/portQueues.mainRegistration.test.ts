@@ -9,10 +9,10 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { lastPort } from "@testutils/e2e/fake-ports.js";
 import {
    connectWaiting,
    flushed,
-   lastPort,
    loadBoundedProject,
    loadMain,
    range,

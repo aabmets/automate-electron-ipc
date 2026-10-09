@@ -9,12 +9,11 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
+import { createContents } from "@testutils/e2e/fake-contents.js";
+import { channelsMade, lastPort } from "@testutils/e2e/fake-ports.js";
 import {
-   channelsMade,
    cleanupMainPorts,
-   createContents,
    fromPage,
-   lastPort,
    loadMain,
    loadMainWithElectron,
 } from "@testutils/e2e/main-port-utils.js";

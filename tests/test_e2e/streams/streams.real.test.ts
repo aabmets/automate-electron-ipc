@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { channelsMade, cleanupStreams } from "@testutils/e2e/stream-main-utils.js";
+import { channelsMade } from "@testutils/e2e/fake-ports.js";
+import { cleanupStreams } from "@testutils/e2e/stream-main-utils.js";
 import { settleRead } from "@testutils/e2e/stream-preload-utils.js";
 import { loadBoth } from "@testutils/e2e/stream-real-utils.js";
 import { settle } from "@testutils/e2e/wire-utils.js";

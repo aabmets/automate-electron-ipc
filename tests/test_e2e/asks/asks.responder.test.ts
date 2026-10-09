@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanupAsks, createContents, currentProject, loadMain } from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks, currentProject, loadMain } from "@testutils/e2e/ask-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -32,7 +33,7 @@ describe("ask, from the main process to a responder and back", () => {
          electron: preload.electron,
       });
       const { ipcRenderer } = preload.electron;
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       contents.send.mockImplementation((channel: string, ...args: unknown[]) => {
          const call = ipcRenderer.on.mock.calls.find(([name]) => name === channel);
          // Electron delivers it later, and without the main process waiting.

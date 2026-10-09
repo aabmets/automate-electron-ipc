@@ -9,14 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupAsks,
-   createContents,
-   createFrame,
-   type FakeContents,
-   loadMain,
-   questions,
-} from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks, createFrame, loadMain, questions } from "@testutils/e2e/ask-utils.js";
+import { createContents, FakeContents } from "@testutils/e2e/fake-contents.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -47,7 +41,7 @@ describe("ask, main process, a page which is replaced", () => {
    it("rejects the question of contents when a navigation commits, and leaves nothing behind", async () => {
       const { ipc, reply } = await loadMain();
       vi.useFakeTimers();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const answer = ipc.hasUnsavedChanges.invokeWith(contents, { timeoutMs: 5000 }, 7);
       const second = ipc.describe.invoke(contents);
       const rejected = [
@@ -69,7 +63,7 @@ describe("ask, main process, a page which is replaced", () => {
 
    it("rejects the question of a window, which asks its contents", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke({ webContents: contents }, 7);
       navigate(contents);
@@ -79,7 +73,7 @@ describe("ask, main process, a page which is replaced", () => {
 
    it("keeps the question of contents for a navigation inside the page, or of a frame", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
       const settled = vi.fn();
@@ -97,7 +91,7 @@ describe("ask, main process, a page which is replaced", () => {
 
    it("lets the old page answer while a navigation is still pending", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
 
@@ -111,7 +105,7 @@ describe("ask, main process, a page which is replaced", () => {
    });
 
    it("rejects the question of a frame when that frame navigates", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
@@ -124,7 +118,7 @@ describe("ask, main process, a page which is replaced", () => {
    });
 
    it("keeps the question of a frame while another frame navigates", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc, reply } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
@@ -140,7 +134,7 @@ describe("ask, main process, a page which is replaced", () => {
    });
 
    it("rejects the question of a subframe when the main frame navigates away", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
@@ -151,7 +145,7 @@ describe("ask, main process, a page which is replaced", () => {
    });
 
    it("rejects the question of a frame which is replaced by a new one when it navigates", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
@@ -164,7 +158,7 @@ describe("ask, main process, a page which is replaced", () => {
    });
 
    it("rejects the question of a frame whose state cannot be read on a navigation", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
@@ -179,7 +173,7 @@ describe("ask, main process, a page which is replaced", () => {
 
    it("settles only once when a navigation follows the destruction", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
 
       contents.emit("destroyed");
@@ -192,8 +186,8 @@ describe("ask, main process, a page which is replaced", () => {
 describe("ask, main process, replies that are not meant for a question", () => {
    it("ignores replies of other contents, for unknown IDs, and on the reply channel of another channel", async () => {
       const { ipc, reply, electron } = await loadMain();
-      const contents = createContents(1);
-      const stranger = createContents(2);
+      const contents = createContents({ id: 1 });
+      const stranger = createContents({ id: 2 });
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       ipc.describe.invoke(contents);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -215,7 +209,7 @@ describe("ask, main process, replies that are not meant for a question", () => {
 
    it("counts only the first reply", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -231,7 +225,7 @@ describe("ask, main process, replies that are not meant for a question", () => {
 
    it("ignores a reply whose sender cannot be inspected", async () => {
       const { ipc, replyListener } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
       const settled = vi.fn();

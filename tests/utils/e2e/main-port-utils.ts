@@ -15,50 +15,17 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
+import { createContents, FakeContents } from "./fake-contents.js";
+import { channelsMade, FakeChannelMain, FakePortMain } from "./fake-ports.js";
 import { disconnectWire } from "./wire-utils.js";
 
 const rawPorts: MessagePort[] = [];
-
-/** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
-export function createContents(state: { loading?: boolean; url?: string } = {}) {
-   const contents = Object.assign(new EventEmitter(), {
-      loading: state.loading ?? false,
-      url: state.url ?? "app://.",
-      destroyed: false,
-      postMessage: vi.fn(),
-      send: vi.fn(),
-      isLoading: () => contents.loading,
-      getURL: () => contents.url,
-      isDestroyed: () => contents.destroyed,
-   });
-   return contents;
-}
-export type FakeContents = ReturnType<typeof createContents>;
 
 /** Destroys contents the way Electron does: they emit `destroyed` once they cannot be used. */
 export function destroy(contents: FakeContents) {
    contents.destroyed = true;
    contents.emit("destroyed");
-}
-
-/** A `MessagePortMain`: an emitter with the methods of the generated code, and records of them. */
-export class FakePortMain extends EventEmitter {
-   readonly postMessage = vi.fn();
-   readonly start = vi.fn();
-   readonly close = vi.fn();
-}
-
-/** The ports a `MessageChannelMain` made, in order. */
-export const channelsMade: { port1: FakePortMain; port2: object }[] = [];
-
-export class FakeChannelMain {
-   port1 = new FakePortMain();
-   port2 = { name: `port2 of ${channelsMade.length + 1}` };
-   constructor() {
-      channelsMade.push(this);
-   }
 }
 
 export async function loadMainWithElectron(channelClass: unknown = FakeChannelMain) {
@@ -79,9 +46,6 @@ export function disconnectListener(electron: ReturnType<typeof createFakeElectro
    );
    return call?.[1] as (event: { sender: unknown }, key: unknown) => void;
 }
-
-/** The main port of the last pair that was made. */
-export const lastPort = () => channelsMade[channelsMade.length - 1].port1;
 
 /** Delivers a message from the page to the main port, the way Electron does. */
 export const fromPage = (port: FakePortMain, data: unknown) => port.emit("message", { data });

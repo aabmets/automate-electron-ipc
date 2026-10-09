@@ -9,7 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { createContents, mainLoader } from "@testutils/e2e/sender-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
+import { mainLoader } from "@testutils/e2e/sender-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,8 +18,8 @@ const loadMain = mainLoader(fixtures.run);
 
 describe("send, to a window, a view or contents", () => {
    it.each([
-      ["a BrowserWindow", () => ({ webContents: createContents(1) })],
-      ["a WebContentsView", () => ({ webContents: createContents(2) })],
+      ["a BrowserWindow", () => ({ webContents: createContents({ id: 1 }) })],
+      ["a WebContentsView", () => ({ webContents: createContents({ id: 2 }) })],
    ])("sends to the webContents of %s", async (_name, make) => {
       const { ipc } = await loadMain();
       const target = make();
@@ -30,7 +31,7 @@ describe("send, to a window, a view or contents", () => {
 
    it("sends to a WebContents, which has no webContents of its own", async () => {
       const { ipc } = await loadMain();
-      const contents = createContents(3);
+      const contents = createContents({ id: 3 });
 
       ipc.progress.send(contents, 50, "half");
 
@@ -39,9 +40,9 @@ describe("send, to a window, a view or contents", () => {
    });
 
    it("sends only to the target, not to other contents", async () => {
-      const other = createContents(9);
+      const other = createContents({ id: 9 });
       const { ipc } = await loadMain([other]);
-      const target = createContents(4);
+      const target = createContents({ id: 4 });
 
       ipc.progress.send(target, 1);
 
@@ -51,7 +52,9 @@ describe("send, to a window, a view or contents", () => {
    it("still throws for a destroyed target, since the caller handed it over", async () => {
       const { ipc } = await loadMain();
 
-      expect(() => ipc.progress.send(createContents(5, true), 1)).toThrowError(/destroyed/);
+      expect(() => ipc.progress.send(createContents({ id: 5, destroyed: true }), 1)).toThrowError(
+         /destroyed/,
+      );
    });
 });
 
@@ -72,7 +75,7 @@ function createFrame(state: { destroyed?: boolean; detached?: boolean } = {}) {
 
 describe("send, to a frame", () => {
    it("sends to the frame itself, and not to its contents", async () => {
-      const { ipc } = await loadMain([createContents(1)]);
+      const { ipc } = await loadMain([createContents({ id: 1 })]);
       const frame = createFrame();
 
       ipc.progress.send(frame, 50, "half");
@@ -90,7 +93,7 @@ describe("send, to a frame", () => {
 
 describe("sendToSender", () => {
    it("sends to the frame that sent the event, and reports it", async () => {
-      const other = createContents(9);
+      const other = createContents({ id: 9 });
       const { ipc } = await loadMain([other]);
       const frame = createFrame();
 
@@ -131,7 +134,7 @@ describe("sendToSender", () => {
       ["a destroyed frame", () => createFrame({ destroyed: true })],
       ["a detached frame", () => createFrame({ detached: true })],
    ])("sends nothing and reports it for %s", async (_name, make) => {
-      const other = createContents(9);
+      const other = createContents({ id: 9 });
       const { ipc } = await loadMain([other]);
       const frame = make();
 

@@ -20,27 +20,13 @@ import {
 } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
+import { createContents } from "./fake-contents.js";
+import { channelsMade, FakeChannelMain, FakePagePort, FakePortMain } from "./fake-ports.js";
 import { closeWire, wire } from "./wire-utils.js";
 
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
 const rawPorts: MessagePort[] = [];
-
-/** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
-export function createContents(state: { loading?: boolean; url?: string; id?: number } = {}) {
-   const contents = Object.assign(new EventEmitter(), {
-      id: state.id ?? 1,
-      loading: state.loading ?? false,
-      url: state.url ?? "app://.",
-      destroyed: false,
-      postMessage: vi.fn(),
-      send: vi.fn(),
-      isLoading: () => contents.loading,
-      getURL: () => contents.url,
-      isDestroyed: () => contents.destroyed,
-   });
-   return contents;
-}
 
 /**
  * A `UtilityProcess` stand-in, which the main process pairs the page with. It is attached to the
@@ -54,20 +40,6 @@ export function createChild({ attached = true } = {}) {
    return child;
 }
 
-/** The ports a `MessageChannelMain` made, in order. */
-export const channelsMade: {
-   port1: { close: ReturnType<typeof vi.fn> };
-   port2: { close: ReturnType<typeof vi.fn> };
-}[] = [];
-
-export class FakeChannelMain {
-   port1 = { name: `port1 of ${channelsMade.length + 1}`, close: vi.fn() };
-   port2 = { name: `port2 of ${channelsMade.length + 1}`, close: vi.fn() };
-   constructor() {
-      channelsMade.push(this);
-   }
-}
-
 export async function loadMain(channelClass: unknown = FakeChannelMain) {
    const project = await fixtures.run("utility-ports");
    channelsMade.length = 0;
@@ -77,23 +49,6 @@ export async function loadMain(channelClass: unknown = FakeChannelMain) {
    return main.ipc;
 }
 
-/** A `MessagePortMain` of the child: an emitter with the methods of the generated code. */
-export class FakeBrokerPort extends EventEmitter {
-   readonly postMessage = vi.fn();
-   readonly start = vi.fn();
-   readonly close = vi.fn();
-   /** The page posts a message. */
-   fromPage(data: unknown) {
-      this.emit("message", { data });
-   }
-   /** What was posted to the page, with the given tag. */
-   posted(tag?: string) {
-      return this.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((message) => tag === undefined || message.__ipc === tag);
-   }
-}
-
 /** A `process.parentPort` stand-in, which the code in the utility process uses. */
 export function createParentPort() {
    const port = Object.assign(new EventEmitter(), { postMessage: vi.fn() });
@@ -101,7 +56,7 @@ export function createParentPort() {
    /** The main process posts a message to the child, with the ports it transfers. */
    const emitFromMain = (data: unknown, ports?: unknown[]) => port.emit("message", { data, ports });
    /** The main process hands a brokered port to the child. */
-   const broker = (channel: string, key = "1:utility", brokerPort = new FakeBrokerPort()) => {
+   const broker = (channel: string, key = "1:utility", brokerPort = new FakePortMain()) => {
       emitFromMain({ __ipc: "port", channel: wire(channel), key }, [brokerPort]);
       return brokerPort;
    };
@@ -132,34 +87,6 @@ export const cancel = (channel: string, id: number) => ({
    channel: wire(channel),
    id,
 });
-
-/** A `MessagePort` of the page: records what is posted, and delivers what the test says. */
-export class FakePagePort {
-   onmessage: ((event: { data: unknown }) => void) | null = null;
-   readonly postMessage = vi.fn();
-   readonly close = vi.fn();
-   private readonly closeListeners: (() => void)[] = [];
-   addEventListener(type: string, listener: () => void) {
-      if (type === "close") {
-         this.closeListeners.push(listener);
-      }
-   }
-   /** The child posts a message to the page. */
-   deliver(data: unknown) {
-      this.onmessage?.({ data });
-   }
-   emitClose() {
-      for (const listener of this.closeListeners) {
-         listener();
-      }
-   }
-   /** What the page posted to the child, with the given tag. */
-   posted(tag: string) {
-      return this.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((message) => message.__ipc === tag);
-   }
-}
 
 export async function loadPage() {
    const project = await fixtures.run("utility-ports");

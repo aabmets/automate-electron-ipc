@@ -12,28 +12,7 @@
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { portWire } from "@testutils/e2e/stream-main-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
-import { vi } from "vitest";
-
-/** A `MessagePort` of the page: records what is posted, and delivers what the test says. */
-export class FakePagePort {
-   onmessage: ((event: { data: unknown }) => void) | null = null;
-   readonly postMessage = vi.fn();
-   readonly close = vi.fn();
-   private readonly closeListeners: (() => void)[] = [];
-   addEventListener(type: string, listener: () => void) {
-      if (type === "close") {
-         this.closeListeners.push(listener);
-      }
-   }
-   deliver(data: unknown) {
-      this.onmessage?.({ data });
-   }
-   emitClose() {
-      for (const listener of this.closeListeners) {
-         listener();
-      }
-   }
-}
+import { FakePagePort } from "./fake-ports.js";
 
 export async function loadPreload() {
    const project = await fixtures.run("stream-channels");

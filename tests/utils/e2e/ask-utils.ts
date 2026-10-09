@@ -9,7 +9,6 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
@@ -24,21 +23,6 @@ export function cleanupAsks() {
 
 export const request = (name: string) => `autoipc:${name}`;
 export const replyOf = (name: string) => `autoipc:${name}:reply`;
-
-/** A WebContents stand-in: an emitter which announces its end, as the real one does. */
-export function createContents(id: number, state: { destroyed?: boolean; crashed?: boolean } = {}) {
-   const contents = Object.assign(new EventEmitter(), {
-      id,
-      destroyed: state.destroyed ?? false,
-      crashed: state.crashed ?? false,
-      getURL: () => "app://.",
-      send: vi.fn(),
-      isDestroyed: () => contents.destroyed,
-      isCrashed: () => contents.crashed,
-   });
-   return contents;
-}
-export type FakeContents = ReturnType<typeof createContents>;
 
 /** A WebFrameMain stand-in, which has no `getURL` and is not an emitter of `destroyed`. */
 export function createFrame(

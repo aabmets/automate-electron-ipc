@@ -9,13 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   channelsMade,
-   cleanupStreams,
-   createFrame,
-   loadMain,
-   start,
-} from "@testutils/e2e/stream-main-utils.js";
+import { channelsMade } from "@testutils/e2e/fake-ports.js";
+import { cleanupStreams, createFrame, loadMain, start } from "@testutils/e2e/stream-main-utils.js";
 import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

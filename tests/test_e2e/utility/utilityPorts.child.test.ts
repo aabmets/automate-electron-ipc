@@ -12,11 +12,11 @@
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 // biome-ignore-all lint/style/useThrowOnlyError: a plain object is what a handler may throw, and the library reduces it
 
+import { FakePortMain } from "@testutils/e2e/fake-ports.js";
 import { loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import {
    call,
    cleanupUtilityPorts,
-   FakeBrokerPort,
    loadUtility,
    startStream,
 } from "@testutils/e2e/utility-port-utils.js";
@@ -51,7 +51,7 @@ describe("utility ports, the utility process, accepting ports", () => {
       const unknown = broker("getUser");
       const other = broker("somethingElse");
       emitFromMain({ __ipc: "port", channel: wire("queryRows"), key: "k" });
-      emitFromMain({ __ipc: "port", channel: 7, key: "k" }, [new FakeBrokerPort()]);
+      emitFromMain({ __ipc: "port", channel: 7, key: "k" }, [new FakePortMain()]);
 
       expect(unknown.close).toHaveBeenCalledTimes(1);
       expect(unknown.start).not.toHaveBeenCalled();

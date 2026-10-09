@@ -9,13 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupAsks,
-   createContents,
-   createFrame,
-   loadMain,
-   questions,
-} from "@testutils/e2e/ask-utils.js";
+import { cleanupAsks, createFrame, loadMain, questions } from "@testutils/e2e/ask-utils.js";
+import { createContents } from "@testutils/e2e/fake-contents.js";
 import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +19,7 @@ afterEach(cleanupAsks);
 describe("ask, main process, errors of the renderer", () => {
    it("rejects with an IpcAskError which carries the name, message, code and data", async () => {
       const { ipc, IpcAskError, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -52,7 +47,7 @@ describe("ask, main process, errors of the renderer", () => {
 
    it("rejects with the code that the preload script gives when no responder is registered", async () => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -88,7 +83,7 @@ describe("ask, main process, errors of the renderer", () => {
       ],
    ])("reads the error %j defensively", async (error, expected) => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -109,7 +104,7 @@ describe("ask, main process, errors of the renderer", () => {
       { ok: false, error: "boom" },
    ])("rejects an unreadable reply %j", async (envelope) => {
       const { ipc, reply } = await loadMain();
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
 
       const answer = ipc.hasUnsavedChanges.invoke(contents, 7);
       const [[id]] = questions(contents.send, "hasUnsavedChanges");
@@ -124,7 +119,7 @@ describe("ask, main process, errors of the renderer", () => {
 
 describe("ask, main process, frames", () => {
    it("sends to the frame itself, and takes the answer of that frame only", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc, reply } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
       const sibling = createFrame({ processId: 4, routingId: 11 });
@@ -138,7 +133,7 @@ describe("ask, main process, frames", () => {
       answer.then(settled, settled);
       reply("hasUnsavedChanges", contents, id, ok("sibling"), sibling);
       reply("hasUnsavedChanges", contents, id, ok("no frame"), null);
-      reply("hasUnsavedChanges", createContents(2), id, ok("other contents"), frame);
+      reply("hasUnsavedChanges", createContents({ id: 2 }), id, ok("other contents"), frame);
       await Promise.resolve();
       expect(settled).not.toHaveBeenCalled();
 
@@ -147,7 +142,7 @@ describe("ask, main process, frames", () => {
    });
 
    it("recognises the frame by its process and routing IDs, not by the object", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc, reply } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
 
@@ -159,7 +154,7 @@ describe("ask, main process, frames", () => {
    });
 
    it("rejects the question of a frame when its contents are destroyed", async () => {
-      const contents = createContents(1);
+      const contents = createContents({ id: 1 });
       const { ipc } = await loadMain("ask-channels", () => contents);
       const frame = createFrame({ processId: 4, routingId: 10 });
 
@@ -190,7 +185,7 @@ describe("ask, main process, frames", () => {
 
       const answer = ipc.hasUnsavedChanges.invoke(frame, 7);
       const [[id]] = questions(frame.send, "hasUnsavedChanges");
-      reply("hasUnsavedChanges", createContents(9), id, ok("frame"), frame);
+      reply("hasUnsavedChanges", createContents({ id: 9 }), id, ok("frame"), frame);
 
       await expect(answer).resolves.toBe("frame");
    });
@@ -208,7 +203,7 @@ describe("ask, main process, frames", () => {
          },
       };
 
-      reply("hasUnsavedChanges", createContents(9), id, ok("broken"), broken);
+      reply("hasUnsavedChanges", createContents({ id: 9 }), id, ok("broken"), broken);
       await Promise.resolve();
 
       expect(settled).not.toHaveBeenCalled();

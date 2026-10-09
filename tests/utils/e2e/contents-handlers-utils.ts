@@ -13,6 +13,7 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { vi } from "vitest";
 import { fixtures } from "../fixture-tracker.js";
+import { createContents as createFakeContents } from "./fake-contents.js";
 import { wire } from "./wire-utils.js";
 
 // T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }` and register
@@ -47,18 +48,9 @@ export type FakeIpc = ReturnType<typeof createFakeIpc>;
 
 let lastContentsId = 0;
 
+/** Contents with the `ipc` of their own that `webContents.ipc` is, and an ID of their own. */
 export function createContents() {
-   const contents = Object.assign(new EventEmitter(), {
-      id: ++lastContentsId,
-      ipc: createFakeIpc(),
-      destroyed: false,
-      isDestroyed: () => contents.destroyed,
-      destroy() {
-         contents.destroyed = true;
-         contents.emit("destroyed");
-      },
-   });
-   return contents;
+   return Object.assign(createFakeContents({ id: ++lastContentsId }), { ipc: createFakeIpc() });
 }
 
 export type Contents = ReturnType<typeof createContents>;

@@ -9,13 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   type Contents,
-   callFrom,
-   createContents,
-   forbidden,
-   loadMain,
-} from "@testutils/e2e/scopes-main-utils.js";
+import { createContents, FakeContents } from "@testutils/e2e/fake-contents.js";
+import { callFrom, forbidden, loadMain } from "@testutils/e2e/scopes-main-utils.js";
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
 
@@ -23,7 +18,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
    describe("the registration", () => {
       it("is removed by the function that registerScope returns", async () => {
          const { generated, ipc, call } = await loadMain();
-         const settings = createContents(1);
+         const settings = createContents({ id: 1 });
          const dispose = generated.registerScope(settings, "settings");
          ipc.getSettings.handle(async () => ({ theme: "dark" }));
          await expect(call("getSettings", callFrom(settings))).resolves.toMatchObject({ ok: true });
@@ -38,7 +33,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
       it("is replaced when the contents are registered again, and the old disposer does nothing", async () => {
          const { generated, ipc, call } = await loadMain();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
          const disposeFirst = generated.registerScope(contents, "settings");
          generated.registerScope(contents, "editor");
          ipc.getSettings.handle(async () => ({ theme: "dark" }));
@@ -57,7 +52,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
       it("is removed when the contents are destroyed", async () => {
          const { generated, ipc, call } = await loadMain();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
          generated.registerScope(contents, "settings");
          ipc.getSettings.handle(async () => ({ theme: "dark" }));
 
@@ -71,8 +66,8 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
       it("takes the contents of a window or a view", async () => {
          const { generated, ipc, call } = await loadMain();
-         const window = { webContents: createContents(1) };
-         const view = { webContents: createContents(2) };
+         const window = { webContents: createContents({ id: 1 }) };
+         const view = { webContents: createContents({ id: 2 }) };
          generated.registerScope(window, "settings");
          generated.registerScope(view, "settings");
          ipc.getSettings.handle(async () => ({ theme: "dark" }));
@@ -87,7 +82,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
       it("throws for a scope that the schema does not declare, and registers nothing", async () => {
          const { generated } = await loadMain();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
 
          expect(() => generated.registerScope(contents, "admin")).toThrowError(
             "The scope 'admin' is not declared in the schema. Use one of: editor, settings",
@@ -97,7 +92,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
 
       it("throws for contents that are destroyed already", async () => {
          const { generated } = await loadMain();
-         const contents = createContents(1);
+         const contents = createContents({ id: 1 });
          contents.destroyed = true;
 
          expect(() => generated.registerScope(contents, "settings")).toThrowError(
@@ -111,7 +106,7 @@ describe("registerScope, and the channels with scopes in the main process", () =
          ipc.getSettings.handle(async () => ({ theme: "dark" }));
 
          // The contents have an ID that is the name of a property of every object.
-         const event = callFrom({ id: "constructor" } as unknown as Contents);
+         const event = callFrom({ id: "constructor" } as unknown as FakeContents);
 
          await expect(call("getSettings", event)).resolves.toStrictEqual(forbidden("getSettings"));
       });
