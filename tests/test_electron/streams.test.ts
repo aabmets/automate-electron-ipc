@@ -408,8 +408,8 @@ describeElectron("stream channels in Electron", "electron-streams", scenarios, (
       });
    });
 
-   // T87: every open stream adds a 'destroyed' listener of its own to the contents of its page.
-   it.fails("reads many streams of one page at once without a MaxListenersExceededWarning", () => {
+   // Every open stream used to add a 'destroyed' listener of its own to the contents of its page (T87).
+   it("reads many streams of one page at once without a MaxListenersExceededWarning", () => {
       expect(group.value("manyStreams")).toStrictEqual({ chunks: 60, warnings: [] });
    });
 

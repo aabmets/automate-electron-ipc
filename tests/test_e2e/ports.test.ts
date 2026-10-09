@@ -409,6 +409,37 @@ describe("ipc.<name>.connect", () => {
          expect(posted(two)).toHaveLength(1);
       });
 
+      // Node warns about more than ten listeners of one event (T87).
+      it("adds one listener of each event to the windows, however many connections they share", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         const connections = Array.from({ length: 12 }, () => ipc.chat.connect(one, two));
+
+         for (const win of [one, two]) {
+            expect(listenersOn(win)).toStrictEqual({
+               closed: 1,
+               "did-navigate": 1,
+               "did-fail-load": 1,
+               "did-finish-load": 1,
+               "did-stop-loading": 1,
+            });
+         }
+         // The listeners stay while one connection is left, and the page of that one still pairs.
+         for (const connection of connections.slice(0, 11)) {
+            connection.close();
+         }
+         expect(listenersOn(one).closed).toBe(1);
+         const before = posted(one).length;
+         one.webContents.emit("did-finish-load");
+         expect(posted(one)).toHaveLength(before + 1);
+
+         // A window that is destroyed ends the connection that is left, with no listener behind.
+         destroy(one);
+         expect(listenersOn(one)).toStrictEqual(noListeners);
+         expect(listenersOn(two)).toStrictEqual(noListeners);
+      });
+
       it("stops listening to the contents when the connection is closed", async () => {
          const ipc = await loadMain();
          const one = createWindow();

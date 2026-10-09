@@ -303,6 +303,35 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          expect(contents.postMessage).toHaveBeenCalledOnce();
       });
 
+      // Node warns about more than ten listeners of one event (T87).
+      it("adds one listener of each event to the contents, however many connections they have", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connections = Array.from({ length: 12 }, () => ipc.logTail.connect(contents));
+
+         for (const event of [
+            "did-navigate",
+            "did-fail-load",
+            "did-finish-load",
+            "did-stop-loading",
+            "destroyed",
+         ]) {
+            expect(contents.listenerCount(event)).toBe(1);
+         }
+         for (const connection of connections.slice(0, 11)) {
+            connection.close();
+         }
+         expect(contents.listenerCount("destroyed")).toBe(1);
+
+         // The connection that is left still ends with the contents.
+         const last = connections[11];
+         const closed = vi.fn();
+         last.onClose(closed);
+         destroy(contents);
+         expect(closed).toHaveBeenCalledOnce();
+         expect(contents.listenerCount("destroyed")).toBe(0);
+      });
+
       it("stops listening to the contents when the connection is closed", async () => {
          const ipc = await loadMain();
          const contents = createContents();

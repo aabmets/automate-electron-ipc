@@ -173,6 +173,10 @@ export class MainBindingsWriter extends BaseWriter {
          "listenForPortDisconnects",
          "PageLoadWatch",
          "watchPageLoad",
+         "WatchableEmitter",
+         "EventWatch",
+         "eventWatches",
+         "watchEvent",
          "MessagePortMain",
          "MainPortConnection",
          "MainPortListener",
@@ -219,6 +223,7 @@ export class MainBindingsWriter extends BaseWriter {
          "Parameters",
          "setTimeout",
          "clearTimeout",
+         ...(this.usesEventWatch() ? ["WeakMap"] : []),
          // The channels to a utility process.
          ...(this.hasUtilityChannels()
             ? [
@@ -359,6 +364,7 @@ export class MainBindingsWriter extends BaseWriter {
             workerValidators: offPage.validators,
             scopes,
             usesScopedGuards: this.hasScopedGuards(),
+            usesEventWatch: this.usesEventWatch(),
          },
          [...eventTypes].sort(utils.compareStrings),
       );
@@ -476,6 +482,22 @@ export class MainBindingsWriter extends BaseWriter {
    private getImportedTypes(spec: t.ChannelSpec): string[] {
       return this.isBrokeredSpec(spec) ? [] : spec.signature.customTypes;
    }
+   /**
+    * Whether the generated code watches events of contents, windows or children for the calls or
+    * connections it holds open: `ask`, `stream`, `port` and `mainPort` channels, and the brokered
+    * channels of a utility process.
+    */
+   private usesEventWatch(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some(
+            (spec) =>
+               spec.kind === "Port" ||
+               (spec.kind === "Stream" && spec.direction === "RendererToMain") ||
+               (spec.kind === "Unicast" && spec.direction === "MainToRenderer") ||
+               this.isBrokeredSpec(spec),
+         ),
+      );
+   }
    /** Whether any schema file declares a channel between a renderer and a utility process. */
    private hasBrokeredChannels(): boolean {
       return this.pfsArray.some((pfs) =>
@@ -523,6 +545,7 @@ export class MainBindingsWriter extends BaseWriter {
          workerValidators: Map<t.ChannelSpec, string>;
          scopes: string[];
          usesScopedGuards: boolean;
+         usesEventWatch: boolean;
       },
       eventTypes: string[],
    ): string[] {
@@ -552,6 +575,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesSenders) {
          support.push(this.buildSenderHelpers(uses.usesEmits));
+      }
+      if (uses.usesEventWatch) {
+         support.push(this.buildEventWatch());
       }
       if (uses.usesAsks) {
          support.push(this.buildAskHelpers());
@@ -663,7 +689,9 @@ export class MainBindingsWriter extends BaseWriter {
     * a schema type could shadow, and has no prototype), and `watch`, which disposes the
     * registration when the contents are destroyed. The registry of the contents and the single
     * `destroyed` listener are made once per contents, so any number of channels does not hit the
-    * limit of listeners, and both are dropped when the contents are destroyed. Contents which are
+    * limit of listeners, and both are dropped when the contents are destroyed. A handler replaces
+    * the one of its channel, and the registration it replaces is released at once, so registering
+    * again for each load does not accumulate the callbacks that were replaced. Contents which are
     * already destroyed throw, since `ipc` would never receive anything.
     */
    private buildTargetResolver(): string {
@@ -682,12 +710,14 @@ export class MainBindingsWriter extends BaseWriter {
          "interface IpcTarget {",
          `${i1}ipc: IpcMain;`,
          `${i1}handlers: { [channel: string]: unknown };`,
-         `${i1}watch: (remove: () => void) => () => void;`,
+         `${i1}watch: (remove: () => void, handled?: string) => () => void;`,
          "}",
          "",
          "interface IpcContentsRecord {",
          `${i1}handlers: { [channel: string]: unknown };`,
          `${i1}removers: (() => void)[];`,
+         `${i1}/** The remover of the registration which holds the handler of each channel now. */`,
+         `${i1}current: { [channel: string]: unknown };`,
          "}",
          "",
          "const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };",
@@ -705,7 +735,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}const id = contents.id;`,
          `${i1}let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;`,
          `${i1}if (!record) {`,
-         `${i2}const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };`,
+         `${i2}const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [], current: { __proto__: null } };`,
          `${i2}record = created;`,
          `${i2}contentsIpcRegistry[id] = created;`,
          `${i2}contents.once('destroyed', () => {`,
@@ -715,18 +745,33 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}}`,
          `${i2}});`,
          `${i1}}`,
-         `${i1}const { handlers, removers } = record;`,
+         `${i1}const { handlers, removers, current } = record;`,
+         `${i1}const forget = (remove: () => void): void => {`,
+         `${i2}for (let at = 0; at < removers.length; at++) {`,
+         `${i3}if (removers[at] === remove) {`,
+         `${i3}${i1}removers.splice(at, 1);`,
+         `${i3}${i1}return;`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
          `${i1}return {`,
          `${i2}ipc: contents.ipc,`,
          `${i2}handlers,`,
-         `${i2}watch: (remove) => {`,
+         `${i2}watch: (remove, handled) => {`,
+         `${i3}// A handler replaces the one of its channel, so the registration it replaced is released:`,
+         `${i3}// its remover would otherwise hold the replaced callback until the contents are destroyed.`,
+         `${i3}if (handled !== undefined) {`,
+         `${i4}const replaced = current[handled] as (() => void) | undefined;`,
+         `${i4}if (replaced) {`,
+         `${i4}${i1}forget(replaced);`,
+         `${i4}}`,
+         `${i4}current[handled] = remove;`,
+         `${i3}}`,
          `${i3}removers.push(remove);`,
          `${i3}return () => {`,
-         `${i4}for (let at = 0; at < removers.length; at++) {`,
-         `${i4}${i1}if (removers[at] === remove) {`,
-         `${i4}${i2}removers.splice(at, 1);`,
-         `${i4}${i2}return;`,
-         `${i4}${i1}}`,
+         `${i4}forget(remove);`,
+         `${i4}if (handled !== undefined && current[handled] === remove) {`,
+         `${i4}${i1}delete current[handled];`,
          `${i4}}`,
          `${i3}};`,
          `${i2}},`,
@@ -1129,7 +1174,7 @@ export class MainBindingsWriter extends BaseWriter {
             );
          }
          lines.push(
-            `${i2}const ${unwatchName} = ${targetName}.watch(${removeName});`,
+            `${i2}const ${unwatchName} = ${targetName}.watch(${removeName}${isBroadcast ? "" : `, ${channel}`});`,
             `${i2}return ${removeName};`,
             `${i1}},`,
          );
@@ -1406,6 +1451,84 @@ export class MainBindingsWriter extends BaseWriter {
       ];
    }
    /**
+    * `watchEvent(emitter, event, callback)`, which the calls and connections that the main process
+    * holds open use to learn when the contents, the window or the child they depend on goes away.
+    * A listener of its own for each of them would grow without bound while they are open, and
+    * Node warns about more than ten of the same event (`MaxListenersExceededWarning`). So an
+    * emitter has one listener for each event, with the callbacks of all watchers behind it, which
+    * is added with the first watcher and removed with the last. The disposer removes that one
+    * callback, and a callback which was removed is not called by a dispatch that is under way. A
+    * callback which throws is logged and does not keep the others from running. The callbacks
+    * are held by a `WeakMap` that is keyed by the emitter, so nothing outlives the contents.
+    */
+   private buildEventWatch(): string {
+      const [i1, i2, i3, i4, i5] = this.indents;
+      return [
+         "",
+         "interface WatchableEmitter {",
+         `${i1}on(event: string, listener: (...args: any[]) => void): unknown;`,
+         `${i1}removeListener(event: string, listener: (...args: any[]) => void): unknown;`,
+         "}",
+         "",
+         "interface EventWatch {",
+         `${i1}callbacks: ((...args: any[]) => void)[];`,
+         `${i1}listener: (...args: any[]) => void;`,
+         "}",
+         "",
+         "const eventWatches = new WeakMap<object, { [event: string]: EventWatch | undefined }>();",
+         "",
+         "function watchEvent(",
+         `${i1}emitter: WatchableEmitter,`,
+         `${i1}event: string,`,
+         `${i1}callback: (...args: any[]) => void,`,
+         "): () => void {",
+         `${i1}const known = eventWatches.get(emitter);`,
+         `${i1}const watched: { [event: string]: EventWatch | undefined } = known ?? ({ __proto__: null } as any);`,
+         `${i1}if (!known) {`,
+         `${i2}eventWatches.set(emitter, watched);`,
+         `${i1}}`,
+         `${i1}let watch = watched[event];`,
+         `${i1}if (!watch) {`,
+         `${i2}const callbacks: ((...args: any[]) => void)[] = [];`,
+         `${i2}watch = {`,
+         `${i3}callbacks,`,
+         `${i3}listener: (...args: any[]) => {`,
+         `${i4}for (const next of callbacks.slice()) {`,
+         `${i5}if (callbacks.indexOf(next) >= 0) {`,
+         `${i5}${i1}try {`,
+         `${i5}${i2}next(...args);`,
+         `${i5}${i1}} catch (error) {`,
+         `${i5}${i2}console.error(error);`,
+         `${i5}${i1}}`,
+         `${i5}}`,
+         `${i4}}`,
+         `${i3}},`,
+         `${i2}};`,
+         `${i2}watched[event] = watch;`,
+         `${i2}emitter.on(event, watch.listener);`,
+         `${i1}}`,
+         `${i1}const { callbacks, listener } = watch;`,
+         `${i1}callbacks.push(callback);`,
+         `${i1}return () => {`,
+         `${i2}const at = callbacks.indexOf(callback);`,
+         `${i2}if (at < 0) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}callbacks.splice(at, 1);`,
+         `${i2}if (callbacks.length === 0 && watched[event] === watch) {`,
+         `${i3}delete watched[event];`,
+         `${i3}try {`,
+         `${i4}emitter.removeListener(event, listener);`,
+         `${i3}} catch {`,
+         `${i4}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i3}}`,
+         `${i2}}`,
+         `${i1}};`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
     * The helpers of the `ask` channels. Electron has no invoke from the main process to a
     * renderer, so `askRenderer` sends the question with a correlation ID as its first argument,
     * and the preload script answers on the reply channel with the same ID and the envelope of the
@@ -1423,7 +1546,8 @@ export class MainBindingsWriter extends BaseWriter {
     * because the frame is destroyed or detached by then), or of the main frame, which replaces
     * every frame below it. The commit is watched and not the start, so the old document can still
     * answer while a navigation is pending, and a navigation that `beforeunload` cancels changes
-    * nothing.
+    * nothing. The events are watched through `watchEvent`, so any number of pending questions
+    * adds one listener of each event to the contents, and not one of its own each (T87).
     * `IpcAskError` carries the `name`, `message`, `code` and `data` of an error of the responder,
     * and the code `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` or
     * `IPC_ASK_INVALID_REPLY` for the failures of the library itself.
@@ -1526,15 +1650,13 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}listenForAskReplies(reply);`,
          `${i2}const id = ++lastAskId;`,
          `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
+         `${i2}let stopWatching = (): void => undefined;`,
          `${i2}let onGone = (): void => undefined;`,
          `${i2}let onFrameNavigate = (..._details: unknown[]): void => undefined;`,
          `${i2}const finish = (settle: () => void): void => {`,
          `${i3}clearTimeout(timer);`,
          `${i3}delete pendingAsks[id];`,
-         `${i3}contents?.removeListener('destroyed', onGone);`,
-         `${i3}contents?.removeListener('render-process-gone', onGone);`,
-         `${i3}contents?.removeListener('did-navigate', onGone);`,
-         `${i3}contents?.removeListener('did-frame-navigate', onFrameNavigate);`,
+         `${i3}stopWatching();`,
          `${i3}settle();`,
          `${i2}};`,
          `${i2}onGone = () => finish(() => reject(destroyed));`,
@@ -1577,12 +1699,18 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}},`,
          `${i2}};`,
          `${i2}pendingAsks[id] = pending;`,
-         `${i2}contents?.once('destroyed', onGone);`,
-         `${i2}contents?.once('render-process-gone', onGone);`,
-         `${i2}if (frame) {`,
-         `${i3}contents?.on('did-frame-navigate', onFrameNavigate);`,
-         `${i2}} else {`,
-         `${i3}contents?.on('did-navigate', onGone);`,
+         `${i2}if (contents) {`,
+         `${i3}const asked = contents;`,
+         `${i3}const stops = [`,
+         `${i4}watchEvent(asked, 'destroyed', onGone),`,
+         `${i4}watchEvent(asked, 'render-process-gone', onGone),`,
+         `${i4}frame ? watchEvent(asked, 'did-frame-navigate', onFrameNavigate) : watchEvent(asked, 'did-navigate', onGone),`,
+         `${i3}];`,
+         `${i3}stopWatching = () => {`,
+         `${i4}for (const stop of stops) {`,
+         `${i4}${i1}stop();`,
+         `${i4}}`,
+         `${i3}};`,
          `${i2}}`,
          `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
          `${i3}const error = new IpcAskError(`,
@@ -1621,7 +1749,8 @@ export class MainBindingsWriter extends BaseWriter {
     * allows so far, as it reads. An absolute total is safe against a repeated or late message, and
     * only a higher one counts. A stop wakes the pump that waits for credit, so a cancel, a closed
     * port and a destroyed contents work while the generator is paused. With `Infinity` the
-    * generator is never paused.
+    * generator is never paused. The `destroyed` event of the contents is watched through
+    * `watchEvent`, so any number of open streams of a page adds one listener, and not one each.
     */
    private buildStreamHelpers(): string {
       const [i1, i2, i3, i4, i5] = this.indents;
@@ -1674,6 +1803,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}let done = false;`,
          `${i1}let limit = highWaterMark;`,
          `${i1}let sent = 0;`,
+         `${i1}let unwatch = (): void => undefined;`,
          `${i1}let wake: (() => void) | null = null;`,
          `${i1}const resume = (): void => {`,
          `${i2}const waiting = wake;`,
@@ -1686,7 +1816,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}done = true;`,
          `${i2}resume();`,
-         `${i2}sender.removeListener('destroyed', cancel);`,
+         `${i2}unwatch();`,
          `${i2}port1.close();`,
          `${i2}return true;`,
          `${i1}};`,
@@ -1715,7 +1845,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i1}});`,
          `${i1}port1.on('close', cancel);`,
-         `${i1}sender.once('destroyed', cancel);`,
+         `${i1}unwatch = watchEvent(sender, 'destroyed', cancel);`,
          `${i1}port1.start();`,
          `${i1}const pump = async (): Promise<void> => {`,
          `${i2}while (!done) {`,
@@ -1867,8 +1997,9 @@ export class MainBindingsWriter extends BaseWriter {
     * reported, such as one that finished before the watch began. A failed main-frame load does not
     * count, nor does the error page that Electron shows for it. The state of the load resets only
     * when a main-frame navigation commits (`did-navigate`), so one that never commits changes
-    * nothing. `onLoad` runs once per load, and the watch starts out loaded if the contents have a
-    * page and are not loading.
+    * nothing. The events are watched through `watchEvent`, so any number of watches of the same
+    * contents adds one listener of each event. `onLoad` runs once per load, and the watch starts
+    * out loaded if the contents have a page and are not loading.
     */
    private buildPageLoadWatch(): string {
       const [i1, i2, i3, i4] = this.indents;
@@ -1914,19 +2045,17 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}finish();`,
          `${i2}}`,
          `${i1}};`,
-         `${i1}contents.on('did-navigate', commit);`,
-         `${i1}contents.on('did-fail-load', fail);`,
-         `${i1}contents.on('did-finish-load', finish);`,
-         `${i1}contents.on('did-stop-loading', stop);`,
+         `${i1}const stops = [`,
+         `${i2}watchEvent(contents, 'did-navigate', commit),`,
+         `${i2}watchEvent(contents, 'did-fail-load', fail),`,
+         `${i2}watchEvent(contents, 'did-finish-load', finish),`,
+         `${i2}watchEvent(contents, 'did-stop-loading', stop),`,
+         `${i1}];`,
          `${i1}return {`,
          `${i2}isLoaded: () => loaded,`,
          `${i2}dispose: () => {`,
-         `${i3}// Destroyed contents have dropped their listeners, and cannot be reached.`,
-         `${i3}if (!contents.isDestroyed()) {`,
-         `${i4}contents.off('did-navigate', commit);`,
-         `${i4}contents.off('did-fail-load', fail);`,
-         `${i4}contents.off('did-finish-load', finish);`,
-         `${i4}contents.off('did-stop-loading', stop);`,
+         `${i3}for (const unwatch of stops) {`,
+         `${i4}unwatch();`,
          `${i3}}`,
          `${i2}},`,
          `${i1}};`,
@@ -1958,6 +2087,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}const watched = winA === winB ? [ends[0]] : ends;`,
          `${i1}let closed = false;`,
          `${i1}const watches = new Map<BrowserWindow, PageLoadWatch>();`,
+         `${i1}const unwatchClosed: (() => void)[] = [];`,
          `${i1}const isReady = (win: BrowserWindow) => !win.isDestroyed() && !!watches.get(win)?.isLoaded();`,
          `${i1}const pair = () => {`,
          `${i2}if (closed || !isReady(winA) || !isReady(winB)) {`,
@@ -1973,11 +2103,10 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}closed = true;`,
          `${i2}for (const end of watched) {`,
-         `${i3}// A destroyed window has dropped its listeners, and cannot be reached.`,
-         `${i3}if (!end.win.isDestroyed()) {`,
-         `${i4}end.win.off('closed', close);`,
-         `${i3}}`,
          `${i3}watches.get(end.win)?.dispose();`,
+         `${i2}}`,
+         `${i2}for (const unwatch of unwatchClosed.splice(0)) {`,
+         `${i3}unwatch();`,
          `${i2}}`,
          `${i2}for (const end of ends) {`,
          `${i3}portEnds.delete(end.key);`,
@@ -1993,7 +2122,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}listenForPortDisconnects(channel);`,
          `${i2}for (const end of watched) {`,
-         `${i3}end.win.on('closed', close);`,
+         `${i3}unwatchClosed.push(watchEvent(end.win, 'closed', close));`,
          `${i3}watches.set(end.win, watchPageLoad(end.contents, pair));`,
          `${i2}}`,
          `${i2}pair();`,
@@ -2157,6 +2286,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}let port: MessagePortMain | null = null;`,
          `${i1}let closed = false;`,
          `${i1}const watch = watchPageLoad(contents, () => pair());`,
+         `${i1}let unwatchDestroyed = (): void => undefined;`,
          `${i1}const isReady = () => !contents.isDestroyed() && watch.isLoaded();`,
          `${i1}// Drops the port without ending the connection, which is what a new port replaces.`,
          `${i1}const release = () => {`,
@@ -2216,9 +2346,9 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}pending.items.length = 0;`,
          `${i2}portEnds.delete(key);`,
          `${i2}watch.dispose();`,
-         `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i2}unwatchDestroyed();`,
+         `${i2}// Destroyed contents cannot be reached.`,
          `${i2}if (!contents.isDestroyed()) {`,
-         `${i3}contents.off('destroyed', close);`,
          `${i3}contents.send(\`\${channel}:close\`, key);`,
          `${i2}}`,
          `${i2}if (release()) {`,
@@ -2229,7 +2359,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}try {`,
          `${i2}portEnds.set(key, { contents, close });`,
          `${i2}listenForPortDisconnects(channel);`,
-         `${i2}contents.on('destroyed', close);`,
+         `${i2}unwatchDestroyed = watchEvent(contents, 'destroyed', close);`,
          `${i2}pair();`,
          `${i1}} catch (error) {`,
          `${i2}close();`,
@@ -2453,6 +2583,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}const linkKey = \`\${channel}:\${contents.id}\`;`,
          `${i1}const key = \`\${++lastUtilityLinkId}:utility\`;`,
          `${i1}let closed = false;`,
+         `${i1}const unwatch: (() => void)[] = [];`,
          `${i1}const pair = () => {`,
          `${i2}if (closed || contents.isDestroyed() || !watch.isLoaded()) {`,
          `${i3}return;`,
@@ -2480,13 +2611,14 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}}`,
          `${i2}closed = true;`,
          `${i2}watch.dispose();`,
-         `${i2}child.removeListener('exit', close);`,
+         `${i2}for (const stop of unwatch.splice(0)) {`,
+         `${i3}stop();`,
+         `${i2}}`,
          `${i2}if (utilityLinks.get(linkKey) === close) {`,
          `${i3}utilityLinks.delete(linkKey);`,
          `${i2}}`,
-         `${i2}// Destroyed contents have dropped their listeners, and cannot be reached.`,
+         `${i2}// Destroyed contents cannot be reached.`,
          `${i2}if (!contents.isDestroyed()) {`,
-         `${i3}contents.off('destroyed', close);`,
          `${i3}contents.send(\`\${channel}:close\`, key);`,
          `${i2}}`,
          `${i1}};`,
@@ -2494,8 +2626,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}// A failure from here on undoes what was registered, since the caller never gets the handle.`,
          `${i1}try {`,
          `${i2}utilityLinks.set(linkKey, close);`,
-         `${i2}contents.on('destroyed', close);`,
-         `${i2}child.once('exit', close);`,
+         `${i2}unwatch.push(watchEvent(contents, 'destroyed', close), watchEvent(child, 'exit', close));`,
          `${i2}pair();`,
          `${i1}} catch (error) {`,
          `${i2}close();`,

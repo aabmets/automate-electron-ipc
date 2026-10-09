@@ -404,9 +404,9 @@ describe("the webContents option of listeners and handlers", () => {
             expect(await isReleased(() => ({}))).toBe(true);
          });
 
-         // T87: each registration on the contents keeps its remover in the record of the contents
-         // until the contents are destroyed, and the remover holds the replaced callback.
-         it.fails("is released when the handler is registered on the contents", async () => {
+         // The record of the contents used to keep the remover of each replaced registration until
+         // the contents were destroyed, and the remover holds the replaced callback (T87).
+         it("is released when the handler is registered on the contents", async () => {
             expect(await isReleased((contents) => ({ webContents: contents }))).toBe(true);
          });
       });

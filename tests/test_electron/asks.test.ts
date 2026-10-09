@@ -159,7 +159,7 @@ const scenarios: Record<string, Scenario> = {
       return { plain: await attempt(), error: await attempt() };
    },
 
-   // The scenarios below cover T84 and find T87. They read the state of the question after a pause, and
+   // The scenarios below cover T84 and T87. They read the state of the question after a pause, and
    // do not await it, so that they return what happened and do not fail with a timeout.
 
    // The page that was asked goes away, but its contents stay: a reload of the window, or a
@@ -263,8 +263,8 @@ describeElectron("ask channels in Electron", "electron-asks", scenarios, (group)
       });
    });
 
-   // T87: every question adds a 'destroyed' and a 'render-process-gone' listener of its own.
-   it.fails("asks a window many questions at once without a MaxListenersExceededWarning", () => {
+   // Every question used to add a 'destroyed' and a 'render-process-gone' listener of its own (T87).
+   it("asks a window many questions at once without a MaxListenersExceededWarning", () => {
       expect(group.value("manyAsksAtOnce")).toStrictEqual({ answers: 12, warnings: [] });
    });
 

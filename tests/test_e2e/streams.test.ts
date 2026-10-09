@@ -471,6 +471,50 @@ describe("stream, main process, cancelling", () => {
       expect(lastChannel().port1.close).toHaveBeenCalledOnce();
    });
 
+   // Node warns about more than ten listeners of one event (T87).
+   it("keeps one 'destroyed' listener on the contents of any number of open streams", async () => {
+      const context = await loadMain();
+      const contents = createContents();
+      const streams = [];
+      for (let n = 0; n < 12; n++) {
+         // biome-ignore lint/performance/noAwaitInLoops: each call starts after the last one
+         streams.push(await start(context, "counter", { id: n, contents }));
+      }
+
+      expect(contents.listenerCount("destroyed")).toBe(1);
+
+      // A stream that ends lets go of its own part only.
+      streams[0].source.end();
+      await settle();
+      expect(contents.listenerCount("destroyed")).toBe(1);
+
+      contents.emit("destroyed");
+      await settle();
+
+      for (const { source } of streams.slice(1)) {
+         expect(source.iterator.return).toHaveBeenCalledOnce();
+      }
+      expect(streams[0].source.iterator.return).not.toHaveBeenCalled();
+      expect(contents.listenerCount("destroyed")).toBe(0);
+   });
+
+   it("lets go of the contents when the last of many streams ends", async () => {
+      const context = await loadMain();
+      const contents = createContents();
+      const streams = [];
+      for (let n = 0; n < 3; n++) {
+         // biome-ignore lint/performance/noAwaitInLoops: each call starts after the last one
+         streams.push(await start(context, "counter", { id: n, contents }));
+      }
+
+      for (const { source } of streams) {
+         source.end();
+      }
+      await settle();
+
+      expect(contents.listenerCount("destroyed")).toBe(0);
+   });
+
    it("ignores messages of the page which are not a cancel", async () => {
       const context = await loadMain();
       const { source } = await start(context, "counter");

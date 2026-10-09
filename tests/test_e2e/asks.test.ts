@@ -465,6 +465,78 @@ describe("ask, main process, a target that is gone", () => {
       expect(contents.listenerCount("did-navigate")).toBe(0);
    });
 
+   // Node warns about more than ten listeners of one event (T87).
+   it("keeps one listener per event on the contents, however many questions are pending", async () => {
+      const { ipc, reply } = await loadMain();
+      const contents = createContents(1);
+
+      const answers = Array.from({ length: 12 }, (_, n) =>
+         ipc.hasUnsavedChanges.invoke(contents, n),
+      );
+      const ids = questions(contents.send, "hasUnsavedChanges").map(([id]) => id);
+
+      expect(ids).toHaveLength(12);
+      for (const event of ["destroyed", "render-process-gone", "did-navigate"]) {
+         expect(contents.listenerCount(event)).toBe(1);
+      }
+      expect(contents.listenerCount("did-frame-navigate")).toBe(0);
+      // The first ten answer, and the rest are still watched.
+      for (const id of ids.slice(0, 10)) {
+         reply("hasUnsavedChanges", contents, id, ok(true));
+      }
+      expect(contents.listenerCount("destroyed")).toBe(1);
+      for (const id of ids.slice(10)) {
+         reply("hasUnsavedChanges", contents, id, ok(true));
+      }
+      await expect(Promise.all(answers)).resolves.toHaveLength(12);
+      for (const event of ["destroyed", "render-process-gone", "did-navigate"]) {
+         expect(contents.listenerCount(event)).toBe(0);
+      }
+   });
+
+   it("settles every pending question when the contents go away, with one listener", async () => {
+      const { ipc } = await loadMain();
+      const contents = createContents(1);
+
+      const answers = Array.from({ length: 12 }, (_, n) =>
+         ipc.hasUnsavedChanges.invoke(contents, n).then(
+            () => "answered",
+            (error: { code: string }) => error.code,
+         ),
+      );
+      contents.emit("render-process-gone");
+
+      await expect(Promise.all(answers)).resolves.toStrictEqual(
+         Array.from({ length: 12 }, () => "IPC_ASK_DESTROYED"),
+      );
+      for (const event of ["destroyed", "render-process-gone", "did-navigate"]) {
+         expect(contents.listenerCount(event)).toBe(0);
+      }
+   });
+
+   it("keeps one listener of the commit for the questions of the frames of one contents", async () => {
+      const frames = [1, 2, 3].map((routingId) => createFrame({ processId: 4, routingId }));
+      const contents = createContents(1);
+      const { ipc, reply } = await loadMain("ask-channels", () => contents);
+
+      const answers = frames.map((frame) => ipc.hasUnsavedChanges.invoke(frame as any, 1));
+
+      expect(contents.listenerCount("did-frame-navigate")).toBe(1);
+      expect(contents.listenerCount("did-navigate")).toBe(0);
+      // A navigation of the second frame ends only its question.
+      contents.emit("did-frame-navigate", {}, "app://main/x", 200, "OK", false, 4, 2);
+      await expect(answers[1]).rejects.toMatchObject({ code: "IPC_ASK_DESTROYED" });
+      expect(contents.listenerCount("did-frame-navigate")).toBe(1);
+      for (const [index, frame] of frames.entries()) {
+         if (index !== 1) {
+            const [[id]] = questions(frame.send, "hasUnsavedChanges");
+            reply("hasUnsavedChanges", contents, id, ok(true), frame);
+         }
+      }
+      await expect(Promise.all([answers[0], answers[2]])).resolves.toStrictEqual([true, true]);
+      expect(contents.listenerCount("did-frame-navigate")).toBe(0);
+   });
+
    it("rejects with the error of the send, and leaves nothing behind", async () => {
       const { ipc, reply } = await loadMain();
       vi.useFakeTimers();

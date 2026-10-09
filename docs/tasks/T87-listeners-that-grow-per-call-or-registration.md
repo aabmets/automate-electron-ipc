@@ -22,4 +22,20 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   `tests/test_electron/streams.test.ts` (`manyStreams`), `tests/test_electron/ports.test.ts`
   (`manyConnections`) and `tests/test_e2e/contentsHandlers.test.ts` (a replaced handler is
   released) turn into passing tests.
-- **Delivered:**
+- **Delivered:** 2026-10-09. A generated `watchEvent(emitter, event, callback)` keeps one listener per emitter and
+  event, with the callbacks of all watchers behind it (a `WeakMap` keyed by the emitter; the listener is
+  added with the first watcher and removed with the last; a callback that throws is logged and does
+  not stop the others). `askRenderer` (`destroyed`, `render-process-gone`, `did-navigate` or
+  `did-frame-navigate`), `startStream` (`destroyed`), `watchPageLoad` (the four load events),
+  `connectPorts` (`closed` of the window), `connectMainPort` and `connectUtilityPort` (`destroyed`) and
+  the `'exit'` of the child in `connectUtilityPort` use it, so 12 asks, streams or connections add one
+  listener of each event, not twelve. The helper is written only for a schema with such channels.
+  Replacing a handler registered with the `webContents` option now releases the registration it
+  replaced: `watch(remove, channel)` drops the remover of the replaced one from the record of the
+  contents. Not changed, on purpose: `resolveIpcTarget` and `registerScope` already add one
+  `destroyed` listener per contents; `attachUtility` adds one `'exit'` per child; the worker `ask`
+  helper registers once per worker and per session and holds pending asks in a table, so it has no
+  listener per call. The preload `on`/`once` of a `send` channel still adds an `ipcRenderer` listener
+  per subscription (the page owns them and each disposer removes its own), so more than ten
+  subscribers to one channel can still print the warning in the renderer; a follow-up could share
+  one `ipcRenderer` listener per channel.

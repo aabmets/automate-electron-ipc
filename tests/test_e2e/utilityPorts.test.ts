@@ -73,6 +73,9 @@ function destroy(contents: FakeContents) {
    contents.emit("destroyed");
 }
 
+/** The events that `connect` listens to on the contents of a page, to tell when it has loaded. */
+const loadEvents = ["did-navigate", "did-fail-load", "did-finish-load", "did-stop-loading"];
+
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
 
@@ -300,6 +303,61 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       startLoading(contents);
       finishLoading(contents);
       expect(channelsMade).toHaveLength(1);
+   });
+
+   // Node warns about more than ten listeners of one event (T87).
+   it("adds one 'exit' listener to the child and one 'destroyed' listener to each page, however many connections", async () => {
+      const ipc = await loadMain();
+      const child = createChild();
+      const pages = Array.from({ length: 12 }, (_, id) => createContents({ id: id + 1 }));
+      const links = pages.map((page) => ipc.queryRows.connect(child, page));
+
+      // The one of attachUtility, and the one that the connections share.
+      expect(child.listenerCount("exit")).toBe(2);
+      for (const page of pages) {
+         expect(page.listenerCount("destroyed")).toBe(1);
+         for (const event of loadEvents) {
+            expect(page.listenerCount(event)).toBe(1);
+         }
+      }
+
+      // Closing all but one of them keeps the shared listener for the one that is left.
+      for (const link of links.slice(0, 11)) {
+         link.close();
+      }
+      expect(child.listenerCount("exit")).toBe(2);
+      child.emit("exit", 1);
+      expect(pages[11].send).toHaveBeenCalledWith(closeWire("queryRows"), expect.any(String));
+      expect(pages[11].listenerCount("destroyed")).toBe(0);
+
+      const lone = createChild();
+      const connection = ipc.queryRows.connect(lone, createContents());
+      connection.close();
+      expect(lone.listenerCount("exit")).toBe(1);
+   });
+
+   it("connects many channels of one page with one listener for each event", async () => {
+      const ipc = await loadMain();
+      const child = createChild();
+      const contents = createContents();
+
+      const links = [
+         ipc.queryRows.connect(child, contents),
+         ipc.scanRows.connect(child, contents),
+         ipc.counter.connect(child, contents),
+      ];
+
+      expect(contents.listenerCount("destroyed")).toBe(1);
+      for (const event of loadEvents) {
+         expect(contents.listenerCount(event)).toBe(1);
+      }
+      for (const link of links) {
+         link.close();
+      }
+      expect(contents.listenerCount("destroyed")).toBe(0);
+      for (const event of loadEvents) {
+         expect(contents.listenerCount(event)).toBe(0);
+      }
    });
 
    it("ends the connection when the child exits", async () => {

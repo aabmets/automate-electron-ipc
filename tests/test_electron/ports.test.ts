@@ -277,7 +277,7 @@ const scenarios: Record<string, Scenario> = {
       return { events: await ctx.evaluate(win, () => (window as any).events), warnings };
    },
 
-   // The scenarios below find T85 (fixed) and T87. They read the state after a pause, as the ones above.
+   // The scenarios below found T85 and T87, both fixed. They read the state after a pause, as the ones above.
 
    // A main-frame load fails, and Electron shows its error page, with a did-finish-load of its own.
    mainPortFailedLoad: async (ctx) => {
@@ -483,8 +483,8 @@ function body(group: ElectronGroup) {
       });
    });
 
-   // T87: every connection adds its own 'destroyed' listener and four load listeners to the contents.
-   it.fails("connects a window many times without a MaxListenersExceededWarning", () => {
+   // Every connection used to add its own 'destroyed' listener and four load listeners (T87).
+   it("connects a window many times without a MaxListenersExceededWarning", () => {
       expect(group.value("manyConnections")).toStrictEqual([]);
    });
 

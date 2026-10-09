@@ -95,12 +95,14 @@ describe("MainBindingsWriter", () => {
          interface IpcTarget {
             ipc: IpcMain;
             handlers: { [channel: string]: unknown };
-            watch: (remove: () => void) => () => void;
+            watch: (remove: () => void, handled?: string) => () => void;
          }
 
          interface IpcContentsRecord {
             handlers: { [channel: string]: unknown };
             removers: (() => void)[];
+            /** The remover of the registration which holds the handler of each channel now. */
+            current: { [channel: string]: unknown };
          }
 
          const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
@@ -118,7 +120,7 @@ describe("MainBindingsWriter", () => {
             const id = contents.id;
             let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;
             if (!record) {
-               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };
+               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [], current: { __proto__: null } };
                record = created;
                contentsIpcRegistry[id] = created;
                contents.once('destroyed', () => {
@@ -128,18 +130,33 @@ describe("MainBindingsWriter", () => {
                   }
                });
             }
-            const { handlers, removers } = record;
+            const { handlers, removers, current } = record;
+            const forget = (remove: () => void): void => {
+               for (let at = 0; at < removers.length; at++) {
+                  if (removers[at] === remove) {
+                     removers.splice(at, 1);
+                     return;
+                  }
+               }
+            };
             return {
                ipc: contents.ipc,
                handlers,
-               watch: (remove) => {
+               watch: (remove, handled) => {
+                  // A handler replaces the one of its channel, so the registration it replaced is released:
+                  // its remover would otherwise hold the replaced callback until the contents are destroyed.
+                  if (handled !== undefined) {
+                     const replaced = current[handled] as (() => void) | undefined;
+                     if (replaced) {
+                        forget(replaced);
+                     }
+                     current[handled] = remove;
+                  }
                   removers.push(remove);
                   return () => {
-                     for (let at = 0; at < removers.length; at++) {
-                        if (removers[at] === remove) {
-                           removers.splice(at, 1);
-                           return;
-                        }
+                     forget(remove);
+                     if (handled !== undefined && current[handled] === remove) {
+                        delete current[handled];
                      }
                   };
                },
@@ -210,7 +227,7 @@ describe("MainBindingsWriter", () => {
                   target.ipc.removeHandler('vitestChannel');
                   target.ipc.handle('vitestChannel', listener);
                   target.handlers['vitestChannel'] = listener;
-                  const unwatch = target.watch(remove);
+                  const unwatch = target.watch(remove, 'vitestChannel');
                   return remove;
                },
                handleOnce: (callback: (event: IpcMainInvokeEvent, arg1: CustomType, arg2?: CustomType) => Promise<string>, options?: IpcListenOptions) => {
@@ -237,7 +254,7 @@ describe("MainBindingsWriter", () => {
                   target.ipc.removeHandler('vitestChannel');
                   target.ipc.handle('vitestChannel', listener);
                   target.handlers['vitestChannel'] = listener;
-                  const unwatch = target.watch(remove);
+                  const unwatch = target.watch(remove, 'vitestChannel');
                   return remove;
                },
             },
@@ -314,12 +331,14 @@ describe("MainBindingsWriter", () => {
          interface IpcTarget {
             ipc: IpcMain;
             handlers: { [channel: string]: unknown };
-            watch: (remove: () => void) => () => void;
+            watch: (remove: () => void, handled?: string) => () => void;
          }
 
          interface IpcContentsRecord {
             handlers: { [channel: string]: unknown };
             removers: (() => void)[];
+            /** The remover of the registration which holds the handler of each channel now. */
+            current: { [channel: string]: unknown };
          }
 
          const registeredHandlers: { [channel: string]: unknown } = { __proto__: null };
@@ -337,7 +356,7 @@ describe("MainBindingsWriter", () => {
             const id = contents.id;
             let record = contentsIpcRegistry[id] as IpcContentsRecord | undefined;
             if (!record) {
-               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [] };
+               const created: IpcContentsRecord = { handlers: { __proto__: null }, removers: [], current: { __proto__: null } };
                record = created;
                contentsIpcRegistry[id] = created;
                contents.once('destroyed', () => {
@@ -347,18 +366,33 @@ describe("MainBindingsWriter", () => {
                   }
                });
             }
-            const { handlers, removers } = record;
+            const { handlers, removers, current } = record;
+            const forget = (remove: () => void): void => {
+               for (let at = 0; at < removers.length; at++) {
+                  if (removers[at] === remove) {
+                     removers.splice(at, 1);
+                     return;
+                  }
+               }
+            };
             return {
                ipc: contents.ipc,
                handlers,
-               watch: (remove) => {
+               watch: (remove, handled) => {
+                  // A handler replaces the one of its channel, so the registration it replaced is released:
+                  // its remover would otherwise hold the replaced callback until the contents are destroyed.
+                  if (handled !== undefined) {
+                     const replaced = current[handled] as (() => void) | undefined;
+                     if (replaced) {
+                        forget(replaced);
+                     }
+                     current[handled] = remove;
+                  }
                   removers.push(remove);
                   return () => {
-                     for (let at = 0; at < removers.length; at++) {
-                        if (removers[at] === remove) {
-                           removers.splice(at, 1);
-                           return;
-                        }
+                     forget(remove);
+                     if (handled !== undefined && current[handled] === remove) {
+                        delete current[handled];
                      }
                   };
                },
@@ -938,6 +972,67 @@ describe("MainBindingsWriter", () => {
          import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";
          import type { BrowserWindow, IpcMainEvent, WebContents } from "electron";
 
+         interface WatchableEmitter {
+            on(event: string, listener: (...args: any[]) => void): unknown;
+            removeListener(event: string, listener: (...args: any[]) => void): unknown;
+         }
+
+         interface EventWatch {
+            callbacks: ((...args: any[]) => void)[];
+            listener: (...args: any[]) => void;
+         }
+
+         const eventWatches = new WeakMap<object, { [event: string]: EventWatch | undefined }>();
+
+         function watchEvent(
+            emitter: WatchableEmitter,
+            event: string,
+            callback: (...args: any[]) => void,
+         ): () => void {
+            const known = eventWatches.get(emitter);
+            const watched: { [event: string]: EventWatch | undefined } = known ?? ({ __proto__: null } as any);
+            if (!known) {
+               eventWatches.set(emitter, watched);
+            }
+            let watch = watched[event];
+            if (!watch) {
+               const callbacks: ((...args: any[]) => void)[] = [];
+               watch = {
+                  callbacks,
+                  listener: (...args: any[]) => {
+                     for (const next of callbacks.slice()) {
+                        if (callbacks.indexOf(next) >= 0) {
+                           try {
+                              next(...args);
+                           } catch (error) {
+                              console.error(error);
+                           }
+                        }
+                     }
+                  },
+               };
+               watched[event] = watch;
+               emitter.on(event, watch.listener);
+            }
+            const { callbacks, listener } = watch;
+            callbacks.push(callback);
+            return () => {
+               const at = callbacks.indexOf(callback);
+               if (at < 0) {
+                  return;
+               }
+               callbacks.splice(at, 1);
+               if (callbacks.length === 0 && watched[event] === watch) {
+                  delete watched[event];
+                  try {
+                     emitter.removeListener(event, listener);
+                  } catch {
+                     // Destroyed contents have dropped their listeners, and cannot be reached.
+                  }
+               }
+            };
+         }
+
          let lastPortConnectionId = 0;
          const portEnds = new Map<string, { contents: WebContents; close: () => void }>();
          const portDisconnectChannels = new Set<string>();
@@ -995,19 +1090,17 @@ describe("MainBindingsWriter", () => {
                   finish();
                }
             };
-            contents.on('did-navigate', commit);
-            contents.on('did-fail-load', fail);
-            contents.on('did-finish-load', finish);
-            contents.on('did-stop-loading', stop);
+            const stops = [
+               watchEvent(contents, 'did-navigate', commit),
+               watchEvent(contents, 'did-fail-load', fail),
+               watchEvent(contents, 'did-finish-load', finish),
+               watchEvent(contents, 'did-stop-loading', stop),
+            ];
             return {
                isLoaded: () => loaded,
                dispose: () => {
-                  // Destroyed contents have dropped their listeners, and cannot be reached.
-                  if (!contents.isDestroyed()) {
-                     contents.off('did-navigate', commit);
-                     contents.off('did-fail-load', fail);
-                     contents.off('did-finish-load', finish);
-                     contents.off('did-stop-loading', stop);
+                  for (const unwatch of stops) {
+                     unwatch();
                   }
                },
             };
@@ -1023,6 +1116,7 @@ describe("MainBindingsWriter", () => {
             const watched = winA === winB ? [ends[0]] : ends;
             let closed = false;
             const watches = new Map<BrowserWindow, PageLoadWatch>();
+            const unwatchClosed: (() => void)[] = [];
             const isReady = (win: BrowserWindow) => !win.isDestroyed() && !!watches.get(win)?.isLoaded();
             const pair = () => {
                if (closed || !isReady(winA) || !isReady(winB)) {
@@ -1038,11 +1132,10 @@ describe("MainBindingsWriter", () => {
                }
                closed = true;
                for (const end of watched) {
-                  // A destroyed window has dropped its listeners, and cannot be reached.
-                  if (!end.win.isDestroyed()) {
-                     end.win.off('closed', close);
-                  }
                   watches.get(end.win)?.dispose();
+               }
+               for (const unwatch of unwatchClosed.splice(0)) {
+                  unwatch();
                }
                for (const end of ends) {
                   portEnds.delete(end.key);
@@ -1058,7 +1151,7 @@ describe("MainBindingsWriter", () => {
                }
                listenForPortDisconnects(channel);
                for (const end of watched) {
-                  end.win.on('closed', close);
+                  unwatchClosed.push(watchEvent(end.win, 'closed', close));
                   watches.set(end.win, watchPageLoad(end.contents, pair));
                }
                pair();
@@ -1137,7 +1230,8 @@ describe("MainBindingsWriter", () => {
       it("should end the connection when the contents are destroyed or the page asks for it", async () => {
          const output = await render(mainPort);
 
-         expect(output).toContain("contents.on('destroyed', close);");
+         expect(output).toContain("unwatchDestroyed = watchEvent(contents, 'destroyed', close);");
+         expect(output).not.toContain("contents.on('destroyed'");
          expect(output).toContain("portEnds.set(key, { contents, close });");
          expect(output).toContain("listenForPortDisconnects(channel);");
       });
@@ -1520,12 +1614,13 @@ describe("MainBindingsWriter", () => {
          const output = await render([ask]);
 
          expect(output).toContain("contents.isDestroyed() || contents.isCrashed()");
-         expect(output).toContain("contents?.on('did-navigate', onGone);");
-         expect(output).toContain("contents?.on('did-frame-navigate', onFrameNavigate);");
-         expect(output).toContain("contents?.removeListener('did-navigate', onGone);");
+         expect(output).toContain("watchEvent(asked, 'destroyed', onGone),");
+         expect(output).toContain("watchEvent(asked, 'render-process-gone', onGone),");
          expect(output).toContain(
-            "contents?.removeListener('did-frame-navigate', onFrameNavigate);",
+            "frame ? watchEvent(asked, 'did-frame-navigate', onFrameNavigate) : watchEvent(asked, 'did-navigate', onGone),",
          );
+         // A question adds no listener of its own to the contents (T87).
+         expect(output).not.toMatch(/contents\??\.(on|once|removeListener)\(/);
          expect(output).not.toContain("did-start-navigation");
          expect(output).not.toContain("will-navigate");
       });
@@ -1724,7 +1819,8 @@ describe("MainBindingsWriter", () => {
 
          expect(output).toContain("if (data && data.type === 'cancel') {");
          expect(output).toContain("port1.on('close', cancel);");
-         expect(output).toContain("sender.once('destroyed', cancel);");
+         expect(output).toContain("unwatch = watchEvent(sender, 'destroyed', cancel);");
+         expect(output).not.toMatch(/sender\.(on|once|removeListener)\(/);
          expect(output).toContain("Promise.resolve(iterator.return?.())");
       });
 
@@ -2124,7 +2220,12 @@ describe("MainBindingsWriter, renderer to utility channels", () => {
       expect(output).toContain("child.postMessage({ __ipc: 'port', channel, key }, [port1]);");
       expect(output).toContain("contents.postMessage(channel, key, [port2]);");
       expect(output).toContain("contents.send(`${channel}:close`, key);");
-      expect(output).toContain("child.once('exit', close);");
+      expect(output).toContain(
+         "unwatch.push(watchEvent(contents, 'destroyed', close), watchEvent(child, 'exit', close));",
+      );
+      // The single listener of attachUtility remains, and the connection adds none of its own (T87).
+      expect(output.match(/child\.(once|on)\('exit'/g)).toHaveLength(1);
+      expect(output).not.toContain("child.removeListener('exit'");
       expect(output).toContain("utilityLinks.get(linkKey)?.();");
    });
 
@@ -2384,5 +2485,89 @@ describe("MainBindingsWriter, scopes", () => {
       ]) {
          expect(names).toContain(name);
       }
+   });
+});
+
+describe("MainBindingsWriter, shared event watches", () => {
+   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+
+   const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
+   const stream = {
+      name: "rows",
+      kind: "Stream",
+      direction: "RendererToMain",
+      returnType: "AsyncIterable<number>",
+   } as const;
+   const port = { name: "chat", kind: "Port", direction: "RendererToRenderer" } as const;
+   const mainPort = { name: "logTail", kind: "Port", direction: "MainToRenderer" } as const;
+   const brokered = {
+      name: "queryRows",
+      kind: "Unicast",
+      direction: "RendererToUtility",
+      returnType: "Promise<number>",
+   } as const;
+   const plain = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+   const broadcast = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
+
+   const render = async (...channels: shared.SimpleChannel[]) => {
+      const writer = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
+      await writer.write(false);
+      return (await fsp.readFile(writer.getTargetFilePath())).toString();
+   };
+
+   it.each([
+      ["an ask", [ask]],
+      ["a stream", [stream]],
+      ["a port", [port]],
+      ["a mainPort", [mainPort]],
+      ["a brokered channel", [brokered]],
+      ["all of them", [ask, stream, port, mainPort, brokered]],
+   ])("writes watchEvent once for %s", async (_name, channels) => {
+      const output = await render(...channels);
+
+      expect(output.match(/^function watchEvent\(/gm)).toHaveLength(1);
+      expect(output).toContain("const eventWatches = new WeakMap<");
+      // One listener per event and emitter, and it goes with the last watcher.
+      expect(output).toContain("emitter.on(event, watch.listener);");
+      expect(output).toContain("emitter.removeListener(event, listener);");
+      expect(output.match(/emitter\.on\(/g)).toHaveLength(1);
+   });
+
+   it("writes none of it for channels which hold nothing open", async () => {
+      const output = await render(plain, broadcast);
+
+      for (const name of ["watchEvent", "eventWatches", "WatchableEmitter", "WeakMap"]) {
+         expect(output).not.toContain(name);
+      }
+   });
+
+   it("adds no listener to contents, a window or a child outside watchEvent", async () => {
+      const strip = (output: string) => output.replace(/^function watchEvent\([\s\S]*?\n}\n/m, "");
+      // The stream channel comes with resolveIpcTarget, whose one listener per contents is its own.
+      const output = strip(await render(ask, port, mainPort, brokered));
+      const withStream = strip(await render(stream));
+
+      expect(output).not.toMatch(/\b(contents|asked|win)\??\.(on|once|off|removeListener)\(/);
+      expect(output).not.toMatch(/end\.win\.(on|off)\(/);
+      expect(output).not.toMatch(/child\.(once|removeListener)\('exit', close/);
+      // The one listener of attachUtility remains.
+      expect(output.match(/child\.once\('exit'/g)).toHaveLength(1);
+      expect(withStream).not.toMatch(/\bsender\??\.(on|once|off|removeListener)\(/);
+   });
+
+   it("reserves its names, and WeakMap, only for such a schema", () => {
+      const reserved = (...channels: shared.SimpleChannel[]) =>
+         (
+            new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels)) as unknown as {
+               getReservedNames: () => string[];
+            }
+         ).getReservedNames();
+
+      for (const name of ["watchEvent", "eventWatches", "EventWatch", "WatchableEmitter"]) {
+         expect(reserved(ask)).toContain(name);
+         expect(reserved(plain)).toContain(name);
+      }
+      expect(reserved(ask)).toContain("WeakMap");
+      expect(reserved(plain)).not.toContain("WeakMap");
    });
 });
