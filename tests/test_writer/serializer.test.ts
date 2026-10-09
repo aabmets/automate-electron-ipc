@@ -229,7 +229,9 @@ describe("serializer, the generated files", () => {
    it("reads the arguments of an emit and of an ask in the page", async () => {
       const output = await preload([emit, ask]);
 
-      expect(output).toContain("const args = readArguments('emitIt', received);");
+      expect(output).toContain(
+         "return listenToChannel('autoipc:emitIt', callback, false, (received: any[]) => readArguments('emitIt', received));",
+      );
       expect(output).toContain(
          "encodeValue(channel, await handler(...decodeArguments(channel, args)))",
       );
@@ -391,7 +393,9 @@ describe("serializer, the generated files", () => {
       expect(output).toContain(
          "ipcRenderer.send('autoipc:workerSend', encodeSync('workerSend', args))",
       );
-      expect(output).toContain("const args = readArguments('workerEmit', received);");
+      expect(output).toContain(
+         "return listenToChannel('autoipc:workerEmit', callback, false, (received: any[]) => readArguments('workerEmit', received));",
+      );
       expect(output).toContain(
          "encodeValue(channel, await handler(...decodeArguments(channel, args)))",
       );

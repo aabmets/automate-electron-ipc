@@ -61,6 +61,7 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
          askNames: [],
          streamSpecs: [],
          brokeredSpecs: [],
+         subscribed: false,
          channels: [],
       };
       for (const parsedFileSpecs of this.pfsArray) {

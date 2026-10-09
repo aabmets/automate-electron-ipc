@@ -14,4 +14,14 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     unsubscribes during a dispatch, and of deserializing the arguments once per message.
 - **Tests:** a real-Electron scenario with many subscribers, and unit tests that count the
   `ipcRenderer` listeners of the fake.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Confirmed in real Electron 44.7 first: eleven `on` subscribers of one
+  channel printed `MaxListenersExceededWarning: ... 11 autoipc:tick listeners added` on the console
+  of the page. The generated `preload.ts` now has a helper, `listenToChannel`, written only when a
+  channel has `on` and `once`: one `ipcRenderer` listener per channel with the subscribers behind it
+  (added with the first, removed with the last), arguments read once per message (an unreadable
+  message keeps `once` subscribers), a `once` subscriber removed before its callback runs, a
+  snapshot per dispatch that skips subscribers disposed meanwhile, and a throwing callback logged
+  without stopping the others. `ipcRenderer.once` is no longer used. Note: the other generated
+  components of `preload.ts` are joined without a normalizer, and the error helpers followed by
+  the ask helpers leave two blank lines in a row (pre-existing, not touched); the new helper does
+  not.

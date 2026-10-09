@@ -516,7 +516,9 @@ describe("ServiceWorkerPreloadWriter", () => {
       expect(output).toContain(
          "send: (...args: any[]) => ipcRenderer.send('autoipc:syncDone', ...args),",
       );
-      expect(output).toContain("ipcRenderer.on('autoipc:configChanged', listener);");
+      expect(output).toContain(
+         "on: (callback: Function) => {\n         return listenToChannel('autoipc:configChanged', callback, false);",
+      );
       expect(output).toContain("handle: (callback: Function) => {");
       expect(output).toContain(
          "ipcRenderer.on('autoipc:flush', (_event: unknown, id: unknown, ...args: any[]) => {",

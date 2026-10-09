@@ -331,21 +331,75 @@ describe("PreloadBindingsWriter", () => {
       const expectedOutput = utils.dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
+         interface ChannelSubscriber {
+            callback: Function;
+            once: boolean;
+         }
+
+         interface ChannelSubscription {
+            subscribers: ChannelSubscriber[];
+            listener: (_event: unknown, ...received: any[]) => void;
+         }
+
+         const channelSubscriptions: { [channel: string]: ChannelSubscription | undefined } = { __proto__: null } as any;
+
+         function listenToChannel(
+            channel: string,
+            callback: Function,
+            once: boolean,
+            read?: (received: any[]) => any[] | undefined,
+         ): () => void {
+            let subscription = channelSubscriptions[channel];
+            if (!subscription) {
+               const subscribers: ChannelSubscriber[] = [];
+               const listener = (_event: unknown, ...received: any[]) => {
+                  const args = read ? read(received) : received;
+                  if (!args) {
+                     return;
+                  }
+                  for (const next of subscribers.slice()) {
+                     if (subscribers.indexOf(next) < 0) {
+                        continue;
+                     }
+                     if (next.once) {
+                        unlistenToChannel(channel, next);
+                     }
+                     try {
+                        next.callback(...args);
+                     } catch (error) {
+                        console.error(error);
+                     }
+                  }
+               };
+               subscription = { subscribers, listener };
+               channelSubscriptions[channel] = subscription;
+               ipcRenderer.on(channel, listener);
+            }
+            const subscriber: ChannelSubscriber = { callback, once };
+            subscription.subscribers.push(subscriber);
+            return () => unlistenToChannel(channel, subscriber);
+         }
+
+         function unlistenToChannel(channel: string, subscriber: ChannelSubscriber): void {
+            const subscription = channelSubscriptions[channel];
+            const at = subscription ? subscription.subscribers.indexOf(subscriber) : -1;
+            if (!subscription || at < 0) {
+               return;
+            }
+            subscription.subscribers.splice(at, 1);
+            if (subscription.subscribers.length === 0) {
+               delete channelSubscriptions[channel];
+               ipcRenderer.removeListener(channel, subscription.listener);
+            }
+         }
+
          export const api = {
             vitestChannel: {
                on: (callback: Function) => {
-                  const listener = (_event: any, ...args: any[]) => callback(...args);
-                  ipcRenderer.on('vitestChannel', listener);
-                  return () => {
-                     ipcRenderer.removeListener('vitestChannel', listener);
-                  };
+                  return listenToChannel('vitestChannel', callback, false);
                },
                once: (callback: Function) => {
-                  const listener = (_event: any, ...args: any[]) => callback(...args);
-                  ipcRenderer.once('vitestChannel', listener);
-                  return () => {
-                     ipcRenderer.removeListener('vitestChannel', listener);
-                  };
+                  return listenToChannel('vitestChannel', callback, true);
                },
             },
          };
@@ -696,6 +750,77 @@ describe("PreloadBindingsWriter", () => {
       });
    });
 
+   describe("subscriptions of main to renderer channels", () => {
+      const channels = [
+         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+         { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "pushAlso", kind: "Broadcast", direction: "MainToRenderer" },
+         { name: "askIt", kind: "Unicast", direction: "MainToRenderer" },
+      ] as const;
+      const render = async (
+         specs: readonly shared.SimpleChannel[],
+         config: Partial<t.IPCResolvedConfig> = {},
+      ) => {
+         const obj = new shared.VitestPreloadBindingsWriter(
+            shared.buildFileSpecs(...specs),
+            config,
+         );
+         await obj.write(false);
+         return (await fsp.readFile(obj.getTargetFilePath())).toString();
+      };
+
+      it("shares one ipcRenderer listener per channel, which on and once both use", async () => {
+         const output = await render(channels);
+
+         expect(output.match(/function listenToChannel\(/g)).toHaveLength(1);
+         // The one listener is added by listenToChannel, and no subscription adds one of its own.
+         expect(output.match(/ipcRenderer\.on\(channel, listener\);/g)).toHaveLength(1);
+         expect(output).not.toContain("ipcRenderer.once(");
+         expect(output).toContain("return listenToChannel('pushIt', callback, false);");
+         expect(output).toContain("return listenToChannel('pushIt', callback, true);");
+         expect(output).toContain("return listenToChannel('pushAlso', callback, false);");
+         expect(output).toContain("ipcRenderer.removeListener(channel, subscription.listener);");
+      });
+
+      it("writes the helper only for a page that subscribes to a message of the main process", async () => {
+         expect(await render([channels[0]])).not.toContain("listenToChannel");
+         // An ask is answered by one responder, and does not subscribe.
+         expect(await render([channels[0], channels[3]])).not.toContain("listenToChannel");
+         expect(await render([channels[1]])).toContain("function listenToChannel(");
+      });
+
+      it("is set off from the components around it by one blank line", async () => {
+         const output = await render([
+            ...channels,
+            { name: "chatIt", kind: "Port", direction: "RendererToRenderer" },
+         ]);
+
+         expect(output).toContain("function createPortChannel(");
+         expect(output).toContain("function toIpcError(");
+         expect(output).toMatch(/[^\n]\n\ninterface ChannelSubscriber \{/);
+         expect(output).toMatch(/subscription\.listener\);\n {3}\}\n\}\n\n[a-z]/);
+      });
+
+      it("reads the arguments of a message once, before the subscribers are called", async () => {
+         const output = await render([channels[1]]);
+
+         expect(output).toContain("const args = read ? read(received) : received;");
+         expect(output.indexOf("const args = read ?")).toBeLessThan(
+            output.indexOf("next.callback(...args)"),
+         );
+      });
+
+      it("removes a once subscriber before its callback runs, and skips the ones removed during a dispatch", async () => {
+         const output = await render([channels[1]]);
+
+         expect(output.indexOf("unlistenToChannel(channel, next);")).toBeLessThan(
+            output.indexOf("next.callback(...args)"),
+         );
+         expect(output).toContain("for (const next of subscribers.slice()) {");
+         expect(output).toContain("if (subscribers.indexOf(next) < 0) {");
+      });
+   });
+
    describe("channel prefix", () => {
       const channels = [
          { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
@@ -717,9 +842,8 @@ describe("PreloadBindingsWriter", () => {
 
          expect(output).toContain("ipcRenderer.invoke('app:getIt', ...args)");
          expect(output).toContain("ipcRenderer.send('app:sendIt', ...args)");
-         expect(output).toContain("ipcRenderer.on('app:pushIt', listener);");
-         expect(output).toContain("ipcRenderer.once('app:pushIt', listener);");
-         expect(output).toContain("ipcRenderer.removeListener('app:pushIt', listener);");
+         expect(output).toContain("return listenToChannel('app:pushIt', callback, false);");
+         expect(output).toContain("return listenToChannel('app:pushIt', callback, true);");
          expect(output).toContain(
             "ipcRenderer.on('app:chatIt', (event: IpcRendererEvent, key: unknown) => {",
          );

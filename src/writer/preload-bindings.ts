@@ -25,6 +25,8 @@ export interface ChannelGroups {
    askNames: string[];
    streamSpecs: t.ChannelSpec[];
    brokeredSpecs: t.ChannelSpec[];
+   /** Whether a channel has `on` and `once`, which share `subscribe`. */
+   subscribed: boolean;
    channels: ChannelEntry[];
 }
 
@@ -114,6 +116,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          askNames: [],
          streamSpecs: [],
          brokeredSpecs: [],
+         subscribed: false,
          channels: [],
       };
       for (const parsedFileSpecs of this.pfsArray) {
@@ -144,6 +147,8 @@ export class PreloadBindingsWriter extends BaseWriter {
       } else if (spec.direction === "MainToRenderer") {
          if (spec.kind === "Unicast") {
             askNames.push(spec.name);
+         } else {
+            groups.subscribed = true;
          }
          channels.push(this.buildMainToRendererChannel(spec));
       }
@@ -170,6 +175,9 @@ export class PreloadBindingsWriter extends BaseWriter {
       }
       if (this.hasSerializedChannels()) {
          out.push(this.buildSerializerComponents());
+      }
+      if (groups.subscribed) {
+         out.push(this.buildSubscriptionComponents());
       }
       out.push(...this.getTimeoutComponents());
       if (askNames.length > 0 || streamSpecs.length > 0 || brokeredSpecs.length > 0) {
@@ -355,40 +363,114 @@ export class PreloadBindingsWriter extends BaseWriter {
    }
 
    /**
-    * `ipc.<name>.on(callback)` and `ipc.<name>.once(callback)`. The wrapper that is registered with
-    * `ipcRenderer` is created here, in the preload script, because contextBridge hands over a new
-    * proxy of the callback on every crossing, so a separate `off(callback)` could not find it. Each
-    * method returns a function which removes that one wrapper. The callback never sees the event,
-    * and the return value is not `ipcRenderer`, which must not leak into the page.
+    * `ipc.<name>.on(callback)` and `ipc.<name>.once(callback)`. The subscription is created here,
+    * in the preload script, because contextBridge hands over a new proxy of the callback on every
+    * crossing, so a separate `off(callback)` could not find it. Each method returns a function
+    * which removes that one subscription. The callback never sees the event, and the return value
+    * is not `ipcRenderer`, which must not leak into the page. The subscriptions of a channel share
+    * one `ipcRenderer` listener (see `buildSubscriptionComponents`).
     */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
-      const [i0, i1, i2, i3, i4] = this.indents;
+      const [i0, i1, i2] = this.indents;
       if (spec.kind === "Unicast") {
          return this.buildAskChannel(spec);
       }
-      const serialized = this.isSerializedSpec(spec);
-      const listener = serialized
-         ? [
-              `${i2}const listener = (_event: any, ...received: any[]) => {`,
-              `${i3}const args = readArguments('${spec.name}', received);`,
-              `${i3}if (args) {`,
-              `${i4}callback(...args);`,
-              `${i3}}`,
-              `${i2}};`,
-           ].join("\n")
-         : `${i2}const listener = (_event: any, ...args: any[]) => callback(...args);`;
+      const read = this.isSerializedSpec(spec)
+         ? `, (received: any[]) => readArguments('${spec.name}', received)`
+         : "";
       const subscribe = (method: "on" | "once") =>
          [
             `${i1}${method}: (callback: Function) => {`,
-            listener,
-            `${i2}ipcRenderer.${method}(${this.wireName(spec.name)}, listener);`,
-            `${i2}return () => {`,
-            `${i3}ipcRenderer.removeListener(${this.wireName(spec.name)}, listener);`,
-            `${i2}};`,
+            `${i2}return listenToChannel(${this.wireName(spec.name)}, callback, ${method === "once"}${read});`,
             `${i1}},`,
          ].join("\n");
       const methods = [subscribe("on"), subscribe("once")].join("\n");
       return { name: spec.name, property: `\n${i0}${spec.name}: {\n${methods}\n${i0}},` };
+   }
+
+   /**
+    * `listenToChannel(channel, callback, once, read?)`, which `on` and `once` of the channels use. Each
+    * subscription used to add an `ipcRenderer` listener of its own, and Node warns about more than
+    * ten listeners of the same event (`MaxListenersExceededWarning`), which is no reason to refuse an
+    * eleventh subscriber of a channel. So a channel has one `ipcRenderer` listener with the
+    * subscribers behind it, which is added with the first subscriber and removed with the last.
+    * - `read` turns the arguments of a message into the list that the callbacks get, once per
+    *   message, or into nothing for a message that cannot be read. Then no callback runs, and a
+    *   `once` subscriber stays;
+    * - a subscriber is called in the order of subscription, and a `once` subscriber is removed
+    *   before its callback runs, so that a message it causes cannot reach it again;
+    * - a callback which unsubscribes any subscriber during a dispatch keeps that one from being
+    *   called by it, and a subscriber which is added during a dispatch gets the next message;
+    * - a callback which throws is logged and does not keep the others from running;
+    * - the function it returns removes that one subscription, also when the callback is the same
+    *   as another one, and does nothing when it is called again.
+    */
+   private buildSubscriptionComponents(): string {
+      const [i1, i2, i3, i4, i5] = this.indents;
+      return [
+         "",
+         "interface ChannelSubscriber {",
+         `${i1}callback: Function;`,
+         `${i1}once: boolean;`,
+         "}",
+         "",
+         "interface ChannelSubscription {",
+         `${i1}subscribers: ChannelSubscriber[];`,
+         `${i1}listener: (_event: unknown, ...received: any[]) => void;`,
+         "}",
+         "",
+         "const channelSubscriptions: { [channel: string]: ChannelSubscription | undefined } = { __proto__: null } as any;",
+         "",
+         "function listenToChannel(",
+         `${i1}channel: string,`,
+         `${i1}callback: Function,`,
+         `${i1}once: boolean,`,
+         `${i1}read?: (received: any[]) => any[] | undefined,`,
+         "): () => void {",
+         `${i1}let subscription = channelSubscriptions[channel];`,
+         `${i1}if (!subscription) {`,
+         `${i2}const subscribers: ChannelSubscriber[] = [];`,
+         `${i2}const listener = (_event: unknown, ...received: any[]) => {`,
+         `${i3}const args = read ? read(received) : received;`,
+         `${i3}if (!args) {`,
+         `${i4}return;`,
+         `${i3}}`,
+         `${i3}for (const next of subscribers.slice()) {`,
+         `${i4}if (subscribers.indexOf(next) < 0) {`,
+         `${i5}continue;`,
+         `${i4}}`,
+         `${i4}if (next.once) {`,
+         `${i5}unlistenToChannel(channel, next);`,
+         `${i4}}`,
+         `${i4}try {`,
+         `${i5}next.callback(...args);`,
+         `${i4}} catch (error) {`,
+         `${i5}console.error(error);`,
+         `${i4}}`,
+         `${i3}}`,
+         `${i2}};`,
+         `${i2}subscription = { subscribers, listener };`,
+         `${i2}channelSubscriptions[channel] = subscription;`,
+         `${i2}ipcRenderer.on(channel, listener);`,
+         `${i1}}`,
+         `${i1}const subscriber: ChannelSubscriber = { callback, once };`,
+         `${i1}subscription.subscribers.push(subscriber);`,
+         `${i1}return () => unlistenToChannel(channel, subscriber);`,
+         "}",
+         "",
+         "function unlistenToChannel(channel: string, subscriber: ChannelSubscriber): void {",
+         `${i1}const subscription = channelSubscriptions[channel];`,
+         `${i1}const at = subscription ? subscription.subscribers.indexOf(subscriber) : -1;`,
+         `${i1}if (!subscription || at < 0) {`,
+         `${i2}return;`,
+         `${i1}}`,
+         `${i1}subscription.subscribers.splice(at, 1);`,
+         `${i1}if (subscription.subscribers.length === 0) {`,
+         `${i2}delete channelSubscriptions[channel];`,
+         `${i2}ipcRenderer.removeListener(channel, subscription.listener);`,
+         `${i1}}`,
+         "}",
+      ].join("\n");
    }
 
    /**

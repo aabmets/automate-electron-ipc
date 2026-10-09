@@ -410,6 +410,72 @@ const scenarios: Record<string, Scenario> = {
       return { added: win.webContents.listenerCount("destroyed") - baseline, warnings };
    },
 
+   // Eleven subscribers of one channel are normal use. ipcRenderer is an EventEmitter, and warns
+   // (MaxListenersExceededWarning, on the console of the page) about more than ten listeners.
+   manySubscribers: async (ctx) => {
+      const win = await ctx.open();
+      const messages: string[] = [];
+      win.webContents.on("console-message", (...args: any[]) => {
+         const details =
+            args[0] && typeof args[0].message === "string" ? args[0] : { message: args[2] };
+         messages.push(String(details.message));
+      });
+      await ctx.evaluate(win, () => {
+         const got: number[][] = [];
+         (window as any).got = got;
+         for (let n = 0; n < 11; n++) {
+            got.push([]);
+            ipc.tick.on((value: number) => got[n].push(value));
+         }
+         const once: number[] = [];
+         (window as any).once = once;
+         for (let n = 0; n < 11; n++) {
+            ipc.tick.once((value: number) => once.push(value));
+         }
+      });
+      ctx.ipc.tick.send(win, 1);
+      ctx.ipc.tick.send(win, 2);
+      const page = await ctx.until(
+         win,
+         () =>
+            (window as any).got.every((c: number[]) => c.length === 2) && {
+               got: (window as any).got,
+               once: (window as any).once,
+            },
+      );
+      await ctx.sleep(200);
+      return {
+         first: page.got[0],
+         last: page.got[10],
+         onceCalls: page.once.length,
+         warnings: messages.filter((m) => m.includes("MaxListenersExceeded")),
+      };
+   },
+
+   // The subscribers of one channel share a listener, and still behave like separate ones.
+   subscriberLifecycle: async (ctx) => {
+      const win = await ctx.open();
+      await ctx.evaluate(win, () => {
+         const log: string[] = [];
+         (window as any).log = log;
+         let offB: () => void = () => {};
+         ipc.tick.on((n: number) => {
+            log.push(`a${n}`);
+            offB();
+         });
+         offB = ipc.tick.on((n: number) => log.push(`b${n}`));
+         ipc.tick.on(() => {
+            throw new Error("a subscriber failed");
+         });
+         ipc.tick.on((n: number) => log.push(`c${n}`));
+         ipc.tick.once((n: number) => log.push(`o${n}`));
+      });
+      ctx.ipc.tick.send(win, 1);
+      await ctx.until(win, () => (window as any).log.includes("c1"));
+      ctx.ipc.tick.send(win, 2);
+      return await ctx.until(win, () => (window as any).log.includes("c2") && (window as any).log);
+   },
+
    bind: async (ctx) => {
       const win = await ctx.open();
       await ctx.evaluate(win, () => {
@@ -525,6 +591,20 @@ describeElectron("core channels in Electron", "electron-core", scenarios, (group
       it("handles only the first message with once", () => {
          expect(group.value("sendOnce")).toStrictEqual([["first"]]);
       });
+   });
+
+   // The page of the preload script used one ipcRenderer listener per subscription (T94).
+   it("lets a page subscribe many times to one channel without a MaxListenersExceededWarning", () => {
+      expect(group.value("manySubscribers")).toStrictEqual({
+         first: [1, 2],
+         last: [1, 2],
+         onceCalls: 11,
+         warnings: [],
+      });
+   });
+
+   it("keeps the order, the disposers and the once of the subscribers of a channel", () => {
+      expect(group.value("subscriberLifecycle")).toStrictEqual(["a1", "c1", "o1", "a2", "c2"]);
    });
 
    it("removes exactly the listener of a disposer, in the main process and in the page", () => {

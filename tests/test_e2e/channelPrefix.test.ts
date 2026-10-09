@@ -32,7 +32,7 @@ afterEach(async () => {
  */
 function wireNames(text: string): string[] {
    const calls =
-      /(?:electronIpcMain|target\.ipc|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage|connectPorts)\(\s*'([^']+)'/g;
+      /(?:electronIpcMain|target\.ipc|ipcRenderer)\.\w+\(\s*'([^']+)'|(?:send|postMessage|connectPorts|listenToChannel)\(\s*'([^']+)'/g;
    const names = Array.from(text.matchAll(calls), (match) =>
       (match[1] ?? match[2]).replace(/:close$/, ""),
    );
@@ -136,16 +136,23 @@ describe.each([
       const fake = createFakePreloadElectron();
       loadGenerated(project.generated["preload.ts"], { electron: fake.electron });
 
-      fake.exposed.ipc.progress.on(vi.fn());
-      fake.exposed.ipc.progress.once(vi.fn());
-      const dispose = fake.exposed.ipc.progress.on(vi.fn());
-      dispose();
+      const disposers = [
+         fake.exposed.ipc.progress.on(vi.fn()),
+         fake.exposed.ipc.progress.once(vi.fn()),
+         fake.exposed.ipc.progress.on(vi.fn()),
+      ];
+      for (const dispose of disposers) {
+         dispose();
+      }
 
+      // The subscriptions of a channel share one listener of ipcRenderer (T94).
       const { ipcRenderer } = fake.electron;
       const channels = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.map((c) => c[0]);
-      expect(channels(ipcRenderer.on)).toContain(`${prefix}progress`);
+      expect(channels(ipcRenderer.on).filter((name) => name === `${prefix}progress`)).toStrictEqual(
+         [`${prefix}progress`],
+      );
       expect(channels(ipcRenderer.on)).toContain(`${prefix}chat`);
-      expect(channels(ipcRenderer.once)).toStrictEqual([`${prefix}progress`]);
+      expect(channels(ipcRenderer.once)).toStrictEqual([]);
       expect(channels(ipcRenderer.removeListener)).toStrictEqual([`${prefix}progress`]);
    });
 

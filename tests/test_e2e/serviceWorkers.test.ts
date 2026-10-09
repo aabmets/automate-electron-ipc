@@ -910,7 +910,9 @@ describe("service worker channels, preload script", () => {
          registered[0][1],
       );
       exposed.ipc.goOffline.once(callback);
-      expect(ipcRenderer.once).toHaveBeenCalledWith(wire("goOffline"), expect.any(Function));
+      // A once subscription shares the listener of its channel, and does not use ipcRenderer.once.
+      expect(ipcRenderer.on).toHaveBeenCalledWith(wire("goOffline"), expect.any(Function));
+      expect(ipcRenderer.once).not.toHaveBeenCalled();
    });
 
    describe("the responders to the questions of the main process", () => {

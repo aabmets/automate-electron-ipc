@@ -82,13 +82,6 @@ async function connect(fixture = "serializer", options: { validateSender?: boole
    const pageOn = createRegistry();
    page.electron.ipcRenderer.on.mockImplementation(pageOn.add);
    page.electron.ipcRenderer.removeListener.mockImplementation(pageOn.remove);
-   page.electron.ipcRenderer.once.mockImplementation((wire: string, listener: Listener) => {
-      const once: Listener = (...args) => {
-         pageOn.remove(wire, once);
-         return listener(...args);
-      };
-      pageOn.add(wire, once);
-   });
    const toPage = (wire: string, ...args: unknown[]) => {
       for (const listener of pageOn.of(wire)) {
          listener({}, ...structuredClone(args));
@@ -150,7 +143,7 @@ async function connect(fixture = "serializer", options: { validateSender?: boole
       handler: (wire: string) => handlers.get(wire) as Listener,
       /** The listener that the generated main process registered with `ipcMain.on`. */
       mainListener: (wire: string) => mainOn.of(wire)[0],
-      /** The listener that the preload script registered with `ipcRenderer.on` or `once`. */
+      /** The listener that the preload script registered with `ipcRenderer.on`. */
       pageListener: (wire: string) => pageOn.of(wire)[0],
    };
 }
@@ -423,12 +416,36 @@ describe("generated serializer, emit", () => {
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       const listener = vi.fn();
       page.changed.once(listener);
-      const onChanged = pageElectron.ipcRenderer.once.mock.calls[0][1];
+      const onChanged = pageElectron.ipcRenderer.on.mock.calls.find(
+         ([name]: [string]) => name === "autoipc:changed",
+      )?.[1];
 
       onChanged({}, "garbage");
       ipc.changed.send({ webContents: contents }, appointment());
 
       expect(listener).toHaveBeenCalledOnce();
+   });
+
+   it("reads the message once for any number of subscribers", async () => {
+      const { page, ipc, contents, spied, pageElectron } = await connect();
+      const listeners = [vi.fn(), vi.fn(), vi.fn()];
+      page.changed.on(listeners[0]);
+      page.changed.on(listeners[1]);
+      page.changed.once(listeners[2]);
+      spied.deserialize.mockClear();
+
+      ipc.changed.send({ webContents: contents }, appointment());
+
+      expect(spied.deserialize).toHaveBeenCalledOnce();
+      for (const listener of listeners) {
+         expect(listener).toHaveBeenCalledOnce();
+      }
+      // One listener of ipcRenderer for the three subscribers.
+      expect(
+         pageElectron.ipcRenderer.on.mock.calls.filter(
+            ([name]: [string]) => name === "autoipc:changed",
+         ),
+      ).toHaveLength(1);
    });
 
    it("drops a message that cannot be read in the page, and logs it", async () => {
