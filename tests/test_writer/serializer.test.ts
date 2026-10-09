@@ -58,6 +58,12 @@ const port: shared.SimpleChannel = {
    direction: "RendererToRenderer",
    params: ["at: Date"],
 };
+const mainPort: shared.SimpleChannel = {
+   name: "mainPortIt",
+   kind: "Port",
+   direction: "MainToRenderer",
+   params: ["at: Date"],
+};
 const utility: shared.SimpleChannel = {
    name: "utilityIt",
    kind: "Unicast",
@@ -124,8 +130,10 @@ describe("serializer, the generated files", () => {
 
    it("writes nothing of the serializer when the config does not set one", async () => {
       const outputs = [
-         await main([invoke, send, emit, ask, stream], { serializer: undefined }),
-         await preload([invoke, send, emit, ask, stream], { serializer: undefined }),
+         await main([invoke, send, emit, ask, stream, port, mainPort], { serializer: undefined }),
+         await preload([invoke, send, emit, ask, stream, port, mainPort], {
+            serializer: undefined,
+         }),
       ];
       for (const output of outputs) {
          expect(output).not.toMatch(
@@ -253,8 +261,8 @@ describe("serializer, the generated files", () => {
       expect(output).toContain("value: encodeValue(channel, step.value)");
    });
 
-   it("leaves the ports, the utility channels and the worker channels out", async () => {
-      for (const channel of [port, utility, worker, workerAsk]) {
+   it("leaves the utility channels and the worker channels out", async () => {
+      for (const channel of [utility, worker, workerAsk]) {
          // biome-ignore lint/performance/noAwaitInLoops: the writers of a class share one file
          const output = await main([channel]);
          const page = await preload([channel]);
@@ -265,12 +273,51 @@ describe("serializer, the generated files", () => {
       }
    });
 
+   it("posts a message of a port channel in the page as a list of the serialized arguments", async () => {
+      const output = await preload([port]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("port.postMessage([encodeValue(channel, args)]);");
+      expect(output).toContain("next.postMessage([encodeValue(channel, args)]);");
+      expect(output).toContain(
+         "const args = Array.isArray(event.data) ? readArguments(channel, event.data) : undefined;",
+      );
+      expect(output).toContain("notify(subscribers, args);");
+      expect(output).not.toContain("notify(subscribers, event.data);");
+   });
+
+   it("serializes the messages of a main port channel in the page as well", async () => {
+      const output = await preload([mainPort]);
+
+      expect(output).toContain("port.postMessage([encodeValue(channel, args)]);");
+      expect(output).toContain("readArguments(channel, event.data)");
+   });
+
+   it("serializes the messages of a main port channel in main", async () => {
+      const output = await main([mainPort]);
+
+      expect(output).toContain(IMPORT);
+      expect(output).toContain("port.postMessage([encodeValue(name, args)]);");
+      expect(output).toContain("next.postMessage([encodeValue(name, args)]);");
+      expect(output).toContain("const args = readSentArguments(name, event.data);");
+      expect(output).toContain("notifyMainPortListeners(subscribers, args);");
+      expect(output).toContain("export class IpcSerializationError extends Error {");
+   });
+
+   it("serializes a port channel only where the messages are seen: the pages, not the main process that pairs them", async () => {
+      const output = await main([port]);
+
+      expect(output).not.toContain("ipcSerialize");
+      expect(output).not.toContain("encodeValue");
+      expect(output).not.toContain("IpcSerializationError");
+   });
+
    it("serializes the channels of the page and leaves the others of the same schema alone", async () => {
-      const output = await main([invoke, port, utility, worker]);
+      const output = await main([invoke, utility, worker]);
 
       expect(output).toContain(IMPORT);
       expect(output).toContain("encodeValue('getIt'");
-      expect(output).not.toMatch(/(?:encode|decode)Value\('(?:portIt|utilityIt|workerIt)'/);
+      expect(output).not.toMatch(/(?:encode|decode)Value\('(?:utilityIt|workerIt)'/);
    });
 
    it("writes the preload script of a service worker without the serializer", async () => {

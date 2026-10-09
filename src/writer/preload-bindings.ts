@@ -1063,9 +1063,18 @@ export class PreloadBindingsWriter extends BaseWriter {
     * - `onReady` runs at once if a port is there, and again for every new port;
     * - `onClose` runs when a connection ends, which the main process or the other page does. The
     *   replaced port is closed without it, since the connection goes on.
+    *
+    * With a serializer, a message is posted as a list of one value, which is the list of the arguments
+    * as the serializer made it, and a message that arrives is deserialized the same way, so the
+    * pages and the main process agree on it. A `send` that cannot be serialized throws, like the
+    * other channels, when a port is there. A message that waits in the queue is serialized when the
+    * queue is flushed, and one that cannot be is logged with `console.error` and dropped, like one
+    * that cannot be posted. A message that cannot be deserialized is logged and dropped.
     */
    private getPortComponents(): string {
       const [i1, i2, i3, i4, i5, i6] = this.indents;
+      const serialized = this.usesSerializer();
+      const wire = (args: string) => (serialized ? `[encodeValue(channel, ${args})]` : args);
       return [
          "",
          "type PortListener = { callback: Function };",
@@ -1176,10 +1185,20 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}}`,
          `${i3}port = next;`,
          `${i3}next.onmessage = (event: MessageEvent) => {`,
-         `${i4}if (Array.isArray(event.data)) {`,
-         `${i5}notify(ownSubscribers, event.data);`,
-         `${i5}notify(subscribers, event.data);`,
-         `${i4}}`,
+         ...(serialized
+            ? [
+                 `${i4}const args = Array.isArray(event.data) ? readArguments(channel, event.data) : undefined;`,
+                 `${i4}if (args) {`,
+                 `${i5}notify(ownSubscribers, args);`,
+                 `${i5}notify(subscribers, args);`,
+                 `${i4}}`,
+              ]
+            : [
+                 `${i4}if (Array.isArray(event.data)) {`,
+                 `${i5}notify(ownSubscribers, event.data);`,
+                 `${i5}notify(subscribers, event.data);`,
+                 `${i4}}`,
+              ]),
          `${i3}};`,
          `${i3}next.addEventListener('close', () => {`,
          `${i4}if (port === next) {`,
@@ -1190,7 +1209,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i3}});`,
          `${i3}for (const args of pending.items.splice(0)) {`,
          `${i4}try {`,
-         `${i5}next.postMessage(args);`,
+         `${i5}next.postMessage(${wire("args")});`,
          `${i4}} catch (error) {`,
          `${i5}console.error(error);`,
          `${i4}}`,
@@ -1217,7 +1236,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i5}return;`,
          `${i4}}`,
          `${i4}if (port) {`,
-         `${i5}port.postMessage(args);`,
+         `${i5}port.postMessage(${wire("args")});`,
          `${i4}} else {`,
          `${i5}enqueue(pending, args, channel, max, ownOverflow ?? overflow);`,
          `${i4}}`,

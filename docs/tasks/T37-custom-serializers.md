@@ -23,7 +23,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     Not covered, since they do not go through the page wrappers and have their own protocols: `port`
     channels, utility process channels and service worker channels. The writer of the service worker
     preload script reuses the page writer, so it turns the serializer off (`usesSerializer()`); the main
-    process routes the traffic of a worker through its own code. Follow-up: T81.
+    process routes the traffic of a worker through its own code. Follow-up: T81a (ports), T81b (utility
+    processes) and T81c (service workers).
   - Order in `main.ts`: the sender check, then deserializing, then the `validate` schema on the
     deserialized arguments. A rejected sender never reaches the code of the serializer. A `once` or
     `handleOnce` is used up by the first message that could be read.

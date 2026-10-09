@@ -117,8 +117,8 @@ Config explanation:
    It is in the API of every scope, and in the empty API of a schema without channels for the page.
    Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
  - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
-   crosses between a page and the main process, so that a `Date`, a `Map` or a class instance arrives as it
-   was sent. Off by default. A value that starts with `.` is a path from the project root, such as
+   crosses between a page and the main process, and to the messages of `port` and `mainPort` channels, so
+   that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
    `"./src/wire.ts"`; any other value is a package, such as `"superjson"`. See
    [Custom serializers](#custom-serializers).
 
@@ -1334,9 +1334,12 @@ code has no dependency on this library at runtime.
 The serializer applies to the channels between a page and the main process: the arguments and the
 result of `invoke`, the arguments of `send` and `emit`, the arguments and the answer of `ask`, and the
 arguments and the chunks of `stream`. The arguments of a call travel as one value, the list of them.
-It does not apply to the errors of an `invoke`, whose `data` is cloned as before, nor to `port`
-channels, the channels of utility processes and the channels of service workers, which carry their
-values as they are.
+It applies to `port` and `mainPort` channels as well, at both ends, whether the other end is another
+page or the main process: a message is posted as a list of one value, the list of the arguments as the
+serializer made it. The main process only pairs the pages of a `port` channel and sees none of their
+messages, so its file does not import the serializer for that channel.
+It does not apply to the errors of an `invoke`, whose `data` is cloned as before, nor to the channels
+of utility processes and the channels of service workers, which carry their values as they are.
 
 - **Order.** The main process checks the sender first, then deserializes, then runs the `validate`
   schema on the deserialized arguments. A message from a sender that is rejected never reaches the
@@ -1348,7 +1351,10 @@ values as they are.
   the page in the error envelope. A message that cannot be deserialized is answered with that error if
   someone waits for an answer, and otherwise (`send`, `emit`) it is logged with `console.error` and
   dropped, so it is not an uncaught error of the main process. A chunk of a stream that cannot be read
-  fails the stream.
+  fails the stream. On a port channel, a `send` throws when its message cannot be serialized and a port
+  is there. A message that waits in the queue for a port is serialized when the queue is flushed, so one
+  that cannot be is logged with `console.error` and dropped, and the others go on. A message that arrives
+  and cannot be deserialized is logged and dropped as well.
 - **`contextBridge`.** The page and the preload script are separate worlds. The values that your
   serializer revives in the preload script reach the page through `contextBridge`, which copies them
   again: a `Date`, a `Map` and a `Set` stay what they are, a class instance becomes a plain object

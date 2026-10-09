@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 70 delivered, 11 remaining, 1 dropped.
+**Progress:** 71 delivered, 13 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -60,6 +60,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T76: Port channels never pair while `isLoading()` is true](./tasks/T76-port-pairing-waits-on-isloading.md) · depends on: T75
 - [x] [T77: `ask` on a destroyed `BrowserWindow` throws a TypeError](./tasks/T77-ask-on-destroyed-browser-window.md) · depends on: T75
 - [x] [T78: `connect` leaves an entry behind when the second window is destroyed](./tasks/T78-connect-leaks-first-end-on-destroyed-window.md) · depends on: T76
+- [ ] [T82: A synchronous error of the preload script loses its fields across `contextBridge`](./tasks/T82-synchronous-errors-lose-fields-across-contextbridge.md) · depends on: T81a
 
 ## Phase 2: Core API, listener lifecycle and security
 
@@ -97,7 +98,9 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - [x] [T74: Backpressure for streams](./tasks/T74-stream-backpressure.md) · depends on: T27
 - [x] [T79: Timeouts for utility process calls](./tasks/T79-utility-call-timeouts.md) · depends on: T29, T28, T30
 - [x] [T80: Validation and timeouts for service worker calls](./tasks/T80-worker-call-validation-and-timeouts.md) · depends on: T36, T17, T28
-- [ ] [T81: Serializer for port, utility process and service worker channels](./tasks/T81-serializer-for-other-transports.md) · depends on: T37, T26, T30, T36
+- [x] [T81a: Serializer for port channels](./tasks/T81a-serializer-for-port-channels.md) · depends on: T37, T26
+- [ ] [T81b: Serializer for utility process channels](./tasks/T81b-serializer-for-utility-process-channels.md) · depends on: T81a, T30, T79
+- [ ] [T81c: Serializer for service worker channels](./tasks/T81c-serializer-for-service-worker-channels.md) · depends on: T81a, T36, T80
 
 ## Phase 4: Developer experience
 

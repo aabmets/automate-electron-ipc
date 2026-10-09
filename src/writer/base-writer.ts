@@ -171,15 +171,18 @@ export class BaseWriter {
    }
 
    /**
-    * Whether the arguments and the results of the channel go through the serializer: those of
-    * `invoke`, `send`, `stream`, `emit` and `ask`. The ports of a port channel carry their
-    * messages as they are, and the traffic with a utility process or a worker is not covered.
+    * Whether the messages of the channel go through the serializer: the arguments and the results of
+    * `invoke`, `send`, `stream`, `emit` and `ask`, and the messages of a `port` or `mainPort` channel,
+    * which travel as one value, the list of the arguments. The traffic with a utility process or a
+    * service worker is not covered. A writer that only pairs the ends of a channel, and sees none of
+    * its messages, turns the channel off for its file.
     */
    protected isSerializedSpec(spec: t.ChannelSpec): boolean {
       return (
          this.usesSerializer() &&
-         spec.kind !== "Port" &&
-         (spec.direction === "RendererToMain" || spec.direction === "MainToRenderer")
+         (spec.direction === "RendererToMain" ||
+            spec.direction === "MainToRenderer" ||
+            spec.direction === "RendererToRenderer")
       );
    }
 

@@ -229,6 +229,10 @@ export class MainBindingsWriter extends BaseWriter {
          ...(this.hasWorkerChannels() ? WORKER_RESERVED_NAMES : []),
       ];
    }
+   /** The main process only pairs the pages of a `port` channel, and sees none of their messages. */
+   protected isSerializedSpec(spec: t.ChannelSpec): boolean {
+      return spec.direction !== "RendererToRenderer" && super.isSerializedSpec(spec);
+   }
    protected renderEmptyFileContents(): string {
       return "export const ipc = {};";
    }
@@ -2012,9 +2016,18 @@ export class MainBindingsWriter extends BaseWriter {
     *   the connection. `close` is final: the page is told through `<channel>:close`, the port is
     *   closed and a reload pairs no more. The connection also ends when the contents are destroyed,
     *   and when the page asks for it.
+    *
+    * With a serializer, a message is posted as a list of one value, which is the list of the arguments
+    * as the serializer made it, and a message that arrives is deserialized the same way. A `send`
+    * that cannot be serialized throws an `IpcSerializationError` when a port is there. A message that
+    * waits in the queue is serialized when the queue is flushed, and one that cannot be is logged
+    * with `console.error` and dropped, like one that cannot be posted. A message that cannot be
+    * deserialized is logged and dropped.
     */
    private buildMainPortHelpers(): string {
       const [i1, i2, i3, i4, i5] = this.indents;
+      const serialized = this.usesSerializer();
+      const wire = (args: string) => (serialized ? `[encodeValue(name, ${args})]` : args);
       return [
          "",
          "export interface PortOverflowInfo {",
@@ -2136,9 +2149,20 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}release();`,
          `${i2}port = next;`,
          `${i2}next.on('message', (event: { data: unknown }) => {`,
-         `${i3}if (port === next && Array.isArray(event.data)) {`,
-         `${i4}notifyMainPortListeners(subscribers, event.data);`,
-         `${i3}}`,
+         ...(serialized
+            ? [
+                 `${i3}if (port === next && Array.isArray(event.data)) {`,
+                 `${i4}const args = readSentArguments(name, event.data);`,
+                 `${i4}if (args) {`,
+                 `${i5}notifyMainPortListeners(subscribers, args);`,
+                 `${i4}}`,
+                 `${i3}}`,
+              ]
+            : [
+                 `${i3}if (port === next && Array.isArray(event.data)) {`,
+                 `${i4}notifyMainPortListeners(subscribers, event.data);`,
+                 `${i3}}`,
+              ]),
          `${i2}});`,
          `${i2}next.on('close', () => {`,
          `${i3}if (port === next) {`,
@@ -2149,7 +2173,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i2}next.start();`,
          `${i2}for (const args of pending.items.splice(0)) {`,
          `${i3}try {`,
-         `${i4}next.postMessage(args);`,
+         `${i4}next.postMessage(${wire("args")});`,
          `${i3}} catch (error) {`,
          `${i4}console.error(error);`,
          `${i3}}`,
@@ -2197,7 +2221,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i4}return;`,
          `${i3}}`,
          `${i3}if (port) {`,
-         `${i4}port.postMessage(args);`,
+         `${i4}port.postMessage(${wire("args")});`,
          `${i3}} else {`,
          `${i4}enqueueMainPort(pending, args, name, max, ownOverflow ?? portsConfig.onOverflow);`,
          `${i3}}`,
