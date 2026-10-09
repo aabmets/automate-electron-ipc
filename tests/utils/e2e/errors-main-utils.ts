@@ -11,6 +11,7 @@
 
 import { type E2EProject, runFixture } from "../e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "./runtime-utils.js";
+import { wire } from "./wire-utils.js";
 
 type Handler = (...args: unknown[]) => Promise<{ ok: boolean; value?: unknown; error?: any }>;
 
@@ -28,9 +29,7 @@ export function errorsMainLoader(track: (project: E2EProject) => void) {
       const electron = createFakeElectron();
       const generated = loadGenerated(project.generated["main.ts"], { electron });
       const handlerOf = (channel: string): Handler => {
-         const call = electron.ipcMain.handle.mock.calls.find(
-            ([name]) => name === `autoipc:${channel}`,
-         );
+         const call = electron.ipcMain.handle.mock.calls.find(([name]) => name === wire(channel));
          return call?.[1] as Handler;
       };
       return { electron, generated, handlerOf, ipc: generated.ipc };

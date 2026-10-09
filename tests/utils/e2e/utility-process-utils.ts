@@ -13,16 +13,11 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { wire } from "./wire-utils.js";
 
 let project: E2EProject | undefined;
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
-
-export const wire = (name: string) => `autoipc:${name}`;
-export const ok = (value: unknown) => ({ ok: true, value });
-export const failed = (error: Record<string, unknown>) => ({ ok: false, error });
-/** Lets the promises that are settled by a message run. */
-export const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /**
  * A `UtilityProcess` stand-in: an emitter with `postMessage`, which the main process uses. It is

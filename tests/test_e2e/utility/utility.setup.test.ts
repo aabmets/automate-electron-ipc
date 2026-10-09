@@ -21,11 +21,10 @@ import {
 import {
    createChild,
    createParentPort,
-   flush,
    load,
    resetUtilityFakes,
-   wire,
 } from "@testutils/e2e/utility-process-utils.js";
+import { flush, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 

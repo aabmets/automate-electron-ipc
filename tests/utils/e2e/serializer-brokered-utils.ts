@@ -14,7 +14,7 @@ import { vi } from "vitest";
 import { type E2EProject, runFixture } from "../e2e-utils.js";
 import { createFakePreloadElectron, loadGenerated } from "./runtime-utils.js";
 import { loadSerializer } from "./serializer-wire-utils.js";
-import { wire } from "./service-worker-utils.js";
+import { wire } from "./wire-utils.js";
 
 /**
  * Makes the `loadBrokered` function of one test file. `track` gets the project of each run, and

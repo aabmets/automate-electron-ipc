@@ -14,14 +14,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { vi } from "vitest";
 import { type E2EProject, runFixture } from "../e2e-utils.js";
-import {
-   createFakeElectron,
-   createFakePreloadElectron,
-   loadGenerated,
-   settlePorts,
-} from "./runtime-utils.js";
-
-export const settle = () => settlePorts(10);
+import { createFakeElectron, createFakePreloadElectron, loadGenerated } from "./runtime-utils.js";
 
 /** The `Appointment` of the fixture, with the types that structured clone cannot tell apart. */
 export const appointment = () => ({

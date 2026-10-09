@@ -17,13 +17,10 @@ import {
 } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { disconnectWire } from "./wire-utils.js";
 
 const rawPorts: MessagePort[] = [];
 let project: E2EProject | undefined;
-
-export const wire = (name: string) => `autoipc:${name}`;
-export const closeWire = (name: string) => `autoipc:${name}:close`;
-export const disconnectWire = (name: string) => `autoipc:${name}:disconnect`;
 
 /** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
 export function createContents(state: { loading?: boolean; url?: string } = {}) {

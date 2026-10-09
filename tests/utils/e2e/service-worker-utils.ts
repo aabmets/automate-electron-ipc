@@ -13,18 +13,7 @@ import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 import type { E2EProject } from "../e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "./runtime-utils.js";
-
-/** The wire name of a channel, with the channel prefix that the fixtures use. */
-export const wire = (name: string) => `autoipc:${name}`;
-
-/** The envelope of a call or an answer that succeeded. */
-export const ok = (value: unknown) => ({ ok: true, value });
-
-/** The envelope of a call or an answer that failed. */
-export const failed = (error: Record<string, unknown>) => ({ ok: false, error });
-
-/** Lets the promises that are settled by a message run. */
-export const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+import { wire } from "./wire-utils.js";
 
 /** Runs the generated `main.ts` of a fixture in this process, against a fake `electron`. */
 export function loadWorkerMain(project: E2EProject): any {

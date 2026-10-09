@@ -10,16 +10,11 @@
  */
 
 import { EventEmitter } from "node:events";
-import {
-   createFakeElectron,
-   createSource,
-   loadGenerated,
-   settlePorts,
-} from "@testutils/e2e/runtime-utils.js";
+import { createFakeElectron, createSource, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { wire } from "./wire-utils.js";
 
-export const wire = (name: string) => `autoipc:${name}`;
 export const portWire = (name: string) => `autoipc:${name}:port`;
 
 let project: E2EProject | undefined;
@@ -44,9 +39,6 @@ export async function cleanupStreams() {
    await project?.cleanup();
    project = undefined;
 }
-
-/** Lets the promises and the events of the real ports run. */
-export const settle = () => settlePorts(20);
 
 /** A WebContents stand-in: an emitter that announces its end, as the real one does. */
 export function createContents(id = 1) {

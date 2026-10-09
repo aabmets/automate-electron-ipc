@@ -18,8 +18,8 @@ import {
    createContents,
    disposeContentsFixture,
    loadMain,
-   ok,
 } from "@testutils/e2e/contents-handlers-utils.js";
+import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

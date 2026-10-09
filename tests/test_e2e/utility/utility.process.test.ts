@@ -9,15 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   createParentPort,
-   failed,
-   flush,
-   load,
-   ok,
-   resetUtilityFakes,
-   wire,
-} from "@testutils/e2e/utility-process-utils.js";
+import { createParentPort, load, resetUtilityFakes } from "@testutils/e2e/utility-process-utils.js";
+import { failed, flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

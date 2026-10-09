@@ -14,6 +14,7 @@ import {
    createFakeWindow,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
+import { flush } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,9 +24,6 @@ afterEach(async () => {
    await project?.cleanup();
    project = undefined;
 });
-
-/** Lets the pending promise callbacks of the generated listeners run. */
-const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 describe("ipcAutomation, triggers", () => {
    it("generates a binder for triggered channels only, and a sender for all", async () => {

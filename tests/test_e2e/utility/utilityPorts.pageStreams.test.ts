@@ -12,7 +12,8 @@
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 // biome-ignore-all lint/style/useThrowOnlyError: a plain object is what a handler may throw, and the library reduces it
 
-import { cleanupUtilityPorts, loadPage, settled, wire } from "@testutils/e2e/utility-port-utils.js";
+import { cleanupUtilityPorts, loadPage, settled } from "@testutils/e2e/utility-port-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

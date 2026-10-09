@@ -17,9 +17,9 @@ import {
    lastChannel,
    loadMain,
    posted,
-   settle,
    start,
 } from "@testutils/e2e/stream-main-utils.js";
+import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanupStreams);

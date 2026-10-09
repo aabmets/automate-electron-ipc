@@ -9,14 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupPortConnect,
-   closeWire,
-   disconnectWire,
-   loadHub,
-   loadPreload,
-   settle,
-} from "@testutils/e2e/port-connect-utils.js";
+import { cleanupPortConnect, loadHub, loadPreload } from "@testutils/e2e/port-connect-utils.js";
+import { closeWire, disconnectWire, settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

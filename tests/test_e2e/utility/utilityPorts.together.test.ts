@@ -13,12 +13,8 @@
 // biome-ignore-all lint/style/useThrowOnlyError: a plain object is what a handler may throw, and the library reduces it
 
 import { finishLoading, startLoading } from "@testutils/e2e/runtime-utils.js";
-import {
-   cleanupUtilityPorts,
-   loadAll,
-   settle,
-   settled,
-} from "@testutils/e2e/utility-port-utils.js";
+import { cleanupUtilityPorts, loadAll, settled } from "@testutils/e2e/utility-port-utils.js";
+import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

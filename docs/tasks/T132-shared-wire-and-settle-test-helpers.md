@@ -11,4 +11,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** One `tests/utils/e2e/wire-utils.ts` with these helpers; delete the copies and update the
   importers. Keep the Standard Schema `ok` of `runtime-validation-utils.ts`, which is another thing.
 - **Tests:** Same test count, no assertion changed, the whole suite passes.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `tests/utils/e2e/wire-utils.ts` holds `WIRE_PREFIX`, `wire`, `closeWire`, `disconnectWire`, `ok`, `failed`, `settle` and `flush`; the twelve helper copies and three local copies in test files are gone, and the importers use the new module. Also moved: the two copies of `failed`, and the `autoipc:${channel}` literals of three helpers now call `wire`. `settle` is 20 ms everywhere (the serializer runtime helper had 10). 3294 tests, unchanged, no assertion changed.

@@ -9,13 +9,9 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   cleanupRuntime,
-   generateFixture,
-   loadPreload,
-   wire,
-} from "@testutils/e2e/runtime-main-utils.js";
+import { cleanupRuntime, generateFixture, loadPreload } from "@testutils/e2e/runtime-main-utils.js";
 import { callablePaths, windowIpcPaths } from "@testutils/e2e/runtime-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupRuntime);

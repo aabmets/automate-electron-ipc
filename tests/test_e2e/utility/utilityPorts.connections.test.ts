@@ -16,11 +16,11 @@ import { finishLoading, startLoading } from "@testutils/e2e/runtime-utils.js";
 import {
    channelsMade,
    cleanupUtilityPorts,
-   closeWire,
    createChild,
    createContents,
    loadMain,
 } from "@testutils/e2e/utility-port-utils.js";
+import { closeWire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

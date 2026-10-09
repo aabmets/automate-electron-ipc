@@ -13,7 +13,7 @@
 
 import { AT, date, settled } from "@testutils/e2e/serializer-wire-utils.js";
 import { workerConnector } from "@testutils/e2e/serializer-worker-utils.js";
-import { wire } from "@testutils/e2e/service-worker-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

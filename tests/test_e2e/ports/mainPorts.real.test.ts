@@ -10,16 +10,14 @@
  */
 
 import { cleanupMainPorts, loadBoth } from "@testutils/e2e/main-port-utils.js";
-import { finishLoading, settlePorts } from "@testutils/e2e/runtime-utils.js";
+import { finishLoading } from "@testutils/e2e/runtime-utils.js";
+import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {
    vi.restoreAllMocks();
    await cleanupMainPorts();
 });
-
-/** Lets the messages and the events of the real ports arrive. */
-const settle = () => settlePorts(20);
 
 describe("a main process and a page over a real message channel", () => {
    it("sends in both directions, and queues until the page is connected", async () => {

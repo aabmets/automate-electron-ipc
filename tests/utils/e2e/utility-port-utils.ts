@@ -17,22 +17,15 @@ import {
    createFakeElectron,
    createFakePreloadElectron,
    loadGenerated,
-   settlePorts,
 } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { closeWire, wire } from "./wire-utils.js";
 
 /** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
 let attachChild: ((child: unknown) => void) | undefined;
 const rawPorts: MessagePort[] = [];
 let project: E2EProject | undefined;
-
-export const wire = (name: string) => `autoipc:${name}`;
-export const closeWire = (name: string) => `autoipc:${name}:close`;
-
-/** Lets the promises and the events of the ports run. */
-export const settle = () => settlePorts(20);
-export const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** Contents that are loaded unless told otherwise, as an emitter that records what is sent to it. */
 export function createContents(state: { loading?: boolean; url?: string; id?: number } = {}) {
@@ -123,7 +116,6 @@ export async function loadUtility() {
    return { ...parent, ipc: utility.ipc };
 }
 
-export const ok = (value: unknown) => ({ ok: true, value });
 export const call = (channel: string, id: number, ...args: unknown[]) => ({
    __ipc: "call",
    channel: wire(channel),

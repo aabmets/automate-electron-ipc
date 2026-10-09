@@ -11,14 +11,13 @@
 
 import {
    cleanupPortConnect,
-   closeWire,
    createWindow,
    destroy,
    loadMain,
    posted,
-   wire,
 } from "@testutils/e2e/port-connect-utils.js";
 import { commitNavigation, finishLoading, startLoading } from "@testutils/e2e/runtime-utils.js";
+import { closeWire, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

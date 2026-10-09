@@ -13,7 +13,6 @@ import {
    cleanupRuntime,
    generateFixture,
    loadMainWithEmitter,
-   wire,
 } from "@testutils/e2e/runtime-main-utils.js";
 import {
    callablePaths,
@@ -21,6 +20,7 @@ import {
    createFakeWindow,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupRuntime);

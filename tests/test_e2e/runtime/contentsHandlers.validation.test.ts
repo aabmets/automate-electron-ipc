@@ -18,8 +18,8 @@ import {
    disposeContentsFixture,
    eventFrom,
    loadMain,
-   ok,
 } from "@testutils/e2e/contents-handlers-utils.js";
+import { ok } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

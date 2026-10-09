@@ -17,12 +17,10 @@ import {
    cancel,
    cleanupUtilityPorts,
    FakeBrokerPort,
-   flush,
    loadUtility,
-   settle,
    startStream,
-   wire,
 } from "@testutils/e2e/utility-port-utils.js";
+import { flush, settle, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

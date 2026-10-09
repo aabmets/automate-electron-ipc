@@ -14,17 +14,13 @@ import {
    createFakeElectron,
    createFakePreloadElectron,
    loadGenerated,
-   settlePorts,
 } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { closeWire, wire } from "./wire-utils.js";
 
 const channels: MessageChannel[] = [];
 let project: E2EProject | undefined;
-
-export const wire = (name: string) => `autoipc:${name}`;
-export const closeWire = (name: string) => `autoipc:${name}:close`;
-export const disconnectWire = (name: string) => `autoipc:${name}:disconnect`;
 
 /** A window which is loaded unless told otherwise, and whose contents are an emitter. */
 export function createWindow(state: { loading?: boolean; url?: string; destroyed?: boolean } = {}) {
@@ -116,9 +112,6 @@ export async function loadPreload() {
    const end = (key = "1:a") => listener(closeWire("chat"))({}, key);
    return { chat, connect, listener, end, ipcRenderer: fake.electron.ipcRenderer };
 }
-
-/** Lets the messages and the events of the real ports arrive. */
-export const settle = () => settlePorts(20);
 
 /** A hub page with `count` peers, each with the connection object that `onConnection` gave. */
 export async function loadHub(count: number) {

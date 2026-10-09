@@ -15,9 +15,9 @@ import {
    createFrame,
    type FakeContents,
    loadMain,
-   ok,
    questions,
 } from "@testutils/e2e/ask-utils.js";
+import { ok } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupAsks);

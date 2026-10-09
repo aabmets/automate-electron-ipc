@@ -15,8 +15,8 @@ import {
    appointment,
    type Connection,
    serializerConnector,
-   settle,
 } from "@testutils/e2e/serializer-runtime-utils.js";
+import { settle } from "@testutils/e2e/wire-utils.js";
 import type { E2EProject } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

@@ -17,9 +17,7 @@ import {
 } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
-
-export const wire = (name: string) => `autoipc:${name}`;
-export const closeWire = (name: string) => `autoipc:${name}:close`;
+import { closeWire, wire } from "./wire-utils.js";
 
 let project: E2EProject;
 

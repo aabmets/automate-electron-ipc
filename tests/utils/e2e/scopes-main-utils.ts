@@ -13,6 +13,7 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { expect } from "vitest";
+import { wire } from "./wire-utils.js";
 
 /** The fixture project that `loadMain` made, which `disposeScopesFixture` cleans up. */
 let project: E2EProject | undefined;
@@ -54,7 +55,7 @@ export async function loadMain(fixture = "scoped-windows") {
    const generated = loadGenerated(project.generated["main.ts"], { electron });
    /** Calls the handler of an invoke channel, and returns its envelope. */
    const call = (channel: string, event: unknown, ...args: unknown[]) =>
-      handlers.get(`autoipc:${channel}`)?.(event, ...args);
+      handlers.get(wire(channel))?.(event, ...args);
    return { generated, ipc: generated.ipc, emitter, call, project };
 }
 

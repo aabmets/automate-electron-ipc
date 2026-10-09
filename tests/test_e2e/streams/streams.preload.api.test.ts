@@ -14,9 +14,9 @@ import {
    cleanupStreams,
    currentProject,
    generateFixture,
-   wire,
 } from "@testutils/e2e/stream-main-utils.js";
 import { loadPreload } from "@testutils/e2e/stream-preload-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanupStreams);

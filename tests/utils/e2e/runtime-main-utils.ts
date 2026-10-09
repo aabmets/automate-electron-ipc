@@ -15,10 +15,7 @@ import {
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
-
-/** The default `channelPrefix`, which the generated bindings put in front of every wire name. */
-export const WIRE_PREFIX = "autoipc:";
-export const wire = (name: string) => `${WIRE_PREFIX}${name}`;
+import { WIRE_PREFIX } from "./wire-utils.js";
 
 let project: E2EProject | undefined;
 

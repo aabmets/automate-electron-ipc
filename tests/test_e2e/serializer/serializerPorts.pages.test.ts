@@ -10,14 +10,8 @@
  */
 
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import {
-   AT,
-   date,
-   listenerOf,
-   loadSerializer,
-   settle,
-} from "@testutils/e2e/serializer-wire-utils.js";
-import { wire } from "@testutils/e2e/service-worker-utils.js";
+import { AT, date, listenerOf, loadSerializer } from "@testutils/e2e/serializer-wire-utils.js";
+import { settle, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

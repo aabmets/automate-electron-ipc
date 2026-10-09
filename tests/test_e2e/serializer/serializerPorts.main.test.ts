@@ -16,17 +16,10 @@ import {
    finishLoading,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import {
-   AT,
-   date,
-   listenerOf,
-   loadSerializer,
-   settle,
-} from "@testutils/e2e/serializer-wire-utils.js";
+import { AT, date, listenerOf, loadSerializer } from "@testutils/e2e/serializer-wire-utils.js";
+import { closeWire, settle } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-const closeWire = (name: string) => `autoipc:${name}:close`;
 
 let project: E2EProject | undefined;
 const rawPorts: MessagePort[] = [];

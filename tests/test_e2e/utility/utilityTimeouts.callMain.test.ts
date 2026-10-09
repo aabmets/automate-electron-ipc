@@ -12,12 +12,12 @@
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 
 import { loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { ok, wire } from "@testutils/e2e/utility-process-utils.js";
 import {
    createParentPort,
    resetTimeoutFakes,
    track,
 } from "@testutils/e2e/utility-timeout-utils.js";
+import { ok, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

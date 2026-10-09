@@ -9,14 +9,8 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-   createChild,
-   flush,
-   load,
-   ok,
-   resetUtilityFakes,
-   wire,
-} from "@testutils/e2e/utility-process-utils.js";
+import { createChild, load, resetUtilityFakes } from "@testutils/e2e/utility-process-utils.js";
+import { flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(async () => {

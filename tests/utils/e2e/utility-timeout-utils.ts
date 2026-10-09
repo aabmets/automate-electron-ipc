@@ -11,8 +11,8 @@
 
 import { EventEmitter } from "node:events";
 import { createFakePreloadElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
-import { wire } from "@testutils/e2e/utility-process-utils.js";
 import { vi } from "vitest";
+import { wire } from "./wire-utils.js";
 
 /** Starts a call and watches how it settles, so that no rejection is left unhandled. */
 export function track(promise: Promise<unknown>) {

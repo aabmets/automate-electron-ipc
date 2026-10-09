@@ -34,7 +34,6 @@ export async function cleanupAsks() {
 
 export const request = (name: string) => `autoipc:${name}`;
 export const replyOf = (name: string) => `autoipc:${name}:reply`;
-export const ok = (value: unknown) => ({ ok: true, value });
 
 /** A WebContents stand-in: an emitter which announces its end, as the real one does. */
 export function createContents(id: number, state: { destroyed?: boolean; crashed?: boolean } = {}) {

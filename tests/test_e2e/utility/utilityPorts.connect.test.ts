@@ -25,8 +25,8 @@ import {
    createChild,
    createContents,
    loadMain,
-   wire,
 } from "@testutils/e2e/utility-port-utils.js";
+import { wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

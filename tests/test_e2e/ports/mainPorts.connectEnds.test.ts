@@ -11,15 +11,13 @@
 
 import {
    cleanupMainPorts,
-   closeWire,
    createContents,
    disconnectListener,
-   disconnectWire,
    type FakeContents,
    loadMain,
    loadMainWithElectron,
-   wire,
 } from "@testutils/e2e/main-port-utils.js";
+import { closeWire, disconnectWire, wire } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

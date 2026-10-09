@@ -17,7 +17,7 @@ import {
    oneString,
    schema,
 } from "@testutils/e2e/service-worker-guard-utils.js";
-import { flush } from "@testutils/e2e/service-worker-utils.js";
+import { flush } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

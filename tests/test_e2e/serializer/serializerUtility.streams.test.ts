@@ -12,8 +12,8 @@
 // biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 
 import { brokeredLoader } from "@testutils/e2e/serializer-brokered-utils.js";
-import { AT, date, settle, settled } from "@testutils/e2e/serializer-wire-utils.js";
-import { wire } from "@testutils/e2e/service-worker-utils.js";
+import { AT, date, settled } from "@testutils/e2e/serializer-wire-utils.js";
+import { settle, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

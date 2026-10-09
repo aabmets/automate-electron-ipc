@@ -9,9 +9,10 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { channelsMade, cleanupStreams, settle } from "@testutils/e2e/stream-main-utils.js";
+import { channelsMade, cleanupStreams } from "@testutils/e2e/stream-main-utils.js";
 import { settleRead } from "@testutils/e2e/stream-preload-utils.js";
 import { loadBoth } from "@testutils/e2e/stream-real-utils.js";
+import { settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanupStreams);

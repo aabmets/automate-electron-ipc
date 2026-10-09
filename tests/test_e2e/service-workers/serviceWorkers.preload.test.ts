@@ -14,7 +14,7 @@ import {
    createFakePreloadElectron,
    loadGenerated,
 } from "@testutils/e2e/runtime-utils.js";
-import { failed, flush, ok, wire } from "@testutils/e2e/service-worker-utils.js";
+import { failed, flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

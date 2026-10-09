@@ -13,6 +13,7 @@ import { EventEmitter } from "node:events";
 import { createFakeElectron, loadGenerated } from "@testutils/e2e/runtime-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { vi } from "vitest";
+import { wire } from "./wire-utils.js";
 
 // T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }` and register
 // on `webContents.ipc` instead of the global `ipcMain`. The fake contents here follow the dispatch
@@ -83,23 +84,21 @@ export async function loadMain(fixture = "all-kinds") {
    /** Delivers an `invoke` of the page the way Electron does: the first target with a handler answers. */
    const invoke = async (contents: Contents, channel: string, ...args: unknown[]) => {
       const target: FakeIpc | undefined = [contents.ipc, globalIpc].find((ipc) =>
-         ipc.handlers.has(`autoipc:${channel}`),
+         ipc.handlers.has(wire(channel)),
       );
       if (!target) {
          throw new Error(`No handler registered for '${channel}'`);
       }
-      return await target.handlers.get(`autoipc:${channel}`)?.(eventFrom(contents), ...args);
+      return await target.handlers.get(wire(channel))?.(eventFrom(contents), ...args);
    };
    /** Delivers a `send` of the page: the listeners of the contents, then the global ones. */
    const send = (contents: Contents, channel: string, ...args: unknown[]) => {
       const event = eventFrom(contents);
-      contents.ipc.emitter.emit(`autoipc:${channel}`, event, ...args);
-      globalIpc.emitter.emit(`autoipc:${channel}`, event, ...args);
+      contents.ipc.emitter.emit(wire(channel), event, ...args);
+      globalIpc.emitter.emit(wire(channel), event, ...args);
    };
    return { generated, ipc: generated.ipc, globalIpc, invoke, send };
 }
-
-export const ok = (value: unknown) => ({ ok: true, value });
 
 /** Cleans up the project of `loadMain`. Call it from `afterEach`. */
 export async function disposeContentsFixture() {

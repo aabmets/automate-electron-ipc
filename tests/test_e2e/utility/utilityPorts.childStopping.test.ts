@@ -16,11 +16,10 @@ import { createSource } from "@testutils/e2e/runtime-utils.js";
 import {
    cancel,
    cleanupUtilityPorts,
-   flush,
    loadUtility,
-   settle,
    startStream,
 } from "@testutils/e2e/utility-port-utils.js";
+import { flush, settle } from "@testutils/e2e/wire-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {

@@ -17,12 +17,10 @@ import {
    call,
    cleanupUtilityPorts,
    FakeBrokerPort,
-   flush,
    loadUtility,
-   ok,
    startStream,
-   wire,
 } from "@testutils/e2e/utility-port-utils.js";
+import { flush, ok, wire } from "@testutils/e2e/wire-utils.js";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

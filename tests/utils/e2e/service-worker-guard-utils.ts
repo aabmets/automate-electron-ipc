@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 import type { E2EProject } from "../e2e-utils.js";
 import { createFakeElectron, loadGenerated } from "./runtime-utils.js";
-import { wire } from "./service-worker-utils.js";
+import { wire } from "./wire-utils.js";
 
 export type Check = (args: unknown[]) => string | null;
 
