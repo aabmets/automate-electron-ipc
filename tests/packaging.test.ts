@@ -107,4 +107,39 @@ describe("package.json", () => {
          /uses the TypeScript library/i,
       );
    });
+
+   describe("exports", () => {
+      const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
+      const entries = Object.entries(manifest.exports) as [
+         string,
+         { types: string; default: string },
+      ][];
+
+      it("lists the entry points of the package", () => {
+         expect(entries.map(([key]) => key)).toEqual([".", "./api"]);
+      });
+
+      it.each(entries)("points the types of '%s' at a file that exists", (_key, target) => {
+         expect(target.types).toMatch(/^\.\/types\/.+\.d\.ts$/);
+         expect(fs.existsSync(path.join(root, target.types))).toBe(true);
+      });
+
+      it.each(entries)(
+         "maps the default of '%s' to a source file that tsc emits there",
+         (_key, target) => {
+            const { rootDir, outDir } = tsconfig.compilerOptions;
+            const outRelative = path.posix.relative(outDir, target.default);
+            expect(outRelative.startsWith("..")).toBe(false);
+            const source = path.posix.join(rootDir, outRelative.replace(/\.js$/, ".ts"));
+            expect(outRelative.endsWith(".js")).toBe(true);
+            expect(fs.existsSync(path.join(root, source))).toBe(true);
+            expect(listSourceFiles(path.join(root, "src"))).toContain(path.join(root, source));
+            expect(tsconfig.include).toContain("src/**/*");
+         },
+      );
+
+      it("ships the files that the entry points name", () => {
+         expect(manifest.files).toEqual(expect.arrayContaining(["dist", "types"]));
+      });
+   });
 });

@@ -137,6 +137,23 @@ export async function planRun(options?: t.RunOptions | string): Promise<t.RunPla
 }
 
 /**
+ * Writes the files of a plan, deletes the stale generated files of earlier runs, and reports what
+ * was done.
+ */
+export async function applyPlan(plan: t.RunPlan): Promise<void> {
+   await writeOutputs(plan.outputs);
+   if (plan.staleFiles.length > 0) {
+      await removeFiles(plan.staleFiles);
+      logger.removedStaleFiles(plan.staleFiles, plan.config.projectRoot);
+   }
+   if (plan.pfsArray.length === 0) {
+      logger.noChannelExpressions(plan.config.ipcSchema.path);
+   } else {
+      logger.reportSuccess(plan.pfsArray, plan.config.projectRoot);
+   }
+}
+
+/**
  * Generates the IPC bindings of the project that contains `cwd`.
  *
  * @param [options] - The options of the run, or the directory to find the project root from as a
@@ -151,14 +168,5 @@ export async function ipcAutomation(options?: t.RunOptions | string): Promise<vo
       logger.nonExistentSchemaPath(ipcSchema.path);
       return;
    }
-   await writeOutputs(plan.outputs);
-   if (plan.staleFiles.length > 0) {
-      await removeFiles(plan.staleFiles);
-      logger.removedStaleFiles(plan.staleFiles, plan.config.projectRoot);
-   }
-   if (plan.pfsArray.length === 0) {
-      logger.noChannelExpressions(plan.config.ipcSchema.path);
-   } else {
-      logger.reportSuccess(plan.pfsArray, plan.config.projectRoot);
-   }
+   await applyPlan(plan);
 }

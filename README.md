@@ -235,6 +235,30 @@ until you stop it with Ctrl+C. It takes the same flags as a normal run (`--cwd`,
    it does not set the exit code.
  - A change of the config that moves the `ipcDataDir` makes the watcher follow it.
 
+### API
+
+The generator can also be run from code, with `automate-electron-ipc/api`. It takes the same
+options as the CLI (`cwd`, `configFile`, and `overrides` for the config options that win over the
+config source) and renders the files with the same pipeline.
+
+```ts
+import { check, generate } from "automate-electron-ipc/api";
+
+const { files, channels } = await generate({ cwd: "packages/app" });
+// files: the absolute paths that were written, sorted. channels: the number of channels.
+
+const { stale } = await check({ overrides: { codeIndent: 2 } });
+// stale: the generated files that are out of date or missing. Nothing is written.
+```
+
+- `generate(options?)` writes the files like `ipcgen`, and `check(options?)` compares them with the
+  ones on disk like `ipcgen --check`.
+- Both are silent by default and never set `process.exitCode`. Pass `logger: true` to print the same
+  lines as the CLI.
+- They throw on errors: a schema that does not parse or validate, and a schema path that does not
+  exist, whose message is the one of the CLI warning. Unlike the CLI, `generate` does not create
+  the missing directory.
+
 ### Composing the preload script
 
 The generated `preload.ts` exports the API it builds, and a function that exposes it:

@@ -46,4 +46,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     declared types (follow how `tests/test_types/` checks the public types).
 - **README:** an "API" section.
 - **Follow-up IDs:** T152-T153.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `generate` and `check` in `src/api.ts` (silent by default through `logger.setSilent`, restored in a `finally`), types in `types/api.d.ts`, `exports` map with `.` and `./api`. `ApiRunOptions` and `GenerateOptions` are public; the internal `RunOptions` is unchanged. No follow-ups, so T152-T153 are unused.

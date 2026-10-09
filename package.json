@@ -30,8 +30,14 @@
    "types": "./types/index.d.ts",
    "module": "./dist/index.js",
    "exports": {
-      "types": "./types/index.d.ts",
-      "default": "./dist/index.js"
+      ".": {
+         "types": "./types/index.d.ts",
+         "default": "./dist/index.js"
+      },
+      "./api": {
+         "types": "./types/api.d.ts",
+         "default": "./dist/api.js"
+      }
    },
    "bin": {
       "ipcgen": "./dist/cli.js"

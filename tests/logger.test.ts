@@ -175,4 +175,26 @@ describe("logger", () => {
          expect(text).not.toContain("/project/");
       });
    });
+
+   it("prints nothing while it is silent, and gives back the setting it replaced", () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const previous = logger.setSilent(true);
+      logger.nonExistentSchemaPath("/p/schema.ts");
+      logger.reportSuccess([]);
+      logger.fatalError(new Error("boom"));
+      const during = logger.setSilent(previous);
+
+      expect(previous).toBe(false);
+      expect(during).toBe(true);
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      logger.fatalError(new Error("boom"));
+      expect(errorSpy).toHaveBeenCalledOnce();
+   });
+
+   it("spells the missing schema warning as one line", () => {
+      expect(logger.nonExistentSchemaMessage("/p/schema.ts")).toBe(
+         "Skipping IPC automation, because schema path does not exist: /p/schema.ts",
+      );
+   });
 });

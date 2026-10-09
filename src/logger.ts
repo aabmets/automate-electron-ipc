@@ -29,15 +29,37 @@ function formatOutput(messages: string[], icon: string): string {
       .join("\n");
 }
 
+let silent = false;
+
+/**
+ * Turns the output of the logger off or on, and returns the previous setting. The programmatic API
+ * is silent unless asked otherwise: it sets this around a run, and puts the previous value back in a
+ * `finally`.
+ */
+export function setSilent(value: boolean): boolean {
+   const previous = silent;
+   silent = value;
+   return previous;
+}
+
 function warn(messages: string[]): void {
+   if (silent) {
+      return;
+   }
    console.warn(paint("yellow", formatOutput(messages, "⚠️")));
 }
 
 function success(messages: string[]): void {
+   if (silent) {
+      return;
+   }
    console.warn(paint("green", formatOutput(messages, "✔")));
 }
 
 function error(messages: string[]): void {
+   if (silent) {
+      return;
+   }
    console.error(paint("red", formatOutput(messages, "✖")));
 }
 
@@ -48,8 +70,17 @@ function displayPath(fullPath: string, projectRoot?: string): string {
    return inside ? toPosix(relative) : fullPath;
 }
 
+function nonExistentSchemaLines(path: string): string[] {
+   return ["Skipping IPC automation, because schema path does not exist:", path];
+}
+
 export function nonExistentSchemaPath(path: string): void {
-   warn(["Skipping IPC automation, because schema path does not exist:", path]);
+   warn(nonExistentSchemaLines(path));
+}
+
+/** The text of `nonExistentSchemaPath` on one line, for the error that the API throws. */
+export function nonExistentSchemaMessage(path: string): string {
+   return nonExistentSchemaLines(path).join(" ");
 }
 
 export function noChannelExpressions(path: string): void {
@@ -112,7 +143,9 @@ export function removedStaleFiles(paths: string[], projectRoot?: string): void {
 }
 
 export default {
+   setSilent,
    nonExistentSchemaPath,
+   nonExistentSchemaMessage,
    noChannelExpressions,
    cannotExecuteChannels,
    cloneWarnings,

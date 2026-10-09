@@ -66,7 +66,10 @@ export async function typecheck(files: Record<string, string>): Promise<string> 
             moduleResolution: "bundler",
             skipLibCheck: true,
             types: [],
-            paths: { "automate-electron-ipc": [path.join(root, "types/index.d.ts")] },
+            paths: {
+               "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
+               "automate-electron-ipc/api": [path.join(root, "types/api.d.ts")],
+            },
          },
          files: Object.keys(files),
       };
