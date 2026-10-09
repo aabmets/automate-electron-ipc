@@ -16,4 +16,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** The number of tests (and of `it.fails` and `it.skip`) is the same before and after,
   with no assertion changed; the whole suite passes; `bun scripts/check-size.ts --update` lowers the
   baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `ipcAutomation`, `utility`, `utilityTimeouts`, `contentsHandlers` and `scopes`
+  of `tests/test_e2e` are now 21 files of at most 276 lines (with header), split along their describe
+  blocks, with the shared fakes in `tests/utils/generated-text-utils.ts`, `utility-process-utils.ts`,
+  `utility-timeout-utils.ts`, `contents-handlers-utils.ts` and `scopes-main-utils.ts`. 237 tests before
+  and after with identical titles, none skipped, no assertion changed. Deviation from the task text:
+  `contentsHandlers.test.ts` had no `it.fails` tests, only a `(T87)` comment, which moved with its test.
+  The five baseline entries are removed.
