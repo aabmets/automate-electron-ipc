@@ -19,6 +19,7 @@ import {
    MANIFEST_SOURCE,
 } from "./config-file.js";
 import { assertOutputsDistinct, deriveOutputPaths } from "./config-outputs.js";
+import { detectNodeNext } from "./tsconfig.js";
 import utils from "./utils.js";
 import { validateOptionalConfig } from "./validation/config-validation.js";
 
@@ -114,7 +115,6 @@ export async function getResolvedConfig(
       Object.entries(overrides).filter(([, value]) => value !== undefined),
    );
    const mergedConfig: t.IPCOptionalConfig = {
-      projectUsesNodeNext: false,
       ipcDataDir: "src/autoipc",
       codeIndent: 3,
       rawErrors: false,
@@ -126,6 +126,12 @@ export async function getResolvedConfig(
       ...userConfig,
       ...defined,
    };
+   // Any source that sets the option wins over the tsconfig of the project.
+   if (mergedConfig.projectUsesNodeNext === undefined) {
+      mergedConfig.projectUsesNodeNext = await detectNodeNext(
+         utils.resolveUserProjectPath("", cwd),
+      );
+   }
    validateOptionalConfig(mergedConfig, source, Object.keys(defined));
 
    const projectRoot = utils.resolveUserProjectPath("", cwd);

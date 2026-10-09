@@ -58,7 +58,6 @@ The same options can live in a config file instead, see [Config file](#config-fi
 {
    "config": {
       "autoipc": {
-         "projectUsesNodeNext": false,
          "ipcDataDir": "src/autoipc",
          "codeIndent": 3,
          "rawErrors": false,
@@ -75,7 +74,13 @@ The same options can live in a config file instead, see [Config file](#config-fi
 ```
 
 Config explanation:
- - `projectUsesNodeNext` - Must be set to true when `moduleResolution` in `tsconfig.json` is `nodenext`.
+ - `projectUsesNodeNext` - Spells the imports of the generated files as NodeNext does (with `.js` extensions).
+   When you leave it out, it is detected: it is `true` when `module` or `moduleResolution` in the
+   `tsconfig.json` of the project root is `node16` or `nodenext`, and `false` otherwise or without
+   that file. Only `tsconfig.json` is read, not `tsconfig.node.json` or `tsconfig.web.json`, since an
+   electron-vite project has two of those and either could apply. A relative `extends` (one path or
+   an array) is followed, and a package such as `@tsconfig/node22` is not. Set the option yourself to
+   override the detection, in any config source or with the run options.
  - `ipcDataDir` - Relative path to a directory within the users project which will contain the IPC schema expressions and where the IPC bindings will be generated into.
  - `codeIndent` - How many spaces will one code indentation level have within the generated IPC bindings.
  - `rawErrors` - Set to true to leave the errors of `invoke` handlers to Electron. See [Errors](#errors).

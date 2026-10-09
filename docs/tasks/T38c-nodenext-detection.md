@@ -26,4 +26,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   error naming the file.
 - **README:** document the detection under `projectUsesNodeNext`.
 - **Follow-up IDs:** T146-T147.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `detectNodeNext` in `src/tsconfig.ts` reads only `<projectRoot>/tsconfig.json`; `getResolvedConfig` calls it when no source or override sets `projectUsesNodeNext`, and the default `false` is gone. The JSONC reader is a small comment and trailing-comma stripper. A relative `extends` is followed per key (later entry wins, the file wins over its bases), a cycle is cut, and a relative base that does not exist is an error naming the file that extends it. No follow-ups, so T146-T147 stay free.
