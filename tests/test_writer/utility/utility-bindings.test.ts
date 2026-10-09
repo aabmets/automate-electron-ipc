@@ -9,57 +9,47 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestUtilityBindingsWriter } from "@testutils/writer/test-writers.js";
 import {
    callMain,
    callUtility,
    notifyMain,
    notifyUtility,
-   renderer,
 } from "@testutils/writer/utility-writer-utils.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { buildFileSpecs, getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("UtilityBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestUtilityBindingsWriter);
+   mockGetTargetFilePath(VitestUtilityBindingsWriter);
 
-   const render = async (
-      channels: shared.SimpleChannel[],
-      config: Partial<t.IPCResolvedConfig> = {},
-   ) => {
-      const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels), {
+   const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+      renderWith(VitestUtilityBindingsWriter, channels, {
          channelPrefix: "autoipc:",
          ...config,
       });
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
 
    it("has channels only when the schema has a channel to or from a utility process", () => {
-      const has = (...channels: shared.SimpleChannel[]) =>
-         new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels)).hasChannels();
+      const has = (...channels: SimpleChannel[]) =>
+         new VitestUtilityBindingsWriter(buildFileSpecs(...channels)).hasChannels();
 
       expect(has()).toBe(false);
-      expect(has(renderer, { name: "p", kind: "Port", direction: "RendererToRenderer" })).toBe(
+      expect(has(getUser, { name: "p", kind: "Port", direction: "RendererToRenderer" })).toBe(
          false,
       );
       for (const channel of [callUtility, notifyUtility, callMain, notifyMain]) {
-         expect(has(renderer, channel)).toBe(true);
+         expect(has(getUser, channel)).toBe(true);
       }
    });
 
    it("writes an empty ipc object when there is no schema", async () => {
-      const obj = new shared.VitestUtilityBindingsWriter([]);
-      await obj.write(false);
-      expect((await fsp.readFile(obj.getTargetFilePath())).toString()).toBe(
-         "export const ipc = {};",
-      );
+      expect(await renderSpecs(VitestUtilityBindingsWriter, [])).toBe("export const ipc = {};");
    });
 
    it("writes the peer, the port and one object per channel, sorted by name", async () => {
-      const output = await render([notifyMain, callUtility, renderer, callMain, notifyUtility]);
+      const output = await render([notifyMain, callUtility, getUser, callMain, notifyUtility]);
 
       expect(output).toContain("export class IpcUtilityError extends Error {");
       expect(output).toContain(

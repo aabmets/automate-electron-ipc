@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getIt } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    describe("ask channels", () => {
       const ask = {
@@ -33,18 +34,10 @@ describe("MainBindingsWriter", () => {
          returnType: "Promise<string>",
       } as const;
       const emit = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
-      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestMainBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestMainBindingsWriter, channels, config);
 
       it("generates invoke and invokeWith, which share one helper", async () => {
          const output = await render([ask, askAsync]);
@@ -123,7 +116,7 @@ describe("MainBindingsWriter", () => {
       });
 
       it("keeps the envelope and the reply listener of the other channels", async () => {
-         const output = await render([ask, unicast]);
+         const output = await render([ask, getIt]);
 
          expect(output).toContain("function settleInvoke(");
          expect(output).toContain("function isSenderAllowed(");

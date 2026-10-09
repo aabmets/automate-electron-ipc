@@ -29,4 +29,3 @@ export const notifyMain = {
    kind: "Broadcast",
    direction: "UtilityToMain",
 } as const;
-export const renderer = { name: "getUser", kind: "Unicast", direction: "RendererToMain" } as const;

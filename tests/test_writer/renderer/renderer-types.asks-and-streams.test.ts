@@ -9,27 +9,21 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("RendererTypesWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
    describe("ask channels", () => {
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestRendererTypesWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestRendererTypesWriter, channels, config);
       const ask = {
          name: "askIt",
          kind: "Unicast",
@@ -62,17 +56,10 @@ describe("RendererTypesWriter", () => {
    });
 
    describe("stream channels", () => {
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestRendererTypesWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestRendererTypesWriter, channels, config);
       const rows = {
          name: "exportRows",
          kind: "Stream",

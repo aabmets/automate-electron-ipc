@@ -10,17 +10,21 @@
  */
 
 import cfg from "@src/config.js";
-import mocks from "@testutils/writer/shared-mocks.js";
+import {
+   mockFspReadFile,
+   mockFspStatsByPath,
+   mockResolveUserProjectPath,
+} from "@testutils/writer/shared-mocks.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getResolvedConfig", () => {
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    describe("path of the utility bindings", () => {
       const resolve = async (autoipc: Record<string, unknown>) => {
-         mocks.mockFspStatsByPath({});
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath({});
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 
@@ -49,8 +53,8 @@ describe("getResolvedConfig", () => {
 
    describe("paths of the service worker files", () => {
       const resolve = async (autoipc: Record<string, unknown>) => {
-         mocks.mockFspStatsByPath({});
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath({});
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 
@@ -102,8 +106,8 @@ describe("getResolvedConfig", () => {
          autoipc: Record<string, unknown>,
          entries: Record<string, "directory" | "file"> = {},
       ) => {
-         mocks.mockFspStatsByPath(entries);
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath(entries);
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 

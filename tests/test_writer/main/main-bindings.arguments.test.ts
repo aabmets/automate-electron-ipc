@@ -9,20 +9,18 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    describe("argument validation", () => {
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
       const validate = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
       const unicast = {
          name: "getIt",

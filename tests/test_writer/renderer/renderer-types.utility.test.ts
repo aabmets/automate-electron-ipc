@@ -9,20 +9,17 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("RendererTypesWriter, utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...channels));
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
-   const utility: shared.SimpleChannel[] = [
+   const render = (...channels: SimpleChannel[]) => renderWith(VitestRendererTypesWriter, channels);
+   const utility: SimpleChannel[] = [
       {
          name: "indexFile",
          kind: "Unicast",
@@ -41,24 +38,17 @@ describe("RendererTypesWriter, utility channels", () => {
    });
 
    it("leaves the utility channels out when renderer channels are declared as well", async () => {
-      const alone = await render({ name: "getUser", kind: "Unicast", direction: "RendererToMain" });
-      const mixed = await render(
-         { name: "getUser", kind: "Unicast", direction: "RendererToMain" },
-         ...utility,
-      );
+      const alone = await render(getUser);
+      const mixed = await render(getUser, ...utility);
 
       expect(mixed).toStrictEqual(alone);
    });
 });
 
 describe("RendererTypesWriter, renderer to utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...channels));
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
+   const render = (...channels: SimpleChannel[]) => renderWith(VitestRendererTypesWriter, channels);
    const invokeUtility = {
       name: "queryRows",
       kind: "Unicast",
@@ -106,7 +96,7 @@ describe("RendererTypesWriter, renderer to utility channels", () => {
 
    it("declares IpcUtilityError, with its codes, only for such a schema", async () => {
       const output = await render(invokeUtility);
-      const plain = await render({ name: "getUser", kind: "Unicast", direction: "RendererToMain" });
+      const plain = await render(getUser);
 
       expect(output).toContain("type IpcUtilityError = Error & {");
       expect(output).toContain("name: 'IpcUtilityError';");

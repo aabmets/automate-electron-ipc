@@ -13,15 +13,15 @@ import {
    all,
    invokeFromWorker,
    render,
-   renderer,
    sendFromWorker,
 } from "@testutils/writer/service-worker-writer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { getUser } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, service worker channels, validation of the arguments", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    const validate = { name: "idArgs", exported: "idArgs", fromPath: "./validators" };
    const validatedCall = { ...invokeFromWorker, params: ["id: number"], validate } as const;
@@ -157,7 +157,7 @@ describe("MainBindingsWriter, service worker channels, validation of the argumen
 
    it("shares one validation function with the channels of the pages", async () => {
       const page = {
-         ...renderer,
+         ...getUser,
          params: ["id: number"],
          validate,
       } as const;

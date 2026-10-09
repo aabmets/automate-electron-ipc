@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import { callUtility, renderer } from "@testutils/writer/utility-writer-utils.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestUtilityBindingsWriter } from "@testutils/writer/test-writers.js";
+import { callUtility } from "@testutils/writer/utility-writer-utils.js";
+import { buildFileSpecs, getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("UtilityBindingsWriter, renderer to utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestUtilityBindingsWriter);
+   mockGetTargetFilePath(VitestUtilityBindingsWriter);
 
    const invokeUtility = {
       name: "queryRows",
@@ -33,24 +34,21 @@ describe("UtilityBindingsWriter, renderer to utility channels", () => {
       returnType: "AsyncIterable<number>",
    } as const;
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels), {
+   const render = (...channels: SimpleChannel[]) =>
+      renderWith(VitestUtilityBindingsWriter, channels, {
          channelPrefix: "autoipc:",
       });
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
 
    it("has channels when the schema has a channel from a page to a utility process", () => {
-      const has = (...channels: shared.SimpleChannel[]) =>
-         new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels)).hasChannels();
+      const has = (...channels: SimpleChannel[]) =>
+         new VitestUtilityBindingsWriter(buildFileSpecs(...channels)).hasChannels();
 
-      expect(has(renderer, invokeUtility)).toBe(true);
-      expect(has(renderer, streamUtility)).toBe(true);
+      expect(has(getUser, invokeUtility)).toBe(true);
+      expect(has(getUser, streamUtility)).toBe(true);
    });
 
    it("writes handle for a call, and for a stream, typed as the signature", async () => {
-      const output = await render(streamUtility, invokeUtility, renderer);
+      const output = await render(streamUtility, invokeUtility, getUser);
 
       expect(output).toContain(
          [
@@ -146,11 +144,9 @@ describe("UtilityBindingsWriter, renderer to utility channels", () => {
    });
 
    it("reserves the names of the server only for a schema with such channels", () => {
-      const reserved = (...channels: shared.SimpleChannel[]) =>
+      const reserved = (...channels: SimpleChannel[]) =>
          (
-            new shared.VitestUtilityBindingsWriter(
-               shared.buildFileSpecs(...channels),
-            ) as unknown as {
+            new VitestUtilityBindingsWriter(buildFileSpecs(...channels)) as unknown as {
                getReservedNames: () => string[];
             }
          ).getReservedNames();

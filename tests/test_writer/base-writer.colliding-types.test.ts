@@ -9,13 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestBaseWriter } from "@testutils/writer/test-writers.js";
+import { parseTestSignature } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("BaseWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestBaseWriter);
+   mockGetTargetFilePath(VitestBaseWriter);
 
    describe("channel specs of colliding type names", () => {
       const pfsOf = (fullPath: string, definition: string): t.ParsedFileSpecs => ({
@@ -25,7 +26,7 @@ describe("BaseWriter", () => {
             channelSpecArray: [
                {
                   name: "chan",
-                  signature: shared.parseTestSignature(definition),
+                  signature: parseTestSignature(definition),
                } as unknown as t.ChannelSpec,
             ],
             channelMapExport: null,
@@ -38,14 +39,14 @@ describe("BaseWriter", () => {
       const first = pfsOf("/project/a.ts", "() => User");
       const renamed = (definition: string) => {
          const second = pfsOf("/project/b.ts", definition);
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
          // The first file takes the name `User`, so the second one is renamed.
          obj.getChannelSpecs(first);
          return obj.getChannelSpecs(second)[0].signature;
       };
 
       it("should return the specs as they are when no type name is taken", () => {
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first]);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [first]);
          expect(obj.getChannelSpecs(first)).toBe(first.specs.channelSpecArray);
       });
 
@@ -54,7 +55,7 @@ describe("BaseWriter", () => {
             "(User: User, list?: Map<string, User>, o: { User: User; readonly User: User }, " +
             's: "User", n: NS.User, c: A extends B ? User : User[]) => Promise<User[]>';
          const second = pfsOf("/project/b.ts", definition);
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
 
          expect(obj.getChannelSpecs(first)).toBe(first.specs.channelSpecArray);
          const [spec] = obj.getChannelSpecs(second);
@@ -78,8 +79,8 @@ describe("BaseWriter", () => {
       it("should rename the references in the chunk type of a stream signature", () => {
          const second = pfsOf("/project/b.ts", "() => AsyncIterable<User>");
          const spec = second.specs.channelSpecArray[0];
-         spec.signature = shared.parseTestSignature("() => AsyncIterable<User>", [], true);
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         spec.signature = parseTestSignature("() => AsyncIterable<User>", [], true);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
          obj.getChannelSpecs(first);
          const { signature } = obj.getChannelSpecs(second)[0];
 
@@ -139,7 +140,7 @@ describe("BaseWriter", () => {
          } = second.specs.channelSpecArray[0].signature;
          bare.params = bare.params.map(({ typeStart: _t, ...param }) => param);
          second.specs.channelSpecArray[0].signature = bare;
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [first, second]);
          obj.getChannelSpecs(first);
          expect(obj.getChannelSpecs(second)[0].signature).toMatchObject({
             returnType: "User",
@@ -158,7 +159,7 @@ describe("BaseWriter", () => {
    // Regression for T89: the path of an import type is relative to the schema file, and was
    // copied as it is into the generated files.
    describe("import types in signatures", () => {
-      class InIpcDir extends shared.VitestBaseWriter {
+      class InIpcDir extends VitestBaseWriter {
          public getTargetFilePath(): string {
             return "/project/ipc/main.ts";
          }
@@ -171,7 +172,7 @@ describe("BaseWriter", () => {
                channelSpecArray: [
                   {
                      name: "chan",
-                     signature: shared.parseTestSignature(definition),
+                     signature: parseTestSignature(definition),
                   } as unknown as t.ChannelSpec,
                ],
                channelMapExport: null,

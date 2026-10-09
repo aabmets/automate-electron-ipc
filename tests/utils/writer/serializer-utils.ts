@@ -9,114 +9,120 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
+import { renderWith } from "./render-utils.js";
+import {
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+   VitestServiceWorkerPreloadWriter,
+   VitestUtilityBindingsWriter,
+} from "./test-writers.js";
+import { type SimpleChannel } from "./writer-utils.js";
 
 export const IMPORT =
    'import { serialize as ipcSerialize, deserialize as ipcDeserialize } from "superjson";';
 
-export const invoke: shared.SimpleChannel = {
+export const invoke: SimpleChannel = {
    name: "getIt",
    kind: "Unicast",
    direction: "RendererToMain",
    params: ["at: Date"],
    returnType: "Promise<Date>",
 };
-export const send: shared.SimpleChannel = {
+export const send: SimpleChannel = {
    name: "sendIt",
    kind: "Broadcast",
    direction: "RendererToMain",
    params: ["at: Date"],
 };
-export const emit: shared.SimpleChannel = {
+export const emit: SimpleChannel = {
    name: "emitIt",
    kind: "Broadcast",
    direction: "MainToRenderer",
    params: ["at: Date"],
 };
-export const ask: shared.SimpleChannel = {
+export const ask: SimpleChannel = {
    name: "askIt",
    kind: "Unicast",
    direction: "MainToRenderer",
    params: ["zone: string"],
    returnType: "Promise<Date>",
 };
-export const stream: shared.SimpleChannel = {
+export const stream: SimpleChannel = {
    name: "streamIt",
    kind: "Stream",
    direction: "RendererToMain",
    params: ["since: Date"],
    returnType: "AsyncIterable<Date>",
 };
-export const port: shared.SimpleChannel = {
+export const port: SimpleChannel = {
    name: "portIt",
    kind: "Port",
    direction: "RendererToRenderer",
    params: ["at: Date"],
 };
-export const mainPort: shared.SimpleChannel = {
+export const mainPort: SimpleChannel = {
    name: "mainPortIt",
    kind: "Port",
    direction: "MainToRenderer",
    params: ["at: Date"],
 };
-export const utility: shared.SimpleChannel = {
+export const utility: SimpleChannel = {
    name: "utilityIt",
    kind: "Unicast",
    direction: "MainToUtility",
    params: ["at: Date"],
    returnType: "Promise<void>",
 };
-export const utilityNotify: shared.SimpleChannel = {
+export const utilityNotify: SimpleChannel = {
    name: "utilityNotify",
    kind: "Broadcast",
    direction: "MainToUtility",
    params: ["at: Date"],
 };
-export const callMain: shared.SimpleChannel = {
+export const callMain: SimpleChannel = {
    name: "callMain",
    kind: "Unicast",
    direction: "UtilityToMain",
    params: ["at: Date"],
    returnType: "Promise<Date>",
 };
-export const brokeredCall: shared.SimpleChannel = {
+export const brokeredCall: SimpleChannel = {
    name: "brokeredCall",
    kind: "Unicast",
    direction: "RendererToUtility",
    params: ["at: Date"],
    returnType: "Promise<Date>",
 };
-export const brokeredStream: shared.SimpleChannel = {
+export const brokeredStream: SimpleChannel = {
    name: "brokeredStream",
    kind: "Stream",
    direction: "RendererToUtility",
    params: ["since: Date"],
    returnType: "AsyncIterable<Date>",
 };
-export const worker: shared.SimpleChannel = {
+export const worker: SimpleChannel = {
    name: "workerIt",
    kind: "Unicast",
    direction: "ServiceWorkerToMain",
    params: ["at: Date"],
    returnType: "Promise<Date>",
 };
-export const workerSend: shared.SimpleChannel = {
+export const workerSend: SimpleChannel = {
    name: "workerSend",
    kind: "Broadcast",
    direction: "ServiceWorkerToMain",
    params: ["at: Date"],
    returnType: "void",
 };
-export const workerEmit: shared.SimpleChannel = {
+export const workerEmit: SimpleChannel = {
    name: "workerEmit",
    kind: "Broadcast",
    direction: "MainToServiceWorker",
    params: ["at: Date"],
    returnType: "void",
 };
-export const workerAsk: shared.SimpleChannel = {
+export const workerAsk: SimpleChannel = {
    name: "workerAsk",
    kind: "Unicast",
    direction: "MainToServiceWorker",
@@ -125,47 +131,13 @@ export const workerAsk: shared.SimpleChannel = {
 };
 
 export const config = { serializer: "superjson", channelPrefix: "autoipc:" };
-export const main = async (
-   channels: shared.SimpleChannel[],
+export const main = (channels: SimpleChannel[], extra: Partial<t.IPCResolvedConfig> = {}) =>
+   renderWith(VitestMainBindingsWriter, channels, { ...config, ...extra });
+export const preload = (channels: SimpleChannel[], extra: Partial<t.IPCResolvedConfig> = {}) =>
+   renderWith(VitestPreloadBindingsWriter, channels, { ...config, ...extra });
+export const utilityFile = (channels: SimpleChannel[], extra: Partial<t.IPCResolvedConfig> = {}) =>
+   renderWith(VitestUtilityBindingsWriter, channels, { ...config, ...extra });
+export const workerPreload = (
+   channels: SimpleChannel[],
    extra: Partial<t.IPCResolvedConfig> = {},
-) => {
-   const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels), {
-      ...config,
-      ...extra,
-   });
-   await obj.write(false);
-   return (await fsp.readFile(obj.getTargetFilePath())).toString();
-};
-export const preload = async (
-   channels: shared.SimpleChannel[],
-   extra: Partial<t.IPCResolvedConfig> = {},
-) => {
-   const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels), {
-      ...config,
-      ...extra,
-   });
-   await obj.write(false);
-   return (await fsp.readFile(obj.getTargetFilePath())).toString();
-};
-export const utilityFile = async (
-   channels: shared.SimpleChannel[],
-   extra: Partial<t.IPCResolvedConfig> = {},
-) => {
-   const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(...channels), {
-      ...config,
-      ...extra,
-   });
-   await obj.write(false);
-   return (await fsp.readFile(obj.getTargetFilePath())).toString();
-};
-export const workerPreload = async (
-   channels: shared.SimpleChannel[],
-   extra: Partial<t.IPCResolvedConfig> = {},
-) => {
-   const obj = new shared.VitestServiceWorkerPreloadWriter(shared.buildFileSpecs(...channels), {
-      ...config,
-      ...extra,
-   });
-   await obj.write(false);
-   return (await fsp.readFile(obj.getTargetFilePath())).toString();
-};
+) => renderWith(VitestServiceWorkerPreloadWriter, channels, { ...config, ...extra });

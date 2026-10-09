@@ -9,28 +9,28 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import {
+   buildFileSpecs,
+   type SimpleChannel,
+   vitestChannelSpecs,
+} from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    describe("mainPort channels", () => {
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
       const mainPort = { name: "tail", kind: "Port", direction: "MainToRenderer" } as const;
       const port = { name: "chat", kind: "Port", direction: "RendererToRenderer" } as const;
 
       it("should write a typed connect method which returns the connection of one contents", async () => {
-         const pfsArray = shared.vitestChannelSpecs.Port_MainToRenderer;
-         const obj = new shared.VitestMainBindingsWriter(pfsArray);
-         await obj.write(false);
-         const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+         const pfsArray = vitestChannelSpecs.Port_MainToRenderer;
+         const output = await renderSpecs(VitestMainBindingsWriter, pfsArray);
 
          expect(output).toContain(
             'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
@@ -108,7 +108,7 @@ describe("MainBindingsWriter", () => {
       });
 
       it("should reserve the names that the helpers declare, so that schema types are renamed", () => {
-         const generator = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(mainPort));
+         const generator = new VitestMainBindingsWriter(buildFileSpecs(mainPort));
          const names = (
             generator as unknown as { getReservedNames(): string[] }
          ).getReservedNames();
@@ -166,11 +166,9 @@ describe("MainBindingsWriter", () => {
       });
 
       it("should put the prefix in front of the name that is passed to Electron", async () => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(mainPort), {
+         const output = await renderSpecs(VitestMainBindingsWriter, buildFileSpecs(mainPort), {
             channelPrefix: "app:",
          });
-         await obj.write(false);
-         const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
 
          expect(output).toContain("connectMainPort('app:tail', 'tail', 1000, target)");
       });

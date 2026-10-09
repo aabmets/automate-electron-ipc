@@ -9,9 +9,10 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import shared from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
+import { renderWith } from "./render-utils.js";
+import { VitestMainBindingsWriter } from "./test-writers.js";
+import { type SimpleChannel } from "./writer-utils.js";
 
 export const invokeFromWorker = {
    name: "getToken",
@@ -33,17 +34,10 @@ export const emitToWorker = {
    kind: "Broadcast",
    direction: "MainToServiceWorker",
 } as const;
-export const renderer = { name: "getUser", kind: "Unicast", direction: "RendererToMain" } as const;
 export const all = [invokeFromWorker, sendFromWorker, askWorker, emitToWorker];
 
-export const render = async (
-   channels: shared.SimpleChannel[],
-   config: Partial<t.IPCResolvedConfig> = {},
-) => {
-   const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels), {
+export const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+   renderWith(VitestMainBindingsWriter, channels, {
       channelPrefix: "autoipc:",
       ...config,
    });
-   await obj.write(false);
-   return (await fsp.readFile(obj.getTargetFilePath())).toString();
-};

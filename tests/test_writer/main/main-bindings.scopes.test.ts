@@ -9,21 +9,18 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { dedent } from "@testutils/text-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, scopes", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
-   const invoke = (scopes?: string[], extra: Partial<shared.SimpleChannel> = {}) =>
+   const render = (...channels: SimpleChannel[]) => renderWith(VitestMainBindingsWriter, channels);
+   const invoke = (scopes?: string[], extra: Partial<SimpleChannel> = {}) =>
       ({
          name: "getIt",
          kind: "Unicast",
@@ -31,21 +28,21 @@ describe("MainBindingsWriter, scopes", () => {
          returnType: "Promise<string>",
          ...(scopes ? { scopes } : {}),
          ...extra,
-      }) as shared.SimpleChannel;
+      }) as SimpleChannel;
    const send = (scopes?: string[]) =>
       ({
          name: "sendIt",
          kind: "Broadcast",
          direction: "RendererToMain",
          ...(scopes ? { scopes } : {}),
-      }) as shared.SimpleChannel;
+      }) as SimpleChannel;
    const emit = (scopes?: string[]) =>
       ({
          name: "pushIt",
          kind: "Broadcast",
          direction: "MainToRenderer",
          ...(scopes ? { scopes } : {}),
-      }) as shared.SimpleChannel;
+      }) as SimpleChannel;
 
    it("declares the registry of the scopes, in code unit order, ahead of the sender validation", async () => {
       const output = await render(invoke(["settings", "editor"]), send(["Zed"]));
@@ -184,7 +181,7 @@ describe("MainBindingsWriter, scopes", () => {
    });
 
    it("reserves the names of the registry, so that a schema type is renamed", () => {
-      const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(invoke(["a"])));
+      const obj = new VitestMainBindingsWriter(buildFileSpecs(invoke(["a"])));
       const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
 
       for (const name of [

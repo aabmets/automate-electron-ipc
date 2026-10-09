@@ -11,116 +11,12 @@
 
 import { parseModule } from "@src/parser/ast.js";
 import { parseSignature } from "@src/parser/type/signature.js";
-import { BaseWriter } from "@src/writer/base-writer.js";
-import { MainBindingsWriter } from "@src/writer/main/main-bindings.js";
-import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
-import { ServiceWorkerPreloadWriter } from "@src/writer/preload/service-worker-preload.js";
-import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
-import { ServiceWorkerTypesWriter } from "@src/writer/renderer/service-worker-types.js";
-import { UtilityBindingsWriter } from "@src/writer/utility/utility-bindings.js";
 import type * as t from "@types";
 
-export class VitestBaseWriter extends BaseWriter {
-   public getTargetFilePath(): string {
-      return "";
-   }
-   public renderEmptyFileContents(): string {
-      return "EMPTY FILE";
-   }
-   public renderFileContents(): string {
-      return "const asdfg = 123;";
-   }
-   public getCodeIndents(): string[] {
-      return super.getCodeIndents();
-   }
-   public joinComponents(components: string[]): string {
-      return super.joinComponents(components);
-   }
-   public injectEventTypehint(
-      signature: t.CallableSignature,
-      eventType: string,
-      eventName?: string,
-   ): string {
-      return super.injectEventTypehint(signature, eventType, eventName);
-   }
-   public getTypeParams(signature: t.CallableSignature): string {
-      return super.getTypeParams(signature);
-   }
-   public getOriginalParams(spec: t.ChannelSpec, withTypes: boolean): string {
-      return super.getOriginalParams(spec, withTypes);
-   }
-   public sortChannels<T extends { name: string }>(channels: T[]): T[] {
-      return super.sortChannels(channels);
-   }
-   public getChannelSpecs(parsedFileSpecs: t.ParsedFileSpecs): t.ChannelSpec[] {
-      return super.getChannelSpecs(parsedFileSpecs);
-   }
-   public getScopedFilePath(filePath: string): string {
-      return super.getScopedFilePath(filePath);
-   }
-}
-
-export class VitestMainBindingsWriter extends MainBindingsWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
-
-export class VitestPreloadBindingsWriter extends PreloadBindingsWriter {
-   constructor(
-      pfsArray: t.ParsedFileSpecs[],
-      config: Partial<t.IPCResolvedConfig> = {},
-      scope: string | null = null,
-   ) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray, scope);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
-
-export class VitestRendererTypesWriter extends RendererTypesWriter {
-   constructor(
-      pfsArray: t.ParsedFileSpecs[],
-      config: Partial<t.IPCResolvedConfig> = {},
-      scope: string | null = null,
-   ) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray, scope);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
-
-export class VitestUtilityBindingsWriter extends UtilityBindingsWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
-
-export class VitestServiceWorkerPreloadWriter extends ServiceWorkerPreloadWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
-
-export class VitestServiceWorkerTypesWriter extends ServiceWorkerTypesWriter {
-   constructor(pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig> = {}) {
-      super({ codeIndent: 3, ...config } as t.IPCResolvedConfig, pfsArray);
-   }
-   public getTargetFilePath(): string {
-      return "";
-   }
-}
+/** The channels that many writer tests describe, so that they need not write them out. */
+export const getIt = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
+export const sendIt = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+export const getUser = { name: "getUser", kind: "Unicast", direction: "RendererToMain" } as const;
 
 /**
  * Builds the file specs of one channel, with a signature that the parser produces from
@@ -166,10 +62,10 @@ export interface SimpleChannel {
    kind: t.ChannelKind;
    direction: t.ChannelDirection;
    /** Parameters as written in the signature, such as `"id: number"` or `"...rest: string[]"`. */
-   params?: string[];
+   params?: readonly string[];
    returnType?: string;
    trigger?: string;
-   allowedOrigins?: string[];
+   allowedOrigins?: readonly string[];
    validate?: t.ValidatorRef;
    /** The size of the send queues of a port channel. */
    maxQueue?: number;
@@ -180,7 +76,7 @@ export interface SimpleChannel {
    /** The error types of an invoke or stream channel, such as `"NotFoundError | AuthError"`. */
    errors?: string;
    /** The scopes of the channel. */
-   scopes?: string[];
+   scopes?: readonly string[];
 }
 
 /**
@@ -209,56 +105,46 @@ export function buildFileSpecs(...channels: SimpleChannel[]): t.ParsedFileSpecs[
    ];
 }
 
-export default {
-   buildFileSpecs,
-   parseTestSignature,
-   VitestBaseWriter,
-   VitestMainBindingsWriter,
-   VitestPreloadBindingsWriter,
-   VitestRendererTypesWriter,
-   VitestUtilityBindingsWriter,
-   VitestServiceWorkerPreloadWriter,
-   VitestServiceWorkerTypesWriter,
-   vitestChannelSpecs: {
-      Unicast_RendererToMain: getParsedFileSpecsArray({
-         channelKind: "Unicast",
-         channelDirection: "RendererToMain",
-         paramType: "CustomType",
-         paramRest: false,
-         paramOptional: true,
-         sigReturnType: "Promise<string>",
-      }),
-      Broadcast_RendererToMain: getParsedFileSpecsArray({
-         channelKind: "Broadcast",
-         channelDirection: "RendererToMain",
-         paramType: "string",
-         paramRest: false,
-         paramOptional: false,
-         sigReturnType: "void",
-      }),
-      Broadcast_MainToRenderer: getParsedFileSpecsArray({
-         channelKind: "Broadcast",
-         channelDirection: "MainToRenderer",
-         paramType: "number",
-         paramRest: true,
-         paramOptional: false,
-         sigReturnType: "Promise<CustomType>",
-      }),
-      Port_RendererToRenderer: getParsedFileSpecsArray({
-         channelKind: "Port",
-         channelDirection: "RendererToRenderer",
-         paramType: "string",
-         paramRest: false,
-         paramOptional: false,
-         sigReturnType: "void",
-      }),
-      Port_MainToRenderer: getParsedFileSpecsArray({
-         channelKind: "Port",
-         channelDirection: "MainToRenderer",
-         paramType: "string",
-         paramRest: false,
-         paramOptional: false,
-         sigReturnType: "void",
-      }),
-   },
+/** File specs of one channel of each kind and direction, with a signature that has a rest parameter. */
+export const vitestChannelSpecs = {
+   Unicast_RendererToMain: getParsedFileSpecsArray({
+      channelKind: "Unicast",
+      channelDirection: "RendererToMain",
+      paramType: "CustomType",
+      paramRest: false,
+      paramOptional: true,
+      sigReturnType: "Promise<string>",
+   }),
+   Broadcast_RendererToMain: getParsedFileSpecsArray({
+      channelKind: "Broadcast",
+      channelDirection: "RendererToMain",
+      paramType: "string",
+      paramRest: false,
+      paramOptional: false,
+      sigReturnType: "void",
+   }),
+   Broadcast_MainToRenderer: getParsedFileSpecsArray({
+      channelKind: "Broadcast",
+      channelDirection: "MainToRenderer",
+      paramType: "number",
+      paramRest: true,
+      paramOptional: false,
+      sigReturnType: "Promise<CustomType>",
+   }),
+   Port_RendererToRenderer: getParsedFileSpecsArray({
+      channelKind: "Port",
+      channelDirection: "RendererToRenderer",
+      paramType: "string",
+      paramRest: false,
+      paramOptional: false,
+      sigReturnType: "void",
+   }),
+   Port_MainToRenderer: getParsedFileSpecsArray({
+      channelKind: "Port",
+      channelDirection: "MainToRenderer",
+      paramType: "string",
+      paramRest: false,
+      paramOptional: false,
+      sigReturnType: "void",
+   }),
 };

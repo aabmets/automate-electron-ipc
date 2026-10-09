@@ -15,18 +15,18 @@ import {
    emitToWorker,
    invokeFromWorker,
    render,
-   renderer,
    sendFromWorker,
 } from "@testutils/writer/service-worker-writer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getUser } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, service worker channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    it("writes nothing for the workers when the schema has no such channel", async () => {
-      const output = await render([renderer]);
+      const output = await render([getUser]);
       for (const name of [
          "attachServiceWorkers",
          "IpcWorkerError",
@@ -210,12 +210,12 @@ describe("MainBindingsWriter, service worker channels", () => {
    });
 
    it("does not let a schema type take a name that the worker helpers declare", () => {
-      const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(invokeFromWorker));
+      const obj = new VitestMainBindingsWriter(buildFileSpecs(invokeFromWorker));
       const reserved = (obj as unknown as { getReservedNames: () => string[] }).getReservedNames();
       for (const name of ["WorkerHub", "attachServiceWorkers", "Session", "IpcWorkerError"]) {
          expect(reserved).toContain(name);
       }
-      const plain = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(renderer));
+      const plain = new VitestMainBindingsWriter(buildFileSpecs(getUser));
       const plainReserved = (
          plain as unknown as { getReservedNames: () => string[] }
       ).getReservedNames();

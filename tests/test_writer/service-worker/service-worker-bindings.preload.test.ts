@@ -9,43 +9,39 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import { all, invokeFromWorker, renderer } from "@testutils/writer/service-worker-writer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { all, invokeFromWorker } from "@testutils/writer/service-worker-writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import {
+   VitestPreloadBindingsWriter,
+   VitestServiceWorkerPreloadWriter,
+} from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("ServiceWorkerPreloadWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestServiceWorkerPreloadWriter);
+   mockGetTargetFilePath(VitestServiceWorkerPreloadWriter);
 
-   const render = async (
-      channels: shared.SimpleChannel[],
-      config: Partial<t.IPCResolvedConfig> = {},
-   ) => {
-      const obj = new shared.VitestServiceWorkerPreloadWriter(shared.buildFileSpecs(...channels), {
+   const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+      renderWith(VitestServiceWorkerPreloadWriter, channels, {
          channelPrefix: "autoipc:",
          ...config,
       });
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
 
    it("has channels only when the schema has a channel to or from a service worker", () => {
-      const has = (...channels: shared.SimpleChannel[]) =>
-         new shared.VitestServiceWorkerPreloadWriter(
-            shared.buildFileSpecs(...channels),
-         ).hasChannels();
+      const has = (...channels: SimpleChannel[]) =>
+         new VitestServiceWorkerPreloadWriter(buildFileSpecs(...channels)).hasChannels();
 
       expect(has()).toBe(false);
-      expect(has(renderer)).toBe(false);
+      expect(has(getUser)).toBe(false);
       for (const channel of all) {
-         expect(has(renderer, channel)).toBe(true);
+         expect(has(getUser, channel)).toBe(true);
       }
    });
 
    it("writes the API of a page for the channels of the worker, and leaves the others out", async () => {
-      const output = await render([...all, renderer]);
+      const output = await render([...all, getUser]);
 
       expect(output).toContain('import { contextBridge, ipcRenderer } from "electron";');
       expect(output).toContain("ipcRenderer.invoke('autoipc:getToken', ...args)");
@@ -111,15 +107,14 @@ describe("ServiceWorkerPreloadWriter", () => {
 });
 
 describe("PreloadBindingsWriter, calls of a worker", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    it("leaves the timeout of a worker call out of the preload script of the page", async () => {
-      const obj = new shared.VitestPreloadBindingsWriter(
-         shared.buildFileSpecs(renderer, { ...invokeFromWorker, timeoutMs: 800 }),
+      const output = await renderSpecs(
+         VitestPreloadBindingsWriter,
+         buildFileSpecs(getUser, { ...invokeFromWorker, timeoutMs: 800 }),
          { channelPrefix: "autoipc:" },
       );
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
       expect(output).not.toContain("withTimeout");
       expect(output).not.toContain("getToken");
    });

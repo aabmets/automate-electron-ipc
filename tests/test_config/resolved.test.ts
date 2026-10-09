@@ -11,17 +11,21 @@
 
 import cfg from "@src/config.js";
 import utils from "@src/utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
+import {
+   mockFspReadFile,
+   mockFspStatsByPath,
+   mockResolveUserProjectPath,
+} from "@testutils/writer/shared-mocks.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getResolvedConfig", () => {
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    it("should resolve the manifest and the data dir from the given cwd", async () => {
       // Regression for T07: the project root was found from the library install location.
-      mocks.mockFspStatsByPath({});
-      mocks.mockFspReadFile({ config: { autoipc: { ipcDataDir: "ipc" } } });
+      mockFspStatsByPath({});
+      mockFspReadFile({ config: { autoipc: { ipcDataDir: "ipc" } } });
       const resolve = vi.spyOn(utils, "resolveUserProjectPath");
       await cfg.getResolvedConfig("/home/user/workspace/packages/app");
       expect(resolve).toHaveBeenCalledWith("package.json", "/home/user/workspace/packages/app");
@@ -31,8 +35,8 @@ describe("getResolvedConfig", () => {
    const DEFAULT_DIR = "/home/user/project/src/autoipc";
 
    it("should resolve missing optional config to expected default config", async () => {
-      mocks.mockFspStatsByPath({ [`${DEFAULT_DIR}/schema.ts`]: "file" });
-      mocks.mockFspReadFile({ config: {} });
+      mockFspStatsByPath({ [`${DEFAULT_DIR}/schema.ts`]: "file" });
+      mockFspReadFile({ config: {} });
       const config = await cfg.getResolvedConfig();
 
       expect(config?.ipcSchema?.stats?.isDirectory()).toStrictEqual(false);
@@ -63,8 +67,8 @@ describe("getResolvedConfig", () => {
 
    it("should resolve optional config to expected config", async () => {
       const dir = "/home/user/project/src/subpath/autoipc";
-      mocks.mockFspStatsByPath({ [`${dir}/schema`]: "directory" });
-      mocks.mockFspReadFile({
+      mockFspStatsByPath({ [`${dir}/schema`]: "directory" });
+      mockFspReadFile({
          config: {
             autoipc: {
                projectUsesNodeNext: true,
@@ -106,8 +110,8 @@ describe("getResolvedConfig", () => {
 
    describe("exposure of the API", () => {
       const resolve = async (autoipc: Record<string, unknown>) => {
-         mocks.mockFspStatsByPath({});
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath({});
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 
@@ -130,8 +134,8 @@ describe("getResolvedConfig", () => {
 
    describe("serializer", () => {
       const resolve = async (autoipc: Record<string, unknown>) => {
-         mocks.mockFspStatsByPath({});
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath({});
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 
@@ -161,8 +165,8 @@ describe("getResolvedConfig", () => {
 
    describe("choice of the schema path", () => {
       const resolve = async (entries: Record<string, "directory" | "file">) => {
-         mocks.mockFspStatsByPath(entries);
-         mocks.mockFspReadFile({ config: {} });
+         mockFspStatsByPath(entries);
+         mockFspReadFile({ config: {} });
          return (await cfg.getResolvedConfig()).ipcSchema;
       };
 

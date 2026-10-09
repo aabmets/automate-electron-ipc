@@ -9,32 +9,27 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { filterByScope } from "@src/scopes.js";
 import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getIt } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("RendererTypesWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
    describe("exposure of the API", () => {
-      const channels = shared.buildFileSpecs({
+      const channels = buildFileSpecs({
          name: "getIt",
          kind: "Unicast",
          direction: "RendererToMain",
          errors: "NotFoundError",
       });
-      const render = async (
-         pfsArray: t.ParsedFileSpecs[],
-         config: Partial<t.IPCResolvedConfig>,
-      ) => {
-         const obj = new shared.VitestRendererTypesWriter(pfsArray, config);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig>) =>
+         renderSpecs(VitestRendererTypesWriter, pfsArray, config);
 
       it("declares the global variable as 'ipc' when the config says nothing", async () => {
          const output = await render(channels, {});
@@ -68,18 +63,13 @@ describe("RendererTypesWriter", () => {
    });
 
    describe("getPathForFile", () => {
-      const channels = shared.buildFileSpecs(
-         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
-         { name: "zed", kind: "Broadcast", direction: "RendererToMain" },
-      );
-      const render = async (
-         pfsArray: t.ParsedFileSpecs[],
-         config: Partial<t.IPCResolvedConfig>,
-      ) => {
-         const obj = new shared.VitestRendererTypesWriter(pfsArray, config);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const channels = buildFileSpecs(getIt, {
+         name: "zed",
+         kind: "Broadcast",
+         direction: "RendererToMain",
+      });
+      const render = (pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig>) =>
+         renderSpecs(VitestRendererTypesWriter, pfsArray, config);
 
       it("declares nothing when the config says nothing, or says false", async () => {
          const output = await render(channels, {});
@@ -119,7 +109,7 @@ describe("RendererTypesWriter", () => {
                getTargetFilePath(): string;
             }
          ).getTargetFilePath();
-      const channels = shared.buildFileSpecs(
+      const channels = buildFileSpecs(
          {
             name: "getIt",
             kind: "Unicast",
@@ -128,15 +118,8 @@ describe("RendererTypesWriter", () => {
          },
          { name: "sendIt", kind: "Broadcast", direction: "RendererToMain", scopes: ["settings"] },
       );
-      const render = async (scope: string | null) => {
-         const obj = new shared.VitestRendererTypesWriter(
-            filterByScope(channels, scope),
-            {},
-            scope,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (scope: string | null) =>
+         renderSpecs(VitestRendererTypesWriter, filterByScope(channels, scope), {}, scope);
 
       it("writes the file of the surface of no scope to the usual path", () => {
          expect(targetOf(null)).toBe("/p/ipc/window.d.ts");
@@ -172,18 +155,12 @@ describe("RendererTypesWriter", () => {
    describe("channel prefix", () => {
       it("does not change the declarations, since they use the names from the schema", async () => {
          const channels = [
-            { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
+            getIt,
             { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" },
             { name: "chatIt", kind: "Port", direction: "RendererToRenderer" },
          ] as const;
-         const render = async (config: Partial<t.IPCResolvedConfig>) => {
-            const obj = new shared.VitestRendererTypesWriter(
-               shared.buildFileSpecs(...channels),
-               config,
-            );
-            await obj.write(false);
-            return (await fsp.readFile(obj.getTargetFilePath())).toString();
-         };
+         const render = (config: Partial<t.IPCResolvedConfig>) =>
+            renderWith(VitestRendererTypesWriter, channels, config);
 
          const prefixed = await render({ channelPrefix: "app:" });
 

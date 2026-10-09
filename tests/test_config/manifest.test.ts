@@ -12,25 +12,25 @@
 import fsp from "node:fs/promises";
 import cfg from "@src/config.js";
 import utils from "@src/utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
+import { mockFspReadFile, mockResolveUserProjectPath } from "@testutils/writer/shared-mocks.js";
 import type * as t from "@types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getConfigFromUserPackage", () => {
    // The manifest path comes from the working directory, which may have no package.json.
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    it("should not throw errors when user package lacks autoipc config", async () => {
       let config: t.IPCOptionalConfig;
 
-      mocks.mockFspReadFile({});
+      mockFspReadFile({});
       config = await cfg.getConfigFromUserPackage();
       expect(config).toStrictEqual({});
       vi.restoreAllMocks();
 
-      mocks.mockResolveUserProjectPath();
-      mocks.mockFspReadFile({ config: {} });
+      mockResolveUserProjectPath();
+      mockFspReadFile({ config: {} });
       config = await cfg.getConfigFromUserPackage();
       expect(config).toStrictEqual({});
    });
@@ -41,14 +41,14 @@ describe("getConfigFromUserPackage", () => {
          ipcDataDir: "src/subpath/autoipc",
          codeIndent: 4,
       };
-      mocks.mockFspReadFile({ config: { autoipc: optionalConfig } });
+      mockFspReadFile({ config: { autoipc: optionalConfig } });
       const config = await cfg.getConfigFromUserPackage();
       expect(config).toMatchObject(optionalConfig);
    });
 });
 
 describe("getConfigFromUserPackage with a manifest that is not valid JSON", () => {
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    it("names the manifest in the error", async () => {
@@ -69,7 +69,7 @@ describe("getConfigFromUserPackage with a manifest that is not valid JSON", () =
 });
 
 describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    // Regression for T98: these fell through to the validation of the config, with a message
@@ -80,7 +80,7 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
       ["a string", "app", "of type string"],
       ["a number", 5, "of type number"],
    ])("names the manifest when it holds %s", async (_label, data, described) => {
-      mocks.mockFspReadFile(data);
+      mockFspReadFile(data);
       const resolved = utils.resolveUserProjectPath("package.json");
 
       await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
@@ -94,7 +94,7 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
       ["a string", "x", "of type string"],
       ["a boolean", false, "of type boolean"],
    ])("names the 'config' entry when it is %s", async (_label, value, described) => {
-      mocks.mockFspReadFile({ config: value });
+      mockFspReadFile({ config: value });
 
       await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
          `'config' must be an object, but it is ${described}.`,
@@ -109,7 +109,7 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
       ["false", false, "of type boolean"],
       ["an empty string", "", "of type string"],
    ])("names the 'config.autoipc' entry when it is %s", async (_label, value, described) => {
-      mocks.mockFspReadFile({ config: { autoipc: value } });
+      mockFspReadFile({ config: { autoipc: value } });
       const resolved = utils.resolveUserProjectPath("package.json");
 
       await expect(cfg.getConfigFromUserPackage()).rejects.toThrowError(
@@ -118,7 +118,7 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
    });
 
    it("fails the resolution of the config with that message", async () => {
-      mocks.mockFspReadFile({ config: { autoipc: "src/ipc" } });
+      mockFspReadFile({ config: { autoipc: "src/ipc" } });
 
       await expect(cfg.getResolvedConfig()).rejects.toThrowError(
          /'config\.autoipc' must be an object/,
@@ -126,12 +126,12 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
    });
 
    it("accepts an empty autoipc object and a config without autoipc", async () => {
-      mocks.mockFspReadFile({ config: { autoipc: {} } });
+      mockFspReadFile({ config: { autoipc: {} } });
       await expect(cfg.getConfigFromUserPackage()).resolves.toStrictEqual({});
       vi.restoreAllMocks();
 
-      mocks.mockResolveUserProjectPath();
-      mocks.mockFspReadFile({ name: "app", config: { other: 1 } });
+      mockResolveUserProjectPath();
+      mockFspReadFile({ name: "app", config: { other: 1 } });
       await expect(cfg.getConfigFromUserPackage()).resolves.toStrictEqual({});
    });
 });

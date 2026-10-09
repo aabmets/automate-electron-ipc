@@ -17,12 +17,12 @@ import {
    render,
    sendFromWorker,
 } from "@testutils/writer/service-worker-writer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, service worker channels, timeouts", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    it("writes no timer without a timeout", async () => {
       const output = await render(all);

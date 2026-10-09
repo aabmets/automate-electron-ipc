@@ -10,15 +10,15 @@
  */
 
 import { allSpecs, anySpec } from "@src/writer/channel-kinds.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 const files = [
-   ...shared.buildFileSpecs(
+   ...buildFileSpecs(
       { name: "first", kind: "Unicast", direction: "RendererToMain" },
       { name: "second", kind: "Broadcast", direction: "MainToRenderer" },
    ),
-   ...shared.buildFileSpecs({ name: "third", kind: "Unicast", direction: "MainToUtility" }),
+   ...buildFileSpecs({ name: "third", kind: "Unicast", direction: "MainToUtility" }),
 ];
 
 describe("anySpec", () => {

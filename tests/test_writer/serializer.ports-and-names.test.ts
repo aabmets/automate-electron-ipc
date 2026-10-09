@@ -22,13 +22,17 @@ import {
    stream,
    worker,
 } from "@testutils/writer/serializer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import {
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+} from "@testutils/writer/test-writers.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("serializer, ports and reserved names", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    it("posts a message of a port channel in the page as a list of the serialized arguments", async () => {
       const output = await preload([port]);
@@ -78,7 +82,7 @@ describe("serializer, ports and reserved names", () => {
    });
 
    it("reserves the names of the serializer, so that a schema type is renamed", () => {
-      const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(invoke), config);
+      const obj = new VitestMainBindingsWriter(buildFileSpecs(invoke), config);
       const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
 
       for (const name of [
@@ -92,7 +96,7 @@ describe("serializer, ports and reserved names", () => {
       ]) {
          expect(names).toContain(name);
       }
-      const off = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(invoke), {});
+      const off = new VitestMainBindingsWriter(buildFileSpecs(invoke), {});
       expect((off as unknown as { getReservedNames(): string[] }).getReservedNames()).not.toContain(
          "encodeValue",
       );

@@ -9,42 +9,34 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
+import { renderWith } from "@testutils/writer/render-utils.js";
 import {
    askWorker,
    emitToWorker,
    invokeFromWorker,
-   renderer,
    sendFromWorker,
 } from "@testutils/writer/service-worker-writer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestServiceWorkerTypesWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("ServiceWorkerTypesWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestServiceWorkerTypesWriter);
+   mockGetTargetFilePath(VitestServiceWorkerTypesWriter);
 
-   const render = async (
-      channels: shared.SimpleChannel[],
-      config: Partial<t.IPCResolvedConfig> = {},
-   ) => {
-      const obj = new shared.VitestServiceWorkerTypesWriter(shared.buildFileSpecs(...channels), {
+   const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+      renderWith(VitestServiceWorkerTypesWriter, channels, {
          channelPrefix: "autoipc:",
          ...config,
       });
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
 
    it("has channels only when the schema has a channel to or from a service worker", () => {
-      const has = (...channels: shared.SimpleChannel[]) =>
-         new shared.VitestServiceWorkerTypesWriter(
-            shared.buildFileSpecs(...channels),
-         ).hasChannels();
+      const has = (...channels: SimpleChannel[]) =>
+         new VitestServiceWorkerTypesWriter(buildFileSpecs(...channels)).hasChannels();
 
-      expect(has(renderer)).toBe(false);
-      expect(has(renderer, askWorker)).toBe(true);
+      expect(has(getUser)).toBe(false);
+      expect(has(getUser, askWorker)).toBe(true);
    });
 
    it("declares the API of the worker for its own channels", async () => {
@@ -58,7 +50,7 @@ describe("ServiceWorkerTypesWriter", () => {
          { ...sendFromWorker, params: ["n: number"] },
          { ...askWorker, params: ["force: boolean"], returnType: "number" },
          { ...emitToWorker, params: ["key: string"] },
-         renderer,
+         getUser,
       ]);
 
       expect(output).toContain("interface IpcApi {");

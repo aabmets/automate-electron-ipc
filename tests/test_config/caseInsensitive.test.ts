@@ -11,11 +11,15 @@
 
 import cfg from "@src/config.js";
 import utils from "@src/utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
+import {
+   mockFspReadFile,
+   mockFspStatsByPath,
+   mockResolveUserProjectPath,
+} from "@testutils/writer/shared-mocks.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getResolvedConfig", () => {
-   beforeEach(mocks.mockResolveUserProjectPath);
+   beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
    describe("output paths on a file system that ignores case", () => {
@@ -26,8 +30,8 @@ describe("getResolvedConfig", () => {
          entries: Record<string, "directory" | "file"> = {},
       ) => {
          vi.spyOn(utils, "isCaseInsensitiveFileSystem").mockResolvedValue(insensitive);
-         mocks.mockFspStatsByPath(entries);
-         mocks.mockFspReadFile({ config: { autoipc } });
+         mockFspStatsByPath(entries);
+         mockFspReadFile({ config: { autoipc } });
          return await cfg.getResolvedConfig();
       };
 

@@ -10,13 +10,13 @@
  */
 
 import { collectScopes, filterByScope, isInScope, scopedFilePath } from "@src/scopes.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 /** The channels of a schema file, with the scopes of each. */
 function build(...channels: [name: string, scopes?: string[]][]): t.ParsedFileSpecs[] {
-   const [file] = shared.buildFileSpecs(
+   const [file] = buildFileSpecs(
       ...channels.map(([name]) => ({
          name,
          kind: "Unicast" as const,

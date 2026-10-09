@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestPreloadBindingsWriter } from "@testutils/writer/test-writers.js";
+import { getIt, type SimpleChannel, sendIt } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    describe("utility process timeouts", () => {
       const invokeUtility = {
@@ -30,17 +31,8 @@ describe("PreloadBindingsWriter", () => {
          direction: "RendererToUtility",
          returnType: "AsyncIterable<number>",
       } as const;
-      const render = async (
-         channels: shared.SimpleChannel[],
-         config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+         renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("passes the timeout of a call as the last argument, and none without one", async () => {
          const output = await render([
@@ -86,31 +78,20 @@ describe("PreloadBindingsWriter", () => {
    });
 
    describe("invoke timeouts", () => {
-      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
       const other = { name: "getOther", kind: "Unicast", direction: "RendererToMain" } as const;
-      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
-      const render = async (
-         channels: shared.SimpleChannel[],
-         config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+         renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("generates nothing for a channel without a timeout", async () => {
-         const output = await render([unicast]);
+         const output = await render([getIt]);
 
          expect(output).not.toContain("withTimeout");
          expect(output).not.toContain("IpcTimeoutError");
-         expect(output).toBe(await render([unicast], { timeoutMs: 0 }));
+         expect(output).toBe(await render([getIt], { timeoutMs: 0 }));
       });
 
       it("races the invoke of a channel with the timeoutMs option", async () => {
-         const output = await render([{ ...unicast, timeoutMs: 500 }, other]);
+         const output = await render([{ ...getIt, timeoutMs: 500 }, other]);
 
          expect(output).toContain(
             "const result = await withTimeout('getIt', 500, ipcRenderer.invoke('getIt', ...args));",
@@ -120,7 +101,7 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("rejects with the plain object of the timeout error, not with an Error", async () => {
-         const output = await render([{ ...unicast, timeoutMs: 500 }]);
+         const output = await render([{ ...getIt, timeoutMs: 500 }]);
 
          expect(output).toContain(
             "reject({ name: 'IpcTimeoutError', message, code: 'IPC_TIMEOUT' });",
@@ -129,14 +110,14 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("clears the timer when the call settles, and caps it at what a timer holds", async () => {
-         const output = await render([{ ...unicast, timeoutMs: 500 }]);
+         const output = await render([{ ...getIt, timeoutMs: 500 }]);
 
          expect(output.match(/clearTimeout\(timer\)/g)).toHaveLength(2);
          expect(output).toContain("Math.min(timeoutMs, 2147483647)");
       });
 
       it("applies the timeout of the config to every invoke", async () => {
-         const output = await render([unicast, other, broadcast], { timeoutMs: 2500 });
+         const output = await render([getIt, other, sendIt], { timeoutMs: 2500 });
 
          expect(output).toContain(
             "withTimeout('getIt', 2500, ipcRenderer.invoke('getIt', ...args))",
@@ -151,7 +132,7 @@ describe("PreloadBindingsWriter", () => {
       it("lets the option override the config, and 0 turn the timeout off", async () => {
          const output = await render(
             [
-               { ...unicast, timeoutMs: 100 },
+               { ...getIt, timeoutMs: 100 },
                { ...other, timeoutMs: 0 },
             ],
             {
@@ -164,7 +145,7 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("races the raw invoke when rawErrors is set", async () => {
-         const output = await render([{ ...unicast, timeoutMs: 500 }], { rawErrors: true });
+         const output = await render([{ ...getIt, timeoutMs: 500 }], { rawErrors: true });
 
          expect(output).toContain(
             "invoke: (...args: any[]) => withTimeout('getIt', 500, ipcRenderer.invoke('getIt', ...args)),",
@@ -172,7 +153,7 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("times the wire name, which carries the prefix", async () => {
-         const output = await render([{ ...unicast, timeoutMs: 500 }], { channelPrefix: "app:" });
+         const output = await render([{ ...getIt, timeoutMs: 500 }], { channelPrefix: "app:" });
 
          expect(output).toContain(
             "withTimeout('getIt', 500, ipcRenderer.invoke('app:getIt', ...args))",
@@ -181,7 +162,7 @@ describe("PreloadBindingsWriter", () => {
 
       it("ignores the timeout for send and ask channels", async () => {
          const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
-         const output = await render([broadcast, ask], { timeoutMs: 2500 });
+         const output = await render([sendIt, ask], { timeoutMs: 2500 });
 
          expect(output).not.toContain("withTimeout");
       });

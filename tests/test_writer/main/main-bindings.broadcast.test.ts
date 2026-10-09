@@ -9,20 +9,19 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { dedent } from "@testutils/text-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { vitestChannelSpecs } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    it("should write Broadcast RendererToMain callables into ipc object", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Broadcast_RendererToMain;
+      const buffer = await renderSpecs(VitestMainBindingsWriter, pfsArray);
       const expectedOutput = dedent(`
          import { ipcMain as electronIpcMain } from "electron";
          import type { IpcMainEvent, IpcMain, WebContents } from "electron";

@@ -21,13 +21,16 @@ import {
    send,
    stream,
 } from "@testutils/writer/serializer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import {
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+} from "@testutils/writer/test-writers.js";
 import { describe, expect, it } from "vitest";
 
 describe("serializer, the page and main", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    it("imports the package that the config names, in main.ts and in preload.ts", async () => {
       expect(await main([invoke])).toContain(IMPORT);

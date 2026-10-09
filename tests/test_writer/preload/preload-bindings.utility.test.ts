@@ -9,21 +9,19 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestPreloadBindingsWriter } from "@testutils/writer/test-writers.js";
+import { getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter, utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels));
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
+   const render = (...channels: SimpleChannel[]) =>
+      renderWith(VitestPreloadBindingsWriter, channels);
 
-   const utility: shared.SimpleChannel[] = [
+   const utility: SimpleChannel[] = [
       { name: "indexFile", kind: "Unicast", direction: "MainToUtility" },
       { name: "setLevel", kind: "Broadcast", direction: "MainToUtility" },
       { name: "getSetting", kind: "Unicast", direction: "UtilityToMain" },
@@ -38,11 +36,8 @@ describe("PreloadBindingsWriter, utility channels", () => {
    });
 
    it("leaves the utility channels out when renderer channels are declared as well", async () => {
-      const alone = await render({ name: "getUser", kind: "Unicast", direction: "RendererToMain" });
-      const mixed = await render(
-         { name: "getUser", kind: "Unicast", direction: "RendererToMain" },
-         ...utility,
-      );
+      const alone = await render(getUser);
+      const mixed = await render(getUser, ...utility);
 
       expect(mixed).toStrictEqual(alone);
       for (const { name } of utility) {
@@ -52,15 +47,12 @@ describe("PreloadBindingsWriter, utility channels", () => {
 });
 
 describe("PreloadBindingsWriter, renderer to utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const obj = new shared.VitestPreloadBindingsWriter(shared.buildFileSpecs(...channels), {
+   const render = (...channels: SimpleChannel[]) =>
+      renderWith(VitestPreloadBindingsWriter, channels, {
          channelPrefix: "autoipc:",
       });
-      await obj.write(false);
-      return (await fsp.readFile(obj.getTargetFilePath())).toString();
-   };
 
    const invokeUtility = {
       name: "queryRows",

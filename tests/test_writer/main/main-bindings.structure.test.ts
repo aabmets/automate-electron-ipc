@@ -9,29 +9,30 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import {
+   buildFileSpecs,
+   getIt,
+   type SimpleChannel,
+   sendIt,
+} from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    it("should import only the event types that the channels use", async () => {
       // Regression for B6: Unicast handlers get an IpcMainInvokeEvent, Broadcast ones an IpcMainEvent.
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
-      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
-      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
 
-      const both = await render(unicast, broadcast);
+      const both = await render(getIt, sendIt);
       expect(both).toContain(
          'import type { IpcMainInvokeEvent, IpcMainEvent, IpcMain, WebContents } from "electron";',
       );
-      const onlyUnicast = await render(unicast);
+      const onlyUnicast = await render(getIt);
       expect(onlyUnicast).toContain(
          'import type { IpcMainInvokeEvent, IpcMain, WebContents } from "electron";',
       );
@@ -41,7 +42,7 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should enforce the declared signature in the handler wrappers", async () => {
-      const pfsArray = shared.buildFileSpecs(
+      const pfsArray = buildFileSpecs(
          {
             name: "restIt",
             kind: "Broadcast",
@@ -50,9 +51,7 @@ describe("MainBindingsWriter", () => {
          },
          { name: "bareIt", kind: "Unicast", direction: "RendererToMain", returnType: "number" },
       );
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestMainBindingsWriter, pfsArray);
 
       expect(output).toContain(
          "const listener = (event: IpcMainEvent, label: string, flag?: boolean, ...rest: number[]) => {",
@@ -64,15 +63,13 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should not shadow the callback or the event with parameters of the signature", async () => {
-      const pfsArray = shared.buildFileSpecs({
+      const pfsArray = buildFileSpecs({
          name: "clashIt",
          kind: "Broadcast",
          direction: "RendererToMain",
          params: ["callback: string", "event: number"],
       });
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestMainBindingsWriter, pfsArray);
 
       expect(output).toContain(
          "on: (_callback: (_event: IpcMainEvent, callback: string, event: number) => void, options?: IpcListenOptions)",
@@ -86,15 +83,13 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should not shadow the listener or the registry with parameters of the signature", async () => {
-      const pfsArray = shared.buildFileSpecs({
+      const pfsArray = buildFileSpecs({
          name: "clashIt",
          kind: "Unicast",
          direction: "RendererToMain",
          params: ["listener: string"],
       });
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestMainBindingsWriter, pfsArray);
 
       expect(output).toContain("const handler = (event: IpcMainInvokeEvent, listener: string)");
       expect(output).toContain("const _listener = (event: IpcMainInvokeEvent, ...rest: unknown[])");
@@ -103,29 +98,22 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should register the handlers of invoke channels in the registry of the target only", async () => {
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
-      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
-      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
 
-      expect(await render(unicast)).toContain("target.handlers['getIt'] = listener;");
-      expect(await render(broadcast)).not.toContain("handlers[");
-      expect(await render(broadcast)).not.toContain("removeHandler(");
+      expect(await render(getIt)).toContain("target.handlers['getIt'] = listener;");
+      expect(await render(sendIt)).not.toContain("handlers[");
+      expect(await render(sendIt)).not.toContain("removeHandler(");
    });
 
    it("should write one object per channel, sorted by name, with no top-level helpers", async () => {
-      const pfsArray = shared.buildFileSpecs(
+      const pfsArray = buildFileSpecs(
          { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },
          { name: "alpha", kind: "Port", direction: "RendererToRenderer" },
          { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
          { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
       );
-      const obj = new shared.VitestMainBindingsWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestMainBindingsWriter, pfsArray);
 
       const keys = [...output.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
       expect(keys).toStrictEqual(["Beta", "alpha", "gamma", "zeta"]);
@@ -135,11 +123,8 @@ describe("MainBindingsWriter", () => {
 
    it("should import ipcMain from electron only where it is used", async () => {
       // Regression for T65: the import was unused, and failed under noUnusedLocals, without them.
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
       const toRenderer = await render({
          name: "a",
          kind: "Broadcast",

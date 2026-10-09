@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    describe("stream channels", () => {
       const rows = {
@@ -38,17 +39,10 @@ describe("MainBindingsWriter", () => {
          direction: "RendererToMain",
          returnType: "Promise<string>",
       } as const;
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestMainBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestMainBindingsWriter, channels, config);
 
       it("generates handle only, which takes an async generator and gets the event first", async () => {
          const output = await render([rows]);

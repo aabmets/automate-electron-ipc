@@ -9,30 +9,24 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestPreloadBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    describe("ask channels", () => {
       const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
       const askToo = { name: "askAlso", kind: "Unicast", direction: "MainToRenderer" } as const;
       const emit = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("exposes handle only, and listens for the questions of the channel", async () => {
          const output = await render([ask]);
@@ -101,17 +95,10 @@ describe("PreloadBindingsWriter", () => {
          returnType: "AsyncIterable<string>",
       } as const;
       const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
-      const render = async (
-         channels: Parameters<typeof shared.buildFileSpecs>,
+      const render = (
+         channels: Parameters<typeof buildFileSpecs>,
          config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      ) => renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("exposes stream only, which opens a stream of the channel", async () => {
          const output = await render([rows]);

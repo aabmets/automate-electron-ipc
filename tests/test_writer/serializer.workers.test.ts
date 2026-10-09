@@ -19,14 +19,18 @@ import {
    workerPreload,
    workerSend,
 } from "@testutils/writer/serializer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import {
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+   VitestServiceWorkerPreloadWriter,
+} from "@testutils/writer/test-writers.js";
 import { describe, expect, it } from "vitest";
 
 describe("serializer, service workers", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestServiceWorkerPreloadWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestServiceWorkerPreloadWriter);
 
    it("imports the serializer for the worker channels alone, in main.ts and in the script of the worker", async () => {
       for (const channel of [worker, workerSend, workerEmit, workerAsk]) {

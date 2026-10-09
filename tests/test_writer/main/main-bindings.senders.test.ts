@@ -9,30 +9,27 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { type SimpleChannel, sendIt } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    describe("sender validation", () => {
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestMainBindingsWriter, channels);
       const unicast = {
          name: "getIt",
          kind: "Unicast",
          direction: "RendererToMain",
          returnType: "Promise<string>",
       } as const;
-      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
 
       it("checks the sender first in every listener, and rejects Unicast with an error", async () => {
-         const output = await render(unicast, broadcast);
+         const output = await render(unicast, sendIt);
 
          const throwing =
             /const guard = \(event: IpcMainInvokeEvent\) => \{\n\s+if \(!isSenderAllowed\(event, 'getIt'\)\) \{\n\s+throw new IpcForbiddenError\('getIt'\);/g;
@@ -59,7 +56,7 @@ describe("MainBindingsWriter", () => {
       it("passes the allowed origins of the channel as a list of string literals", async () => {
          const output = await render(
             { ...unicast, allowedOrigins: ["app://.", "http://localhost:5173"] },
-            { ...broadcast, allowedOrigins: ['a"b://x'] },
+            { ...sendIt, allowedOrigins: ['a"b://x'] },
          );
 
          expect(output).toContain(
@@ -86,7 +83,7 @@ describe("MainBindingsWriter", () => {
          expect(await render(unicast)).toContain(
             "validateSender?: (event: IpcMainInvokeEvent, channel: string) => boolean;",
          );
-         expect(await render(broadcast)).toContain(
+         expect(await render(sendIt)).toContain(
             "validateSender?: (event: IpcMainEvent, channel: string) => boolean;",
          );
       });

@@ -11,13 +11,13 @@
 
 import fsp from "node:fs/promises";
 import { BaseWriter } from "@src/writer/base-writer.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestBaseWriter } from "@testutils/writer/test-writers.js";
 import type * as t from "@types";
 import { describe, expect, it, vi } from "vitest";
 
 describe("BaseWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestBaseWriter);
+   mockGetTargetFilePath(VitestBaseWriter);
 
    it("should throw an error on abstract base class instantiation", () => {
       expect(() => {
@@ -47,12 +47,12 @@ describe("BaseWriter", () => {
    });
 
    it("should not throw an error on subclass instantiation", () => {
-      new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
+      new VitestBaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
    });
 
    it("should generate code indents array", () => {
       for (const value of [2, 3, 4]) {
-         const obj = new shared.VitestBaseWriter({ codeIndent: value } as t.IPCResolvedConfig, []);
+         const obj = new VitestBaseWriter({ codeIndent: value } as t.IPCResolvedConfig, []);
          expect(obj.getCodeIndents()).toStrictEqual([
             " ".repeat(value),
             "  ".repeat(value),
@@ -65,7 +65,7 @@ describe("BaseWriter", () => {
    });
 
    it("should inject the event typehint at the start of the parameter list", () => {
-      const writer = shared.VitestBaseWriter.prototype;
+      const writer = VitestBaseWriter.prototype;
       const sign = (definition: string, params: number) =>
          ({
             definition,
@@ -88,7 +88,7 @@ describe("BaseWriter", () => {
          paramsStart: 32,
          params: [{}],
       } as unknown as t.CallableSignature;
-      const writer = shared.VitestBaseWriter.prototype;
+      const writer = VitestBaseWriter.prototype;
       expect(writer.injectEventTypehint(signature, "IpcMainEvent")).toBe(
          "<T extends (x: number) => void>(event: IpcMainEvent, cb: T) => void",
       );
@@ -96,7 +96,7 @@ describe("BaseWriter", () => {
    });
 
    it("should join components with at most one blank line between them", () => {
-      const writer = shared.VitestBaseWriter.prototype;
+      const writer = VitestBaseWriter.prototype;
 
       expect(writer.joinComponents([])).toBe("");
       expect(writer.joinComponents(["a", "b"])).toBe("a\nb");
@@ -114,9 +114,7 @@ describe("BaseWriter", () => {
 
    it("should return no type parameters for a plain signature", () => {
       const signature = { definition: "(a: string) => void", paramsStart: 1 };
-      expect(
-         shared.VitestBaseWriter.prototype.getTypeParams(signature as t.CallableSignature),
-      ).toBe("");
+      expect(VitestBaseWriter.prototype.getTypeParams(signature as t.CallableSignature)).toBe("");
    });
 
    it("should stringify CallableParam objects with and without types", () => {
@@ -134,9 +132,9 @@ describe("BaseWriter", () => {
             ] as Partial<t.CallableParam>[],
          } as Partial<t.CallableSignature>,
       } as Partial<t.ChannelSpec>;
-      let result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
+      let result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, true);
       expect(result).toStrictEqual("arg1, arg2");
-      result = shared.VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, false);
+      result = VitestBaseWriter.prototype.getOriginalParams(spec as t.ChannelSpec, false);
       expect(result).toStrictEqual("arg1: number, arg2: string");
    });
 
@@ -151,7 +149,7 @@ describe("BaseWriter", () => {
             ],
          },
       } as t.ChannelSpec;
-      const writer = shared.VitestBaseWriter.prototype;
+      const writer = VitestBaseWriter.prototype;
       expect(writer.getOriginalParams(spec, true)).toStrictEqual("first, maybe, ...values");
       expect(writer.getOriginalParams(spec, false)).toStrictEqual(
          "first: string, maybe?: number, ...values: number[]",
@@ -168,7 +166,7 @@ describe("BaseWriter", () => {
             ],
          },
       } as t.ChannelSpec;
-      const writer = shared.VitestBaseWriter.prototype;
+      const writer = VitestBaseWriter.prototype;
       expect(writer.getOriginalParams(spec, true)).toStrictEqual("_arg0, _arg1, arg0");
       expect(writer.getOriginalParams(spec, false)).toStrictEqual(
          "_arg0: Point, _arg1: number[], arg0: string",
@@ -177,7 +175,7 @@ describe("BaseWriter", () => {
 
    describe("sortChannels, order by name in code unit order", () => {
       const sort = (...names: string[]) =>
-         shared.VitestBaseWriter.prototype
+         VitestBaseWriter.prototype
             .sortChannels(names.map((name) => ({ name })))
             .map((channel) => channel.name);
 
@@ -211,21 +209,21 @@ describe("BaseWriter", () => {
    });
 
    it("should render empty file contents when pfsArray is empty", async () => {
-      const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, []);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       expect(buffer.toString()).toStrictEqual("EMPTY FILE");
    });
 
    it("should render file contents when pfsArray is not empty", async () => {
-      const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
       await obj.write(false);
       const buffer = await fsp.readFile(obj.getTargetFilePath());
       expect(buffer.toString()).toStrictEqual("const asdfg = 123;");
    });
 
    it("should prepend the generated-file notice, without the stale 'PLUGIN' wording", async () => {
-      const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
+      const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
       await obj.write(true);
       const text = (await fsp.readFile(obj.getTargetFilePath())).toString();
       // Regression for T65: the file started with a blank line.
@@ -242,12 +240,12 @@ describe("BaseWriter", () => {
 
    describe("scope", () => {
       it("writes the files of no scope to the path that it is given", () => {
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, []);
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, []);
          expect(obj.getScopedFilePath("/p/ipc/preload.ts")).toBe("/p/ipc/preload.ts");
       });
 
       it("names the file of a scope after it, in front of the extension", () => {
-         const obj = new shared.VitestBaseWriter({} as t.IPCResolvedConfig, [], "settings");
+         const obj = new VitestBaseWriter({} as t.IPCResolvedConfig, [], "settings");
          expect(obj.getScopedFilePath("/p/ipc/preload.ts")).toBe("/p/ipc/preload.settings.ts");
          expect(obj.getScopedFilePath("/p/ipc/window.d.ts")).toBe("/p/ipc/window.settings.d.ts");
       });

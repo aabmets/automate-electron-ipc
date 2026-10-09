@@ -9,13 +9,14 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getIt, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, shared event watches", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    const ask = { name: "askIt", kind: "Unicast", direction: "MainToRenderer" } as const;
    const stream = {
@@ -32,14 +33,9 @@ describe("MainBindingsWriter, shared event watches", () => {
       direction: "RendererToUtility",
       returnType: "Promise<number>",
    } as const;
-   const plain = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
    const broadcast = { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" } as const;
 
-   const render = async (...channels: shared.SimpleChannel[]) => {
-      const writer = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels));
-      await writer.write(false);
-      return (await fsp.readFile(writer.getTargetFilePath())).toString();
-   };
+   const render = (...channels: SimpleChannel[]) => renderWith(VitestMainBindingsWriter, channels);
 
    it.each([
       ["an ask", [ask]],
@@ -60,7 +56,7 @@ describe("MainBindingsWriter, shared event watches", () => {
    });
 
    it("writes none of it for channels which hold nothing open", async () => {
-      const output = await render(plain, broadcast);
+      const output = await render(getIt, broadcast);
 
       for (const name of ["watchEvent", "eventWatches", "WatchableEmitter", "WeakMap"]) {
          expect(output).not.toContain(name);
@@ -82,18 +78,18 @@ describe("MainBindingsWriter, shared event watches", () => {
    });
 
    it("reserves its names, and WeakMap, only for such a schema", () => {
-      const reserved = (...channels: shared.SimpleChannel[]) =>
+      const reserved = (...channels: SimpleChannel[]) =>
          (
-            new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels)) as unknown as {
+            new VitestMainBindingsWriter(buildFileSpecs(...channels)) as unknown as {
                getReservedNames: () => string[];
             }
          ).getReservedNames();
 
       for (const name of ["watchEvent", "eventWatches", "EventWatch", "WatchableEmitter"]) {
          expect(reserved(ask)).toContain(name);
-         expect(reserved(plain)).toContain(name);
+         expect(reserved(getIt)).toContain(name);
       }
       expect(reserved(ask)).toContain("WeakMap");
-      expect(reserved(plain)).not.toContain("WeakMap");
+      expect(reserved(getIt)).not.toContain("WeakMap");
    });
 });

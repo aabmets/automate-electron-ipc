@@ -9,21 +9,25 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { dedent } from "@testutils/text-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import {
+   buildFileSpecs,
+   parseTestSignature,
+   type SimpleChannel,
+   vitestChannelSpecs,
+} from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("RendererTypesWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
    it("should write send, on, onReady, onClose, onOverflow and onConnection methods for Port channels", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Port_RendererToRenderer;
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Port_RendererToRenderer;
+      const buffer = await renderSpecs(VitestRendererTypesWriter, pfsArray);
       const expectedOutput = dedent(`
          interface IpcPortOverflowInfo {
             channel: string;
@@ -55,11 +59,8 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should declare the overflow types only if a port channel uses them", async () => {
-      const render = async (...channels: shared.SimpleChannel[]) => {
-         const obj = new shared.VitestRendererTypesWriter(shared.buildFileSpecs(...channels));
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (...channels: SimpleChannel[]) =>
+         renderWith(VitestRendererTypesWriter, channels);
 
       const withPort = await render({ name: "a", kind: "Port", direction: "RendererToRenderer" });
       const without = await render({ name: "b", kind: "Broadcast", direction: "RendererToMain" });
@@ -72,12 +73,8 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should type a mainPort channel like a port channel, since the page has the same API", async () => {
-      const render = async (name: string, direction: "RendererToRenderer" | "MainToRenderer") => {
-         const specs = shared.buildFileSpecs({ name, kind: "Port", direction });
-         const obj = new shared.VitestRendererTypesWriter(specs);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (name: string, direction: "RendererToRenderer" | "MainToRenderer") =>
+         renderWith(VitestRendererTypesWriter, [{ name, kind: "Port", direction }]);
 
       expect(await render("alpha", "MainToRenderer")).toStrictEqual(
          await render("alpha", "RendererToRenderer"),
@@ -85,15 +82,13 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should write one object per channel, sorted by name, with no ports object", async () => {
-      const pfsArray = shared.buildFileSpecs(
+      const pfsArray = buildFileSpecs(
          { name: "zeta", kind: "Broadcast", direction: "MainToRenderer" },
          { name: "alpha", kind: "Port", direction: "RendererToRenderer" },
          { name: "Beta", kind: "Unicast", direction: "RendererToMain" },
          { name: "gamma", kind: "Broadcast", direction: "RendererToMain" },
       );
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestRendererTypesWriter, pfsArray);
 
       const keys = [...output.matchAll(/^ {3}(\w+): \{$/gm)].map((match) => match[1]);
       expect(keys).toStrictEqual(["Beta", "alpha", "gamma", "zeta"]);
@@ -116,15 +111,13 @@ describe("RendererTypesWriter", () => {
                      name: "getApi",
                      kind: "Unicast",
                      direction: "RendererToMain",
-                     signature: shared.parseTestSignature("() => Promise<IpcApi>"),
+                     signature: parseTestSignature("() => Promise<IpcApi>"),
                   },
                ],
             },
          },
       ] as t.ParsedFileSpecs[];
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestRendererTypesWriter, pfsArray);
 
       expect(output).toMatch(/^import type \{ IpcApi as IpcApi_2 \} from ".*\/schema";$/m);
       expect(output).toContain("invoke: () => Promise<IpcApi_2>;");
@@ -146,14 +139,15 @@ describe("RendererTypesWriter", () => {
                   name: channel,
                   kind: "Unicast",
                   direction: "RendererToMain",
-                  signature: shared.parseTestSignature("() => Promise<User>"),
+                  signature: parseTestSignature("() => Promise<User>"),
                },
             ],
          },
       });
-      const obj = new shared.VitestRendererTypesWriter([pfsOf("a", "getA"), pfsOf("b", "getB")]);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestRendererTypesWriter, [
+         pfsOf("a", "getA"),
+         pfsOf("b", "getB"),
+      ]);
 
       expect(output).toMatch(/^import type \{ User \} from ".*\/a";$/m);
       expect(output).toMatch(/^import type \{ User as User_2 \} from ".*\/b";$/m);

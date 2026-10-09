@@ -15,7 +15,6 @@ import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import utils from "@src/utils.js";
-import { BaseWriter } from "@src/writer/base-writer.js";
 import { afterAll, afterEach, beforeEach, MockInstance, vi } from "vitest";
 
 export function mockFspReadFile(data: any): void {
@@ -48,12 +47,12 @@ export function mockResolveUserProjectPath(): void {
    spy.mockImplementation((subPath = "") => path.join("/home/user/project", subPath));
 }
 
-export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWriter>(cls: T) {
+export function mockGetTargetFilePath(cls: { prototype: unknown }) {
    let spy: MockInstance;
    const dirName = `vitest-${crypto.randomBytes(8).toString("hex")}`;
 
    beforeEach(() => {
-      spy = vi.spyOn(cls.prototype, "getTargetFilePath");
+      spy = vi.spyOn(cls.prototype as object, "getTargetFilePath" as never);
       const fileName = `testfile-${crypto.randomBytes(8).toString("hex")}`;
       spy.mockImplementation(() => {
          return path.join(tmpdir(), dirName, fileName);
@@ -65,10 +64,3 @@ export function mockGetTargetFilePath<T extends new (...args: any[]) => BaseWrit
       await fsp.rm(dirPath, { recursive: true, force: true });
    });
 }
-
-export default {
-   mockFspReadFile,
-   mockFspStatsByPath,
-   mockResolveUserProjectPath,
-   mockGetTargetFilePath,
-};

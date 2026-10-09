@@ -9,14 +9,15 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestMainBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getUser, type SimpleChannel } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("MainBindingsWriter, utility channels", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
 
    const callUtility = { name: "indexFile", kind: "Unicast", direction: "MainToUtility" } as const;
    const notifyUtility = {
@@ -26,19 +27,9 @@ describe("MainBindingsWriter, utility channels", () => {
    } as const;
    const callMain = { name: "getSetting", kind: "Unicast", direction: "UtilityToMain" } as const;
    const notifyMain = { name: "progress", kind: "Broadcast", direction: "UtilityToMain" } as const;
-   const renderer = { name: "getUser", kind: "Unicast", direction: "RendererToMain" } as const;
 
-   const render = async (
-      channels: shared.SimpleChannel[],
-      config: Partial<t.IPCResolvedConfig> = {},
-   ) => {
-      const writer = new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels), {
-         channelPrefix: "autoipc:",
-         ...config,
-      });
-      await writer.write(false);
-      return (await fsp.readFile(writer.getTargetFilePath())).toString();
-   };
+   const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+      renderWith(VitestMainBindingsWriter, channels, { channelPrefix: "autoipc:", ...config });
 
    it("passes the timeout of a call to the child as the last argument", async () => {
       const output = await render(
@@ -66,7 +57,7 @@ describe("MainBindingsWriter, utility channels", () => {
    });
 
    it("writes nothing of the utility protocol for a schema without such channels", async () => {
-      const output = await render([renderer]);
+      const output = await render([getUser]);
 
       for (const name of ["UtilityProcess", "IpcUtilityError", "attachUtility", "WeakMap"]) {
          expect(output).not.toContain(name);
@@ -83,7 +74,7 @@ describe("MainBindingsWriter, utility channels", () => {
    });
 
    it("writes the envelope once when renderer and utility channels share the file", async () => {
-      const output = await render([renderer, callUtility]);
+      const output = await render([getUser, callUtility]);
 
       expect(output.split("function toIpcError(").length).toBe(2);
       expect(output).toContain(
@@ -230,9 +221,9 @@ describe("MainBindingsWriter, utility channels", () => {
    });
 
    it("reserves the names it declares, only when the schema has utility channels", () => {
-      const reserved = (...channels: shared.SimpleChannel[]) =>
+      const reserved = (...channels: SimpleChannel[]) =>
          (
-            new shared.VitestMainBindingsWriter(shared.buildFileSpecs(...channels)) as unknown as {
+            new VitestMainBindingsWriter(buildFileSpecs(...channels)) as unknown as {
                getReservedNames: () => string[];
             }
          ).getReservedNames();
@@ -248,7 +239,7 @@ describe("MainBindingsWriter, utility channels", () => {
          "WeakMap",
       ]) {
          expect(reserved(callUtility)).toContain(name);
-         expect(reserved(renderer)).not.toContain(name);
+         expect(reserved(getUser)).not.toContain(name);
       }
    });
 });

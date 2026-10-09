@@ -9,16 +9,17 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { filterByScope } from "@src/scopes.js";
 import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestPreloadBindingsWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, getIt } from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    describe("scopes", () => {
       const config = {
@@ -31,15 +32,14 @@ describe("PreloadBindingsWriter", () => {
                getTargetFilePath(): string;
             }
          ).getTargetFilePath();
-      const channels = shared.buildFileSpecs(
-         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
-         { name: "sendIt", kind: "Broadcast", direction: "RendererToMain", scopes: ["settings"] },
-      );
-      const render = async (pfsArray: t.ParsedFileSpecs[], scope: string | null) => {
-         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, {}, scope);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const channels = buildFileSpecs(getIt, {
+         name: "sendIt",
+         kind: "Broadcast",
+         direction: "RendererToMain",
+         scopes: ["settings"],
+      });
+      const render = (pfsArray: t.ParsedFileSpecs[], scope: string | null) =>
+         renderSpecs(VitestPreloadBindingsWriter, pfsArray, {}, scope);
 
       it("writes the file of the surface of no scope to the usual path", () => {
          expect(targetOf(null)).toBe("/p/ipc/preload.ts");
@@ -78,18 +78,13 @@ describe("PreloadBindingsWriter", () => {
    });
 
    describe("getPathForFile", () => {
-      const channels = shared.buildFileSpecs(
-         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
-         { name: "zed", kind: "Broadcast", direction: "RendererToMain" },
-      );
-      const render = async (
-         pfsArray: t.ParsedFileSpecs[],
-         config: Partial<t.IPCResolvedConfig>,
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, config);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const channels = buildFileSpecs(getIt, {
+         name: "zed",
+         kind: "Broadcast",
+         direction: "RendererToMain",
+      });
+      const render = (pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig>) =>
+         renderSpecs(VitestPreloadBindingsWriter, pfsArray, config);
       const HELPER = "getPathForFile: (file: File): string => webUtils.getPathForFile(file),";
 
       it("adds nothing when the config says nothing, or says false", async () => {
@@ -132,7 +127,7 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("adds the helper to the empty API of a schema that has only utility channels", async () => {
-         const utilityOnly = shared.buildFileSpecs({
+         const utilityOnly = buildFileSpecs({
             name: "work",
             kind: "Unicast",
             direction: "MainToUtility",
@@ -143,19 +138,19 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("adds the helper to the file of every scope", async () => {
-         const scoped = shared.buildFileSpecs({
+         const scoped = buildFileSpecs({
             name: "sendIt",
             kind: "Broadcast",
             direction: "RendererToMain",
             scopes: ["settings"],
          });
-         const obj = new shared.VitestPreloadBindingsWriter(
+         const output = await renderSpecs(
+            VitestPreloadBindingsWriter,
             scoped,
             { getPathForFile: true },
             "settings",
          );
-         await obj.write(false);
-         expect((await fsp.readFile(obj.getTargetFilePath())).toString()).toContain(HELPER);
+         expect(output).toContain(HELPER);
       });
 
       it("uses nothing of this library at runtime", async () => {
@@ -165,19 +160,13 @@ describe("PreloadBindingsWriter", () => {
    });
 
    describe("exposure of the API", () => {
-      const channels = shared.buildFileSpecs({
+      const channels = buildFileSpecs({
          name: "getIt",
          kind: "Unicast",
          direction: "RendererToMain",
       });
-      const render = async (
-         pfsArray: t.ParsedFileSpecs[],
-         config: Partial<t.IPCResolvedConfig>,
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(pfsArray, config);
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (pfsArray: t.ParsedFileSpecs[], config: Partial<t.IPCResolvedConfig>) =>
+         renderSpecs(VitestPreloadBindingsWriter, pfsArray, config);
       const EXPOSE = (key: string) =>
          `export function expose(key = '${key}'): void {\n   contextBridge.exposeInMainWorld(key, api);\n}`;
 

@@ -9,20 +9,24 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { dedent } from "@testutils/text-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs, renderWith } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestPreloadBindingsWriter } from "@testutils/writer/test-writers.js";
+import {
+   getIt,
+   type SimpleChannel,
+   sendIt,
+   vitestChannelSpecs,
+} from "@testutils/writer/writer-utils.js";
 import type * as t from "@types";
 import { describe, expect, it } from "vitest";
 
 describe("PreloadBindingsWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
 
    it("should write an empty api object that is exposed when pfsArray is empty", async () => {
-      const obj = new shared.VitestPreloadBindingsWriter([]);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const buffer = await renderSpecs(VitestPreloadBindingsWriter, []);
       const expectedOutput = dedent(`
          import { contextBridge } from "electron";\n
          export const api = {};\n
@@ -35,10 +39,8 @@ describe("PreloadBindingsWriter", () => {
    });
 
    it("should write Unicast RendererToMain callables into ipc object", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Unicast_RendererToMain;
-      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Unicast_RendererToMain;
+      const buffer = await renderSpecs(VitestPreloadBindingsWriter, pfsArray);
       const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
@@ -64,10 +66,8 @@ describe("PreloadBindingsWriter", () => {
    });
 
    it("should write Broadcast RendererToMain callables into ipc object", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
-      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Broadcast_RendererToMain;
+      const buffer = await renderSpecs(VitestPreloadBindingsWriter, pfsArray);
       const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
@@ -87,10 +87,8 @@ describe("PreloadBindingsWriter", () => {
    });
 
    it("should write Broadcast MainToRenderer callables into ipc object", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Broadcast_MainToRenderer;
-      const obj = new shared.VitestPreloadBindingsWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Broadcast_MainToRenderer;
+      const buffer = await renderSpecs(VitestPreloadBindingsWriter, pfsArray);
       const expectedOutput = dedent(`
          import { contextBridge, ipcRenderer } from "electron";
          
@@ -177,22 +175,11 @@ describe("PreloadBindingsWriter", () => {
    });
 
    describe("error envelope", () => {
-      const unicast = { name: "getIt", kind: "Unicast", direction: "RendererToMain" } as const;
-      const broadcast = { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" } as const;
-      const render = async (
-         channels: shared.SimpleChannel[],
-         config: Partial<t.IPCResolvedConfig> = {},
-      ) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (channels: SimpleChannel[], config: Partial<t.IPCResolvedConfig> = {}) =>
+         renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("unwraps the envelope of an invoke, and rejects with the error object", async () => {
-         const output = await render([unicast]);
+         const output = await render([getIt]);
 
          expect(output).toContain("const result = await ipcRenderer.invoke('getIt', ...args);");
          expect(output).toContain("if (result.ok) {\n            return result.value;\n         }");
@@ -200,14 +187,14 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("does not wrap the error in an Error, which contextBridge would strip of its fields", async () => {
-         const output = await render([unicast]);
+         const output = await render([getIt]);
 
          expect(output).not.toContain("new Error");
          expect(output).not.toContain("class ");
       });
 
       it("forwards the reply untouched when rawErrors is set", async () => {
-         const output = await render([unicast], { rawErrors: true });
+         const output = await render([getIt], { rawErrors: true });
 
          expect(output).toContain(
             "invoke: (...args: any[]) => ipcRenderer.invoke('getIt', ...args),",
@@ -216,7 +203,7 @@ describe("PreloadBindingsWriter", () => {
       });
 
       it("leaves send channels as they are", async () => {
-         const output = await render([broadcast]);
+         const output = await render([sendIt]);
 
          expect(output).toContain("send: (...args: any[]) => ipcRenderer.send('sendIt', ...args),");
          expect(output).not.toContain("result");
@@ -225,19 +212,13 @@ describe("PreloadBindingsWriter", () => {
 
    describe("channel prefix", () => {
       const channels = [
-         { name: "getIt", kind: "Unicast", direction: "RendererToMain" },
-         { name: "sendIt", kind: "Broadcast", direction: "RendererToMain" },
+         getIt,
+         sendIt,
          { name: "pushIt", kind: "Broadcast", direction: "MainToRenderer" },
          { name: "chatIt", kind: "Port", direction: "RendererToRenderer" },
       ] as const;
-      const render = async (config: Partial<t.IPCResolvedConfig>) => {
-         const obj = new shared.VitestPreloadBindingsWriter(
-            shared.buildFileSpecs(...channels),
-            config,
-         );
-         await obj.write(false);
-         return (await fsp.readFile(obj.getTargetFilePath())).toString();
-      };
+      const render = (config: Partial<t.IPCResolvedConfig>) =>
+         renderWith(VitestPreloadBindingsWriter, channels, config);
 
       it("puts the prefix in front of every name that is passed to Electron", async () => {
          const output = await render({ channelPrefix: "app:" });

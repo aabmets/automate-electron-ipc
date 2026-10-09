@@ -21,14 +21,19 @@ import {
    utilityFile,
    utilityNotify,
 } from "@testutils/writer/serializer-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import {
+   VitestMainBindingsWriter,
+   VitestPreloadBindingsWriter,
+   VitestUtilityBindingsWriter,
+} from "@testutils/writer/test-writers.js";
+import { buildFileSpecs } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("serializer, utility processes", () => {
-   mocks.mockGetTargetFilePath(shared.VitestMainBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestPreloadBindingsWriter);
-   mocks.mockGetTargetFilePath(shared.VitestUtilityBindingsWriter);
+   mockGetTargetFilePath(VitestMainBindingsWriter);
+   mockGetTargetFilePath(VitestPreloadBindingsWriter);
+   mockGetTargetFilePath(VitestUtilityBindingsWriter);
 
    it("serializes the calls and the sends between main and a utility process, in the peer code of main", async () => {
       const output = await main([utility, utilityNotify, callMain]);
@@ -125,7 +130,7 @@ describe("serializer, utility processes", () => {
    });
 
    it("reserves the names of the serializer in the utility file", () => {
-      const obj = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(utility), config);
+      const obj = new VitestUtilityBindingsWriter(buildFileSpecs(utility), config);
       const names = (obj as unknown as { getReservedNames(): string[] }).getReservedNames();
 
       for (const name of [
@@ -136,7 +141,7 @@ describe("serializer, utility processes", () => {
       ]) {
          expect(names).toContain(name);
       }
-      const off = new shared.VitestUtilityBindingsWriter(shared.buildFileSpecs(utility), {});
+      const off = new VitestUtilityBindingsWriter(buildFileSpecs(utility), {});
       expect((off as unknown as { getReservedNames(): string[] }).getReservedNames()).not.toContain(
          "encodeValue",
       );

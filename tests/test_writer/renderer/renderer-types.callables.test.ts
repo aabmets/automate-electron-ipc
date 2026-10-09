@@ -9,19 +9,18 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import fsp from "node:fs/promises";
 import { dedent } from "@testutils/text-utils.js";
-import mocks from "@testutils/writer/shared-mocks.js";
-import shared from "@testutils/writer/writer-utils.js";
+import { renderSpecs } from "@testutils/writer/render-utils.js";
+import { mockGetTargetFilePath } from "@testutils/writer/shared-mocks.js";
+import { VitestRendererTypesWriter } from "@testutils/writer/test-writers.js";
+import { buildFileSpecs, vitestChannelSpecs } from "@testutils/writer/writer-utils.js";
 import { describe, expect, it } from "vitest";
 
 describe("RendererTypesWriter", () => {
-   mocks.mockGetTargetFilePath(shared.VitestRendererTypesWriter);
+   mockGetTargetFilePath(VitestRendererTypesWriter);
 
    it("should write an empty ipc declaration as a module when pfsArray is empty", async () => {
-      const obj = new shared.VitestRendererTypesWriter([]);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const buffer = await renderSpecs(VitestRendererTypesWriter, []);
       const expectedOutput = dedent(`
          interface IpcApi {}
 
@@ -35,10 +34,8 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should write Unicast RendererToMain callables into the ipc declaration", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Unicast_RendererToMain;
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Unicast_RendererToMain;
+      const buffer = await renderSpecs(VitestRendererTypesWriter, pfsArray);
       const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
@@ -69,10 +66,8 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should write Broadcast RendererToMain callables into the ipc declaration", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Broadcast_RendererToMain;
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Broadcast_RendererToMain;
+      const buffer = await renderSpecs(VitestRendererTypesWriter, pfsArray);
       const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
@@ -90,10 +85,8 @@ describe("RendererTypesWriter", () => {
    });
 
    it("should write Broadcast MainToRenderer callables into the ipc declaration", async () => {
-      const pfsArray = shared.vitestChannelSpecs.Broadcast_MainToRenderer;
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const buffer = await fsp.readFile(obj.getTargetFilePath());
+      const pfsArray = vitestChannelSpecs.Broadcast_MainToRenderer;
+      const buffer = await renderSpecs(VitestRendererTypesWriter, pfsArray);
       const expectedOutput = dedent(`
          interface IpcApi {
             vitestChannel: {
@@ -114,7 +107,7 @@ describe("RendererTypesWriter", () => {
    it("should type senders by channel kind, not by the declared return type", async () => {
       // Regression for B7: `ipcRenderer.send` returns `undefined`, so Broadcast senders are
       // `void` even when the declared signature returns a promise.
-      const pfsArray = shared.buildFileSpecs(
+      const pfsArray = buildFileSpecs(
          {
             name: "sendIt",
             kind: "Broadcast",
@@ -137,9 +130,7 @@ describe("RendererTypesWriter", () => {
             returnType: "Promise<string>",
          },
       );
-      const obj = new shared.VitestRendererTypesWriter(pfsArray);
-      await obj.write(false);
-      const output = (await fsp.readFile(obj.getTargetFilePath())).toString();
+      const output = await renderSpecs(VitestRendererTypesWriter, pfsArray);
 
       expect(output).toContain(
          "asyncIt: {\n      /** @throws {IpcError} */\n      invoke: (id: number) => Promise<string>;",
