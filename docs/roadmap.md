@@ -174,7 +174,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [x] [T139: Render the generated files in memory](./tasks/T139-render-generated-files-in-memory.md) · depends on: none
 - [x] [T38a: Config file, precedence, `--cwd` and `--config`](./tasks/T38a-config-file-and-cli-options.md) · depends on: T07
 - [x] [T42a: Error positions and code frames](./tasks/T42a-error-positions-and-code-frames.md) · depends on: T08
-- [ ] [T38b: Output path options and `--out-*` flags](./tasks/T38b-output-path-options.md) · depends on: T38a
+- [x] [T38b: Output path options and `--out-*` flags](./tasks/T38b-output-path-options.md) · depends on: T38a
 - [x] [T38c: Detect NodeNext from `tsconfig.json`](./tasks/T38c-nodenext-detection.md) · depends on: T38a
 - [x] [T39: `ipcgen --check`](./tasks/T39-ipcgen-check.md) · depends on: T06, T38a, T139
 - [ ] [T40: `ipcgen --watch`](./tasks/T40-ipcgen-watch.md) · depends on: T08, T38a

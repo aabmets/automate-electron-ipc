@@ -36,6 +36,12 @@ export interface RunFixtureOptions {
     * `package.json`. The run finds the file in the project root, so the file is part of the fixture.
     */
    ipcDataDir?: string;
+   /**
+    * Options that are merged into the `config.autoipc` of the `package.json` of the copy before the
+    * run, to run one fixture with different outputs, such as `mainBindingsPath`. An option set to
+    * `undefined` is removed.
+    */
+   config?: Record<string, unknown>;
 }
 
 export interface E2EProject {
@@ -95,7 +101,13 @@ export async function runFixture(
    try {
       await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
       const dir = path.join(root, options.project ?? ".");
-      const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
+      const manifestPath = path.join(dir, "package.json");
+      const manifest = JSON.parse(await fsp.readFile(manifestPath, "utf8"));
+      if (options.config !== undefined) {
+         manifest.config = { ...manifest.config, autoipc: { ...manifest.config?.autoipc } };
+         Object.assign(manifest.config.autoipc, options.config);
+         await fsp.writeFile(manifestPath, JSON.stringify(manifest));
+      }
       const autoipc = manifest.config?.autoipc ?? {};
       const ipcDataDir: string | undefined = options.ipcDataDir ?? autoipc.ipcDataDir;
       if (ipcDataDir === undefined) {
@@ -112,6 +124,8 @@ export async function runFixture(
       }
 
       const read = (name: string) => fsp.readFile(path.join(dir, ipcDataDir, name), "utf8");
+      const readOutput = (configured: string | undefined, name: string) =>
+         fsp.readFile(path.join(dir, configured ?? path.join(ipcDataDir, name)), "utf8");
       const utilityPath = path.join(
          dir,
          autoipc.utilityBindingsPath ?? path.join(ipcDataDir, "utility.ts"),
@@ -126,9 +140,9 @@ export async function runFixture(
          .readFile(path.join(path.dirname(workerPreloadPath), "service-worker.d.ts"), "utf8")
          .catch(() => undefined);
       const generated = {
-         "main.ts": await read("main.ts"),
-         "preload.ts": await read("preload.ts"),
-         "window.d.ts": await read("window.d.ts"),
+         "main.ts": await readOutput(autoipc.mainBindingsPath, "main.ts"),
+         "preload.ts": await readOutput(autoipc.preloadBindingsPath, "preload.ts"),
+         "window.d.ts": await readOutput(autoipc.rendererTypesPath, "window.d.ts"),
          ...(utility === undefined ? {} : { "utility.ts": utility }),
          ...(workerPreload === undefined ? {} : { "service-worker-preload.ts": workerPreload }),
          ...(workerTypes === undefined ? {} : { "service-worker.d.ts": workerTypes }),

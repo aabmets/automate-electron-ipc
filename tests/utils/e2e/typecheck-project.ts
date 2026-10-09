@@ -11,6 +11,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { scopedFilePath } from "@src/scopes.js";
 import { runTsc } from "../tsc-utils.js";
 
 const root = path.resolve(import.meta.dirname, "../../..");
@@ -20,6 +21,25 @@ async function listFiles(dir: string): Promise<string[]> {
    return entries
       .filter((entry) => entry.isFile())
       .map((entry) => path.join(entry.parentPath, entry.name));
+}
+
+/**
+ * The generated files of the page, relative to the project: the ones that the config moves, and
+ * `main.ts`, `preload.ts` and `window.d.ts` in the data directory for the others.
+ */
+async function pageFiles(
+   dir: string,
+   ipcDataDir: string,
+): Promise<{ main: string; preload: string; types: string }> {
+   const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
+   const autoipc = manifest.config?.autoipc ?? {};
+   const file = (configured: string | undefined, name: string) =>
+      (configured ?? `${ipcDataDir}/${name}`).replaceAll("\\", "/");
+   return {
+      main: file(autoipc.mainBindingsPath, "main.ts"),
+      preload: file(autoipc.preloadBindingsPath, "preload.ts"),
+      types: file(autoipc.rendererTypesPath, "window.d.ts"),
+   };
 }
 
 /** The generated file for utility processes, as a list for the files of the type-check. */
@@ -94,7 +114,10 @@ export async function typecheckProject(
    const ipcDir = path.join(dir, ipcDataDir);
    // With a scope, the files are those of that scope alone. Without one, the files of the page are
    // those of the surface of no scope, and the files that use a scope are left out.
-   const scopeSuffix = scope === undefined || scope === "default" ? "" : `.${scope}`;
+   const pageScope = scope === undefined || scope === "default" ? null : scope;
+   const page = await pageFiles(dir, ipcDataDir);
+   // The copy of the typings sits next to them, in the same directory.
+   const windowCheck = `${path.posix.dirname(page.types)}/${windowCheckFile}`;
    const scopeFile = scope === undefined ? null : `${ipcDataDir}/schema-scope-${scope}.ts`;
    const schemaFiles = (await listFiles(ipcDir))
       .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
@@ -124,7 +147,7 @@ export async function typecheckProject(
       },
       files: worker
          ? [
-              `${ipcDataDir}/main.ts`,
+              page.main,
               ...(workerGenerated
                  ? [
                       workerGenerated.preload,
@@ -134,9 +157,9 @@ export async function typecheckProject(
               ...schemaFiles,
            ]
          : [
-              ...["main.ts", `preload${scopeSuffix}.ts`, windowCheckFile].map(
-                 (name) => `${ipcDataDir}/${name}`,
-              ),
+              page.main,
+              scopedFilePath(page.preload, pageScope),
+              windowCheck,
               ...(
                  await Promise.all(extraGeneratedFiles.map((find) => find(dir, ipcDataDir)))
               ).flat(),
@@ -154,8 +177,8 @@ export async function typecheckProject(
       }
    } else {
       copies.push([
-         path.join(ipcDir, `window${scopeSuffix}.d.ts`),
-         path.join(ipcDir, windowCheckFile),
+         path.join(dir, scopedFilePath(page.types, pageScope)),
+         path.join(dir, windowCheck),
       ]);
    }
    await Promise.all(

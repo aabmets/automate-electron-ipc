@@ -142,3 +142,56 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       ).toThrowError(/serviceWorkerPreloadPath/);
    });
 });
+
+describe("validateOptionalConfig, paths of the page files", () => {
+   it.each([
+      ["mainBindingsPath", "main.ts"],
+      ["mainBindingsPath", "src/main/ipc.ts"],
+      ["preloadBindingsPath", "src/preload/ipc.ts"],
+      ["rendererTypesPath", "window.d.ts"],
+      ["rendererTypesPath", "types/ipc.d.ts"],
+   ])("accepts %s: %s", (option, value) => {
+      expect(() => validateOptionalConfig({ ...baseConfig, [option]: value })).not.toThrowError();
+   });
+
+   it.each(["mainBindingsPath", "preloadBindingsPath", "rendererTypesPath"])(
+      "rejects an absolute path for %s",
+      (option) => {
+         expect(() =>
+            validateOptionalConfig({ ...baseConfig, [option]: "/srv/ipc.d.ts" }),
+         ).toThrowError(`${option} must be relative to the project root`);
+      },
+   );
+
+   it.each([
+      ["mainBindingsPath", "main"],
+      ["mainBindingsPath", "main.js"],
+      ["mainBindingsPath", "main.mts"],
+      ["mainBindingsPath", "main.d.ts"],
+      ["preloadBindingsPath", "preload.cts"],
+      ["preloadBindingsPath", "preload.d.ts"],
+      ["preloadBindingsPath", ""],
+   ])("rejects %s: %j, since it is not the path of a .ts file", (option, value) => {
+      expect(() => validateOptionalConfig({ ...baseConfig, [option]: value })).toThrowError(
+         `${option} must be the path of a .ts file`,
+      );
+   });
+
+   it.each(["window.ts", "window", "window.d.mts", "window.js", "", "types.d.ts.map"])(
+      "rejects rendererTypesPath: %j, since it is not the path of a .d.ts file",
+      (value) => {
+         expect(() =>
+            validateOptionalConfig({ ...baseConfig, rendererTypesPath: value }),
+         ).toThrowError("rendererTypesPath must be the path of a .d.ts file");
+      },
+   );
+
+   it.each(["mainBindingsPath", "preloadBindingsPath", "rendererTypesPath"])(
+      "rejects a value of %s which is not a string",
+      (option) => {
+         expect(() => validateOptionalConfig({ ...baseConfig, [option]: 5 })).toThrowError(
+            new RegExp(option),
+         );
+      },
+   );
+});

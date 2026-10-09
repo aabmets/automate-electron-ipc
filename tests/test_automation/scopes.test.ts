@@ -119,6 +119,17 @@ describe("ipcAutomation", () => {
          expect(await fsp.readdir(automation.dir)).toStrictEqual(["schema.ts"]);
       });
 
+      it("rejects a main bindings path which is the file of a scope, and writes nothing", async () => {
+         await expect(
+            generate(SCHEMA, {
+               mainBindingsFilePath: path.join(automation.dir, "out/preload.settings.ts"),
+            }),
+         ).rejects.toThrowError(
+            /'mainBindingsPath' \(.*preload\.settings\.ts'\) is the file that the scope 'settings' is generated to/,
+         );
+         expect(await fsp.readdir(automation.dir)).toStrictEqual(["schema.ts"]);
+      });
+
       it("rejects a utility path which is the declaration file of a scope", async () => {
          await expect(
             generate(SCHEMA, {

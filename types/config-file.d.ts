@@ -38,6 +38,23 @@ export interface AutoIpcConfig {
     */
    timeoutMs?: number;
    /**
+    * The path of the generated bindings for the main process, relative to the project root.
+    * Defaults to `main.ts` in `ipcDataDir`. It must be a `.ts` file.
+    */
+   mainBindingsPath?: string;
+   /**
+    * The path of the generated preload script, relative to the project root. Defaults to
+    * `preload.ts` in `ipcDataDir`. The preload scripts of the scopes are written next to it, as
+    * `preload.<scope>.ts`. It must be a `.ts` file.
+    */
+   preloadBindingsPath?: string;
+   /**
+    * The path of the generated typings of the renderer, relative to the project root. Defaults to
+    * `window.d.ts` in `ipcDataDir`. The typings of the scopes are written next to it, as
+    * `window.<scope>.d.ts`. It must be a `.d.ts` file.
+    */
+   rendererTypesPath?: string;
+   /**
     * The path of the generated file for utility processes, relative to the project root. Defaults
     * to `utility.ts` in `ipcDataDir`. The file is written only if the schema has a channel to a
     * utility process.

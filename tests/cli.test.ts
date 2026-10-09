@@ -9,7 +9,10 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ipcAutomation = vi.hoisted(() => vi.fn());
 vi.mock("@src/automation.js", () => ({ ipcAutomation }));
@@ -70,6 +73,86 @@ describe("cli", () => {
       expect(ipcAutomation).toHaveBeenCalledWith({
          cwd: "packages/app",
          configFile: "conf/ipc.config.ts",
+      });
+   });
+
+   describe("the --out-* flags", () => {
+      let dir: string;
+
+      beforeEach(async () => {
+         // The project root is `dir`, and `dir/packages/app` is a directory inside of it.
+         dir = await fsp.mkdtemp(path.join(tmpdir(), "vitest-cli-"));
+         await fsp.mkdir(path.join(dir, "packages/app"), { recursive: true });
+         await fsp.writeFile(path.join(dir, "package.json"), "{}");
+      });
+      afterEach(() => fsp.rm(dir, { recursive: true, force: true }));
+
+      const run = async (...args: string[]) => {
+         process.argv = ["node", "ipcgen", ...args];
+         ipcAutomation.mockResolvedValue(undefined);
+         await importFreshCli();
+         return ipcAutomation.mock.calls.map(([options]) => options);
+      };
+
+      it.each([
+         ["--out-main", "mainBindingsPath"],
+         ["--out-preload", "preloadBindingsPath"],
+         ["--out-types", "rendererTypesPath"],
+      ])("%s sets %s, as a path from the project root", async (flag, option) => {
+         const [options] = await run("--cwd", dir, flag, "src/generated/out.ts");
+         expect(options).toStrictEqual({
+            cwd: dir,
+            configFile: undefined,
+            overrides: { [option]: "src/generated/out.ts" },
+         });
+      });
+
+      it("takes the paths of the flags from the working directory, not from the project root", async () => {
+         const cwd = path.join(dir, "packages/app");
+         const [options] = await run(
+            "--cwd",
+            cwd,
+            "--out-main",
+            "gen/main.ts",
+            "--out-preload",
+            "../shared/preload.ts",
+            "--out-types",
+            path.join(dir, "types/window.d.ts"),
+         );
+         expect(options.overrides).toStrictEqual({
+            mainBindingsPath: "packages/app/gen/main.ts",
+            preloadBindingsPath: "packages/shared/preload.ts",
+            rendererTypesPath: "types/window.d.ts",
+         });
+      });
+
+      it("takes the paths from the process working directory without --cwd", async () => {
+         const cwd = vi.spyOn(process, "cwd").mockReturnValue(path.join(dir, "packages/app"));
+         const [options] = await run("--out-types", "types/window.d.ts");
+         expect(options.overrides).toStrictEqual({
+            rendererTypesPath: "packages/app/types/window.d.ts",
+         });
+         cwd.mockRestore();
+      });
+
+      it("sets no overrides when no flag gives a path", async () => {
+         const calls = await run("--cwd", dir);
+         expect(calls).toHaveLength(1);
+         expect(calls[0]).toStrictEqual({ cwd: dir, configFile: undefined });
+      });
+
+      it("fails when the working directory is in no project", async () => {
+         const outside = await fsp.mkdtemp(path.join(tmpdir(), "vitest-cli-none-"));
+         try {
+            process.argv = ["node", "ipcgen", "--cwd", outside, "--out-main", "a.ts"];
+            const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+            await importFreshCli();
+            expect(ipcAutomation).not.toHaveBeenCalled();
+            expect(String(err.mock.calls[0][0])).toContain("Cannot find the project root");
+            expect(process.exitCode).toBe(1);
+         } finally {
+            await fsp.rm(outside, { recursive: true, force: true });
+         }
       });
    });
 

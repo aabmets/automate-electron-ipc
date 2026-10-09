@@ -15,8 +15,8 @@ import { describe, expect, it } from "vitest";
 
 const KNOWN_KEYS =
    "autoExpose, channelPrefix, codeIndent, exposeAs, getPathForFile, ipcDataDir, isolatedWorldId, " +
-   "projectUsesNodeNext, rawErrors, serializer, serviceWorkerPreloadPath, timeoutMs, " +
-   "utilityBindingsPath";
+   "mainBindingsPath, preloadBindingsPath, projectUsesNodeNext, rawErrors, rendererTypesPath, " +
+   "serializer, serviceWorkerPreloadPath, timeoutMs, utilityBindingsPath";
 
 describe("unknown config key", () => {
    const project = withConfigProject();

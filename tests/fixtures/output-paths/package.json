@@ -1,0 +1,12 @@
+{
+   "name": "fixture-output-paths",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "src/ipc",
+         "mainBindingsPath": "src/main/generated/ipc-main.ts",
+         "preloadBindingsPath": "src/preload/generated/deep/ipc-preload.ts",
+         "rendererTypesPath": "types/ipc-window.d.ts"
+      }
+   }
+}

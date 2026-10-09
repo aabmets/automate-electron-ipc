@@ -63,6 +63,9 @@ The same options can live in a config file instead, see [Config file](#config-fi
          "rawErrors": false,
          "channelPrefix": "autoipc:",
          "timeoutMs": 0,
+         "mainBindingsPath": "src/autoipc/main.ts",
+         "preloadBindingsPath": "src/autoipc/preload.ts",
+         "rendererTypesPath": "src/autoipc/window.d.ts",
          "utilityBindingsPath": "src/autoipc/utility.ts",
          "serviceWorkerPreloadPath": "src/autoipc/service-worker-preload.ts",
          "exposeAs": "ipc",
@@ -94,6 +97,15 @@ Config explanation:
    with an `IpcTimeoutError`. `0`, the default, waits for ever. It is also the default of `callUtility`,
    `callMain` and `invokeUtility`, which reject with an `IpcUtilityError` of the code
    `IPC_UTILITY_TIMEOUT`, and of `invokeFromWorker`. See [Timeouts](#timeouts).
+ - `mainBindingsPath` - Relative path of the generated bindings for the main process, `main.ts` in
+   `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file or of a
+   file that the run reads, such as the schema.
+ - `preloadBindingsPath` - Relative path of the generated preload script, `preload.ts` in `ipcDataDir`
+   by default. The preload scripts of the [scopes](#scopes-a-different-api-per-window) are written next to it, as
+   `preload.<scope>.ts`. It must be a `.ts` file, with the same limits as `mainBindingsPath`.
+ - `rendererTypesPath` - Relative path of the generated typings of the page, `window.d.ts` in
+   `ipcDataDir` by default. The typings of the scopes are written next to it, as `window.<scope>.d.ts`.
+   It must be a `.d.ts` file, with the same limits as `mainBindingsPath`.
  - `utilityBindingsPath` - Relative path of the generated file for utility processes, `utility.ts` in
    `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
    file is written only when the schema has a channel to a utility process. See
@@ -161,6 +173,11 @@ The `ipcgen` command also takes these flags, which win over the config:
  - `--cwd <dir>` - Find the project root from this directory instead of the working directory.
  - `--config <file>` - Read this config file (`.json`, `.mjs` or `.ts`, relative to the working directory)
    instead of looking for `autoipc.config.*` in the project root.
+
+ - `--out-main <file>`, `--out-preload <file>` and `--out-types <file>` - Set `mainBindingsPath`,
+   `preloadBindingsPath` and `rendererTypesPath`. Unlike in the config, the path is relative to the
+   working directory (the one `--cwd` names), and `ipcgen` converts it to a path from the project root.
+   The imports in each generated file are written for the directory that the file ends up in.
 
 The order of precedence is: command line flags, then the one config source, then the defaults.
 

@@ -80,30 +80,51 @@ export interface OutputPaths {
    serviceWorkerTypesFilePath: string;
 }
 
+/** The path of a generated file: the one that the config sets, or `name` in the data directory. */
+function outputPath(
+   configured: string | undefined,
+   ipcDataDir: string,
+   name: string,
+   cwd?: string,
+): string {
+   return utils.toPosix(
+      configured === undefined
+         ? path.join(ipcDataDir, name)
+         : utils.resolveUserProjectPath(configured, cwd),
+   );
+}
+
 /**
  * Derives the paths of the generated files: the ones in the data directory, and the ones that the
- * config moves elsewhere (`utilityBindingsPath` and `serviceWorkerPreloadPath`).
+ * config moves elsewhere (`mainBindingsPath`, `preloadBindingsPath`, `rendererTypesPath`,
+ * `utilityBindingsPath` and `serviceWorkerPreloadPath`).
  */
 export function deriveOutputPaths(
    config: t.IPCOptionalConfig,
    ipcDataDir: string,
    cwd?: string,
 ): OutputPaths {
-   const utilityBindingsFilePath = utils.toPosix(
-      config.utilityBindingsPath === undefined
-         ? path.join(ipcDataDir, "utility.ts")
-         : utils.resolveUserProjectPath(config.utilityBindingsPath, cwd),
-   );
-   const serviceWorkerPreloadFilePath = utils.toPosix(
-      config.serviceWorkerPreloadPath === undefined
-         ? path.join(ipcDataDir, "service-worker-preload.ts")
-         : utils.resolveUserProjectPath(config.serviceWorkerPreloadPath, cwd),
+   const serviceWorkerPreloadFilePath = outputPath(
+      config.serviceWorkerPreloadPath,
+      ipcDataDir,
+      "service-worker-preload.ts",
+      cwd,
    );
    return {
-      mainBindingsFilePath: utils.toPosix(path.join(ipcDataDir, "main.ts")),
-      preloadBindingsFilePath: utils.toPosix(path.join(ipcDataDir, "preload.ts")),
-      rendererTypesFilePath: utils.toPosix(path.join(ipcDataDir, "window.d.ts")),
-      utilityBindingsFilePath,
+      mainBindingsFilePath: outputPath(config.mainBindingsPath, ipcDataDir, "main.ts", cwd),
+      preloadBindingsFilePath: outputPath(
+         config.preloadBindingsPath,
+         ipcDataDir,
+         "preload.ts",
+         cwd,
+      ),
+      rendererTypesFilePath: outputPath(config.rendererTypesPath, ipcDataDir, "window.d.ts", cwd),
+      utilityBindingsFilePath: outputPath(
+         config.utilityBindingsPath,
+         ipcDataDir,
+         "utility.ts",
+         cwd,
+      ),
       serviceWorkerPreloadFilePath,
       // The typings of the worker are written next to its preload script.
       serviceWorkerTypesFilePath: utils.toPosix(
@@ -130,7 +151,11 @@ export async function assertOutputsDistinct(
    outputs: OutputPaths,
    inputs: OutputInputs,
 ): Promise<void> {
-   const configured: [string, string | undefined, string][] = [
+   // Listed in the order in which a clash is blamed on the later path.
+   const options: [string, string | undefined, string][] = [
+      ["mainBindingsPath", config.mainBindingsPath, outputs.mainBindingsFilePath],
+      ["preloadBindingsPath", config.preloadBindingsPath, outputs.preloadBindingsFilePath],
+      ["rendererTypesPath", config.rendererTypesPath, outputs.rendererTypesFilePath],
       ["utilityBindingsPath", config.utilityBindingsPath, outputs.utilityBindingsFilePath],
       [
          "serviceWorkerPreloadPath",
@@ -138,14 +163,15 @@ export async function assertOutputsDistinct(
          outputs.serviceWorkerPreloadFilePath,
       ],
    ];
+   const configured = options.filter(([, value]) => value !== undefined);
    // A file system that ignores case holds `ipc/Main.ts` and `ipc/main.ts` in one file.
    const fold = (await utils.isCaseInsensitiveFileSystem(inputs.ipcDataDir))
       ? (file: string) => file.toLowerCase()
       : (file: string) => file;
+   // The files that no option moves are in the data directory, where an option can hit them.
    const taken = [
-      outputs.mainBindingsFilePath,
-      outputs.preloadBindingsFilePath,
-      outputs.rendererTypesFilePath,
+      ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
+      outputs.serviceWorkerTypesFilePath,
    ].map(fold);
    for (const [option, value, file] of configured) {
       if (taken.includes(fold(file))) {

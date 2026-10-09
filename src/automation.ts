@@ -34,11 +34,13 @@ import { UtilityBindingsWriter } from "./writer/utility/utility-bindings.js";
 
 /**
  * Throws if the file of a scope would overwrite another generated file. The files of the scopes
- * are named after them, so only the paths that the config sets, which are the ones of the utility
- * bindings and of the service worker preload script, can clash.
+ * are named after them, so only the paths that the config sets can clash: the ones of the main
+ * bindings, the utility bindings and the service worker preload script. The preload script and the
+ * typings of the page cannot, since a scoped file of one is never the base file of the other.
  */
 function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): void {
    const configured: [string, string][] = [
+      ["mainBindingsPath", config.mainBindingsFilePath],
       ["utilityBindingsPath", config.utilityBindingsFilePath],
       ["serviceWorkerPreloadPath", config.serviceWorkerPreloadFilePath],
    ];

@@ -5,6 +5,7 @@ import type * as t from "@types";
 import { program } from "commander";
 import { ipcAutomation } from "./automation.js";
 import { findStaleOutputs } from "./check.js";
+import { type CliFlags, flagsToRunOptions } from "./cli-options.js";
 import cfg from "./config.js";
 import logger from "./logger.js";
 import utils from "./utils.js";
@@ -38,11 +39,23 @@ program
       "directory to find the project root from (default: the working directory)",
    )
    .option("--config <file>", "config file to read, relative to the working directory")
+   .option(
+      "--out-main <file>",
+      "path of the generated main bindings, relative to the working directory",
+   )
+   .option(
+      "--out-preload <file>",
+      "path of the generated preload script, relative to the working directory",
+   )
+   .option(
+      "--out-types <file>",
+      "path of the generated renderer typings (.d.ts), relative to the working directory",
+   )
    .option("--check", "exit with 1 if the generated files are out of date, and write nothing")
-   .action(async (options: { cwd?: string; config?: string; check?: boolean }) => {
+   .action(async (flags: CliFlags) => {
       try {
-         const runOptions = { cwd: options.cwd, configFile: options.config };
-         await (options.check ? runCheck(runOptions) : ipcAutomation(runOptions));
+         const runOptions = flagsToRunOptions(flags);
+         await (flags.check ? runCheck(runOptions) : ipcAutomation(runOptions));
       } catch (error) {
          logger.fatalError(error);
          process.exitCode = 1;

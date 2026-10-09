@@ -35,6 +35,28 @@ function relativeScriptPath(option: string) {
    });
 }
 
+/** A path in the project, relative to its root, of a `.ts` file that is not a declaration file. */
+function relativeTsPath(option: string) {
+   return refine(string(), "relative", (value) => {
+      if (path.isAbsolute(value)) {
+         return `${option} must be relative to the project root`;
+      }
+      return /\.ts$/.test(value) && utils.isSchemaSourceFile(value)
+         ? true
+         : `${option} must be the path of a .ts file`;
+   });
+}
+
+/** A path in the project, relative to its root, of a `.d.ts` file. */
+function relativeDeclarationPath(option: string) {
+   return refine(string(), "relative", (value) => {
+      if (path.isAbsolute(value)) {
+         return `${option} must be relative to the project root`;
+      }
+      return /\.d\.ts$/.test(value) ? true : `${option} must be the path of a .d.ts file`;
+   });
+}
+
 const IPCOptionalConfigStruct = object({
    projectUsesNodeNext: boolean(),
    ipcDataDir: refine(string(), "relative", (value) => {
@@ -42,6 +64,9 @@ const IPCOptionalConfigStruct = object({
       return path.isAbsolute(value) ? errMsg : true;
    }),
    rawErrors: optional(boolean()),
+   mainBindingsPath: optional(relativeTsPath("mainBindingsPath")),
+   preloadBindingsPath: optional(relativeTsPath("preloadBindingsPath")),
+   rendererTypesPath: optional(relativeDeclarationPath("rendererTypesPath")),
    utilityBindingsPath: optional(relativeScriptPath("utilityBindingsPath")),
    serviceWorkerPreloadPath: optional(relativeScriptPath("serviceWorkerPreloadPath")),
    channelPrefix: optional(
