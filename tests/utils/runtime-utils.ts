@@ -114,6 +114,18 @@ export function abortNavigation(contents: LoadingContents) {
    contents.emit("did-stop-loading");
 }
 
+/**
+ * A load is stopped after its navigation committed, such as `webContents.stop()` while the new
+ * document loads: `did-navigate`, then `did-fail-load` with ERR_ABORTED (-3), which shows no
+ * error page, and `did-stop-loading` without a `did-finish-load`.
+ */
+export function stopCommittedLoad(contents: LoadingContents) {
+   commitNavigation(contents);
+   contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "app://x", true);
+   contents.loading = false;
+   contents.emit("did-stop-loading");
+}
+
 /** A fake `electron` module for the generated main process bindings. */
 export function createFakeElectron() {
    return {

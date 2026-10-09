@@ -1060,21 +1060,28 @@ describe("MainBindingsWriter", () => {
             // Whether the load that is going on has been reported already.
             let settled = !contents.isDestroyed() && !contents.isLoading();
             let failed = false;
+            // Whether a main-frame navigation has committed since the watch began.
+            let committed = false;
             // A main-frame navigation that commits replaces the document. One that starts and stops
             // without a commit (a prevented one, a download, a 204 response) leaves the page as it was.
             const commit = () => {
                loaded = false;
                settled = false;
                failed = false;
+               committed = true;
             };
             // A failed load ends in the error page of Electron, which fires its own did-finish-load.
-            // ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded.
+            // ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded. When it
+            // follows a commit, the document that committed is the page, and it loaded as far as it got.
             const fail = (_event: unknown, code: number, _description: string, _url: string, isMainFrame: boolean) => {
-               if (isMainFrame) {
+               if (!isMainFrame) {
+                  return;
+               }
+               if (code !== -3) {
                   failed = true;
-                  if (code !== -3) {
-                     loaded = false;
-                  }
+                  loaded = false;
+               } else if (!committed) {
+                  failed = true;
                }
             };
             const finish = () => {

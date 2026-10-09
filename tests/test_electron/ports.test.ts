@@ -300,6 +300,33 @@ const scenarios: Record<string, Scenario> = {
       return { failure, afterFailure, page: await ctx.evaluate(win, () => (window as any).events) };
    },
 
+   // The load of a page is stopped after the navigation committed, such as by webContents.stop()
+   // while the document is still arriving. Electron fires did-fail-load with ERR_ABORTED and
+   // did-stop-loading, and no did-finish-load, but the document and its preload script are there.
+   mainPortStoppedAfterCommit: async (ctx) => {
+      const http = require("node:http");
+      const server = http.createServer((_request: any, response: any) => {
+         response.writeHead(200, { "content-type": "text/html" });
+         response.write(ctx.data.logPage);
+         setTimeout(() => response.end("<p>the rest</p>"), 1500).unref();
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+         const win = ctx.blank();
+         const connection = ctx.ipc.logTail.connect(win);
+         const main: string[] = [];
+         connection.onReady(() => main.push("ready"));
+         connection.send("queued");
+         win.webContents.once("did-navigate", () => setTimeout(() => win.webContents.stop(), 150));
+         await win.loadURL(`http://127.0.0.1:${server.address().port}/`).catch(() => undefined);
+         await ctx.sleep(500);
+         return { main: [...main], page: await ctx.evaluate(win, () => (window as any).events) };
+      } finally {
+         server.closeAllConnections();
+         server.close();
+      }
+   },
+
    // A navigation which never commits, such as one that will-navigate prevents (Electron security
    // checklist #13), leaves the page as it was, with its ports.
    abortedNavigation: async (ctx) => {
@@ -471,6 +498,13 @@ function body(group: ElectronGroup) {
             afterFailure: [],
             page: [["ready"], ["message", "queued"]],
          });
+      });
+   });
+
+   it("pairs the document of a load that was stopped after its navigation committed", () => {
+      expect(group.value("mainPortStoppedAfterCommit")).toStrictEqual({
+         main: ["ready"],
+         page: [["ready"], ["message", "queued"]],
       });
    });
 

@@ -1995,9 +1995,11 @@ export class MainBindingsWriter extends BaseWriter {
     * `loadURL` has resolved, until `did-stop-loading`. So the page counts as loaded from every
     * `did-finish-load`, and from the `did-stop-loading` of a load that `did-finish-load` has not
     * reported, such as one that finished before the watch began. A failed main-frame load does not
-    * count, nor does the error page that Electron shows for it. The state of the load resets only
-    * when a main-frame navigation commits (`did-navigate`), so one that never commits changes
-    * nothing. The events are watched through `watchEvent`, so any number of watches of the same
+    * count, nor does the error page that Electron shows for it. The exception is ERR_ABORTED (-3)
+    * after a commit, such as `stop()` while the new document loads: it shows no error page and the
+    * document that committed is there, so the `did-stop-loading` that follows counts as its load.
+    * The state of the load resets only when a main-frame navigation commits (`did-navigate`), so
+    * one that never commits changes nothing. The events are watched through `watchEvent`, so any number of watches of the same
     * contents adds one listener of each event. `onLoad` runs once per load, and the watch starts
     * out loaded if the contents have a page and are not loading.
     */
@@ -2015,21 +2017,28 @@ export class MainBindingsWriter extends BaseWriter {
          `${i1}// Whether the load that is going on has been reported already.`,
          `${i1}let settled = !contents.isDestroyed() && !contents.isLoading();`,
          `${i1}let failed = false;`,
+         `${i1}// Whether a main-frame navigation has committed since the watch began.`,
+         `${i1}let committed = false;`,
          `${i1}// A main-frame navigation that commits replaces the document. One that starts and stops`,
          `${i1}// without a commit (a prevented one, a download, a 204 response) leaves the page as it was.`,
          `${i1}const commit = () => {`,
          `${i2}loaded = false;`,
          `${i2}settled = false;`,
          `${i2}failed = false;`,
+         `${i2}committed = true;`,
          `${i1}};`,
          `${i1}// A failed load ends in the error page of Electron, which fires its own did-finish-load.`,
-         `${i1}// ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded.`,
+         `${i1}// ERR_ABORTED (-3) shows no error page, so the page that was loaded stays loaded. When it`,
+         `${i1}// follows a commit, the document that committed is the page, and it loaded as far as it got.`,
          `${i1}const fail = (_event: unknown, code: number, _description: string, _url: string, isMainFrame: boolean) => {`,
-         `${i2}if (isMainFrame) {`,
+         `${i2}if (!isMainFrame) {`,
+         `${i3}return;`,
+         `${i2}}`,
+         `${i2}if (code !== -3) {`,
          `${i3}failed = true;`,
-         `${i3}if (code !== -3) {`,
-         `${i4}loaded = false;`,
-         `${i3}}`,
+         `${i3}loaded = false;`,
+         `${i2}} else if (!committed) {`,
+         `${i3}failed = true;`,
          `${i2}}`,
          `${i1}};`,
          `${i1}const finish = () => {`,

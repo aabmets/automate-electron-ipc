@@ -25,6 +25,7 @@ import {
    loadGenerated,
    settlePorts,
    startLoading,
+   stopCommittedLoad,
    windowIpcPaths,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -267,6 +268,20 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
 
       startLoading(contents);
       finishLoading(contents);
+      expect(channelsMade).toHaveLength(1);
+      expect(contents.postMessage).toHaveBeenCalledTimes(1);
+   });
+
+   it("pairs the document that committed when its load is stopped (ERR_ABORTED after a commit)", async () => {
+      const ipc = await loadMain();
+      const child = createChild();
+      const contents = createContents({ loading: true, url: "" });
+      ipc.queryRows.connect(child, contents);
+      expect(channelsMade).toHaveLength(0);
+
+      startLoading(contents);
+      stopCommittedLoad(contents);
+
       expect(channelsMade).toHaveLength(1);
       expect(contents.postMessage).toHaveBeenCalledTimes(1);
    });

@@ -15,4 +15,15 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   Keep one listener per contents and event (`watchEvent`, T87).
 - **Tests:** unit tests with the fakes of `tests/utils/runtime-utils.ts`; a real-Electron scenario for
   each case that changes behavior.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Changed the third case only: an ERR_ABORTED (-3) after a main-frame
+  commit (`webContents.stop()` while the document arrives; Electron fires `did-navigate`,
+  `did-fail-load` -3 and `did-stop-loading`, no `did-finish-load`) no longer sets `failed`, so the
+  `did-stop-loading` counts as the load of the document that committed. `watchPageLoad` keeps a
+  `committed` flag for that; an ERR_ABORTED before any commit still sets `failed`. Left as-is: the
+  first case (a `connect` between the start and the commit of a navigation pairs the old page, and
+  the commit then pairs the new one), since the watch cannot know whether the navigation will commit,
+  and waiting for it would hold back the old page for as long as a slow navigation takes, with the same
+  final state; and the second case (a watch that begins between `did-fail-load` and the error page's
+  `did-finish-load`), since Electron 44 shows nothing that tells the error page apart: `getURL()` and
+  `mainFrame.url` are the failed URL, and `mainFrame.origin` is `"null"` for custom schemes as well.
+  Real-Electron scenario: `mainPortStoppedAfterCommit` (`ports.test.ts`).

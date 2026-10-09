@@ -13,6 +13,7 @@ import { EventEmitter } from "node:events";
 import { type E2EProject, runFixture } from "@testutils/e2e-utils.js";
 import {
    abortNavigation,
+   commitNavigation,
    createFakeElectron,
    createFakePreloadElectron,
    failLoading,
@@ -20,6 +21,7 @@ import {
    loadGenerated,
    settlePorts,
    startLoading,
+   stopCommittedLoad,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -284,6 +286,53 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          startLoading(contents);
          finishLoading(contents);
          expect(onReady).toHaveBeenCalledOnce();
+      });
+
+      it("pairs the document that committed when its load is stopped (ERR_ABORTED after a commit)", async () => {
+         const ipc = await loadMain();
+         const contents = createContents({ loading: true, url: "" });
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         connection.send("queued");
+
+         startLoading(contents);
+         stopCommittedLoad(contents);
+
+         expect(onReady).toHaveBeenCalledOnce();
+         expect(contents.postMessage).toHaveBeenCalledOnce();
+      });
+
+      it("pairs a reloaded page whose load is stopped after a commit, and a later load pairs again", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         onReady.mockClear();
+
+         startLoading(contents);
+         stopCommittedLoad(contents);
+         expect(onReady).toHaveBeenCalledOnce();
+
+         startLoading(contents);
+         finishLoading(contents);
+         expect(onReady).toHaveBeenCalledTimes(2);
+      });
+
+      it("still does not pair a load that fails with an error after a commit", async () => {
+         const ipc = await loadMain();
+         const contents = createContents();
+         const connection = ipc.logTail.connect(contents);
+         const onReady = vi.fn();
+         connection.onReady(onReady);
+         onReady.mockClear();
+
+         startLoading(contents);
+         commitNavigation(contents);
+         failLoading(contents);
+
+         expect(onReady).not.toHaveBeenCalled();
       });
 
       it("does not pair again when only a subframe, or only the document, navigates", async () => {

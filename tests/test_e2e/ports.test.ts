@@ -21,6 +21,7 @@ import {
    loadGenerated,
    settlePorts,
    startLoading,
+   stopCommittedLoad,
 } from "@testutils/runtime-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -360,6 +361,19 @@ describe("ipc.<name>.connect", () => {
          expect(one.webContents.send).not.toHaveBeenCalled();
          expect(two.webContents.send).not.toHaveBeenCalled();
          expect(onClose).not.toHaveBeenCalled();
+      });
+
+      it("pairs a window whose load is stopped after its navigation committed (ERR_ABORTED)", async () => {
+         const ipc = await loadMain();
+         const one = createWindow();
+         const two = createWindow();
+         startLoading(two.webContents);
+         ipc.chat.connect(one, two);
+
+         stopCommittedLoad(two.webContents);
+
+         expect(posted(one)).toHaveLength(1);
+         expect(posted(two)).toHaveLength(1);
       });
 
       it("pairs on the stop of a load after a subframe failed to load", async () => {
