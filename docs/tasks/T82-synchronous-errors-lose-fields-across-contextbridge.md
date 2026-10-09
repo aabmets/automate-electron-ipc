@@ -20,4 +20,12 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `send` of a service worker) say what is true.
 - **Tests:** real-Electron scenarios for each synchronous error; the `it.fails` of T81a turns into a
   passing test, or into an assertion of the documented behavior.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Probed in Electron: a synchronous throw reaches the page as an `Error`
+  with `message` and `stack` only, whatever was thrown (`name` and `code` are lost). The generated
+  preload script throws synchronously in two places, and both serialize: the `send` of a
+  page-to-main channel (also in a service worker) and the `send` of a port channel; brokered
+  utility channels have no `send`, and every other error is a promise rejection, which keeps the
+  plain object. Decision: keep the code in the message. The new `encodeSync` helper throws the
+  object with the message `[IPC_SERIALIZATION] ...`. The `it.fails` of T81a and T81c are plain tests
+  of that now, and a new scenario covers the page `send`. The native errors of `ipcRenderer.send` and
+  `postMessage` for channels without a serializer are Electron's and were left alone.

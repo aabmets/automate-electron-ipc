@@ -162,7 +162,7 @@ describe("a port channel between two pages, with a serializer", () => {
       ]);
    });
 
-   it("throws the plain serialization error from a send that cannot be serialized, and sends nothing", async () => {
+   it("throws the serialization error from a send that cannot be serialized, with the code in the message, and sends nothing", async () => {
       const a = await loadPage();
       const peer = pair(a.fake, "tracker", "1:a");
       const received: unknown[] = [];
@@ -179,7 +179,7 @@ describe("a port channel between two pages, with a serializer", () => {
       expect(thrown).toStrictEqual({
          name: "IpcSerializationError",
          message:
-            "The data cannot be serialized of the channel 'tracker': cannot serialize a function",
+            "[IPC_SERIALIZATION] The data cannot be serialized of the channel 'tracker': cannot serialize a function",
          code: "IPC_SERIALIZATION",
       });
       expect(received).toStrictEqual([]);

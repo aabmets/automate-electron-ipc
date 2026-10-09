@@ -1357,8 +1357,12 @@ It does not apply to the `data` of an error, which is cloned as before.
   code of the serializer. This holds for a service worker as well: `validateSender` and `allowedOrigins`
   come first.
 - **Failures.** A value that cannot be serialized fails the call: an `invoke` or a `stream` rejects,
-  and a `send` throws, in the page, with the plain object `{ name: 'IpcSerializationError', message,
-  code: 'IPC_SERIALIZATION' }`. In the main process the same failure throws an `IpcSerializationError`
+  and a `send` throws, in the page. The rejection is the plain object `{ name: 'IpcSerializationError',
+  message, code: 'IPC_SERIALIZATION' }`. What a function throws synchronously reaches the page as an
+  `Error` with the message only, since `contextBridge` copies it that way, so a `send` throws an `Error`
+  whose message begins with the code: `[IPC_SERIALIZATION] The data cannot be serialized of the channel
+  '...': ...`. The page tells the failure by that prefix, and there is no `code` or `name` to read.
+  In the main process the same failure throws an `IpcSerializationError`
   (exported from `main.ts`), also with the code `IPC_SERIALIZATION`; for a call from the page it reaches
   the page in the error envelope. A message that cannot be deserialized is answered with that error if
   someone waits for an answer, and otherwise (`send`, `emit`) it is logged with `console.error` and
@@ -1378,7 +1382,7 @@ It does not apply to the `data` of an error, which is cloned as before.
   child, fails with the error; a chunk that the page cannot deserialize fails the stream there and
   cancels it in the child.
   For a service worker, a call from the worker whose arguments cannot be serialized rejects, and a
-  `send` throws, in the worker with the plain object, as above. A call that arrives with arguments that
+  `send` throws, in the worker, an `Error` whose message begins with the code, as above. A call that arrives with arguments that
   cannot be read, or whose result cannot be serialized, is answered with the error envelope (or rejects
   with the `IpcSerializationError`, with `rawErrors`). A message of the worker that cannot be read is
   logged with `console.error` and dropped in the main process, and does not use up a `once` listener, and

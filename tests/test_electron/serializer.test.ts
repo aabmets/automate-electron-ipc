@@ -143,6 +143,26 @@ const scenarios: Record<string, Scenario> = {
       });
    },
 
+   // A `send` throws synchronously, and contextBridge turns what the preload script throws into an
+   // `Error` with the message only. So the page can tell the failure only by the code in the message.
+   unserializableSend: async (ctx) => {
+      const win = await ctx.open();
+      let heard = 0;
+      ctx.ipc.logVisit.on(() => {
+         heard++;
+      });
+      const thrown = await ctx.evaluate(win, () => {
+         try {
+            ipc.logVisit.send(() => 1, new Map());
+            return null;
+         } catch (error: any) {
+            return { name: error.name, code: error.code, message: error.message };
+         }
+      });
+      await ctx.sleep(150);
+      return { thrown, heard };
+   },
+
    noArguments: async (ctx) => {
       const win = await ctx.open();
       let called = 0;
@@ -211,6 +231,16 @@ describeElectron("serializer in a sandboxed window", "serializer", scenarios, (g
          name: "IpcSerializationError",
          code: "IPC_SERIALIZATION",
       });
+   });
+
+   it("throws from a send that cannot be serialized with the code in the message, and sends nothing", () => {
+      const { thrown, heard } = group.value<any>("unserializableSend");
+
+      expect(thrown.message).toMatch(
+         /^\[IPC_SERIALIZATION\] The data cannot be serialized of the channel 'logVisit': /,
+      );
+      expect(thrown.code).toBeUndefined();
+      expect(heard).toBe(0);
    });
 
    it("serializes a call without arguments and without a result", () => {

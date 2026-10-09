@@ -382,10 +382,15 @@ describe("generated serializer, send", () => {
       expect(listener).toHaveBeenCalledOnce();
    });
 
-   it("throws in the page, without a message, when the arguments cannot be serialized", async () => {
+   it("throws in the page, with the code in the message, when the arguments cannot be serialized", async () => {
       const { page, pageElectron } = await connect();
 
-      expect(() => page.logVisit.send(new Date(0), Symbol("no"))).toThrowError();
+      expect(() => page.logVisit.send(new Date(0), Symbol("no"))).toThrowError(
+         expect.objectContaining({
+            code: "IPC_SERIALIZATION",
+            message: expect.stringMatching(/^\[IPC_SERIALIZATION\] /),
+         }),
+      );
       expect(pageElectron.ipcRenderer.send).not.toHaveBeenCalled();
    });
 });

@@ -209,7 +209,9 @@ export class PreloadBindingsWriter extends BaseWriter {
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
       const serialized = this.isSerializedSpec(spec);
-      const sent = serialized ? `encodeValue('${spec.name}', args)` : "...args";
+      // A `send` throws synchronously, so its failure must carry the code in the message.
+      const encode = spec.kind === "Broadcast" ? "encodeSync" : "encodeValue";
+      const sent = serialized ? `${encode}('${spec.name}', args)` : "...args";
       let ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ${sent})`;
       if (this.hasTimeout(spec)) {
          ipcRenderer = `withTimeout('${spec.name}', ${this.getTimeoutMs(spec)}, ${ipcRenderer})`;
@@ -242,7 +244,10 @@ export class PreloadBindingsWriter extends BaseWriter {
     * `encodeValue` turns what is sent into the wire value, and `decodeValue` turns what arrives
     * back. The arguments of a call go as one value, the list of them, which `decodeArguments`
     * checks. A failure is a plain object `{ name: 'IpcSerializationError', message, code:
-    * 'IPC_SERIALIZATION' }`, since contextBridge does not keep the fields of an `Error`. A message
+    * 'IPC_SERIALIZATION' }`, since contextBridge does not keep the fields of an `Error`. That holds
+    * for a promise that rejects with it. What a function throws synchronously, as the `send` of a
+    * channel does, reaches the page as an `Error` with the message only, whatever was thrown, so
+    * `encodeSync` puts the code in the message, as `[IPC_SERIALIZATION] ...`. A message
     * from the main process that cannot be read is logged and dropped, and so is not thrown into
     * the code of Electron.
     */
@@ -260,6 +265,14 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}return (ipcSerialize as (value: unknown) => unknown)(value);`,
          `${i1}} catch (cause) {`,
          `${i2}throw serializationError(channel, 'The data cannot be serialized', cause);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function encodeSync(channel: string, value: unknown): unknown {",
+         `${i1}try {`,
+         `${i2}return encodeValue(channel, value);`,
+         `${i1}} catch (error: any) {`,
+         `${i2}throw { ...error, message: \`[\${error.code}] \${error.message}\` };`,
          `${i1}}`,
          "}",
          "",
@@ -1124,14 +1137,16 @@ export class PreloadBindingsWriter extends BaseWriter {
     * With a serializer, a message is posted as a list of one value, which is the list of the arguments
     * as the serializer made it, and a message that arrives is deserialized the same way, so the
     * pages and the main process agree on it. A `send` that cannot be serialized throws, like the
-    * other channels, when a port is there. A message that waits in the queue is serialized when the
+    * other channels, when a port is there, with the code in the message (see `encodeSync`). A message that waits in the queue is serialized when the
     * queue is flushed, and one that cannot be is logged with `console.error` and dropped, like one
     * that cannot be posted. A message that cannot be deserialized is logged and dropped.
     */
    private getPortComponents(): string {
       const [i1, i2, i3, i4, i5, i6] = this.indents;
       const serialized = this.usesSerializer();
-      const wire = (args: string) => (serialized ? `[encodeValue(channel, ${args})]` : args);
+      // A `send` to a port throws synchronously, and a message of the queue does not.
+      const wire = (args: string, encode = "encodeValue") =>
+         serialized ? `[${encode}(channel, ${args})]` : args;
       return [
          "",
          "type PortListener = { callback: Function };",
@@ -1293,7 +1308,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i5}return;`,
          `${i4}}`,
          `${i4}if (port) {`,
-         `${i5}port.postMessage(${wire("args")});`,
+         `${i5}port.postMessage(${wire("args", "encodeSync")});`,
          `${i4}} else {`,
          `${i5}enqueue(pending, args, channel, max, ownOverflow ?? overflow);`,
          `${i4}}`,

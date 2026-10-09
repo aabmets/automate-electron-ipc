@@ -136,19 +136,15 @@ describeElectron(
          ]);
       });
 
-      it("throws from a send that cannot be serialized, and sends nothing", () => {
-         expect(group.value<any>("workerSends").thrown.message).toContain(
-            "cannot be serialized of the channel 'tell'",
-         );
-      });
+      // contextBridge turns what the preload script throws synchronously into an `Error` with the
+      // message only, so the worker tells the failure by the code in the message.
+      it("throws from a send that cannot be serialized, with the code in the message", () => {
+         const { thrown } = group.value<any>("workerSends");
 
-      // T82: contextBridge turns what the preload script throws into an `Error` with the message
-      // only, so the worker cannot tell the failure by its `code`. A `send` does the same.
-      it.fails("keeps the code of the error that a send throws in the worker", () => {
-         expect(group.value<any>("workerSends").thrown).toMatchObject({
-            name: "IpcSerializationError",
-            code: "IPC_SERIALIZATION",
-         });
+         expect(thrown.message).toMatch(
+            /^\[IPC_SERIALIZATION\] The data cannot be serialized of the channel 'tell': /,
+         );
+         expect(thrown.code).toBeUndefined();
       });
 
       it("asks the worker with a Date and gets a Map of Dates, and sends it a Date and a Map", () => {

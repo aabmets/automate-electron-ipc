@@ -211,7 +211,7 @@ describe("serializer, the generated files", () => {
       const output = await preload([send, invoke], { rawErrors: true });
 
       expect(output).toContain(
-         "send: (...args: any[]) => ipcRenderer.send('autoipc:sendIt', encodeValue('sendIt', args)),",
+         "send: (...args: any[]) => ipcRenderer.send('autoipc:sendIt', encodeSync('sendIt', args)),",
       );
       expect(output).toContain(
          "invoke: async (...args: any[]) => decodeValue('getIt', await ipcRenderer.invoke('autoipc:getIt', encodeValue('getIt', args))),",
@@ -389,7 +389,7 @@ describe("serializer, the generated files", () => {
       );
       expect(output).toContain("return decodeValue('workerIt', result.value);");
       expect(output).toContain(
-         "ipcRenderer.send('autoipc:workerSend', encodeValue('workerSend', args))",
+         "ipcRenderer.send('autoipc:workerSend', encodeSync('workerSend', args))",
       );
       expect(output).toContain("const args = readArguments('workerEmit', received);");
       expect(output).toContain(
@@ -519,7 +519,7 @@ describe("serializer, the generated files", () => {
       const output = await preload([port]);
 
       expect(output).toContain(IMPORT);
-      expect(output).toContain("port.postMessage([encodeValue(channel, args)]);");
+      expect(output).toContain("port.postMessage([encodeSync(channel, args)]);");
       expect(output).toContain("next.postMessage([encodeValue(channel, args)]);");
       expect(output).toContain(
          "const args = Array.isArray(event.data) ? readArguments(channel, event.data) : undefined;",
@@ -531,7 +531,7 @@ describe("serializer, the generated files", () => {
    it("serializes the messages of a main port channel in the page as well", async () => {
       const output = await preload([mainPort]);
 
-      expect(output).toContain("port.postMessage([encodeValue(channel, args)]);");
+      expect(output).toContain("port.postMessage([encodeSync(channel, args)]);");
       expect(output).toContain("readArguments(channel, event.data)");
    });
 
