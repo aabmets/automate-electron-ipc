@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { schemaFilePrefix } from "../parser/diagnostics.js";
 
 function describeCloneIssue(channel: string, issue: t.CloneIssue): string {
    const via = issue.via ? ` through '${issue.via}'` : "";
@@ -25,7 +26,7 @@ export function validateCloneIssues(spec: Partial<t.ChannelSpec>, file?: string)
    if (errors.length === 0) {
       return;
    }
-   const where = file === undefined ? "" : `Schema file '${file}': `;
+   const where = schemaFilePrefix(file);
    const lines = errors.map((issue) => {
       const hint =
          issue.reason === "a Promise"
@@ -55,7 +56,7 @@ const NESTED_PROMISE_HINT =
  * not as they are, such as a class instance that loses its prototype and methods.
  */
 export function getCloneWarnings(specs: t.ChannelSpec[], file?: string): string[] {
-   const where = file === undefined ? "" : `Schema file '${file}': `;
+   const where = schemaFilePrefix(file);
    return specs.flatMap((spec) =>
       (spec.signature.cloneIssues ?? [])
          .filter((issue) => issue.level === "warning")

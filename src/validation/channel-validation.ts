@@ -10,6 +10,7 @@
  */
 
 import type * as t from "@types";
+import { schemaFilePrefix } from "../parser/diagnostics.js";
 import { validateChannelSpecWithStruct } from "./channel-spec-structs.js";
 import { validateCloneIssues } from "./clone-issues.js";
 
@@ -26,7 +27,7 @@ function validateCountLimit(
    if (value === undefined || value === Number.POSITIVE_INFINITY) {
       return;
    } else if (!Number.isSafeInteger(value) || value < 0) {
-      const where = file === undefined ? "" : `Schema file '${file}': `;
+      const where = schemaFilePrefix(file);
       throw new Error(
          `${where}Channel '${spec.name}': ${option} must be a non-negative integer or Infinity, ` +
             `found ${value}.`,
@@ -41,7 +42,7 @@ function validateCountLimit(
 function validateTimeoutMs(spec: Partial<t.ChannelSpec>, file?: string): void {
    const value = spec.timeoutMs;
    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
-      const where = file === undefined ? "" : `Schema file '${file}': `;
+      const where = schemaFilePrefix(file);
       throw new Error(
          `${where}Channel '${spec.name}': timeoutMs must be a non-negative integer, found ${value}.`,
       );
@@ -64,7 +65,7 @@ export function validateChannelSpecs(
    const seenChannelNames = new Set<string>();
    for (const spec of specs) {
       if (spec?.name !== undefined && OBJECT_MEMBER_NAMES.has(spec.name)) {
-         const where = file === undefined ? "" : `Schema file '${file}': `;
+         const where = schemaFilePrefix(file);
          throw new Error(
             `${where}Channel name '${spec.name}' is reserved, since it is a member of every ` +
                "object. Choose another name.",

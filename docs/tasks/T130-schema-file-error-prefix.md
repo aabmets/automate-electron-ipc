@@ -9,4 +9,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Scope:** Add `schemaFilePrefix(file?)` to `src/parser/diagnostics.ts` and use it at the six
   sites. The texts of the errors stay word for word; the tests assert them.
 - **Tests:** Same test count, no assertion changed.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `schemaFilePrefix(file?)` is in `src/parser/diagnostics.ts` and replaces the six hand-written prefixes. Texts unchanged, no assertion changed. 3290 tests (2 new, for the helper).

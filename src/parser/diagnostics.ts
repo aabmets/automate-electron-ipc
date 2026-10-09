@@ -21,6 +21,16 @@ export class SchemaError extends Error {
    }
 }
 
+/**
+ * The start of an error message that names the schema file, or nothing when the file is unknown.
+ *
+ * @param [file] - The path of the schema file.
+ * @returns `Schema file '<file>': `, with the trailing space, or an empty string.
+ */
+export function schemaFilePrefix(file?: string): string {
+   return file === undefined ? "" : `Schema file '${file}': `;
+}
+
 /** Tab stops of the code frame, which expands a tab to the next multiple of this width. */
 const FRAME_TAB_WIDTH = 4;
 

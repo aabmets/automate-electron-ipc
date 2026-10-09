@@ -11,6 +11,7 @@
 
 import type * as t from "@types";
 import { assert, boolean, nullable, object, optional, string } from "superstruct";
+import { schemaFilePrefix } from "../parser/diagnostics.js";
 import utils from "../utils.js";
 
 /**
@@ -53,7 +54,7 @@ export function validateReservedApiNames(
       for (const spec of file.specs.channelSpecArray) {
          if (spec.name === "getPathForFile") {
             throw new Error(
-               `Schema file '${file.relativePath}': Channel name 'getPathForFile' is reserved, ` +
+               `${schemaFilePrefix(file.relativePath)}Channel name 'getPathForFile' is reserved, ` +
                   "since the config 'getPathForFile' adds a member of that name to the API. " +
                   "Rename the channel, or turn the config off.",
             );
