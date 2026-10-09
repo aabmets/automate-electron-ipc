@@ -29,6 +29,7 @@ const REJECTED = new Set([
 
 /** The options of the fixtures whose project is not the root of the fixture. */
 const OPTIONS: Record<string, RunFixtureOptions> = {
+   "config-file-ts": { ipcDataDir: "ipc" },
    workspace: { project: "packages/app" },
 };
 

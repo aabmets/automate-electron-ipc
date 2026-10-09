@@ -21,6 +21,7 @@ export const defineChannels: typeof api.defineChannels = (channels) => {
    logger.cannotExecuteChannels();
    return channels;
 };
+export const defineConfig: typeof api.defineConfig = (config) => config;
 export const invoke: typeof api.invoke = verb;
 export const send: typeof api.send = verb;
 export const emit: typeof api.emit = verb;

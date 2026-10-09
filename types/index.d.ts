@@ -21,6 +21,7 @@
  */
 
 export * from "./channel-base.js";
+export * from "./config-file.js";
 export * from "./config-renderer.js";
 export * from "./config-utility.js";
 export * from "./config-worker.js";

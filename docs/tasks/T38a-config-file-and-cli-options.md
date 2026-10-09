@@ -55,4 +55,4 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     `autoipc.config.ts`.
 - **README:** add the config file and the two flags to "Optional Configuration".
 - **Follow-up IDs:** T142-T143.
-- **Delivered:**
+- **Delivered:** 2026-10-09. Config file discovery and loading are in `src/config-file.ts`; `RunOptions` (`cwd`, `configFile`, `overrides`) is in `types/internal-run.d.ts`, created here because T139 had not landed (T139 adds `OutputFile` and `RunPlan` to it). Unknown keys and invalid values name the source (`validateOptionalConfig(config, source, overrideKeys)`); a key set through `overrides` names "the run options". `runFixture` takes `ipcDataDir` for fixtures that configure through a file (fixture `config-file-ts`).

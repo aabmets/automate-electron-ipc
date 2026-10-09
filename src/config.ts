@@ -12,6 +12,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
+import {
+   describeConfigPath,
+   findConfigFile,
+   loadConfigFile,
+   MANIFEST_SOURCE,
+} from "./config-file.js";
 import { assertOutputsDistinct, deriveOutputPaths } from "./config-outputs.js";
 import utils from "./utils.js";
 import { validateOptionalConfig } from "./validation/config-validation.js";
@@ -66,11 +72,47 @@ export async function getConfigFromUserPackage(cwd?: string): Promise<t.IPCOptio
 }
 
 /**
- * Reads the config of the project that contains `cwd`, which is the directory of the nearest
- * `package.json` at or above it. Defaults to the process working directory.
+ * Picks the one source of the user's config: the config file, or `package.json#config.autoipc`.
+ * The two are not merged, so setting both is an error.
  */
-export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConfig> {
-   const userConfig = await getConfigFromUserPackage(cwd);
+async function readConfigSource(
+   cwd: string | undefined,
+   configFile: string | undefined,
+): Promise<{ config: t.IPCOptionalConfig; source: string }> {
+   const projectRoot = utils.resolveUserProjectPath("", cwd);
+   const manifestConfig = await getConfigFromUserPackage(cwd);
+   const filePath = await findConfigFile(projectRoot, cwd, configFile);
+   if (filePath === null) {
+      return { config: manifestConfig, source: MANIFEST_SOURCE };
+   }
+   const source = describeConfigPath(projectRoot, filePath);
+   if (Object.keys(manifestConfig).length > 0) {
+      throw new Error(`The config is set in both '${source}' and '${MANIFEST_SOURCE}'; keep one.`);
+   }
+   const file = await loadConfigFile(projectRoot, filePath);
+   return { config: file.config, source };
+}
+
+/**
+ * Reads the config of the project that contains `cwd`, which is the directory of the nearest
+ * `package.json` at or above it. The options come from the config file or from the manifest, and
+ * `overrides` win over both. Defaults to the process working directory.
+ *
+ * @param [options] - The options of the run, or the `cwd` as a string.
+ */
+export async function getResolvedConfig(
+   options?: t.RunOptions | string,
+): Promise<t.IPCResolvedConfig> {
+   const {
+      cwd,
+      configFile,
+      overrides = {},
+   } = typeof options === "string" ? { cwd: options } : (options ?? {});
+   const { config: userConfig, source } = await readConfigSource(cwd, configFile);
+   // An option that the caller leaves undefined, like a CLI flag that was not given, keeps its value.
+   const defined = Object.fromEntries(
+      Object.entries(overrides).filter(([, value]) => value !== undefined),
+   );
    const mergedConfig: t.IPCOptionalConfig = {
       projectUsesNodeNext: false,
       ipcDataDir: "src/autoipc",
@@ -82,8 +124,9 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       autoExpose: true,
       getPathForFile: false,
       ...userConfig,
+      ...defined,
    };
-   validateOptionalConfig(mergedConfig);
+   validateOptionalConfig(mergedConfig, source, Object.keys(defined));
 
    const projectRoot = utils.resolveUserProjectPath("", cwd);
    const ipcDataDir = utils.resolveUserProjectPath(mergedConfig.ipcDataDir, cwd);

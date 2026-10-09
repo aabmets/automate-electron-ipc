@@ -13,6 +13,7 @@ import {
    ask,
    askWorker,
    defineChannels,
+   defineConfig,
    emit,
    emitToWorker,
    invoke,
@@ -36,6 +37,13 @@ describe("runtime stubs", () => {
       const map = { a: 1 };
       expect(defineChannels(map)).toBe(map);
       expect(spy).toHaveBeenCalledOnce();
+   });
+
+   it("returns the config unchanged and does not warn", () => {
+      const spy = vi.spyOn(logger, "cannotExecuteChannels").mockImplementation(() => undefined);
+      const config = { codeIndent: 4 as const };
+      expect(defineConfig(config)).toBe(config);
+      expect(spy).not.toHaveBeenCalled();
    });
 
    it("makes every verb a no-op that warns", () => {

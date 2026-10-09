@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 130 delivered, 20 remaining, 1 dropped.
+**Progress:** 131 delivered, 19 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -172,7 +172,7 @@ split into the parts below, and T139 was added first so that the features share 
 pipeline. Builders running at the same time follow "Parallel builders" in `CLAUDE.md`.
 
 - [ ] [T139: Render the generated files in memory](./tasks/T139-render-generated-files-in-memory.md) · depends on: none
-- [ ] [T38a: Config file, precedence, `--cwd` and `--config`](./tasks/T38a-config-file-and-cli-options.md) · depends on: T07
+- [x] [T38a: Config file, precedence, `--cwd` and `--config`](./tasks/T38a-config-file-and-cli-options.md) · depends on: T07
 - [ ] [T42a: Error positions and code frames](./tasks/T42a-error-positions-and-code-frames.md) · depends on: T08
 - [ ] [T38b: Output path options and `--out-*` flags](./tasks/T38b-output-path-options.md) · depends on: T38a
 - [ ] [T38c: Detect NodeNext from `tsconfig.json`](./tasks/T38c-nodenext-detection.md) · depends on: T38a

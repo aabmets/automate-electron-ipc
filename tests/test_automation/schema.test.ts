@@ -30,6 +30,21 @@ describe("ipcAutomation", () => {
       expect(cfg.getResolvedConfig).toHaveBeenCalledWith("/work/packages/app");
    });
 
+   it("passes the run options on to the config", async () => {
+      const schemaPath = path.join(automation.dir, "schema.ts");
+      automation.mockConfig({ ipcSchema: { path: schemaPath, stats: null } } as never);
+      vi.spyOn(logger, "nonExistentSchemaPath").mockImplementation(() => undefined);
+      const options = {
+         cwd: "/work/packages/app",
+         configFile: "conf/ipc.config.ts",
+         overrides: { codeIndent: 4 as const },
+      };
+
+      await ipcAutomation(options);
+
+      expect(cfg.getResolvedConfig).toHaveBeenCalledWith(options);
+   });
+
    it("creates the schema directory and skips when the schema path does not exist", async () => {
       const schemaPath = path.join(automation.dir, "ipc/schema.ts");
       automation.mockConfig({ ipcSchema: { path: schemaPath, stats: null } } as never);

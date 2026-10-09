@@ -11,5 +11,6 @@
 
 export * from "./internal-channels.js";
 export * from "./internal-config.js";
+export * from "./internal-run.js";
 export * from "./internal-signature.js";
 export * from "./internal-specs.js";

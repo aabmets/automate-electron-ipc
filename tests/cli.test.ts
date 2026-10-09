@@ -52,7 +52,19 @@ describe("cli", () => {
       ipcAutomation.mockResolvedValue(undefined);
       await importFreshCli();
       expect(ipcAutomation).toHaveBeenCalledOnce();
+      expect(ipcAutomation).toHaveBeenCalledWith({ cwd: undefined, configFile: undefined });
       expect(process.exitCode).toBeUndefined();
+   });
+
+   it("passes --cwd and --config to the automation", async () => {
+      process.argv = ["node", "ipcgen", "--cwd", "packages/app", "--config", "conf/ipc.config.ts"];
+      ipcAutomation.mockResolvedValue(undefined);
+      await importFreshCli();
+      expect(ipcAutomation).toHaveBeenCalledOnce();
+      expect(ipcAutomation).toHaveBeenCalledWith({
+         cwd: "packages/app",
+         configFile: "conf/ipc.config.ts",
+      });
    });
 
    it("prints the error and exits non-zero when the automation fails", async () => {

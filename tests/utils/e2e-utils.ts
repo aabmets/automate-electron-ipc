@@ -31,6 +31,11 @@ export interface RunFixtureOptions {
    project?: string;
    /** Directory, relative to the fixture root, that the run starts from. Defaults to `project`. */
    cwd?: string;
+   /**
+    * The `ipcDataDir` of a fixture whose config lives in a config file, not in the
+    * `package.json`. The run finds the file in the project root, so the file is part of the fixture.
+    */
+   ipcDataDir?: string;
 }
 
 export interface E2EProject {
@@ -98,7 +103,13 @@ export async function runFixture(
       await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
       const dir = path.join(root, options.project ?? ".");
       const manifest = JSON.parse(await fsp.readFile(path.join(dir, "package.json"), "utf8"));
-      const ipcDataDir: string = manifest.config.autoipc.ipcDataDir;
+      const autoipc = manifest.config?.autoipc ?? {};
+      const ipcDataDir: string | undefined = options.ipcDataDir ?? autoipc.ipcDataDir;
+      if (ipcDataDir === undefined) {
+         throw new Error(
+            `Fixture '${fixture}' sets no ipcDataDir in its package.json: pass the option.`,
+         );
+      }
 
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
       try {
@@ -110,13 +121,12 @@ export async function runFixture(
       const read = (name: string) => fsp.readFile(path.join(dir, ipcDataDir, name), "utf8");
       const utilityPath = path.join(
          dir,
-         manifest.config.autoipc.utilityBindingsPath ?? path.join(ipcDataDir, "utility.ts"),
+         autoipc.utilityBindingsPath ?? path.join(ipcDataDir, "utility.ts"),
       );
       const utility = await fsp.readFile(utilityPath, "utf8").catch(() => undefined);
       const workerPreloadPath = path.join(
          dir,
-         manifest.config.autoipc.serviceWorkerPreloadPath ??
-            path.join(ipcDataDir, "service-worker-preload.ts"),
+         autoipc.serviceWorkerPreloadPath ?? path.join(ipcDataDir, "service-worker-preload.ts"),
       );
       const workerPreload = await fsp.readFile(workerPreloadPath, "utf8").catch(() => undefined);
       const workerTypes = await fsp

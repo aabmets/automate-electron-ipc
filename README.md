@@ -52,6 +52,7 @@ Node library for generating IPC components for Electron apps.
 
 You can configure IPC automation in the `package.json` file using the following options. 
 If no configuration is provided, IPC automation will use the default values as shown in the example below.
+The same options can live in a config file instead, see [Config file](#config-file).
 
 ```json
 {
@@ -122,6 +123,41 @@ Config explanation:
    `"./src/wire.ts"`; any other value is a package, such as `"superjson"`. See
    [Custom serializers](#custom-serializers).
 
+
+#### Config file
+
+Instead of `package.json#config.autoipc`, the options can be set in a config file in the project root
+(the directory of the nearest `package.json`). The file is named `autoipc.config.json`,
+`autoipc.config.mjs` or `autoipc.config.ts`:
+
+```ts
+// autoipc.config.ts
+import { defineConfig } from "automate-electron-ipc";
+
+export default defineConfig({
+   ipcDataDir: "src/ipc",
+   codeIndent: 2,
+});
+```
+
+ - A `.json` file holds the config object. In an `.mjs` or `.ts` file, the default export is the config
+   object, or a function (sync or async) that returns it. `defineConfig` only gives the object its type
+   (`AutoIpcConfig`); it can be left out.
+ - A `.ts` file is transpiled to a temporary `.mjs` file next to it, which is deleted after it was read.
+   Relative imports of `.ts` files from a `.ts` config file are not supported.
+ - Paths in the config file are relative to the project root, like the ones in `package.json`.
+ - The root may hold only one `autoipc.config.*` file. Setting the options in a config file **and** in
+   `package.json#config.autoipc` is an error, since the two are not merged.
+ - An option with a name that does not exist is an error that names the source and lists the known
+   options. Every error about the config names the file, or `package.json#config.autoipc`, it comes from.
+
+The `ipcgen` command also takes these flags, which win over the config:
+
+ - `--cwd <dir>` - Find the project root from this directory instead of the working directory.
+ - `--config <file>` - Read this config file (`.json`, `.mjs` or `.ts`, relative to the working directory)
+   instead of looking for `autoipc.config.*` in the project root.
+
+The order of precedence is: command line flags, then the one config source, then the defaults.
 
 ### Composing the preload script
 

@@ -58,11 +58,12 @@ function assertScopeFilesFree(config: t.IPCResolvedConfig, scopes: string[]): vo
 /**
  * Generates the IPC bindings of the project that contains `cwd`.
  *
- * @param [cwd=process.cwd()] - Directory to find the project root from, which is the directory
- * of the nearest `package.json` at or above it.
+ * @param [options] - The options of the run, or the directory to find the project root from as a
+ * string. The project root is the directory of the nearest `package.json` at or above it, and the
+ * directory defaults to the process working directory.
  */
-export async function ipcAutomation(cwd?: string): Promise<void> {
-   const config = await cfg.getResolvedConfig(cwd);
+export async function ipcAutomation(options?: t.RunOptions | string): Promise<void> {
+   const config = await cfg.getResolvedConfig(options);
    const pfsArray: t.ParsedFileSpecs[] = [];
 
    if (!config.ipcSchema.stats) {
