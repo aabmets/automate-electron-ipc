@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 138 delivered, 12 remaining, 1 dropped.
+**Progress:** 139 delivered, 11 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
