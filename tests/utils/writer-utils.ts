@@ -27,6 +27,9 @@ export class VitestBaseWriter extends BaseWriter {
    public getCodeIndents(): string[] {
       return super.getCodeIndents();
    }
+   public joinComponents(components: string[]): string {
+      return super.joinComponents(components);
+   }
    public injectEventTypehint(
       signature: t.CallableSignature,
       eventType: string,

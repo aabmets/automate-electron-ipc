@@ -127,7 +127,7 @@ export class UtilityBindingsWriter extends BaseWriter {
          ...(brokered.length > 0 ? [this.buildBrokerServer(brokered)] : []),
          this.buildBindings(channels),
       );
-      return out.join("\n");
+      return this.joinComponents(out);
    }
    /**
     * The peer of the main process, which is made when a channel is first used. The port is read

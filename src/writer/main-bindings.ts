@@ -375,7 +375,7 @@ export class MainBindingsWriter extends BaseWriter {
       bindingsExpression.push("\n}\n");
 
       out.push(bindingsExpression.join(""));
-      return out.join("\n");
+      return this.joinComponents(out);
    }
    /**
     * Builds the channel of a spec between the main process and a utility process, between a page

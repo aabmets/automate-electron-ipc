@@ -95,6 +95,23 @@ describe("BaseWriter", () => {
       expect(writer.getTypeParams(signature)).toBe("<T extends (x: number) => void>");
    });
 
+   it("should join components with at most one blank line between them", () => {
+      const writer = shared.VitestBaseWriter.prototype;
+
+      expect(writer.joinComponents([])).toBe("");
+      expect(writer.joinComponents(["a", "b"])).toBe("a\nb");
+      expect(writer.joinComponents(["a\n", "b"])).toBe("a\n\nb");
+      expect(writer.joinComponents(["a", "\nb"])).toBe("a\n\nb");
+      // Regression for T100: the newlines of both sides added up to two blank lines.
+      expect(writer.joinComponents(["a\n", "\nb"])).toBe("a\n\nb");
+      expect(writer.joinComponents(["a\n\n", "\n\nb\n"])).toBe("a\n\nb\n");
+      expect(writer.joinComponents(["a\n", "", "\nb", ""])).toBe("a\n\nb\n");
+      // The text inside a component is kept as it is.
+      expect(writer.joinComponents(["\n\na\n\n\nb", "c\n\n\nd\n"])).toBe(
+         "\n\na\n\n\nb\nc\n\n\nd\n",
+      );
+   });
+
    it("should return no type parameters for a plain signature", () => {
       const signature = { definition: "(a: string) => void", paramsStart: 1 };
       expect(

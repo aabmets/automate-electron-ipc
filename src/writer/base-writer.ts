@@ -428,6 +428,25 @@ export class BaseWriter {
    }
 
    /**
+    * Joins the components of a file, such as the imports, the helpers and the exposed object, with
+    * a newline, as `join("\n")` does. A component may start or end with blank lines of its own, so
+    * where two components meet, the newlines are capped at one blank line. The text inside a
+    * component is kept as it is.
+    */
+   protected joinComponents(components: string[]): string {
+      const [first = "", ...rest] = components;
+      let out = first;
+      for (const component of rest) {
+         const trailing = out.length - out.replace(/\n+$/, "").length;
+         const leading = component.length - component.replace(/^\n+/, "").length;
+         const newlines = Math.min(trailing + 1 + leading, 2);
+         out =
+            out.slice(0, out.length - trailing) + "\n".repeat(newlines) + component.slice(leading);
+      }
+      return out;
+   }
+
+   /**
     * Sorts the channels by name, in code unit order, so that the output does not depend on
     * the locale: `getFoo` comes before `getFoo2`, and upper case before lower case.
     */

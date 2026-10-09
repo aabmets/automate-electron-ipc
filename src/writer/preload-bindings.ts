@@ -77,7 +77,7 @@ export class PreloadBindingsWriter extends BaseWriter {
       bindingsExpression.push("\n};\n");
 
       out.push(bindingsExpression.join(""), ...this.buildExpose(), "");
-      return out.join("\n");
+      return this.joinComponents(out);
    }
 
    /**

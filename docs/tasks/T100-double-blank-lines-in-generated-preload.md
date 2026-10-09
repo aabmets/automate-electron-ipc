@@ -13,4 +13,8 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   the components consistent. Related to T65.
 - **Tests:** a test over all fixtures that no generated file contains three newlines in a row, and
   updated exact-output tests where the text changes.
-- **Delivered:**
+- **Delivered:** 2026-10-09. `BaseWriter.joinComponents` caps the newlines where two components
+  meet at one blank line, and keeps the text inside a component as it is. `preload.ts`,
+  `service-worker-preload.ts` and `utility.ts` all had the problem; `main.ts` did not, but uses the
+  same join. The scan runs every fixture that generates files. No exact-output test asserted on the
+  doubled blank lines, so none changed.
