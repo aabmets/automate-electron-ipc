@@ -447,6 +447,88 @@ describe("ImportsGenerator", () => {
          expect(generator.getRenames(pfs).size).toBe(0);
       });
 
+      const writeManifest = (directory: string, manifest: string) => {
+         fs.mkdirSync(path.join(root, "ipc", directory), { recursive: true });
+         fs.writeFileSync(path.join(root, "ipc", directory, "package.json"), manifest);
+      };
+
+      // Regression for T101: "./models" became "./models.js", or named the index file, which the
+      // package.json of the directory comes before.
+      it.each(["types", "typings", "typesVersions", "main"])(
+         "keeps a directory whose package.json has '%s' under NodeNext",
+         (field) => {
+            touch("models/index.ts");
+            touch("models/lib/entry.ts");
+            writeManifest("models", JSON.stringify({ [field]: "./lib/entry.js" }));
+            expect(importOf("./models", true)).toStrictEqual(
+               'import type { Foo0 } from "./models";',
+            );
+            expect(importOf("./models/", true)).toStrictEqual(
+               'import type { Foo0 } from "./models";',
+            );
+         },
+      );
+
+      it("keeps a package directory without an index file", () => {
+         touch("models/lib/entry.ts");
+         writeManifest("models", '{ "main": "./lib/entry.js" }');
+         expect(importOf("./models", true)).toStrictEqual('import type { Foo0 } from "./models";');
+      });
+
+      it("names the index file when the package.json does not name an entry point", () => {
+         touch("plain/index.ts");
+         touch("exported/index.ts");
+         touch("broken/index.ts");
+         touch("listed/index.ts");
+         writeManifest("plain", '{ "name": "plain", "type": "commonjs" }');
+         // `exports` does not apply to a relative specifier.
+         writeManifest("exported", '{ "exports": "./lib/entry.js" }');
+         writeManifest("broken", "{ not json");
+         writeManifest("listed", '["main"]');
+         for (const directory of ["plain", "exported", "broken", "listed"]) {
+            expect(importOf(`./${directory}`, true)).toStrictEqual(
+               `import type { Foo0 } from "./${directory}/index.js";`,
+            );
+         }
+      });
+
+      it("prefers a file over a package directory of the same name", () => {
+         touch("both.ts");
+         writeManifest("both", '{ "main": "./lib/entry.js" }');
+         expect(importOf("./both", true)).toStrictEqual('import type { Foo0 } from "./both.js";');
+      });
+
+      it("rebases a package directory from the generated file", () => {
+         writeManifest("shared/models", '{ "types": "./types.d.ts" }');
+         const generator = new ImportsGenerator(true, path.join(root, "out/main.ts"));
+         const pfs = pfsOf("./shared/models");
+         expect(generator.getDeclaration(pfs, "Foo0")).toStrictEqual(
+            'import type { Foo0 } from "../ipc/shared/models";',
+         );
+         expect(generator.getImportTypePath(pfs, "./shared/models/")).toStrictEqual(
+            "../ipc/shared/models",
+         );
+      });
+
+      it("imports a package directory once, however it is spelled", () => {
+         writeManifest("models", '{ "main": "./lib/entry.js" }');
+         const pfs = pfsOf("./models", "./models/");
+         pfs.specs.importSpecArray = pfs.specs.importSpecArray.map((spec) => ({
+            ...spec,
+            customTypes: ["Foo"],
+         }));
+         const generator = new ImportsGenerator(true, path.join(root, "ipc/main.ts"));
+         expect(generator.getDeclaration(pfs, "Foo")).toStrictEqual(
+            'import type { Foo } from "./models";',
+         );
+         expect(generator.getRenames(pfs).size).toBe(0);
+      });
+
+      it("leaves a package directory alone when the project does not use NodeNext", () => {
+         writeManifest("models", '{ "main": "./lib/entry.js" }');
+         expect(importOf("./models", false)).toStrictEqual('import type { Foo0 } from "./models";');
+      });
+
       it("resolves the directory of a namespace import and of an import type", () => {
          touch("shapes/index.ts");
          const pfs = pfsOf();

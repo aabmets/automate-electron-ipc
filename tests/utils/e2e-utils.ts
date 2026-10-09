@@ -52,7 +52,8 @@ export interface E2EProject {
    };
    /**
     * Type-checks the schema files and generated files, returns the tsc diagnostics.
-    * `compilerOptions` are added to the ones of the generated tsconfig.
+    * `compilerOptions` are added to the ones of the generated tsconfig, and its `paths` to the
+    * path mappings of the tsconfig.
     */
    typecheck: (compilerOptions?: Record<string, unknown>) => Promise<string>;
    /**
@@ -222,11 +223,13 @@ async function typecheckProject(
          moduleResolution: "bundler",
          skipLibCheck: true,
          types: [],
+         ...compilerOptions,
+         // The path mappings of a test are added to the ones that the type-check needs.
          paths: {
             electron: [path.join(root, "node_modules/electron/electron.d.ts")],
             "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
+            ...(compilerOptions.paths as Record<string, string[]> | undefined),
          },
-         ...compilerOptions,
       },
       files: worker
          ? [

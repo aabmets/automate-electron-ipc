@@ -38,6 +38,18 @@ const SCRIPT_OUTPUT_EXTENSIONS: Record<string, string> = {
 const INDEX_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 /**
+ * The fields of the `package.json` of a directory that the compiler or Node resolve the directory
+ * through, before its index file.
+ */
+const PACKAGE_ENTRY_FIELDS = ["types", "typings", "typesVersions", "main"];
+
+/** A directory whose `package.json` names its entry point. */
+const PACKAGE_DIRECTORY = Symbol("package directory");
+
+/** What a directory specifier stands for: an index file, a package directory, or nothing. */
+type DirectoryEntry = string | typeof PACKAGE_DIRECTORY | null;
+
+/**
  * Extensions of the files that a schema file imports as they are, such as a JSON module. A
  * specifier with one is not extensionless, so NodeNext does not add `.js` to it. Other dots in
  * the file name, as in `user.model`, belong to the name.
@@ -70,8 +82,8 @@ export class ImportsGenerator {
    /** The names being resolved, which stops aliases that refer to one another. */
    private readonly resolving = new Set<string>();
    private readonly renames = new Map<string, Map<string, string>>();
-   /** The index file of a directory (null: none), by the absolute path of the specifier. */
-   private readonly directoryIndexes = new Map<string, string | null>();
+   /** What a directory specifier stands for (see `directoryEntry`), by its absolute path. */
+   private readonly directoryEntries = new Map<string, DirectoryEntry>();
 
    /**
     * `reservedNames` are the names that the generated file declares or imports itself, such as
@@ -127,45 +139,80 @@ export class ImportsGenerator {
          // Packages and aliases do not depend on where the generated file is.
          return fromPath;
       }
+      if (!this.projectUsesNodeNext) {
+         return this.adjustImportPath(this.getImportPath(fromPath), sourceFilePath);
+      }
+      if (this.directoryEntry(fromPath, sourceFilePath) === PACKAGE_DIRECTORY) {
+         // No one file path spells both the types and the code of the directory, so it is kept.
+         return this.adjustImportPath(fromPath, sourceFilePath);
+      }
       // NodeNext does not resolve a directory import, so the index file is named.
-      const specifier = this.projectUsesNodeNext
-         ? this.withDirectoryIndex(fromPath, sourceFilePath)
-         : fromPath;
+      const specifier = this.withDirectoryIndex(fromPath, sourceFilePath);
       return this.adjustImportPath(this.getImportPath(specifier), sourceFilePath);
    }
 
    /**
-    * The name of the index file (`index.ts`) that the relative specifier `fromPath` of a source
-    * file stands for, when the specifier has no script or data extension and names a directory
-    * that has an index file. A file of the same name wins over the directory, as it does in
-    * the compiler: `./models` is `models.ts` when both exist.
+    * What the relative specifier `fromPath` of a source file stands for, when it has no script or
+    * data extension and names a directory: the name of its index file (`index.ts`), or
+    * `PACKAGE_DIRECTORY` when its `package.json` names the entry point. A file of the same name
+    * wins over the directory, as it does in the compiler: `./models` is `models.ts` when both
+    * exist. Returns null for anything else.
+    *
+    * The compiler and Node resolve a directory through its `package.json` before its index file,
+    * but only in a CommonJS module, the only kind in which the schema file can import a directory.
+    * The generated files resolve the specifier the same way there, the types through `types` and
+    * the code through `main`, so it is kept. `exports` does not apply to a relative specifier.
     */
-   private directoryIndex(fromPath: string, sourceFilePath: string): string | null {
+   private directoryEntry(fromPath: string, sourceFilePath: string): DirectoryEntry {
       const target = path.resolve(path.dirname(sourceFilePath), fromPath);
-      const cached = this.directoryIndexes.get(target);
+      const cached = this.directoryEntries.get(target);
       if (cached !== undefined) {
          return cached;
       }
       const isFile = (file: string) => fs.statSync(file, { throwIfNoEntry: false })?.isFile();
-      let found: string | null = null;
+      let found: DirectoryEntry = null;
       if (
          !(SCRIPT_EXTENSION.test(target) || DATA_EXTENSION.test(target)) &&
          fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() &&
          !INDEX_EXTENSIONS.some((ext) => isFile(`${target}${ext}`))
       ) {
-         const ext = INDEX_EXTENSIONS.find((candidate) =>
-            isFile(path.join(target, `index${candidate}`)),
-         );
-         found = ext ? `index${ext}` : null;
+         if (this.hasPackageEntry(target)) {
+            found = PACKAGE_DIRECTORY;
+         } else {
+            const ext = INDEX_EXTENSIONS.find((candidate) =>
+               isFile(path.join(target, `index${candidate}`)),
+            );
+            found = ext ? `index${ext}` : null;
+         }
       }
-      this.directoryIndexes.set(target, found);
+      this.directoryEntries.set(target, found);
       return found;
+   }
+
+   /**
+    * Whether the `package.json` of the directory has a field that the compiler or Node resolves
+    * the directory through. One that cannot be read is ignored, as the compiler ignores it.
+    */
+   private hasPackageEntry(directory: string): boolean {
+      let manifest: unknown;
+      try {
+         manifest = JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8"));
+      } catch {
+         return false;
+      }
+      return (
+         typeof manifest === "object" &&
+         manifest !== null &&
+         PACKAGE_ENTRY_FIELDS.some((field) => field in manifest)
+      );
    }
 
    /** `fromPath`, followed by the index file when it names a directory that has one. */
    private withDirectoryIndex(fromPath: string, sourceFilePath: string): string {
-      const index = this.directoryIndex(fromPath, sourceFilePath);
-      return index ? `${fromPath.replace(/\/+$/, "")}/${index}` : fromPath;
+      const entry = this.directoryEntry(fromPath, sourceFilePath);
+      return entry && entry !== PACKAGE_DIRECTORY
+         ? `${fromPath.replace(/\/+$/, "")}/${entry}`
+         : fromPath;
    }
 
    private adjustImportPath(importPath: string, sourceFilePath: string): string {

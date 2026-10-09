@@ -1,0 +1,4 @@
+{
+   "name": "models",
+   "main": "./lib/entry.js"
+}

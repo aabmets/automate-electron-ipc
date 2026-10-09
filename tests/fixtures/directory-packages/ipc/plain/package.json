@@ -1,0 +1,4 @@
+{
+   "name": "plain",
+   "exports": "./missing.js"
+}

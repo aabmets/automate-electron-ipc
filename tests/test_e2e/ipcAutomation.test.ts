@@ -434,6 +434,24 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
       expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 
+   // Regression for T101: "./models" became "./models.js", or named the index file, although the
+   // package.json of the directory comes before it. Path mappings are kept as they are written.
+   it("keeps package directories and path mappings under NodeNext", async () => {
+      project = await runFixture("directory-packages");
+      for (const file of ["main.ts", "window.d.ts"] as const) {
+         const imports = project.generated[file].match(/^import type .*";$/gm) ?? [];
+         expect(imports).toContain('import type { User } from "./models";');
+         expect(imports).toContain('import type { Point } from "./plain/index.js";');
+         expect(imports).toContain('import type { Circle } from "@ipc/shapes";');
+         expect(imports).toContain('import type * as Aliased from "@ipc/models";');
+         expect(project.generated[file]).toContain('import("./models").User');
+         expect(project.generated[file]).not.toMatch(/models(\/index)?\.js/);
+      }
+      expect(project.generated["main.ts"]).toMatch(/^import \{ idArgs \} from "\.\/models";$/m);
+      const paths = { "@ipc/*": ["./ipc/*"] };
+      expect(await project.typecheck({ ...NODE_NEXT_OPTIONS, paths })).toBe("");
+   });
+
    // The import-equals declarations of a namespace body are resolved by the compiler inside
    // the schema file, so a signature reaches them through the exported namespace.
    it("uses an import-equals alias that a namespace body declares", async () => {
