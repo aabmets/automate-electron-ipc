@@ -13,6 +13,7 @@ import type * as t from "@types";
 import { collectScopes } from "../scopes.js";
 import utils from "../utils.js";
 import { BaseWriter } from "./base-writer.js";
+import { askErrorLines, readAskReplyLines } from "./main-asks.js";
 import {
    addScopeImports,
    addStreamImports,
@@ -23,14 +24,43 @@ import {
    importCustomTypes,
 } from "./main-imports.js";
 import { hasScopedGuards } from "./main-registries.js";
+import { buildRendererToMainChannel, getEventType, hasEnvelope } from "./main-renderer-channels.js";
+import { buildMainToRendererChannel, getSenderTypes } from "./main-senders.js";
 import { buildSupport } from "./main-support.js";
 import { importValidator } from "./main-validation.js";
 import { buildUtilityPeer, UTILITY_RUNTIME_NAMES } from "./utility-runtime.js";
 
-interface ChannelEntry {
+export interface ChannelEntry {
    name: string;
    /** The members of the channel object, one per line, indented for the object body. */
    members: string[];
+}
+
+/**
+ * What the modules of the generated `main.ts` read from the writer: the indents, the config, and
+ * the helpers of `BaseWriter` that they call, bound to the writer. A function which reads only the
+ * indents takes `indents` instead.
+ */
+export interface MainContext {
+   indents: string[];
+   config: t.IPCResolvedConfig;
+   /** Whether the config names a serializer. */
+   usesSerializer: boolean;
+   wireName: (name: string, suffix?: string) => string;
+   isSerializedSpec: (spec: t.ChannelSpec) => boolean;
+   collectIdentifiers: (snippets: string[]) => Set<string>;
+   uniqueName: (base: string, taken: Set<string>) => string;
+   getOriginalParams: (spec: t.ChannelSpec, onlyNames: boolean) => string;
+   getTypeParams: (signature: t.CallableSignature) => string;
+   injectEventTypehint: (
+      signature: t.CallableSignature,
+      eventType: string,
+      eventName?: string,
+   ) => string;
+   getHighWaterMark: (spec: t.ChannelSpec) => string;
+   getMaxQueue: (spec: t.ChannelSpec) => string;
+   getTimeoutMs: (spec: t.ChannelSpec) => number;
+   getTimeoutArgument: (spec: t.ChannelSpec) => string;
 }
 
 /** The electron types that the helpers of the channels between a renderer and a utility process use. */
@@ -91,29 +121,23 @@ interface OffPageUse {
    validators: Map<t.ChannelSpec, string>;
 }
 
-/** The names that a generated listener uses, which differ from the names of its signature. */
-interface ListenerNames {
-   event: string;
-   callback: string;
-   listener: string;
-   remove: string;
-   eventType: string;
-   /** The channel name as a quoted literal. */
-   channel: string;
-   isBroadcast: boolean;
-   /** The local name of the imported validator. */
-   validator: string;
-   received: string;
-   args: string;
-   call: string;
-   spent: string;
-   /** The name of the decoded arguments of a serialized channel. */
-   decoded: string;
-   /** Whether the arguments arrive through the serializer. */
-   serialized: boolean;
-}
-
 export class MainBindingsWriter extends BaseWriter {
+   private readonly ctx: MainContext = {
+      indents: this.indents,
+      config: this.config,
+      usesSerializer: this.usesSerializer(),
+      wireName: this.wireName.bind(this),
+      isSerializedSpec: this.isSerializedSpec.bind(this),
+      collectIdentifiers: this.collectIdentifiers.bind(this),
+      uniqueName: this.uniqueName.bind(this),
+      getOriginalParams: this.getOriginalParams.bind(this),
+      getTypeParams: this.getTypeParams.bind(this),
+      injectEventTypehint: this.injectEventTypehint.bind(this),
+      getHighWaterMark: this.getHighWaterMark.bind(this),
+      getMaxQueue: this.getMaxQueue.bind(this),
+      getTimeoutMs: this.getTimeoutMs.bind(this),
+      getTimeoutArgument: this.getTimeoutArgument.bind(this),
+   };
    protected getTargetFilePath(): string {
       return this.config.mainBindingsFilePath;
    }
@@ -291,9 +315,9 @@ export class MainBindingsWriter extends BaseWriter {
                channels.push(this.buildPort(spec, electronImportsSet, electronTypeImportsSet));
             } else if (spec.direction === "RendererToMain") {
                usesIpcMain = true;
-               electronTypeImportsSet.add(this.getEventType(spec));
-               eventTypes.add(this.getEventType(spec));
-               usesEnvelope ||= this.usesEnvelope(spec);
+               electronTypeImportsSet.add(getEventType(spec));
+               eventTypes.add(getEventType(spec));
+               usesEnvelope ||= hasEnvelope(this.ctx, spec);
                usesStreams ||= spec.kind === "Stream";
                const validator = importValidator(
                   this.importsGenerator,
@@ -302,14 +326,14 @@ export class MainBindingsWriter extends BaseWriter {
                   importDeclarationsArray,
                );
                usesValidation ||= validator !== null;
-               channels.push(this.buildRendererToMainChannel(spec, validator));
+               channels.push(buildRendererToMainChannel(this.ctx, spec, validator));
             } else if (spec.direction === "MainToRenderer") {
                usesSenders = true;
                electronImportsSet.add("webContents as electronWebContents");
-               for (const type of this.getSenderTypes(spec)) {
+               for (const type of getSenderTypes(spec)) {
                   electronTypeImportsSet.add(type);
                }
-               channels.push(this.buildMainToRendererChannel(spec));
+               channels.push(buildMainToRendererChannel(this.ctx, spec));
             } else {
                const validator = importValidator(
                   this.importsGenerator,
@@ -360,7 +384,7 @@ export class MainBindingsWriter extends BaseWriter {
       );
       const [i0] = this.indents;
       const bindingsExpression = buildSupport(
-         this.indents,
+         this.ctx,
          {
             usesIpcMain,
             usesValidation,
@@ -383,13 +407,9 @@ export class MainBindingsWriter extends BaseWriter {
          },
          [...eventTypes].sort(utils.compareStrings),
          {
-            senderHelpers: (usesEmits) => this.buildSenderHelpers(usesEmits),
-            eventWatch: () => this.buildEventWatch(),
-            askHelpers: () => this.buildAskHelpers(),
             workerHelpers: (specs, usesAsks, validators) =>
                this.buildWorkerHelpers(specs, usesAsks, validators),
             workerEventType: (spec) => this.getWorkerEventType(spec),
-            streamHelpers: () => this.buildStreamHelpers(),
             utilityHelpers: () => this.buildUtilityHelpers(),
             portRegistry: () => this.buildPortRegistry(),
             pageLoadWatch: () => this.buildPageLoadWatch(),
@@ -492,938 +512,6 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.direction === "MainToRenderer"
          ? [...types, "WebContentsView", "MessagePortMain"]
          : types;
-   }
-   /** The electron types that the channels which send to a renderer use. */
-   private getSenderTypes(spec: t.ChannelSpec): string[] {
-      const types = ["BrowserWindow", "WebContents", "WebContentsView", "WebFrameMain"];
-      // The listener of the replies of an `ask` channel takes the event of `ipcMain.on`.
-      return spec.kind === "Unicast" ? [...types, "IpcMainEvent"] : types;
-   }
-   /**
-    * Whether the results and errors of the handler of the channel are sent as an envelope. A
-    * stream always does, since the start of a stream has no error of Electron's to leave it to.
-    */
-   private usesEnvelope(spec: t.ChannelSpec): boolean {
-      return spec.kind === "Stream" || (spec.kind === "Unicast" && !this.config.rawErrors);
-   }
-   /**
-    * Electron passes an `IpcMainInvokeEvent` to `handle` listeners and an `IpcMainEvent`
-    * to `on` listeners.
-    */
-   private getEventType(spec: t.ChannelSpec): string {
-      return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
-   }
-   /**
-    * `ipc.<name>.on(callback)` and `once` for `send` channels, and `handle` and `handleOnce` for
-    * `invoke` channels. Each returns a function which removes that registration.
-    * A channel has one handler, so registering a handler replaces the previous one instead of
-    * throwing, which window re-creation and a hot restart of the main process need. The disposer
-    * of a replaced handler does nothing, so that it cannot remove its replacement.
-    * Every listener checks the sender first: a `send` from a rejected sender is dropped and a
-    * rejected `invoke` throws an `IpcForbiddenError`.
-    * `once` and `handleOnce` register a normal listener which removes itself after the first
-    * allowed message, since `ipcMain.once` would be used up by a message from a rejected sender.
-    */
-   private buildRendererToMainChannel(spec: t.ChannelSpec, validator: string | null): ChannelEntry {
-      const [, i1, i2, i3, i4] = this.indents;
-      const eventType = this.getEventType(spec);
-      // The names of the generated parameters must not shadow the ones of the signature, nor
-      // the validator, which the listener refers to.
-      const taken = this.collectIdentifiers([spec.signature.definition, validator ?? ""]);
-      const eventName = this.uniqueName("event", taken);
-      const callbackName = this.uniqueName("callback", taken);
-      const listenerName = this.uniqueName("listener", taken);
-      const wrapperParams = [`${eventName}: ${eventType}`, this.getOriginalParams(spec, false)];
-      const forwarded = [eventName, this.getOriginalParams(spec, true)];
-      const typeParams = this.getTypeParams(spec.signature);
-      const modSigDef = this.injectEventTypehint(spec.signature, eventType, eventName);
-      const channel = `'${spec.name}'`;
-      const wire = this.wireName(spec.name);
-      const isBroadcast = spec.kind === "Broadcast";
-      // The origins come before the scopes, so a channel with scopes only passes `undefined` for them.
-      const scopes = spec.scopes
-         ? `, [${spec.scopes.map((scope) => `'${scope}'`).join(", ")}]`
-         : "";
-      const origins = spec.allowedOrigins
-         ? `, [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
-         : scopes
-           ? ", undefined"
-           : "";
-      // The generated names that the listener calls must not be shadowed by its parameters,
-      // so the listener only calls the local functions below, whose names are unique.
-      const serialized = this.isSerializedSpec(spec);
-      const guardName = this.uniqueName("guard", taken);
-      const removeName = this.uniqueName("remove", taken);
-      const allowed = `isSenderAllowed(${eventName}, ${channel}${origins}${scopes})`;
-      const guard = isBroadcast
-         ? [`${i2}const ${guardName} = (${eventName}: ${eventType}) => ${allowed};`]
-         : [
-              `${i2}const ${guardName} = (${eventName}: ${eventType}) => {`,
-              `${i3}if (!${allowed}) {`,
-              `${i4}throw new IpcForbiddenError(${channel});`,
-              `${i3}}`,
-              `${i2}};`,
-           ];
-      const targetName = this.uniqueName("target", taken);
-      const optionsName = this.uniqueName("options", taken);
-      const unwatchName = this.uniqueName("unwatch", taken);
-      const unregister = isBroadcast
-         ? [`${i3}${targetName}.ipc.off(${wire}, ${listenerName});`]
-         : [
-              `${i3}if (${targetName}.handlers[${channel}] === ${listenerName}) {`,
-              `${i4}delete ${targetName}.handlers[${channel}];`,
-              `${i4}${targetName}.ipc.removeHandler(${wire});`,
-              `${i3}}`,
-           ];
-      const names: ListenerNames = {
-         event: eventName,
-         callback: callbackName,
-         listener: listenerName,
-         remove: removeName,
-         eventType,
-         channel,
-         isBroadcast,
-         validator: validator ?? "",
-         received: this.uniqueName("received", taken),
-         args: this.uniqueName("args", taken),
-         call: this.uniqueName("call", taken),
-         spent: this.uniqueName("spent", taken),
-         decoded: this.uniqueName("decoded", taken),
-         serialized,
-      };
-      const envelope = this.usesEnvelope(spec);
-      const isStream = spec.kind === "Stream";
-      const argsName = this.uniqueName("rest", taken);
-      const idName = this.uniqueName("id", taken);
-      // Without the envelope, a serialized call still needs a wrapper that serializes the result.
-      const encodesResult = serialized && spec.kind === "Unicast";
-      const innerName =
-         envelope || encodesResult ? this.uniqueName("handler", taken) : listenerName;
-      const register = (method: string, once: boolean) => {
-         const params = wrapperParams.filter(Boolean).join(", ");
-         const check = isBroadcast
-            ? [`${i3}if (!${guardName}(${eventName})) {`, `${i4}return;`, `${i3}}`]
-            : [`${i3}${guardName}(${eventName});`];
-         // With the envelope, the registered listener wraps the one that runs the handler.
-         const inner = validator
-            ? this.buildValidatedListener({ ...names, listener: innerName }, check, once)
-            : serialized
-              ? this.buildDecodedListener({ ...names, listener: innerName }, check, once)
-              : [
-                   `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
-                   ...check,
-                   ...(once ? [`${i3}${removeName}();`] : []),
-                   `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
-                   `${i2}};`,
-                ];
-         const listener = this.buildOuterListener(spec, names, inner, {
-            innerName,
-            argsName,
-            idName,
-            envelope,
-            encodesResult,
-         });
-         const lines = [
-            `\n${i1}${method}: (${callbackName}: ${modSigDef}, ${optionsName}?: IpcListenOptions) => {`,
-            ...guard,
-            `${i2}const ${targetName} = resolveIpcTarget(${optionsName});`,
-            `${i2}const ${removeName} = () => {`,
-            `${i3}${unwatchName}();`,
-            ...unregister,
-            `${i2}};`,
-            ...listener,
-         ];
-         if (isBroadcast) {
-            lines.push(`${i2}${targetName}.ipc.on(${wire}, ${listenerName});`);
-         } else {
-            lines.push(
-               `${i2}${targetName}.ipc.removeHandler(${wire});`,
-               `${i2}${targetName}.ipc.handle(${wire}, ${listenerName});`,
-               `${i2}${targetName}.handlers[${channel}] = ${listenerName};`,
-            );
-         }
-         lines.push(
-            `${i2}const ${unwatchName} = ${targetName}.watch(${removeName}${isBroadcast ? "" : `, ${channel}`});`,
-            `${i2}return ${removeName};`,
-            `${i1}},`,
-         );
-         return lines.join("\n");
-      };
-      // A stream has no `handleOnce`: a call does not use up a handler that is a generator.
-      const members = isBroadcast
-         ? [register("on", false), register("once", true)]
-         : isStream
-           ? [register("handle", false)]
-           : [register("handle", false), register("handleOnce", true)];
-      return { name: spec.name, members };
-   }
-   /**
-    * The listener that is registered with Electron, around the one that runs the handler. A
-    * stream is started by the call, whose first argument is the ID that the page gave it. The
-    * envelope settles the call, and a serialized result is encoded in the thunk that settles it.
-    * Without the envelope, only a serialized result needs a wrapper.
-    */
-   private buildOuterListener(
-      spec: t.ChannelSpec,
-      n: ListenerNames,
-      inner: string[],
-      w: {
-         innerName: string;
-         argsName: string;
-         idName: string;
-         envelope: boolean;
-         encodesResult: boolean;
-      },
-   ): string[] {
-      const [, , i2, i3] = this.indents;
-      const run = `(${w.innerName} as (...${w.argsName}: unknown[]) => unknown)(${n.event}, ...${w.argsName})`;
-      const result = w.encodesResult ? `encodeValue(${n.channel}, await ${run})` : run;
-      const params = `${n.event}: ${n.eventType}, ...${w.argsName}: unknown[]`;
-      if (spec.kind === "Stream") {
-         const start = `startStream(${n.event}, ${n.channel}, ${this.wireName(spec.name)}, ${w.idName}, ${this.getHighWaterMark(spec)}, () => ${run})`;
-         return [
-            ...inner,
-            `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ${w.idName}: unknown, ...${w.argsName}: unknown[]) =>`,
-            `${i3}settleInvoke(() => ${start});`,
-         ];
-      }
-      if (w.envelope) {
-         const settle = w.encodesResult ? `async () => ${result}` : `() => ${run}`;
-         return [
-            ...inner,
-            `${i2}const ${n.listener} = (${params}) =>`,
-            `${i3}settleInvoke(${settle});`,
-         ];
-      }
-      return w.encodesResult
-         ? [...inner, `${i2}const ${n.listener} = async (${params}) =>`, `${i3}${result};`]
-         : inner;
-   }
-   /**
-    * The lines that decode the arguments of a serialized channel, after the sender check: a call
-    * that is answered throws, and a message that is not answered is logged and dropped.
-    */
-   private buildDecodeLines(n: ListenerNames): string[] {
-      if (!n.serialized) {
-         return [];
-      }
-      const [, , , i3, i4] = this.indents;
-      return n.isBroadcast
-         ? [
-              `${i3}const ${n.decoded} = readSentArguments(${n.channel}, ${n.received});`,
-              `${i3}if (!${n.decoded}) {`,
-              `${i4}return;`,
-              `${i3}}`,
-           ]
-         : [`${i3}const ${n.decoded} = readArguments(${n.channel}, ${n.received});`];
-   }
-   /**
-    * The listener of a serialized channel without a validator. It takes the arguments as they
-    * arrived, and calls the callback with the ones that the serializer returns, so it does not
-    * declare the parameters of the signature. `check` is the sender check. A `once` listener is
-    * used up by the first message that could be read.
-    */
-   private buildDecodedListener(n: ListenerNames, check: string[], once: boolean): string[] {
-      const [, , i2, i3] = this.indents;
-      return [
-         `${i2}const ${n.call} = ${n.callback} as (${n.event}: ${n.eventType}, ...${n.args}: unknown[]) => unknown;`,
-         `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ...${n.received}: unknown[]) => {`,
-         ...check,
-         ...this.buildDecodeLines(n),
-         ...(once ? [`${i3}${n.remove}();`] : []),
-         `${i3}return ${n.call}(${n.event}, ...${n.decoded});`,
-         `${i2}};`,
-      ];
-   }
-   /**
-    * The listener of a channel with a validator. It takes the arguments as they arrived, so the
-    * schema sees all of them, and the callback gets the output of the schema, so the listener
-    * does not declare the parameters of the signature. `check` is the sender check.
-    * A `once` listener is used up by the first valid call only. A second call may pass an
-    * asynchronous schema before the first is accepted, and only one of them gets the callback.
-    */
-   private buildValidatedListener(n: ListenerNames, check: string[], once: boolean): string[] {
-      const [, , i2, i3, i4, i5] = this.indents;
-      const spentBranch = n.isBroadcast
-         ? `${i5}return;`
-         : `${i5}throw new Error("No handler registered for ${n.channel}");`;
-      return [
-         `${i2}const ${n.call} = ${n.callback} as (${n.event}: ${n.eventType}, ...${n.args}: unknown[]) => unknown;`,
-         ...(once ? [`${i2}let ${n.spent} = false;`] : []),
-         `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ...${n.received}: unknown[]) => {`,
-         ...check,
-         ...this.buildDecodeLines(n),
-         `${i3}return validateArguments(${n.event}, ${n.channel}, ${n.validator}, ${n.serialized ? n.decoded : n.received}, ${n.isBroadcast}, (${n.args}) => {`,
-         ...(once
-            ? [
-                 `${i4}if (${n.spent}) {`,
-                 spentBranch,
-                 `${i4}}`,
-                 `${i4}${n.spent} = true;`,
-                 `${i4}${n.remove}();`,
-              ]
-            : []),
-         `${i4}return ${n.call}(${n.event}, ...${n.args});`,
-         `${i3}});`,
-         `${i2}};`,
-      ];
-   }
-   /**
-    * The helpers of the channels from the main process to a renderer. `resolveSendTarget` takes
-    * the receiver out of what `send` or `invoke` is given: a window or a view has contents as
-    * `webContents`, while a `WebContents` and a `WebFrameMain` receive the message themselves.
-    * The `emit` channels also get these two. `broadcastMessage` sends to every contents that is not destroyed, optionally only to those
-    * that `filter` accepts. Destroyed contents are skipped, since sending to them throws.
-    * `sendToSenderFrame` replies to the frame that sent the event. Electron clears `senderFrame`
-    * once the frame navigates or is destroyed, so it is read first, and a missing, destroyed or
-    * detached frame is skipped, which the return value reports.
-    */
-   private buildSenderHelpers(emits: boolean): string {
-      const [i1, i2, i3] = this.indents;
-      const resolve = [
-         "",
-         "function resolveSendTarget(",
-         `${i1}target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,`,
-         "): WebContents | WebFrameMain {",
-         `${i1}return 'webContents' in target ? target.webContents : target;`,
-         "}",
-         "",
-      ];
-      if (!emits) {
-         return resolve.join("\n");
-      }
-      return [
-         ...resolve,
-         "function broadcastMessage(",
-         `${i1}channel: string,`,
-         `${i1}args: unknown[],`,
-         `${i1}filter?: (contents: WebContents) => boolean,`,
-         "): void {",
-         `${i1}for (const contents of electronWebContents.getAllWebContents()) {`,
-         `${i2}if (!contents.isDestroyed() && (!filter || filter(contents))) {`,
-         `${i3}contents.send(channel, ...args);`,
-         `${i2}}`,
-         `${i1}}`,
-         "}",
-         "",
-         "function sendToSenderFrame(",
-         `${i1}event: { readonly senderFrame: WebFrameMain | null },`,
-         `${i1}channel: string,`,
-         `${i1}args: unknown[],`,
-         "): boolean {",
-         `${i1}let frame: WebFrameMain | null = null;`,
-         `${i1}try {`,
-         `${i2}frame = event.senderFrame;`,
-         `${i2}if (frame && (frame.isDestroyed?.() || frame.detached)) {`,
-         `${i3}frame = null;`,
-         `${i2}}`,
-         `${i1}} catch {`,
-         `${i2}frame = null;`,
-         `${i1}}`,
-         `${i1}if (!frame) {`,
-         `${i2}return false;`,
-         `${i1}}`,
-         `${i1}frame.send(channel, ...args);`,
-         `${i1}return true;`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * `ipc.<name>.send(target, ...args)` to one window, view, contents or frame,
-    * `sendToSender(event, ...args)` to the frame that sent the event, `broadcast(...args)` to
-    * all contents, `broadcastTo(filter, ...args)` to those that the filter accepts, and
-    * `ipc.<name>.bind(window, provider)` with a trigger. The filter comes first, since the
-    * signature may end in optional or rest parameters, which would swallow an options argument.
-    */
-   private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
-      if (spec.kind === "Unicast") {
-         return this.buildAskChannel(spec);
-      }
-      const [, i1, i2] = this.indents;
-      // The names of the generated parameters must not shadow a parameter of the signature.
-      const taken = this.collectIdentifiers([spec.signature.definition]);
-      const targetName = this.uniqueName("target", taken);
-      const filterName = this.uniqueName("filter", taken);
-      const eventName = this.uniqueName("event", taken);
-      const senderParams = this.getOriginalParams(spec, true);
-      const wire = this.wireName(spec.name);
-      // A serialized message is one argument, the list of the arguments, as the serializer made it.
-      const serialized = this.isSerializedSpec(spec);
-      const wired = serialized ? `encodeValue('${spec.name}', [${senderParams}])` : senderParams;
-      const sender = `resolveSendTarget(${targetName}).send(${wire}, ${wired})`;
-      const ipcParams = this.getOriginalParams(spec, false);
-      const typeParams = this.getTypeParams(spec.signature);
-      const targetType = "BrowserWindow | WebContents | WebContentsView | WebFrameMain";
-      const ipcSignature = `${typeParams}(${targetName}: ${targetType}, ${ipcParams})`;
-      const filterType = `(contents: WebContents) => boolean`;
-      const eventType = "{ readonly senderFrame: WebFrameMain | null }";
-      const rest = serialized ? `[${wired}]` : senderParams ? `[${senderParams}]` : "[]";
-      const members = [
-         `\n${i1}send: ${ipcSignature} =>`,
-         `\n${i2}${sender},`,
-         `\n${i1}sendToSender: ${typeParams}(${eventName}: ${eventType}, ${ipcParams}) =>`,
-         `\n${i2}sendToSenderFrame(${eventName}, ${wire}, ${rest}),`,
-         `\n${i1}broadcast: ${typeParams}(${ipcParams}) =>`,
-         `\n${i2}broadcastMessage(${wire}, ${rest}),`,
-         `\n${i1}broadcastTo: ${typeParams}(${filterName}: ${filterType}, ${ipcParams}) =>`,
-         `\n${i2}broadcastMessage(${wire}, ${rest}, ${filterName}),`,
-      ];
-      if (spec.trigger) {
-         members.push(`\n${this.buildTriggerBinder(spec)}`);
-      }
-      return { name: spec.name, members };
-   }
-   /** The `IpcAskError` and `IpcAskOptions` of the `ask` channels, and of the questions to a service worker. */
-   private askErrorLines(): string[] {
-      const [i1, i2] = this.indents;
-      return [
-         "export class IpcAskError extends Error {",
-         `${i1}readonly code: string | number | undefined;`,
-         `${i1}readonly channel: string;`,
-         `${i1}readonly data: unknown;`,
-         `${i1}constructor(channel: string, message: string, code?: string | number, name = 'IpcAskError', data?: unknown) {`,
-         `${i2}super(message);`,
-         `${i2}this.name = name;`,
-         `${i2}this.channel = channel;`,
-         `${i2}this.code = code;`,
-         `${i2}this.data = data;`,
-         `${i1}}`,
-         "}",
-         "",
-         "export interface IpcAskOptions {",
-         `${i1}/** Rejects with the code 'IPC_ASK_TIMEOUT' when the renderer or the worker has not answered by then. */`,
-         `${i1}timeoutMs?: number;`,
-         "}",
-         "",
-      ];
-   }
-   /** `readAskReply`, which reads the envelope of the answer to a question. */
-   private readAskReplyLines(): string[] {
-      const [i1, i2] = this.indents;
-      return [
-         "function readAskReply(channel: string, envelope: unknown, who = 'renderer'): { value: unknown } | { error: IpcAskError } {",
-         `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,
-         `${i1}if (source && source.ok === true) {`,
-         `${i2}return { value: source.value };`,
-         `${i1}}`,
-         `${i1}const error = source && typeof source.error === 'object' && source.error !== null ? (source.error as { [key: string]: unknown }) : null;`,
-         `${i1}if (!source || source.ok !== false || !error) {`,
-         `${i2}return { error: new IpcAskError(channel, \`The \${who} sent an unreadable reply\`, 'IPC_ASK_INVALID_REPLY') };`,
-         `${i1}}`,
-         `${i1}const name = typeof error.name === 'string' && error.name ? error.name : 'Error';`,
-         `${i1}const message = typeof error.message === 'string' ? error.message : \`The \${who} failed without a message\`;`,
-         `${i1}const code = typeof error.code === 'string' || typeof error.code === 'number' ? error.code : undefined;`,
-         `${i1}return { error: new IpcAskError(channel, message, code, name, error.data) };`,
-         "}",
-         "",
-      ];
-   }
-   /**
-    * `watchEvent(emitter, event, callback)`, which the calls and connections that the main process
-    * holds open use to learn when the contents, the window or the child they depend on goes away.
-    * A listener of its own for each of them would grow without bound while they are open, and
-    * Node warns about more than ten of the same event (`MaxListenersExceededWarning`). So an
-    * emitter has one listener for each event, with the callbacks of all watchers behind it, which
-    * is added with the first watcher and removed with the last. The disposer removes that one
-    * callback, and a callback which was removed is not called by a dispatch that is under way. A
-    * callback which throws is logged and does not keep the others from running. The callbacks
-    * are held by a `WeakMap` that is keyed by the emitter, so nothing outlives the contents.
-    */
-   private buildEventWatch(): string {
-      const [i1, i2, i3, i4, i5] = this.indents;
-      return [
-         "",
-         "interface WatchableEmitter {",
-         `${i1}on(event: string, listener: (...args: any[]) => void): unknown;`,
-         `${i1}removeListener(event: string, listener: (...args: any[]) => void): unknown;`,
-         "}",
-         "",
-         "interface EventWatch {",
-         `${i1}callbacks: ((...args: any[]) => void)[];`,
-         `${i1}listener: (...args: any[]) => void;`,
-         "}",
-         "",
-         "const eventWatches = new WeakMap<object, { [event: string]: EventWatch | undefined }>();",
-         "",
-         "function watchEvent(",
-         `${i1}emitter: WatchableEmitter,`,
-         `${i1}event: string,`,
-         `${i1}callback: (...args: any[]) => void,`,
-         "): () => void {",
-         `${i1}const known = eventWatches.get(emitter);`,
-         `${i1}const watched: { [event: string]: EventWatch | undefined } = known ?? ({ __proto__: null } as any);`,
-         `${i1}if (!known) {`,
-         `${i2}eventWatches.set(emitter, watched);`,
-         `${i1}}`,
-         `${i1}let watch = watched[event];`,
-         `${i1}if (!watch) {`,
-         `${i2}const callbacks: ((...args: any[]) => void)[] = [];`,
-         `${i2}watch = {`,
-         `${i3}callbacks,`,
-         `${i3}listener: (...args: any[]) => {`,
-         `${i4}for (const next of callbacks.slice()) {`,
-         `${i5}if (callbacks.indexOf(next) >= 0) {`,
-         `${i5}${i1}try {`,
-         `${i5}${i2}next(...args);`,
-         `${i5}${i1}} catch (error) {`,
-         `${i5}${i2}console.error(error);`,
-         `${i5}${i1}}`,
-         `${i5}}`,
-         `${i4}}`,
-         `${i3}},`,
-         `${i2}};`,
-         `${i2}watched[event] = watch;`,
-         `${i2}emitter.on(event, watch.listener);`,
-         `${i1}}`,
-         `${i1}const { callbacks, listener } = watch;`,
-         `${i1}callbacks.push(callback);`,
-         `${i1}return () => {`,
-         `${i2}const at = callbacks.indexOf(callback);`,
-         `${i2}if (at < 0) {`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}callbacks.splice(at, 1);`,
-         `${i2}if (callbacks.length === 0 && watched[event] === watch) {`,
-         `${i3}delete watched[event];`,
-         `${i3}try {`,
-         `${i4}emitter.removeListener(event, listener);`,
-         `${i3}} catch {`,
-         `${i4}// Destroyed contents have dropped their listeners, and cannot be reached.`,
-         `${i3}}`,
-         `${i2}}`,
-         `${i1}};`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * The helpers of the `ask` channels. Electron has no invoke from the main process to a
-    * renderer, so `askRenderer` sends the question with a correlation ID as its first argument,
-    * and the preload script answers on the reply channel with the same ID and the envelope of the
-    * `invoke` channels. Everything on the reply channel is untrusted, so a reply counts only when
-    * the ID is pending for that reply channel, the sender is the contents (and frame) that was asked, and
-    * the envelope has a known shape. Another renderer cannot answer for the one that was asked.
-    *
-    * The promise is settled once: by the answer, by the timeout, or because the contents are
-    * destroyed, their renderer process is gone, or the document that was asked is replaced,
-    * whichever comes first. The target is checked when the question is sent: contents that are
-    * destroyed or crashed, and a frame that is destroyed or detached, are gone. Afterwards a reload
-    * or navigation of the contents (`did-navigate`, which is not emitted for in-page navigations)
-    * replaces the document that was asked. A frame has no event of its own, so for a frame the
-    * `did-frame-navigate` of its contents counts: of that frame (by process and routing ID, or
-    * because the frame is destroyed or detached by then), or of the main frame, which replaces
-    * every frame below it. The commit is watched and not the start, so the old document can still
-    * answer while a navigation is pending, and a navigation that `beforeunload` cancels changes
-    * nothing. The events are watched through `watchEvent`, so any number of pending questions
-    * adds one listener of each event to the contents, and not one of its own each (T87).
-    * `IpcAskError` carries the `name`, `message`, `code` and `data` of an error of the responder,
-    * and the code `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` or
-    * `IPC_ASK_INVALID_REPLY` for the failures of the library itself.
-    */
-   private buildAskHelpers(): string {
-      const [i1, i2, i3, i4] = this.indents;
-      return [
-         "",
-         ...this.askErrorLines(),
-         "interface PendingAsk {",
-         `${i1}reply: string;`,
-         `${i1}contents: WebContents | undefined;`,
-         `${i1}frame: WebFrameMain | undefined;`,
-         `${i1}answer: (envelope: unknown) => void;`,
-         "}",
-         "",
-         "const pendingAsks: { [id: string]: unknown } = { __proto__: null };",
-         "const askReplyListeners: { [reply: string]: unknown } = { __proto__: null };",
-         "let lastAskId = 0;",
-         "",
-         "function isSameFrame(a: WebFrameMain, b: WebFrameMain): boolean {",
-         `${i1}try {`,
-         `${i2}return a === b || (a.processId === b.processId && a.routingId === b.routingId);`,
-         `${i1}} catch {`,
-         `${i2}return false;`,
-         `${i1}}`,
-         "}",
-         "",
-         "function listenForAskReplies(reply: string): void {",
-         `${i1}if (askReplyListeners[reply]) {`,
-         `${i2}return;`,
-         `${i1}}`,
-         `${i1}askReplyListeners[reply] = true;`,
-         `${i1}electronIpcMain.on(reply, (event: IpcMainEvent, id: unknown, envelope: unknown) => {`,
-         `${i2}const pending = typeof id === 'number' ? (pendingAsks[id] as PendingAsk | undefined) : undefined;`,
-         `${i2}if (!pending || pending.reply !== reply) {`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}let allowed = false;`,
-         `${i2}try {`,
-         `${i3}const frame = event.senderFrame;`,
-         `${i3}allowed =`,
-         `${i4}(!pending.contents || event.sender === pending.contents) &&`,
-         `${i4}(!pending.frame || (frame != null && isSameFrame(frame, pending.frame)));`,
-         `${i2}} catch {`,
-         `${i3}allowed = false;`,
-         `${i2}}`,
-         `${i2}if (allowed) {`,
-         `${i3}pending.answer(envelope);`,
-         `${i2}}`,
-         `${i1}});`,
-         "}",
-         "",
-         ...this.readAskReplyLines(),
-         "function askRenderer(",
-         `${i1}channel: string,`,
-         `${i1}wire: string,`,
-         `${i1}reply: string,`,
-         `${i1}target: BrowserWindow | WebContents | WebContentsView | WebFrameMain,`,
-         `${i1}args: unknown[],`,
-         `${i1}options?: IpcAskOptions,`,
-         "): Promise<unknown> {",
-         `${i1}return new Promise<unknown>((resolve, reject) => {`,
-         `${i2}const timeoutMs = options?.timeoutMs;`,
-         `${i2}if (timeoutMs !== undefined && !(typeof timeoutMs === 'number' && timeoutMs >= 0)) {`,
-         `${i3}throw new TypeError('timeoutMs must be a number which is not negative');`,
-         `${i2}}`,
-         `${i2}const destroyed = new IpcAskError(`,
-         `${i3}channel,`,
-         `${i3}\`The renderer that was asked on the channel '\${channel}' is gone\`,`,
-         `${i3}'IPC_ASK_DESTROYED',`,
-         `${i2});`,
-         `${i2}// The webContents of a destroyed BrowserWindow throws when it is read, so the target is`,
-         `${i2}// resolved under the same guard as the checks for a target that is gone.`,
-         `${i2}let destination: WebContents | WebFrameMain | undefined;`,
-         `${i2}let frame: WebFrameMain | undefined;`,
-         `${i2}let contents: WebContents | undefined;`,
-         `${i2}let frameIds: { processId: number; routingId: number } | undefined;`,
-         `${i2}let isGone = false;`,
-         `${i2}try {`,
-         `${i3}isGone = !!(target as { isDestroyed?: () => boolean }).isDestroyed?.();`,
-         `${i3}if (!isGone) {`,
-         `${i4}destination = resolveSendTarget(target);`,
-         `${i4}frame = 'getURL' in destination ? undefined : destination;`,
-         `${i4}contents = 'getURL' in destination ? destination : electronWebContents.fromFrame(destination);`,
-         `${i4}isGone =`,
-         `${i4}${i1}!!(contents && (contents.isDestroyed() || contents.isCrashed())) ||`,
-         `${i4}${i1}!!(frame && (frame.isDestroyed?.() || frame.detached));`,
-         `${i4}if (frame) {`,
-         `${i4}${i1}frameIds = { processId: frame.processId, routingId: frame.routingId };`,
-         `${i4}}`,
-         `${i3}}`,
-         `${i2}} catch {`,
-         `${i3}isGone = true;`,
-         `${i2}}`,
-         `${i2}if (isGone || !destination) {`,
-         `${i3}reject(destroyed);`,
-         `${i3}return;`,
-         `${i2}}`,
-         `${i2}listenForAskReplies(reply);`,
-         `${i2}const id = ++lastAskId;`,
-         `${i2}let timer: ReturnType<typeof setTimeout> | undefined;`,
-         `${i2}let stopWatching = (): void => undefined;`,
-         `${i2}let onGone = (): void => undefined;`,
-         `${i2}let onFrameNavigate = (..._details: unknown[]): void => undefined;`,
-         `${i2}const finish = (settle: () => void): void => {`,
-         `${i3}clearTimeout(timer);`,
-         `${i3}delete pendingAsks[id];`,
-         `${i3}stopWatching();`,
-         `${i3}settle();`,
-         `${i2}};`,
-         `${i2}onGone = () => finish(() => reject(destroyed));`,
-         `${i2}// A navigation of the frame that was asked, or of the main frame, replaces its document.`,
-         `${i2}onFrameNavigate = (...details: unknown[]): void => {`,
-         `${i3}let replaced = details[4] === true;`,
-         `${i3}try {`,
-         `${i4}replaced =`,
-         `${i4}${i1}replaced ||`,
-         `${i4}${i1}(frameIds !== undefined &&`,
-         `${i4}${i2}details[5] === frameIds.processId &&`,
-         `${i4}${i2}details[6] === frameIds.routingId) ||`,
-         `${i4}${i1}!!(frame && (frame.isDestroyed?.() || frame.detached));`,
-         `${i3}} catch {`,
-         `${i4}replaced = true;`,
-         `${i3}}`,
-         `${i3}if (replaced) {`,
-         `${i4}onGone();`,
-         `${i3}}`,
-         `${i2}};`,
-         `${i2}const pending: PendingAsk = {`,
-         `${i3}reply,`,
-         `${i3}contents,`,
-         `${i3}frame,`,
-         `${i3}answer: (envelope) => {`,
-         ...(this.usesSerializer()
-            ? [
-                 `${i4}let outcome = readAskReply(channel, envelope);`,
-                 `${i4}if (!('error' in outcome)) {`,
-                 `${i4}${i1}try {`,
-                 `${i4}${i2}outcome = { value: decodeValue(channel, outcome.value) };`,
-                 `${i4}${i1}} catch (cause) {`,
-                 `${i4}${i2}outcome = { error: new IpcAskError(channel, \`The answer cannot be read: \${cause instanceof Error ? cause.message : String(cause)}\`, 'IPC_ASK_INVALID_REPLY') };`,
-                 `${i4}${i1}}`,
-                 `${i4}}`,
-                 `${i4}const settled = outcome;`,
-              ]
-            : [`${i4}const settled = readAskReply(channel, envelope);`]),
-         `${i4}finish(() => ('error' in settled ? reject(settled.error) : resolve(settled.value)));`,
-         `${i3}},`,
-         `${i2}};`,
-         `${i2}pendingAsks[id] = pending;`,
-         `${i2}if (contents) {`,
-         `${i3}const asked = contents;`,
-         `${i3}const stops = [`,
-         `${i4}watchEvent(asked, 'destroyed', onGone),`,
-         `${i4}watchEvent(asked, 'render-process-gone', onGone),`,
-         `${i4}frame ? watchEvent(asked, 'did-frame-navigate', onFrameNavigate) : watchEvent(asked, 'did-navigate', onGone),`,
-         `${i3}];`,
-         `${i3}stopWatching = () => {`,
-         `${i4}for (const stop of stops) {`,
-         `${i4}${i1}stop();`,
-         `${i4}}`,
-         `${i3}};`,
-         `${i2}}`,
-         `${i2}if (timeoutMs !== undefined && timeoutMs !== Infinity) {`,
-         `${i3}const error = new IpcAskError(`,
-         `${i4}channel,`,
-         `${i4}\`The renderer did not answer the channel '\${channel}' within \${timeoutMs} ms\`,`,
-         `${i4}'IPC_ASK_TIMEOUT',`,
-         `${i3});`,
-         `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
-         `${i2}}`,
-         `${i2}try {`,
-         `${i3}destination.send(wire, id, ${this.usesSerializer() ? "encodeValue(channel, args)" : "...args"});`,
-         `${i2}} catch (error) {`,
-         `${i3}finish(() => reject(error));`,
-         `${i2}}`,
-         `${i1}});`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * `startStream`, which the listener of a `stream` channel calls with the iterable that the
-    * handler returned. It makes a `MessageChannelMain` for the call, hands one port to the frame
-    * that asked, with the ID that the page chose, and drives the iterator over the other one. The
-    * messages are `{ type: 'chunk', value }` in order, then `{ type: 'end' }` or
-    * `{ type: 'error', error }`, and then the port is closed. The page cancels with
-    * `{ type: 'cancel' }` or by closing its port, and the stream also stops when the contents are
-    * destroyed. A stop calls `return()` on the iterator once, so that the generator runs its
-    * `finally` blocks, and no chunk is sent after it. A chunk that cannot be cloned stops the
-    * iterator and fails the stream. Everything that goes wrong before the port is handed over is
-    * thrown, and reaches the page as the envelope of the call, so no port exists for it.
-    *
-    * The flow is controlled by credits. The page may have at most `highWaterMark` chunks that it
-    * has not read, so the main process starts with a `limit` of that many chunks. It counts the
-    * chunks that it sent, and does not pull from the generator once `sent` reaches `limit`.
-    * The page raises the limit with `{ type: 'credit', limit }`, the total number of chunks that it
-    * allows so far, as it reads. An absolute total is safe against a repeated or late message, and
-    * only a higher one counts. A stop wakes the pump that waits for credit, so a cancel, a closed
-    * port and a destroyed contents work while the generator is paused. With `Infinity` the
-    * generator is never paused. The `destroyed` event of the contents is watched through
-    * `watchEvent`, so any number of open streams of a page adds one listener, and not one each.
-    */
-   private buildStreamHelpers(): string {
-      const [i1, i2, i3, i4, i5] = this.indents;
-      return [
-         "",
-         "function stopIterator(iterator: AsyncIterator<unknown>): void {",
-         `${i1}try {`,
-         `${i2}Promise.resolve(iterator.return?.()).catch((error: unknown) => console.error(error));`,
-         `${i1}} catch (error) {`,
-         `${i2}console.error(error);`,
-         `${i1}}`,
-         "}",
-         "",
-         "async function startStream(",
-         `${i1}event: IpcMainInvokeEvent,`,
-         `${i1}channel: string,`,
-         `${i1}wire: string,`,
-         `${i1}id: unknown,`,
-         `${i1}highWaterMark: number,`,
-         `${i1}produce: () => unknown,`,
-         "): Promise<void> {",
-         `${i1}if (typeof id !== 'number') {`,
-         `${i2}throw { name: 'IpcStreamError', message: \`The call of the channel '\${channel}' has no stream ID\`, code: 'IPC_STREAM_INVALID_REQUEST' };`,
-         `${i1}}`,
-         `${i1}const source = (await produce()) as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> } | null | undefined;`,
-         `${i1}const open = source ? source[Symbol.asyncIterator] : undefined;`,
-         `${i1}if (!source || typeof open !== 'function') {`,
-         `${i2}throw { name: 'IpcStreamError', message: \`The handler of the channel '\${channel}' did not return an async iterable\`, code: 'IPC_STREAM_NOT_ITERABLE' };`,
-         `${i1}}`,
-         `${i1}const iterator = open.call(source);`,
-         `${i1}const { port1, port2 } = new MessageChannelMain();`,
-         `${i1}// The port goes to the frame that asked. A frame that is gone cannot be reached.`,
-         `${i1}let target: WebContents | WebFrameMain = event.sender;`,
-         `${i1}try {`,
-         `${i2}const frame = event.senderFrame;`,
-         `${i2}if (frame && !frame.isDestroyed?.() && !frame.detached) {`,
-         `${i3}target = frame;`,
-         `${i2}}`,
-         `${i1}} catch {`,
-         `${i2}// The sender is used instead.`,
-         `${i1}}`,
-         `${i1}try {`,
-         `${i2}target.postMessage(\`\${wire}:port\`, id, [port2]);`,
-         `${i1}} catch (error) {`,
-         `${i2}port1.close();`,
-         `${i2}stopIterator(iterator);`,
-         `${i2}throw error;`,
-         `${i1}}`,
-         `${i1}const sender = event.sender;`,
-         `${i1}let done = false;`,
-         `${i1}let limit = highWaterMark;`,
-         `${i1}let sent = 0;`,
-         `${i1}let unwatch = (): void => undefined;`,
-         `${i1}let wake: (() => void) | null = null;`,
-         `${i1}const resume = (): void => {`,
-         `${i2}const waiting = wake;`,
-         `${i2}wake = null;`,
-         `${i2}waiting?.();`,
-         `${i1}};`,
-         `${i1}const finish = (): boolean => {`,
-         `${i2}if (done) {`,
-         `${i3}return false;`,
-         `${i2}}`,
-         `${i2}done = true;`,
-         `${i2}resume();`,
-         `${i2}unwatch();`,
-         `${i2}port1.close();`,
-         `${i2}return true;`,
-         `${i1}};`,
-         `${i1}const cancel = (): void => {`,
-         `${i2}if (finish()) {`,
-         `${i3}stopIterator(iterator);`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}const fail = (error: IpcErrorInfo): void => {`,
-         `${i2}if (!done) {`,
-         `${i3}try {`,
-         `${i4}port1.postMessage({ type: 'error', error });`,
-         `${i3}} catch (cause) {`,
-         `${i4}console.error(cause);`,
-         `${i3}}`,
-         `${i3}finish();`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}port1.on('message', (message: { data: unknown }) => {`,
-         `${i2}const data = message.data as { type?: unknown; limit?: unknown } | null;`,
-         `${i2}if (data && data.type === 'cancel') {`,
-         `${i3}cancel();`,
-         `${i2}} else if (data && data.type === 'credit' && typeof data.limit === 'number' && data.limit > limit) {`,
-         `${i3}limit = data.limit;`,
-         `${i3}resume();`,
-         `${i2}}`,
-         `${i1}});`,
-         `${i1}port1.on('close', cancel);`,
-         `${i1}unwatch = watchEvent(sender, 'destroyed', cancel);`,
-         `${i1}port1.start();`,
-         `${i1}const pump = async (): Promise<void> => {`,
-         `${i2}while (!done) {`,
-         `${i3}if (sent >= limit) {`,
-         `${i4}// The page has not read enough chunks: the generator waits for credit, a cancel or a stop.`,
-         `${i4}await new Promise<void>((resolve) => {`,
-         `${i5}wake = resolve;`,
-         `${i4}});`,
-         `${i4}continue;`,
-         `${i3}}`,
-         `${i3}let step: IteratorResult<unknown>;`,
-         `${i3}try {`,
-         `${i4}step = await iterator.next();`,
-         `${i3}} catch (error) {`,
-         `${i4}fail(toIpcError(error));`,
-         `${i4}return;`,
-         `${i3}}`,
-         `${i3}if (done) {`,
-         `${i4}return;`,
-         `${i3}}`,
-         `${i3}if (step.done) {`,
-         `${i4}try {`,
-         `${i5}port1.postMessage({ type: 'end' });`,
-         `${i4}} catch (cause) {`,
-         `${i5}console.error(cause);`,
-         `${i4}}`,
-         `${i4}finish();`,
-         `${i4}return;`,
-         `${i3}}`,
-         `${i3}try {`,
-         `${i4}port1.postMessage({ type: 'chunk', value: ${this.usesSerializer() ? "encodeValue(channel, step.value)" : "step.value"} });`,
-         `${i4}sent += 1;`,
-         `${i3}} catch (error) {`,
-         `${i4}stopIterator(iterator);`,
-         `${i4}fail({ name: 'IpcStreamError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_STREAM_UNSENDABLE' });`,
-         `${i4}return;`,
-         `${i3}}`,
-         `${i2}}`,
-         `${i1}};`,
-         `${i1}void pump();`,
-         "}",
-         "",
-      ].join("\n");
-   }
-   /**
-    * `ipc.<name>.invoke(target, ...args)` asks one window, view, contents or frame, and
-    * `ipc.<name>.invokeWith(target, { timeoutMs }, ...args)` does so with a timeout. The options
-    * come before the arguments, since a signature that ends in optional or rest parameters would
-    * swallow trailing options. Both return a promise of what the responder in the renderer returns.
-    */
-   private buildAskChannel(spec: t.ChannelSpec): ChannelEntry {
-      const [, i1, i2] = this.indents;
-      // The names of the generated parameters must not shadow a parameter of the signature.
-      const taken = this.collectIdentifiers([spec.signature.definition]);
-      const targetName = this.uniqueName("target", taken);
-      const optionsName = this.uniqueName("options", taken);
-      const senderParams = this.getOriginalParams(spec, true);
-      const ipcParams = this.getOriginalParams(spec, false);
-      const typeParams = this.getTypeParams(spec.signature);
-      const targetType = "BrowserWindow | WebContents | WebContentsView | WebFrameMain";
-      const returned = spec.signature.async
-         ? spec.signature.returnType
-         : `Promise<Awaited<${spec.signature.returnType}>>`;
-      const channel = `'${spec.name}'`;
-      const rest = senderParams ? `[${senderParams}]` : "[]";
-      const params = (generated: string[]) => [...generated, ipcParams].filter(Boolean).join(", ");
-      const ask = (options: string) =>
-         `askRenderer(${channel}, ${this.wireName(spec.name)}, ${this.wireName(spec.name, ":reply")}, ${targetName}, ${rest}${options}) as ${returned}`;
-      const members = [
-         `\n${i1}invoke: ${typeParams}(${params([`${targetName}: ${targetType}`])}): ${returned} =>`,
-         `\n${i2}${ask("")},`,
-         `\n${i1}invokeWith: ${typeParams}(${params([`${targetName}: ${targetType}`, `${optionsName}: IpcAskOptions`])}): ${returned} =>`,
-         `\n${i2}${ask(`, ${optionsName}`)},`,
-      ];
-      return { name: spec.name, members };
-   }
-   /**
-    * Builds `bind(browserWindow, provider)`, which registers one listener for the trigger
-    * event, evaluates the provider each time the event fires and returns a disposer.
-    * An error of the provider or of the send skips that send and goes to `onError`,
-    * or to `console.error` without it, so that it is never an unhandled rejection.
-    */
-   private buildTriggerBinder(spec: t.ChannelSpec): string {
-      const [, i1, i2, i3, i4, i5] = this.indents;
-      const args = `[${this.getOriginalParams(spec, false)}]`;
-      const provider = `provider: () => ${args} | Promise<${args}>`;
-      const onError = "onError?: (error: unknown) => void";
-      const event = JSON.stringify(spec.trigger);
-      const typeParams = this.getTypeParams(spec.signature);
-      return [
-         `${i1}bind: ${typeParams}(browserWindow: BrowserWindow, ${provider}, ${onError}) => {`,
-         `${i2}const listener = async () => {`,
-         `${i3}try {`,
-         `${i4}const args = await provider();`,
-         `${i4}if (!browserWindow.isDestroyed()) {`,
-         `${i5}browserWindow.webContents.send(${this.wireName(spec.name)}, ${
-            this.isSerializedSpec(spec) ? `encodeValue('${spec.name}', args)` : "...args"
-         });`,
-         `${i4}}`,
-         `${i3}} catch (error) {`,
-         `${i4}(onError ?? console.error)(error);`,
-         `${i3}}`,
-         `${i2}};`,
-         `${i2}browserWindow.on(${event}, listener);`,
-         `${i2}return () => {`,
-         `${i3}browserWindow.off(${event}, listener);`,
-         `${i2}};`,
-         `${i1}},`,
-      ].join("\n");
    }
    /**
     * The registry of the ends of connections, which both kinds of port channel use. Every end of a
@@ -2218,7 +1306,7 @@ export class MainBindingsWriter extends BaseWriter {
       ].join(" | ");
       const out: string[] = [""];
       if (asks.length > 0 && !hasRendererAsks) {
-         out.push(...this.askErrorLines(), ...this.readAskReplyLines());
+         out.push(...askErrorLines(this.indents), ...readAskReplyLines(this.indents));
       }
       out.push(
          "export class IpcWorkerError extends Error {",

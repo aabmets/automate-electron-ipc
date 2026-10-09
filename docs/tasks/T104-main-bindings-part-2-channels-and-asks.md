@@ -17,4 +17,12 @@ Status and dependencies are in the [roadmap](../roadmap.md).
 - **Tests:** No assertion changes. The generated output of every fixture in `tests/fixtures` is
   byte-identical before and after (dump it into the scratchpad first, then `diff -r`), the whole
   suite passes, and `bun scripts/check-size.ts --update` lowers the baseline in the same commit.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The channel builders read more of the writer than `indents`, so the
+  pattern of T103 gains one rule: a function that reads only the indents takes `indents`, and one
+  that reads more takes `ctx: MainContext`. The writer builds `MainContext` once, with the indents,
+  the config, `usesSerializer` and the `BaseWriter` helpers bound to the writer. `MainContext` and
+  `ChannelEntry` are declared in `main-bindings.ts`, and the modules import them as types. New
+  modules: `main-listeners.ts`, `main-renderer-channels.ts`, `main-senders.ts`, `main-asks.ts`
+  (264 lines, so no further seam), `main-watches.ts` and `main-streams.ts` (175). `usesEnvelope`
+  became `hasEnvelope`, since a local of `renderFileContents` has the old name. `main-bindings.ts`
+  went from 2913 to 2001 lines, and the output of all 95 fixtures is byte-identical.

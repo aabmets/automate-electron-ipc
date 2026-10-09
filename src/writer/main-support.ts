@@ -10,12 +10,17 @@
  */
 
 import type * as t from "@types";
+import { buildAskHelpers } from "./main-asks.js";
+import type { MainContext } from "./main-bindings.js";
 import { buildScopeRegistry, buildTargetResolver } from "./main-registries.js";
+import { buildSenderHelpers } from "./main-senders.js";
+import { buildStreamHelpers } from "./main-streams.js";
 import {
    buildArgumentValidation,
    buildSenderValidation,
    getValidatedWorkerEvents,
 } from "./main-validation.js";
+import { buildEventWatch } from "./main-watches.js";
 import { buildErrorEnvelope, buildSerializerRuntime } from "./utility-runtime.js";
 
 /** Which helpers the channels of the file use. */
@@ -45,16 +50,12 @@ export interface SupportUses {
  * module of its feature, which `buildSupport` then calls directly.
  */
 export interface SupportBuilders {
-   senderHelpers: (usesEmits: boolean) => string;
-   eventWatch: () => string;
-   askHelpers: () => string;
    workerHelpers: (
       specs: t.ChannelSpec[],
       usesAsks: boolean,
       validators: Map<t.ChannelSpec, string>,
    ) => string;
    workerEventType: (spec: t.ChannelSpec) => string;
-   streamHelpers: () => string;
    utilityHelpers: () => string;
    portRegistry: () => string;
    pageLoadWatch: () => string;
@@ -65,11 +66,12 @@ export interface SupportBuilders {
 
 /** The helpers that the channels of the file use, in the order that they are declared. */
 export function buildSupport(
-   indents: string[],
+   ctx: MainContext,
    uses: SupportUses,
    eventTypes: string[],
    builders: SupportBuilders,
 ): string[] {
+   const { indents } = ctx;
    const support: string[] = [];
    if (uses.scopes.length > 0) {
       support.push(buildScopeRegistry(indents, uses.scopes));
@@ -108,19 +110,19 @@ export function buildSupport(
       support.push(buildSerializerRuntime(indents));
    }
    if (uses.usesSenders) {
-      support.push(builders.senderHelpers(uses.usesEmits));
+      support.push(buildSenderHelpers(indents, uses.usesEmits));
    }
    if (uses.usesEventWatch) {
-      support.push(builders.eventWatch());
+      support.push(buildEventWatch(indents));
    }
    if (uses.usesAsks) {
-      support.push(builders.askHelpers());
+      support.push(buildAskHelpers(ctx));
    }
    if (uses.workerSpecs.length > 0) {
       support.push(builders.workerHelpers(uses.workerSpecs, uses.usesAsks, uses.workerValidators));
    }
    if (uses.usesStreams) {
-      support.push(builders.streamHelpers());
+      support.push(buildStreamHelpers(ctx));
    }
    if (uses.usesUtility) {
       support.push(builders.utilityHelpers());
