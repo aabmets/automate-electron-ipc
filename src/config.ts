@@ -15,6 +15,61 @@ import type * as t from "@types";
 import utils from "./utils.js";
 import valid from "./validators.js";
 
+/** The extensions that a module specifier of a `.ts`, `.mts` or `.cts` file may end with. */
+const SCRIPT_EXTENSIONS: Record<string, string[]> = {
+   ".ts": [".ts"],
+   ".mts": [".mts"],
+   ".cts": [".cts"],
+   ".js": [".ts"],
+   ".mjs": [".mts"],
+   ".cjs": [".cts"],
+};
+
+/** The TypeScript files which the path of the serializer module can mean. */
+function serializerSourceFiles(serializerFilePath: string): string[] {
+   const extension = path.posix.extname(serializerFilePath);
+   const mapped = SCRIPT_EXTENSIONS[extension];
+   if (mapped !== undefined) {
+      const stem = serializerFilePath.slice(0, -extension.length);
+      return mapped.map((ext) => `${stem}${ext}`);
+   }
+   const exts = [".ts", ".mts", ".cts"];
+   return [
+      ...exts.map((ext) => `${serializerFilePath}${ext}`),
+      ...exts.map((ext) => `${serializerFilePath}/index${ext}`),
+   ];
+}
+
+/**
+ * Tells which input of the run the file of an output path is, or `null` if it is none: the
+ * schema file, a schema source file in the schema directory, or the serializer module. The
+ * run writes the output over the user's file, or parses the output as a schema on the next run.
+ */
+function describeSourceFile(
+   file: string,
+   schemaFile: string,
+   schemaDir: string | null,
+   serializerFilePath: string | undefined,
+): string | null {
+   if (path.posix.normalize(file) === path.posix.normalize(schemaFile)) {
+      return "the schema file";
+   } else if (
+      schemaDir !== null &&
+      utils.isPathInside(file, schemaDir) &&
+      utils.isSchemaSourceFile(file)
+   ) {
+      return "a schema file";
+   } else if (
+      serializerFilePath !== undefined &&
+      serializerSourceFiles(path.posix.normalize(serializerFilePath)).includes(
+         path.posix.normalize(file),
+      )
+   ) {
+      return "the serializer module";
+   }
+   return null;
+}
+
 export async function getConfigFromUserPackage(cwd?: string): Promise<t.IPCOptionalConfig> {
    const filePath = utils.resolveUserProjectPath("package.json", cwd);
    const fileContents = await fsp.readFile(filePath);
@@ -71,19 +126,36 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
    const serializerFilePath = mergedConfig.serializer?.startsWith(".")
       ? utils.resolveUserProjectPath(mergedConfig.serializer, cwd)
       : undefined;
+   const schemaPath = (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/");
+   const outputs: [string, string | undefined, string][] = [
+      ["utilityBindingsPath", mergedConfig.utilityBindingsPath, utilityBindingsFilePath],
+      [
+         "serviceWorkerPreloadPath",
+         mergedConfig.serviceWorkerPreloadPath,
+         serviceWorkerPreloadFilePath,
+      ],
+   ];
    const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath];
-   if (taken.includes(utilityBindingsFilePath)) {
-      throw new Error(
-         `The config 'utilityBindingsPath' ('${mergedConfig.utilityBindingsPath}') is the path of ` +
-            "another generated file. Choose a different path.",
+   for (const [option, value, file] of outputs) {
+      if (taken.includes(file)) {
+         throw new Error(
+            `The config '${option}' ('${value}') is the path of another generated file. ` +
+               "Choose a different path.",
+         );
+      }
+      const source = describeSourceFile(
+         file,
+         schemaFile,
+         onlySchemaDir ? schemaDir : null,
+         serializerFilePath,
       );
-   }
-   taken.push(utilityBindingsFilePath);
-   if (taken.includes(serviceWorkerPreloadFilePath)) {
-      throw new Error(
-         `The config 'serviceWorkerPreloadPath' ('${mergedConfig.serviceWorkerPreloadPath}') is the ` +
-            "path of another generated file. Choose a different path.",
-      );
+      if (source !== null) {
+         throw new Error(
+            `The config '${option}' ('${value}') is ${source}, which the run would overwrite. ` +
+               "Choose a different path.",
+         );
+      }
+      taken.push(file);
    }
    return {
       ...mergedConfig,
@@ -96,7 +168,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       serviceWorkerTypesFilePath,
       ...(serializerFilePath === undefined ? {} : { serializerFilePath }),
       ipcSchema: {
-         path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
+         path: schemaPath,
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,
       },
    } as t.IPCResolvedConfig;

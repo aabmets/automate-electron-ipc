@@ -36,35 +36,6 @@ async function failureOf(fixture: string): Promise<string | null> {
    }
 }
 
-describe("T88: config values which are accepted, but break the output", () => {
-   it.fails("refuses an output path that is the schema file, and leaves the schema alone", async () => {
-      const failure = await failureOf("output-over-schema");
-      expect(failure ?? "the run did not fail").toContain("schema");
-      // Without the check, the generated code of the utility process replaced the schema.
-      expect(await project?.read("schema.ts")).toBeUndefined();
-   });
-
-   it.fails("refuses output paths that are declaration files", async () => {
-      // A .d.mts or .d.cts file cannot hold the runtime code of the utility process or the worker.
-      expect((await failureOf("declaration-output-paths")) ?? "the run did not fail").toMatch(
-         /utilityBindingsPath|\.d\.mts/,
-      );
-   });
-
-   it.fails("does not keep an allowed origin with the default port, which no origin can match", async () => {
-      const failure = await failureOf("default-port-origins");
-      const main = project?.generated["main.ts"] ?? "";
-      // Either way is fine: the run refuses the entries, or it writes them as origins.
-      const outcome =
-         failure === null
-            ? /localhost:80\b|example\.com:443\b/.test(main)
-               ? "kept"
-               : "normalized"
-            : "refused";
-      expect(outcome).not.toBe("kept");
-   });
-});
-
 describe("T89: import paths of the generated files", () => {
    it("generates the files of schema files with script extensions", async () => {
       project = await runFixture("script-extensions");

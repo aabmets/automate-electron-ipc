@@ -748,6 +748,46 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       expect(() => vld.validateChannelSpecs(specs)).toThrowError(/is not an origin/);
    });
 
+   it.each([
+      "http://localhost:80",
+      "https://example.com:443",
+      "ws://localhost:80",
+      "wss://localhost:443",
+      "ftp://example.com:21",
+      "http://localhost:080",
+   ])(
+      "rejects '%s', which has the default port of its scheme and so matches no origin",
+      (origin) => {
+         const specs = make("RendererToMain", "Unicast", ["app://.", origin]);
+         expect(() => vld.validateChannelSpecs(specs)).toThrowError(
+            /has the default port of its scheme.*Write '[^']+'/,
+         );
+      },
+   );
+
+   it("names the origin without the port in the message", () => {
+      const specs = make("RendererToMain", "Unicast", ["https://example.com:443"]);
+      expect(() => vld.validateChannelSpecs(specs)).toThrowError("Write 'https://example.com'");
+   });
+
+   it.each([
+      "http://localhost:443",
+      "https://example.com:80",
+      "http://localhost:8080",
+      "http://localhost:5173",
+      "app://.:80",
+   ])("keeps the origin '%s', whose port is not the default one of its scheme", (origin) => {
+      const specs = make("RendererToMain", "Unicast", [origin]);
+      expect(() => vld.validateChannelSpecs(specs)).not.toThrowError();
+   });
+
+   it("rejects a default port in the origins of the channels that a worker calls", () => {
+      const spec = new ChannelSpecGenerator().generate("ServiceWorkerToMain", "Unicast");
+      expect(() =>
+         vld.validateChannelSpecs([{ ...spec, allowedOrigins: ["https://example.com:443"] }]),
+      ).toThrowError(/default port/);
+   });
+
    it("rejects a value which is not an array of strings", () => {
       for (const value of ["app://.", [1], { a: 1 }]) {
          const specs = make("RendererToMain", "Unicast", value);
@@ -1270,14 +1310,18 @@ describe("validateOptionalConfig, utilityBindingsPath", () => {
       ).toThrowError("utilityBindingsPath must be relative to the project root");
    });
 
-   it.each(["worker/ipc", "worker/ipc.js", "worker/ipc.d.ts", ""])(
-      "rejects %j, since it is not the path of a .ts file",
-      (utilityBindingsPath) => {
-         expect(() => vld.validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
-            "utilityBindingsPath must be the path of a .ts file",
-         );
-      },
-   );
+   it.each([
+      "worker/ipc",
+      "worker/ipc.js",
+      "worker/ipc.d.ts",
+      "worker/ipc.d.mts",
+      "worker/ipc.d.cts",
+      "",
+   ])("rejects %j, since it is not the path of a .ts file", (utilityBindingsPath) => {
+      expect(() => vld.validateOptionalConfig({ ...config, utilityBindingsPath })).toThrowError(
+         "utilityBindingsPath must be the path of a .ts file",
+      );
+   });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;
@@ -1444,14 +1488,18 @@ describe("validateOptionalConfig, serviceWorkerPreloadPath", () => {
       ).toThrowError("serviceWorkerPreloadPath must be relative to the project root");
    });
 
-   it.each(["worker/preload", "worker/preload.js", "worker/preload.d.ts", ""])(
-      "rejects %j, since it is not the path of a .ts file",
-      (serviceWorkerPreloadPath) => {
-         expect(() =>
-            vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
-         ).toThrowError("serviceWorkerPreloadPath must be the path of a .ts file");
-      },
-   );
+   it.each([
+      "worker/preload",
+      "worker/preload.js",
+      "worker/preload.d.ts",
+      "worker/preload.d.mts",
+      "worker/preload.d.cts",
+      "",
+   ])("rejects %j, since it is not the path of a .ts file", (serviceWorkerPreloadPath) => {
+      expect(() =>
+         vld.validateOptionalConfig({ ...config, serviceWorkerPreloadPath }),
+      ).toThrowError("serviceWorkerPreloadPath must be the path of a .ts file");
+   });
 
    it("rejects a value which is not a string", () => {
       const value = 5 as unknown as string;

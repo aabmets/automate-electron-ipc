@@ -41,7 +41,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
             if (path.isAbsolute(value)) {
                return "utilityBindingsPath must be relative to the project root";
             }
-            return /\.[cm]?ts$/.test(value) && !value.endsWith(".d.ts")
+            return utils.isSchemaSourceFile(value)
                ? true
                : "utilityBindingsPath must be the path of a .ts file";
          }),
@@ -51,7 +51,7 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
             if (path.isAbsolute(value)) {
                return "serviceWorkerPreloadPath must be relative to the project root";
             }
-            return /\.[cm]?ts$/.test(value) && !value.endsWith(".d.ts")
+            return utils.isSchemaSourceFile(value)
                ? true
                : "serviceWorkerPreloadPath must be the path of a .ts file";
          }),
@@ -128,6 +128,24 @@ const TriggerStruct = refine(string(), "event", (value) => {
 /** `scheme://host[:port]` in lower case, as Chromium serializes the origin of a frame. */
 const ORIGIN_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[a-z0-9._~%[\]:-]*$/;
 
+/** The ports that Chromium leaves out of the origin of a URL, by scheme. */
+const DEFAULT_PORTS: Record<string, string> = {
+   "http:": "80",
+   "https:": "443",
+   "ws:": "80",
+   "wss:": "443",
+   "ftp:": "21",
+};
+
+/** Returns the origin without its default port, or `null` if the origin has none. */
+function withoutDefaultPort(origin: string): string | null {
+   const match = /^([a-z][a-z0-9+.-]*:)\/\/(.*):(\d+)$/.exec(origin);
+   if (match && Number(DEFAULT_PORTS[match[1] as string]) === Number(match[3])) {
+      return `${match[1]}//${match[2]}`;
+   }
+   return null;
+}
+
 const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
    if (values.length === 0) {
       return "allowedOrigins must list at least one origin, since an empty list allows no caller";
@@ -138,6 +156,13 @@ const AllowedOriginsStruct = refine(array(string()), "origins", (values) => {
             `'${value}' is not an origin. Write the scheme, the host and an optional port, ` +
             "in lower case and without a path, wildcard or credentials, " +
             "such as 'app://.' or 'http://localhost:5173'"
+         );
+      }
+      const portless = withoutDefaultPort(value);
+      if (portless !== null) {
+         return (
+            `'${value}' has the default port of its scheme, which no origin has, so it never ` +
+            `matches a caller. Write '${portless}'`
          );
       }
    }

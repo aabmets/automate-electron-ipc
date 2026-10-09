@@ -10,7 +10,9 @@
  */
 
 import fsp from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { ipcAutomation } from "@src/automation.js";
 import { type E2EProject, NODE_NEXT_OPTIONS, runFixture } from "@testutils/e2e-utils.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -885,5 +887,51 @@ describe("ipcAutomation, channel names", () => {
    it("generates files that type-check", async () => {
       project = await runFixture("short-names");
       expect(await project.typecheck()).toBe("");
+   });
+});
+
+describe("ipcAutomation, config values that would break the output", () => {
+   /** Runs the fixture, and returns the message of the error that the run failed with. */
+   async function failureOf(fixture: string): Promise<string> {
+      try {
+         project = await runFixture(fixture);
+      } catch (error) {
+         return error instanceof Error ? error.message : String(error);
+      }
+      throw new Error("the run did not fail");
+   }
+
+   it("refuses an output path that is the schema file, and leaves the schema alone", async () => {
+      const fixture = path.join(import.meta.dirname, "../fixtures/output-over-schema");
+      const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
+      try {
+         await fsp.cp(fixture, root, { recursive: true });
+         const before = await fsp.readFile(path.join(root, "ipc/schema.ts"), "utf8");
+         const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+         try {
+            await expect(ipcAutomation(root)).rejects.toThrowError(
+               /'utilityBindingsPath' \('ipc\/schema\.ts'\) is the schema file/,
+            );
+         } finally {
+            warn.mockRestore();
+         }
+         expect(await fsp.readFile(path.join(root, "ipc/schema.ts"), "utf8")).toBe(before);
+         // The run stops before it writes any file.
+         expect(await fsp.readdir(path.join(root, "ipc"))).toStrictEqual(["schema.ts"]);
+      } finally {
+         await fsp.rm(root, { recursive: true, force: true });
+      }
+   });
+
+   it("refuses output paths that are declaration files", async () => {
+      expect(await failureOf("declaration-output-paths")).toMatch(
+         /utilityBindingsPath must be the path of a \.ts file/,
+      );
+   });
+
+   it("refuses an allowed origin with the default port, which no origin can match", async () => {
+      const failure = await failureOf("default-port-origins");
+      expect(failure).toContain("'http://localhost:80' has the default port of its scheme");
+      expect(failure).toContain("Write 'http://localhost'");
    });
 });

@@ -19,4 +19,10 @@ Status and dependencies are in the [roadmap](../roadmap.md).
   refuse or normalize origins with a default port, the same in the schema options and the config.
 - **Tests:** the `it.fails` of `T88` in `tests/test_e2e/generatorFindings.test.ts` turn into
   passing tests in the tests of the config and the validators.
-- **Delivered:**
+- **Delivered:** 2026-10-09. The config refuses an output path that is the schema file (also while only
+  `schema/` exists, since the file would then take over), a schema source file under an active
+  `schema/`, or the serializer module (with or without extension, `.js` mapped to `.ts`, or its
+  `index`). Declaration files `.d.mts` and `.d.cts` are refused by the `isSchemaSourceFile` rule.
+  `allowedOrigins` with the default port of `http`, `https`, `ws`, `wss` or `ftp` is refused, with
+  the origin to write instead; there is no origin option in the config, so only the schema options
+  have it. The case-insensitive file system race stayed unconfirmed and is not handled.
