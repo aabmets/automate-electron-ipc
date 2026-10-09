@@ -1,0 +1,12 @@
+{
+   "name": "fixture-serializer-raw-errors",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "rawErrors": true,
+         "channelPrefix": "",
+         "serializer": "./ipc/serializer.ts"
+      }
+   }
+}

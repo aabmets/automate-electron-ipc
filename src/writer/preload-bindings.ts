@@ -149,6 +149,9 @@ export class PreloadBindingsWriter extends BaseWriter {
          ? "contextBridge, ipcRenderer, webUtils"
          : "contextBridge, ipcRenderer";
       const out: string[] = [`import { ${imports} } from "electron";`];
+      if (this.hasSerializedChannels()) {
+         out.push(this.buildSerializerImport());
+      }
       if (portSpecs.length > 0) {
          out.push(
             'import type { IpcRendererEvent } from "electron";',
@@ -157,6 +160,9 @@ export class PreloadBindingsWriter extends BaseWriter {
                .sort((a, b) => utils.compareStrings(a.name, b.name))
                .map((spec) => this.getPortInitializer(spec)),
          );
+      }
+      if (this.hasSerializedChannels()) {
+         out.push(this.buildSerializerComponents());
       }
       out.push(...this.getTimeoutComponents());
       if (askNames.length > 0 || streamSpecs.length > 0 || brokeredSpecs.length > 0) {
@@ -195,24 +201,86 @@ export class PreloadBindingsWriter extends BaseWriter {
     */
    private buildRendererToMainChannel(spec: t.ChannelSpec): ChannelEntry {
       const method = spec.kind === "Broadcast" ? "send" : "invoke";
-      let ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ...args)`;
+      const serialized = this.isSerializedSpec(spec);
+      const sent = serialized ? `encodeValue('${spec.name}', args)` : "...args";
+      let ipcRenderer = `ipcRenderer.${method}(${this.wireName(spec.name)}, ${sent})`;
       if (this.hasTimeout(spec)) {
          ipcRenderer = `withTimeout('${spec.name}', ${this.getTimeoutMs(spec)}, ${ipcRenderer})`;
       }
+      const decode = (value: string) =>
+         serialized ? `decodeValue('${spec.name}', ${value})` : value;
       if (spec.kind === "Unicast" && !this.config.rawErrors) {
          const [, i1, i2, i3] = this.indents;
          const implementation = [
             "async (...args: any[]) => {",
             `${i2}const result = await ${ipcRenderer};`,
             `${i2}if (result.ok) {`,
-            `${i3}return result.value;`,
+            `${i3}return ${decode("result.value")};`,
             `${i2}}`,
             `${i2}throw result.error;`,
             `${i1}}`,
          ].join("\n");
          return this.buildChannel(spec.name, method, implementation);
       }
+      if (serialized && spec.kind === "Unicast") {
+         // A synchronous failure to serialize must reject the promise, not throw.
+         const implementation = `async (...args: any[]) => ${decode(`await ${ipcRenderer}`)}`;
+         return this.buildChannel(spec.name, method, implementation);
+      }
       return this.buildChannel(spec.name, method, `(...args: any[]) => ${ipcRenderer}`);
+   }
+
+   /**
+    * The helpers of the serializer, which the channels between this page and the main process use:
+    * `encodeValue` turns what is sent into the wire value, and `decodeValue` turns what arrives
+    * back. The arguments of a call go as one value, the list of them, which `decodeArguments`
+    * checks. A failure is a plain object `{ name: 'IpcSerializationError', message, code:
+    * 'IPC_SERIALIZATION' }`, since contextBridge does not keep the fields of an `Error`. A message
+    * from the main process that cannot be read is logged and dropped, and so is not thrown into
+    * the code of Electron.
+    */
+   private buildSerializerComponents(): string {
+      const [i1, i2] = this.indents;
+      return [
+         "",
+         "function serializationError(channel: string, what: string, cause: unknown) {",
+         `${i1}const reason = cause instanceof Error ? cause.message : String(cause);`,
+         `${i1}return { name: 'IpcSerializationError', message: \`\${what} of the channel '\${channel}': \${reason}\`, code: 'IPC_SERIALIZATION' };`,
+         "}",
+         "",
+         "function encodeValue(channel: string, value: unknown): unknown {",
+         `${i1}try {`,
+         `${i2}return (ipcSerialize as (value: unknown) => unknown)(value);`,
+         `${i1}} catch (cause) {`,
+         `${i2}throw serializationError(channel, 'The data cannot be serialized', cause);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function decodeValue(channel: string, wire: unknown): unknown {",
+         `${i1}try {`,
+         `${i2}return (ipcDeserialize as (wire: unknown) => unknown)(wire);`,
+         `${i1}} catch (cause) {`,
+         `${i2}throw serializationError(channel, 'The data cannot be deserialized', cause);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function decodeArguments(channel: string, received: unknown[]): any[] {",
+         `${i1}const value = received.length === 1 ? decodeValue(channel, received[0]) : undefined;`,
+         `${i1}if (!Array.isArray(value)) {`,
+         `${i2}throw serializationError(channel, 'The arguments are not a list', 'the message has an unknown shape');`,
+         `${i1}}`,
+         `${i1}return value;`,
+         "}",
+         "",
+         "function readArguments(channel: string, received: unknown[]): any[] | undefined {",
+         `${i1}try {`,
+         `${i2}return decodeArguments(channel, received);`,
+         `${i1}} catch (error) {`,
+         `${i2}console.error(error);`,
+         `${i2}return undefined;`,
+         `${i1}}`,
+         "}",
+      ].join("\n");
    }
 
    /** `withTimeout`, if any channel needs it. */
@@ -274,14 +342,25 @@ export class PreloadBindingsWriter extends BaseWriter {
     * and the return value is not `ipcRenderer`, which must not leak into the page.
     */
    private buildMainToRendererChannel(spec: t.ChannelSpec): ChannelEntry {
-      const [i0, i1, i2, i3] = this.indents;
+      const [i0, i1, i2, i3, i4] = this.indents;
       if (spec.kind === "Unicast") {
          return this.buildAskChannel(spec);
       }
+      const serialized = this.isSerializedSpec(spec);
+      const listener = serialized
+         ? [
+              `${i2}const listener = (_event: any, ...received: any[]) => {`,
+              `${i3}const args = readArguments('${spec.name}', received);`,
+              `${i3}if (args) {`,
+              `${i4}callback(...args);`,
+              `${i3}}`,
+              `${i2}};`,
+           ].join("\n")
+         : `${i2}const listener = (_event: any, ...args: any[]) => callback(...args);`;
       const subscribe = (method: "on" | "once") =>
          [
             `${i1}${method}: (callback: Function) => {`,
-            `${i2}const listener = (_event: any, ...args: any[]) => callback(...args);`,
+            listener,
             `${i2}ipcRenderer.${method}(${this.wireName(spec.name)}, listener);`,
             `${i2}return () => {`,
             `${i3}ipcRenderer.removeListener(${this.wireName(spec.name)}, listener);`,
@@ -386,7 +465,11 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i2}envelope = { ok: false, error: { name: 'IpcAskError', message, code: 'IPC_ASK_NO_HANDLER' } };`,
          `${i1}} else {`,
          `${i2}try {`,
-         `${i3}envelope = { ok: true, value: await handler(...args) };`,
+         `${i3}envelope = { ok: true, value: ${
+            this.usesSerializer()
+               ? "encodeValue(channel, await handler(...decodeArguments(channel, args)))"
+               : "await handler(...args)"
+         } };`,
          `${i2}} catch (error) {`,
          `${i3}envelope = { ok: false, error: toIpcError(error) };`,
          `${i2}}`,
@@ -559,7 +642,15 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i4}return;`,
          `${i3}}`,
          `${i3}if (message.type === 'chunk') {`,
-         `${i4}reader.push(message.value);`,
+         ...(this.usesSerializer()
+            ? [
+                 `${i4}try {`,
+                 `${i5}reader.push(decodeValue(channel, message.value));`,
+                 `${i4}} catch (error) {`,
+                 `${i5}reader.finish({ error });`,
+                 `${i4}}`,
+              ]
+            : [`${i4}reader.push(message.value);`]),
          `${i3}} else if (message.type === 'end') {`,
          `${i4}reader.finish();`,
          `${i3}} else if (message.type === 'error') {`,
@@ -575,7 +666,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          `${i1}};`,
          `${i1}const unreadable = { name: 'IpcStreamError', message: \`The main process sent an unreadable reply to the channel '\${channel}'\`, code: 'IPC_STREAM_INVALID_REPLY' };`,
          `${i1}try {`,
-         `${i2}ipcRenderer.invoke(wire, id, ...args).then(`,
+         `${i2}ipcRenderer.invoke(wire, id, ${this.usesSerializer() ? "encodeValue(channel, args)" : "...args"}).then(`,
          `${i3}(result: IpcEnvelope | undefined) => {`,
          `${i4}if (!result || !result.ok) {`,
          `${i5}reader.finish({ error: result && result.error ? result.error : unreadable });`,

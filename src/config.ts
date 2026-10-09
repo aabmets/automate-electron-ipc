@@ -68,6 +68,9 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
    const serviceWorkerTypesFilePath = path
       .join(path.dirname(serviceWorkerPreloadFilePath), "service-worker.d.ts")
       .replace(/\\/g, "/");
+   const serializerFilePath = mergedConfig.serializer?.startsWith(".")
+      ? utils.resolveUserProjectPath(mergedConfig.serializer, cwd)
+      : undefined;
    const taken = [mainBindingsFilePath, preloadBindingsFilePath, rendererTypesFilePath];
    if (taken.includes(utilityBindingsFilePath)) {
       throw new Error(
@@ -91,6 +94,7 @@ export async function getResolvedConfig(cwd?: string): Promise<t.IPCResolvedConf
       utilityBindingsFilePath,
       serviceWorkerPreloadFilePath,
       serviceWorkerTypesFilePath,
+      ...(serializerFilePath === undefined ? {} : { serializerFilePath }),
       ipcSchema: {
          path: (onlySchemaDir ? schemaDir : schemaFile).replace(/\\/g, "/"),
          stats: onlySchemaDir ? schemaDirStats : schemaFileStats,

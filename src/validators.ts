@@ -92,6 +92,18 @@ export function validateOptionalConfig(config: t.IPCOptionalConfig): void {
       ),
       autoExpose: optional(boolean()),
       getPathForFile: optional(boolean()),
+      serializer: optional(
+         refine(string(), "module", (value) => {
+            if (value.startsWith(".")) {
+               return /^\.{1,2}\/[^\0\r\n]+$/.test(value)
+                  ? true
+                  : "serializer must start with ./ or ../ when it is a path in the project";
+            }
+            return /^(@[\w.-]+\/)?[\w.-]+(\/[\w.@-]+)*$/.test(value)
+               ? true
+               : "serializer must be a package name such as 'superjson', or a path that starts with ./ or ../";
+         }),
+      ),
       codeIndent: refine(number(), "clamped", (value) => {
          if (!Number.isInteger(value)) {
             return "value must be an integer";

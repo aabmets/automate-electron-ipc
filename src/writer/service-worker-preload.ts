@@ -40,6 +40,10 @@ export class ServiceWorkerPreloadWriter extends PreloadBindingsWriter {
    protected getPathForFileEnabled(): boolean {
       return false;
    }
+   /** The main process routes the traffic of a worker through its own code, which does not serialize. */
+   protected usesSerializer(): boolean {
+      return false;
+   }
    protected groupChannels(): ChannelGroups {
       const groups: ChannelGroups = {
          portSpecs: [],

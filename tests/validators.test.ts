@@ -352,6 +352,47 @@ describe("validateOptionalConfig, getPathForFile", () => {
    });
 });
 
+describe("validateOptionalConfig, serializer", () => {
+   const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
+   const check = (serializer: unknown) =>
+      vld.validateOptionalConfig({ ...config, serializer: serializer as string });
+
+   it.each([
+      "superjson",
+      "@scope/wire",
+      "pkg/sub/path",
+      "msgpack-lite",
+      "./wire.ts",
+      "../shared/wire",
+      "./src/lib/wire.codec.ts",
+   ])("accepts '%s'", (value) => {
+      expect(() => check(value)).not.toThrowError();
+   });
+
+   it("accepts a config without a serializer", () => {
+      expect(() => vld.validateOptionalConfig(config)).not.toThrowError();
+   });
+
+   it.each([
+      "",
+      "/abs/wire.ts",
+      ".wire",
+      "..",
+      "./",
+      'wire"; import "evil',
+      "has space",
+      "back\\slash",
+      "node:fs",
+      "line\nbreak",
+   ])("rejects %j", (value) => {
+      expect(() => check(value)).toThrowError(/serializer/);
+   });
+
+   it.each([5, true, null, []])("rejects %j, since it is not a string", (value) => {
+      expect(() => check(value)).toThrowError(/serializer/);
+   });
+});
+
 describe("validateOptionalConfig, autoExpose", () => {
    const config = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
    const check = (autoExpose: unknown) =>

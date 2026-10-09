@@ -149,6 +149,48 @@ export class BaseWriter {
       return spec.timeoutMs ?? this.config.timeoutMs ?? 0;
    }
 
+   /**
+    * Whether the files serialize what the channels between a page and the main process carry.
+    * The writer of the service worker script turns this off, since the traffic of a worker goes
+    * through its own code in the main process.
+    */
+   protected usesSerializer(): boolean {
+      return !!this.config.serializer;
+   }
+
+   /**
+    * Whether the arguments and the results of the channel go through the serializer: those of
+    * `invoke`, `send`, `stream`, `emit` and `ask`. The ports of a port channel carry their
+    * messages as they are, and the traffic with a utility process or a worker is not covered.
+    */
+   protected isSerializedSpec(spec: t.ChannelSpec): boolean {
+      return (
+         this.usesSerializer() &&
+         spec.kind !== "Port" &&
+         (spec.direction === "RendererToMain" || spec.direction === "MainToRenderer")
+      );
+   }
+
+   /** Whether any channel of the file goes through the serializer, which the file then imports. */
+   protected hasSerializedChannels(): boolean {
+      return this.pfsArray.some((pfs) =>
+         pfs.specs.channelSpecArray.some((spec) => this.isSerializedSpec(spec)),
+      );
+   }
+
+   /**
+    * The import line of the serializer. The generated code refers to it through the aliases
+    * `ipcSerialize` and `ipcDeserialize`, and casts them, since the module's own types are free.
+    */
+   protected buildSerializerImport(): string {
+      const { serializer, serializerFilePath } = this.config;
+      const from =
+         serializerFilePath === undefined
+            ? serializer
+            : this.importsGenerator.getFileImportPath(serializerFilePath);
+      return `import { serialize as ipcSerialize, deserialize as ipcDeserialize } from ${JSON.stringify(from)};`;
+   }
+
    /** Whether the channel is between the main process and a utility process. */
    protected isUtilitySpec(spec: t.ChannelSpec): boolean {
       return spec.direction === "MainToUtility" || spec.direction === "UtilityToMain";

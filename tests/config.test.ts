@@ -160,6 +160,37 @@ describe("getResolvedConfig", () => {
       });
    });
 
+   describe("serializer", () => {
+      const resolve = async (autoipc: Record<string, unknown>) => {
+         mocks.mockFspStatsByPath({});
+         mocks.mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it("is off unless the config names a module", async () => {
+         const config = await resolve({});
+         expect(config.serializer).toBeUndefined();
+         expect(config.serializerFilePath).toBeUndefined();
+      });
+
+      it("keeps the name of a package as it is, and resolves no file", async () => {
+         const config = await resolve({ serializer: "superjson" });
+         expect(config.serializer).toBe("superjson");
+         expect(config.serializerFilePath).toBeUndefined();
+      });
+
+      it("resolves a path from the project root", async () => {
+         const config = await resolve({ serializer: "./src/lib/wire.ts" });
+         expect(config.serializer).toBe("./src/lib/wire.ts");
+         expect(config.serializerFilePath).toBe("/home/user/project/src/lib/wire.ts");
+      });
+
+      it("refuses a value that is neither a package nor a path in the project", async () => {
+         await expect(resolve({ serializer: "/etc/wire.ts" })).rejects.toThrowError(/serializer/);
+         await expect(resolve({ serializer: 5 })).rejects.toThrowError(/serializer/);
+      });
+   });
+
    describe("path of the utility bindings", () => {
       const resolve = async (autoipc: Record<string, unknown>) => {
          mocks.mockFspStatsByPath({});

@@ -92,6 +92,10 @@ interface ListenerNames {
    args: string;
    call: string;
    spent: string;
+   /** The name of the decoded arguments of a serialized channel. */
+   decoded: string;
+   /** Whether the arguments arrive through the serializer. */
+   serialized: boolean;
 }
 
 export class MainBindingsWriter extends BaseWriter {
@@ -178,6 +182,19 @@ export class MainBindingsWriter extends BaseWriter {
          "lastUtilityLinkId",
          "utilityLinks",
          "connectUtilityPort",
+         // The serializer of the config.
+         ...(this.usesSerializer()
+            ? [
+                 "ipcSerialize",
+                 "ipcDeserialize",
+                 "IpcSerializationError",
+                 "encodeValue",
+                 "decodeValue",
+                 "readArguments",
+                 "readSentArguments",
+                 "console",
+              ]
+            : []),
          // Globals that the generated code uses.
          "Promise",
          "Error",
@@ -268,6 +285,9 @@ export class MainBindingsWriter extends BaseWriter {
          this.importCustomTypes(parsedFileSpecs, customTypes, importDeclarationsArray);
       }
       usesEnvelope ||= offPage.envelope;
+      if (this.hasSerializedChannels()) {
+         importDeclarationsArray.push(this.buildSerializerImport());
+      }
       this.addWorkerImports(offPage.workers, electronTypeImportsSet);
       this.addStreamImports(usesStreams, electronImportsSet, electronTypeImportsSet);
       this.addTargetImports(usesIpcMain, electronTypeImportsSet);
@@ -296,6 +316,7 @@ export class MainBindingsWriter extends BaseWriter {
             usesRendererPorts,
             usesMainPorts,
             usesStreams,
+            usesSerializer: this.hasSerializedChannels(),
             usesUtility: offPage.utility,
             usesBrokers: offPage.brokers,
             workerSpecs: offPage.workers,
@@ -452,6 +473,7 @@ export class MainBindingsWriter extends BaseWriter {
          usesRendererPorts: boolean;
          usesMainPorts: boolean;
          usesStreams: boolean;
+         usesSerializer: boolean;
          usesUtility: boolean;
          usesBrokers: boolean;
          workerSpecs: t.ChannelSpec[];
@@ -475,6 +497,9 @@ export class MainBindingsWriter extends BaseWriter {
       }
       if (uses.usesEnvelope) {
          support.push(this.buildErrorEnvelope());
+      }
+      if (uses.usesSerializer) {
+         support.push(this.buildSerializerHelpers());
       }
       if (uses.usesSenders) {
          support.push(this.buildSenderHelpers(uses.usesEmits));
@@ -704,6 +729,65 @@ export class MainBindingsWriter extends BaseWriter {
       return spec.kind === "Broadcast" ? "IpcMainEvent" : "IpcMainInvokeEvent";
    }
    /**
+    * The serializer of the config, for the channels between the main process and a page.
+    * `encodeValue` turns what is sent into the wire value and `decodeValue` turns it back; the
+    * arguments of a call travel as one value, the list of them. `IpcSerializationError` is what a
+    * failure throws: it reaches the caller of a `send`, `emit` or `ask`, and the page as the
+    * `{ name, message, code }` of the usual error envelope. `readArguments` throws for a call that
+    * answers, and `readSentArguments` drops a message that nobody answers, so that a bad message
+    * is logged and does not become an uncaught error of the main process. Deserializing is done
+    * only after the sender is checked, so that a rejected sender reaches no code of the serializer.
+    */
+   private buildSerializerHelpers(): string {
+      const [i1, i2] = this.indents;
+      return [
+         "",
+         "export class IpcSerializationError extends Error {",
+         `${i1}readonly code = 'IPC_SERIALIZATION';`,
+         `${i1}readonly channel: string;`,
+         `${i1}constructor(channel: string, what: string, cause: unknown) {`,
+         `${i2}super(\`\${what} of the channel '\${channel}': \${cause instanceof Error ? cause.message : String(cause)}\`);`,
+         `${i2}this.name = 'IpcSerializationError';`,
+         `${i2}this.channel = channel;`,
+         `${i1}}`,
+         "}",
+         "",
+         "function encodeValue(channel: string, value: unknown): unknown {",
+         `${i1}try {`,
+         `${i2}return (ipcSerialize as (value: unknown) => unknown)(value);`,
+         `${i1}} catch (cause) {`,
+         `${i2}throw new IpcSerializationError(channel, 'The data cannot be serialized', cause);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function decodeValue(channel: string, wire: unknown): unknown {",
+         `${i1}try {`,
+         `${i2}return (ipcDeserialize as (wire: unknown) => unknown)(wire);`,
+         `${i1}} catch (cause) {`,
+         `${i2}throw new IpcSerializationError(channel, 'The data cannot be deserialized', cause);`,
+         `${i1}}`,
+         "}",
+         "",
+         "function readArguments(channel: string, received: unknown[]): unknown[] {",
+         `${i1}const value = received.length === 1 ? decodeValue(channel, received[0]) : undefined;`,
+         `${i1}if (!Array.isArray(value)) {`,
+         `${i2}throw new IpcSerializationError(channel, 'The arguments are not a list', 'the message has an unknown shape');`,
+         `${i1}}`,
+         `${i1}return value;`,
+         "}",
+         "",
+         "function readSentArguments(channel: string, received: unknown[]): unknown[] | undefined {",
+         `${i1}try {`,
+         `${i2}return readArguments(channel, received);`,
+         `${i1}} catch (error) {`,
+         `${i2}console.error(error);`,
+         `${i2}return undefined;`,
+         `${i1}}`,
+         "}",
+         "",
+      ].join("\n");
+   }
+   /**
     * The sender validation of the main process: `configureIpc`, which sets the global validator
     * and the rejection hook, `IpcForbiddenError`, and `isSenderAllowed`, which every listener
     * and handler of a renderer-to-main channel calls first.
@@ -917,6 +1001,7 @@ export class MainBindingsWriter extends BaseWriter {
            : "";
       // The generated names that the listener calls must not be shadowed by its parameters,
       // so the listener only calls the local functions below, whose names are unique.
+      const serialized = this.isSerializedSpec(spec);
       const guardName = this.uniqueName("guard", taken);
       const removeName = this.uniqueName("remove", taken);
       const allowed = `isSenderAllowed(${eventName}, ${channel}${origins}${scopes})`;
@@ -953,12 +1038,17 @@ export class MainBindingsWriter extends BaseWriter {
          args: this.uniqueName("args", taken),
          call: this.uniqueName("call", taken),
          spent: this.uniqueName("spent", taken),
+         decoded: this.uniqueName("decoded", taken),
+         serialized,
       };
       const envelope = this.usesEnvelope(spec);
       const isStream = spec.kind === "Stream";
       const argsName = this.uniqueName("rest", taken);
       const idName = this.uniqueName("id", taken);
-      const innerName = envelope ? this.uniqueName("handler", taken) : listenerName;
+      // Without the envelope, a serialized call still needs a wrapper that serializes the result.
+      const encodesResult = serialized && spec.kind === "Unicast";
+      const innerName =
+         envelope || encodesResult ? this.uniqueName("handler", taken) : listenerName;
       const register = (method: string, once: boolean) => {
          const params = wrapperParams.filter(Boolean).join(", ");
          const check = isBroadcast
@@ -967,28 +1057,22 @@ export class MainBindingsWriter extends BaseWriter {
          // With the envelope, the registered listener wraps the one that runs the handler.
          const inner = validator
             ? this.buildValidatedListener({ ...names, listener: innerName }, check, once)
-            : [
-                 `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
-                 ...check,
-                 ...(once ? [`${i3}${removeName}();`] : []),
-                 `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
-                 `${i2}};`,
-              ];
-         // A stream is started by the call: the first argument is the ID that the page gave it.
-         const run = `(${innerName} as (...${argsName}: unknown[]) => unknown)(${eventName}, ...${argsName})`;
-         const listener = isStream
-            ? [
-                 ...inner,
-                 `${i2}const ${listenerName} = (${eventName}: ${eventType}, ${idName}: unknown, ...${argsName}: unknown[]) =>`,
-                 `${i3}settleInvoke(() => startStream(${eventName}, ${channel}, ${wire}, ${idName}, () => ${run}));`,
-              ]
-            : envelope
-              ? [
-                   ...inner,
-                   `${i2}const ${listenerName} = (${eventName}: ${eventType}, ...${argsName}: unknown[]) =>`,
-                   `${i3}settleInvoke(() => ${run});`,
-                ]
-              : inner;
+            : serialized
+              ? this.buildDecodedListener({ ...names, listener: innerName }, check, once)
+              : [
+                   `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
+                   ...check,
+                   ...(once ? [`${i3}${removeName}();`] : []),
+                   `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
+                   `${i2}};`,
+                ];
+         const listener = this.buildOuterListener(spec, names, inner, {
+            innerName,
+            argsName,
+            idName,
+            envelope,
+            encodesResult,
+         });
          const lines = [
             `\n${i1}${method}: (${callbackName}: ${modSigDef}, ${optionsName}?: IpcListenOptions) => {`,
             ...guard,
@@ -1024,6 +1108,84 @@ export class MainBindingsWriter extends BaseWriter {
       return { name: spec.name, members };
    }
    /**
+    * The listener that is registered with Electron, around the one that runs the handler. A
+    * stream is started by the call, whose first argument is the ID that the page gave it. The
+    * envelope settles the call, and a serialized result is encoded in the thunk that settles it.
+    * Without the envelope, only a serialized result needs a wrapper.
+    */
+   private buildOuterListener(
+      spec: t.ChannelSpec,
+      n: ListenerNames,
+      inner: string[],
+      w: {
+         innerName: string;
+         argsName: string;
+         idName: string;
+         envelope: boolean;
+         encodesResult: boolean;
+      },
+   ): string[] {
+      const [, , i2, i3] = this.indents;
+      const run = `(${w.innerName} as (...${w.argsName}: unknown[]) => unknown)(${n.event}, ...${w.argsName})`;
+      const result = w.encodesResult ? `encodeValue(${n.channel}, await ${run})` : run;
+      const params = `${n.event}: ${n.eventType}, ...${w.argsName}: unknown[]`;
+      if (spec.kind === "Stream") {
+         const start = `startStream(${n.event}, ${n.channel}, ${this.wireName(spec.name)}, ${w.idName}, () => ${run})`;
+         return [
+            ...inner,
+            `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ${w.idName}: unknown, ...${w.argsName}: unknown[]) =>`,
+            `${i3}settleInvoke(() => ${start});`,
+         ];
+      }
+      if (w.envelope) {
+         const settle = w.encodesResult ? `async () => ${result}` : `() => ${run}`;
+         return [
+            ...inner,
+            `${i2}const ${n.listener} = (${params}) =>`,
+            `${i3}settleInvoke(${settle});`,
+         ];
+      }
+      return w.encodesResult
+         ? [...inner, `${i2}const ${n.listener} = async (${params}) =>`, `${i3}${result};`]
+         : inner;
+   }
+   /**
+    * The lines that decode the arguments of a serialized channel, after the sender check: a call
+    * that is answered throws, and a message that is not answered is logged and dropped.
+    */
+   private buildDecodeLines(n: ListenerNames): string[] {
+      if (!n.serialized) {
+         return [];
+      }
+      const [, , , i3, i4] = this.indents;
+      return n.isBroadcast
+         ? [
+              `${i3}const ${n.decoded} = readSentArguments(${n.channel}, ${n.received});`,
+              `${i3}if (!${n.decoded}) {`,
+              `${i4}return;`,
+              `${i3}}`,
+           ]
+         : [`${i3}const ${n.decoded} = readArguments(${n.channel}, ${n.received});`];
+   }
+   /**
+    * The listener of a serialized channel without a validator. It takes the arguments as they
+    * arrived, and calls the callback with the ones that the serializer returns, so it does not
+    * declare the parameters of the signature. `check` is the sender check. A `once` listener is
+    * used up by the first message that could be read.
+    */
+   private buildDecodedListener(n: ListenerNames, check: string[], once: boolean): string[] {
+      const [, , i2, i3] = this.indents;
+      return [
+         `${i2}const ${n.call} = ${n.callback} as (${n.event}: ${n.eventType}, ...${n.args}: unknown[]) => unknown;`,
+         `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ...${n.received}: unknown[]) => {`,
+         ...check,
+         ...this.buildDecodeLines(n),
+         ...(once ? [`${i3}${n.remove}();`] : []),
+         `${i3}return ${n.call}(${n.event}, ...${n.decoded});`,
+         `${i2}};`,
+      ];
+   }
+   /**
     * The listener of a channel with a validator. It takes the arguments as they arrived, so the
     * schema sees all of them, and the callback gets the output of the schema, so the listener
     * does not declare the parameters of the signature. `check` is the sender check.
@@ -1040,7 +1202,8 @@ export class MainBindingsWriter extends BaseWriter {
          ...(once ? [`${i2}let ${n.spent} = false;`] : []),
          `${i2}const ${n.listener} = (${n.event}: ${n.eventType}, ...${n.received}: unknown[]) => {`,
          ...check,
-         `${i3}return validateArguments(${n.event}, ${n.channel}, ${n.validator}, ${n.received}, ${n.isBroadcast}, (${n.args}) => {`,
+         ...this.buildDecodeLines(n),
+         `${i3}return validateArguments(${n.event}, ${n.channel}, ${n.validator}, ${n.serialized ? n.decoded : n.received}, ${n.isBroadcast}, (${n.args}) => {`,
          ...(once
             ? [
                  `${i4}if (${n.spent}) {`,
@@ -1135,14 +1298,17 @@ export class MainBindingsWriter extends BaseWriter {
       const eventName = this.uniqueName("event", taken);
       const senderParams = this.getOriginalParams(spec, true);
       const wire = this.wireName(spec.name);
-      const sender = `resolveSendTarget(${targetName}).send(${wire}, ${senderParams})`;
+      // A serialized message is one argument, the list of the arguments, as the serializer made it.
+      const serialized = this.isSerializedSpec(spec);
+      const wired = serialized ? `encodeValue('${spec.name}', [${senderParams}])` : senderParams;
+      const sender = `resolveSendTarget(${targetName}).send(${wire}, ${wired})`;
       const ipcParams = this.getOriginalParams(spec, false);
       const typeParams = this.getTypeParams(spec.signature);
       const targetType = "BrowserWindow | WebContents | WebContentsView | WebFrameMain";
       const ipcSignature = `${typeParams}(${targetName}: ${targetType}, ${ipcParams})`;
       const filterType = `(contents: WebContents) => boolean`;
       const eventType = "{ readonly senderFrame: WebFrameMain | null }";
-      const rest = senderParams ? `[${senderParams}]` : "[]";
+      const rest = serialized ? `[${wired}]` : senderParams ? `[${senderParams}]` : "[]";
       const members = [
          `\n${i1}send: ${ipcSignature} =>`,
          `\n${i2}${sender},`,
@@ -1325,8 +1491,20 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}contents,`,
          `${i3}frame,`,
          `${i3}answer: (envelope) => {`,
-         `${i4}const outcome = readAskReply(channel, envelope);`,
-         `${i4}finish(() => ('error' in outcome ? reject(outcome.error) : resolve(outcome.value)));`,
+         ...(this.usesSerializer()
+            ? [
+                 `${i4}let outcome = readAskReply(channel, envelope);`,
+                 `${i4}if (!('error' in outcome)) {`,
+                 `${i4}${i1}try {`,
+                 `${i4}${i2}outcome = { value: decodeValue(channel, outcome.value) };`,
+                 `${i4}${i1}} catch (cause) {`,
+                 `${i4}${i2}outcome = { error: new IpcAskError(channel, \`The answer cannot be read: \${cause instanceof Error ? cause.message : String(cause)}\`, 'IPC_ASK_INVALID_REPLY') };`,
+                 `${i4}${i1}}`,
+                 `${i4}}`,
+                 `${i4}const settled = outcome;`,
+              ]
+            : [`${i4}const settled = readAskReply(channel, envelope);`]),
+         `${i4}finish(() => ('error' in settled ? reject(settled.error) : resolve(settled.value)));`,
          `${i3}},`,
          `${i2}};`,
          `${i2}pendingAsks[id] = pending;`,
@@ -1341,7 +1519,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}timer = setTimeout(() => finish(() => reject(error)), Math.min(timeoutMs, 2147483647));`,
          `${i2}}`,
          `${i2}try {`,
-         `${i3}destination.send(wire, id, ...args);`,
+         `${i3}destination.send(wire, id, ${this.usesSerializer() ? "encodeValue(channel, args)" : "...args"});`,
          `${i2}} catch (error) {`,
          `${i3}finish(() => reject(error));`,
          `${i2}}`,
@@ -1466,7 +1644,7 @@ export class MainBindingsWriter extends BaseWriter {
          `${i4}return;`,
          `${i3}}`,
          `${i3}try {`,
-         `${i4}port1.postMessage({ type: 'chunk', value: step.value });`,
+         `${i4}port1.postMessage({ type: 'chunk', value: ${this.usesSerializer() ? "encodeValue(channel, step.value)" : "step.value"} });`,
          `${i3}} catch (error) {`,
          `${i4}stopIterator(iterator);`,
          `${i4}fail({ name: 'IpcStreamError', message: \`A chunk of the channel '\${channel}' cannot be sent: \${toIpcError(error).message}\`, code: 'IPC_STREAM_UNSENDABLE' });`,
@@ -1530,7 +1708,9 @@ export class MainBindingsWriter extends BaseWriter {
          `${i3}try {`,
          `${i4}const args = await provider();`,
          `${i4}if (!browserWindow.isDestroyed()) {`,
-         `${i5}browserWindow.webContents.send(${this.wireName(spec.name)}, ...args);`,
+         `${i5}browserWindow.webContents.send(${this.wireName(spec.name)}, ${
+            this.isSerializedSpec(spec) ? `encodeValue('${spec.name}', args)` : "...args"
+         });`,
          `${i4}}`,
          `${i3}} catch (error) {`,
          `${i4}(onError ?? console.error)(error);`,

@@ -187,6 +187,31 @@ export function electronGate(support: ElectronSupport, env = process.env): "run"
    return env.REQUIRE_ELECTRON === "1" ? "fail" : "skip";
 }
 
+/** Compiles a TypeScript file to CommonJS the way the runner does. */
+async function compileFile(source: string): Promise<string> {
+   return transformSync(await fsp.readFile(source, "utf8"), {
+      jsc: { parser: { syntax: "typescript" }, target: "es2022" },
+      module: { type: "commonjs" },
+   }).code;
+}
+
+/**
+ * Inlines the modules of the project that a script requires, as a bundler does for the preload
+ * script of an app: a sandboxed preload can require `electron` and nothing else. The generated
+ * script requires a module only for the serializer of the config.
+ */
+async function inlineLocalRequires(code: string, sourceFile: string): Promise<string> {
+   const pattern = /require\("(\.{1,2}\/[^"]+)"\)/g;
+   let result = code;
+   for (const match of code.matchAll(pattern)) {
+      const file = path.resolve(path.dirname(sourceFile), `${match[1]}.ts`);
+      const inner = await inlineLocalRequires(await compileFile(file), file);
+      const module = `(() => { const module = { exports: {} }; const exports = module.exports; ${inner}\n return module.exports; })()`;
+      result = result.replace(match[0], () => module);
+   }
+   return result;
+}
+
 async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
    const entries = await fsp.readdir(ipcDir, { recursive: true, withFileTypes: true });
    for (const entry of entries) {
@@ -194,11 +219,9 @@ async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
          continue;
       }
       const source = path.join(entry.parentPath, entry.name);
-      let { code } = transformSync(await fsp.readFile(source, "utf8"), {
-         jsc: { parser: { syntax: "typescript" }, target: "es2022" },
-         module: { type: "commonjs" },
-      });
+      let code = await compileFile(source);
       if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
+         code = await inlineLocalRequires(code, source);
          // The preload script is one file which only requires `electron`, as a sandboxed one must.
          // This tells the tests that it really runs sandboxed and in an isolated context.
          code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;

@@ -114,6 +114,11 @@ Config explanation:
    throws for a value that is not a `File`. A channel cannot be named `getPathForFile` while this is on.
    It is in the API of every scope, and in the empty API of a schema without channels for the page.
    Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
+ - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
+   crosses between a page and the main process, so that a `Date`, a `Map` or a class instance arrives as it
+   was sent. Off by default. A value that starts with `.` is a path from the project root, such as
+   `"./src/wire.ts"`; any other value is a package, such as `"superjson"`. See
+   [Custom serializers](#custom-serializers).
 
 
 ### Composing the preload script
@@ -1243,12 +1248,66 @@ against it, so a mistake is found when the bindings are generated and not when t
   parameter constraints, and the aliases, interfaces and generic types of the schema file.
   Send plain data instead, and use a channel to call back.
 - An instance of a **class declared in the schema file** is a warning: it arrives as a plain
-  object without its prototype and methods. Use an interface or a type alias for the data.
+  object without its prototype and methods. Use an interface or a type alias for the data, or
+  configure a [custom serializer](#custom-serializers) that revives the class.
 
 The result of an `invoke` channel may be a `Promise`, since that is how it is awaited. The same checks
 apply to the type of the chunks of a `stream` channel, not to the iterable that the signature returns. Types that
 come from other files, `typeof` queries and the results of utility types such as `Omit` or
 `Exclude` are not followed, so they are never reported.
+
+
+### Custom serializers
+
+Electron clones the arguments and results with the structured clone algorithm. A `Map`, a `Set`, a
+`Date` and a `bigint` survive it, but a class instance loses its prototype, and a value such as a
+`URL` or an `undefined` member of a union gets lost or changed. The `serializer` option of the config
+names a module that turns the values into something that survives, and back:
+
+```json
+{ "config": { "autoipc": { "serializer": "superjson" } } }
+```
+
+```ts
+// A path from the project root works as well: "serializer": "./src/wire.ts"
+export function serialize(value: unknown): unknown { /* ... */ }
+export function deserialize(wire: unknown): unknown { /* ... */ }
+```
+
+The module must export `serialize` and `deserialize` by these names, in the shape of
+[superjson](https://github.com/flightcontrolhq/superjson): what `serialize` returns must be cloneable
+by Electron (`{ json, meta }` is), and `deserialize` takes it back. Both are synchronous. The generated
+`main.ts` and `preload.ts` import the module, so a sandboxed preload script needs a bundler that
+inlines it, as it does for any import. The module is not part of the generated files, and the generated
+code has no dependency on this library at runtime.
+
+The serializer applies to the channels between a page and the main process: the arguments and the
+result of `invoke`, the arguments of `send` and `emit`, the arguments and the answer of `ask`, and the
+arguments and the chunks of `stream`. The arguments of a call travel as one value, the list of them.
+It does not apply to the errors of an `invoke`, whose `data` is cloned as before, nor to `port`
+channels, the channels of utility processes and the channels of service workers, which carry their
+values as they are.
+
+- **Order.** The main process checks the sender first, then deserializes, then runs the `validate`
+  schema on the deserialized arguments. A message from a sender that is rejected never reaches the
+  code of the serializer.
+- **Failures.** A value that cannot be serialized fails the call: an `invoke` or a `stream` rejects,
+  and a `send` throws, in the page, with the plain object `{ name: 'IpcSerializationError', message,
+  code: 'IPC_SERIALIZATION' }`. In the main process the same failure throws an `IpcSerializationError`
+  (exported from `main.ts`), also with the code `IPC_SERIALIZATION`; for a call from the page it reaches
+  the page in the error envelope. A message that cannot be deserialized is answered with that error if
+  someone waits for an answer, and otherwise (`send`, `emit`) it is logged with `console.error` and
+  dropped, so it is not an uncaught error of the main process. A chunk of a stream that cannot be read
+  fails the stream.
+- **`contextBridge`.** The page and the preload script are separate worlds. The values that your
+  serializer revives in the preload script reach the page through `contextBridge`, which copies them
+  again: a `Date`, a `Map` and a `Set` stay what they are, a class instance becomes a plain object
+  again. A serializer that revives classes helps the main process, and the page only for the types that
+  `contextBridge` carries.
+- **Both ends.** All the code that talks to the channel must agree. A page that was built without the
+  serializer cannot talk to a main process that has it. Turn it on for the whole project.
+- **Types.** The types in `window.d.ts` and in the signatures are those of the schema, as before: the
+  signature says `Date`, and the page gets a `Date`.
 
 
 ### The `as` Form

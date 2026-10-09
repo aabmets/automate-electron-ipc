@@ -1,0 +1,10 @@
+{
+   "name": "fixture-serializer-no-pages",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "serializer": "./ipc/serializer.ts"
+      }
+   }
+}

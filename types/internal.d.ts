@@ -69,6 +69,15 @@ export interface IPCOptionalConfig {
     * that the user dropped or picked, through `webUtils.getPathForFile`. Off by default.
     */
    getPathForFile?: boolean;
+   /**
+    * A module that exports the functions `serialize(value)` and `deserialize(wire)`, in the shape
+    * of superjson: what `serialize` returns must be cloneable by Electron, and `deserialize` turns
+    * it back into the value. The generated main and preload code apply them to the arguments and
+    * the results of the channels between a page and the main process, so that a `Date`, a `Map` or a
+    * class instance arrives as it was sent. A value that starts with `.` is a path relative to the
+    * project root, and any other value is a package, such as `"superjson"`. Off by default.
+    */
+   serializer?: string;
 }
 
 export interface IPCResolvedConfig {
@@ -90,6 +99,9 @@ export interface IPCResolvedConfig {
    isolatedWorldId?: number;
    autoExpose: boolean;
    getPathForFile: boolean;
+   serializer?: string;
+   /** The path of the `serializer` module with `/` separators, when the config gives a path. */
+   serializerFilePath?: string;
    ipcSchema: {
       path: string;
       stats: Stats | null;

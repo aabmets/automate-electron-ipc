@@ -107,6 +107,14 @@ export class ImportsGenerator {
       return adjustedPath;
    }
 
+   /**
+    * The import specifier of a source file in the project, as written from the generated file:
+    * relative, and with the extension that the project's module resolution needs.
+    */
+   public getFileImportPath(filePath: string): string {
+      return this.adjustImportPath(this.getImportPath(path.basename(filePath)), filePath);
+   }
+
    /** Identifies a module independently of how it is spelled: `./a`, `./a.ts` and `./a.js`. */
    private moduleId(fromPath: string, sourceFilePath: string): string {
       if (!fromPath.startsWith(".")) {
