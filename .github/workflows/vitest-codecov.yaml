@@ -73,7 +73,11 @@ jobs:
           bun --version
 
       # The whole suite, including the e2e tests that type-check the generated output.
+      # The suite includes the Electron tests, which need ELECTRON_NO_SANDBOX because the SUID
+      # sandbox helper of Chromium is not usable on the runner (see the electron job).
       - name: Run Vitest
+        env:
+          ELECTRON_NO_SANDBOX: "1"
         run: ${{ matrix.command }}
 
       - name: Upload coverage to Codecov

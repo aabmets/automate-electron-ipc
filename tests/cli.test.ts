@@ -38,7 +38,8 @@ describe("cli", () => {
 
    afterEach(() => {
       process.argv = originalArgv;
-      process.exitCode = undefined;
+      // Bun ignores `undefined` here and keeps the old code, so reset to 0 and compare with `?? 0`.
+      process.exitCode = 0;
       ipcAutomation.mockReset();
       findStaleOutputs.mockReset();
       getResolvedConfig.mockReset();
@@ -65,7 +66,7 @@ describe("cli", () => {
       await importFreshCli();
       expect(ipcAutomation).toHaveBeenCalledOnce();
       expect(ipcAutomation).toHaveBeenCalledWith({ cwd: undefined, configFile: undefined });
-      expect(process.exitCode).toBeUndefined();
+      expect(process.exitCode ?? 0).toBe(0);
    });
 
    it("passes --cwd and --config to the automation", async () => {
@@ -191,7 +192,7 @@ describe("cli", () => {
          const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
          await importFreshCli();
          expect(String(warn.mock.calls[0][0])).toContain("up to date");
-         expect(process.exitCode).toBeUndefined();
+         expect(process.exitCode ?? 0).toBe(0);
          expect(ipcAutomation).not.toHaveBeenCalled();
       });
 
