@@ -197,6 +197,19 @@ describe("validateOptionalConfig, getPathForFile", () => {
    });
 });
 
+describe("validateOptionalConfig, mock", () => {
+   const check = (mock: unknown) =>
+      validateOptionalConfig({ ...baseConfig, mock: mock as boolean });
+
+   it.each([true, false])("accepts %s", (value) => {
+      expect(() => check(value)).not.toThrowError();
+   });
+
+   it.each(["true", 1, null, []])("rejects %j, since it is not a boolean", (value) => {
+      expect(() => check(value)).toThrowError(/mock/);
+   });
+});
+
 describe("validateOptionalConfig, format", () => {
    const check = (format: unknown) =>
       validateOptionalConfig({ ...baseConfig, format: format as "biome" });

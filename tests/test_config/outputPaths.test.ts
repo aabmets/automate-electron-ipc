@@ -45,6 +45,11 @@ describe("getResolvedConfig", () => {
          expect(config.typesFilePath).toBe("/home/user/project/src/ipc/types.ts");
       });
 
+      it("puts the mock next to the other generated files", async () => {
+         const config = await resolve({ ipcDataDir: "src/ipc" });
+         expect(config.mockFilePath).toBe("/home/user/project/src/ipc/mock.ts");
+      });
+
       it.each(["main.ts", "preload.ts", "types.ts"])(
          "refuses the path of the generated file %s",
          async (name) => {
@@ -54,6 +59,27 @@ describe("getResolvedConfig", () => {
             );
          },
       );
+   });
+
+   describe("path of the mock", () => {
+      const resolve = async (autoipc: Record<string, unknown>) => {
+         mockFspStatsByPath({});
+         mockFspReadFile({ config: { autoipc } });
+         return await cfg.getResolvedConfig();
+      };
+
+      it("is refused as the path of another output while the config mock is on", async () => {
+         await expect(
+            resolve({ mock: true, utilityBindingsPath: "src/autoipc/mock.ts" }),
+         ).rejects.toThrowError(
+            "The config 'utilityBindingsPath' ('src/autoipc/mock.ts') is the path of another generated file.",
+         );
+      });
+
+      it("is free for another output while the config mock is off", async () => {
+         const config = await resolve({ utilityBindingsPath: "src/autoipc/mock.ts" });
+         expect(config.utilityBindingsFilePath).toBe("/home/user/project/src/autoipc/mock.ts");
+      });
    });
 
    describe("paths of the service worker files", () => {

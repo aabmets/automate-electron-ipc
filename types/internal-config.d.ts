@@ -21,6 +21,7 @@ export interface IPCResolvedConfig {
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
    typesFilePath: string;
+   mockFilePath: string;
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;
@@ -35,6 +36,7 @@ export interface IPCResolvedConfig {
    isolatedWorldId?: number;
    autoExpose: boolean;
    getPathForFile: boolean;
+   mock: boolean;
    format: "biome" | "prettier" | false;
    hooks: "react" | "vue" | false;
    serializer?: string;

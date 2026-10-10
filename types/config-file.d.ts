@@ -91,6 +91,12 @@ export interface AutoIpcConfig {
     */
    getPathForFile?: boolean;
    /**
+    * Writes `mock.ts` next to the other generated files: a fake of the API of the page for unit
+    * tests of the renderer, Storybook and a UI that runs in a plain browser. It covers the
+    * surface of no scope, and does not need Electron. Off by default.
+    */
+   mock?: boolean;
+   /**
     * Formats the generated files with the formatter of your project: `"biome"` or `"prettier"`.
     * The formatter runs from `node_modules/.bin` of the project root, so your own formatter config
     * applies. If the binary is not installed, a warning is printed and the files are written

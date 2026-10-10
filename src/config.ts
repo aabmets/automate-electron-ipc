@@ -123,6 +123,7 @@ export async function getResolvedConfig(
       exposeAs: "ipc",
       autoExpose: true,
       getPathForFile: false,
+      mock: false,
       format: false,
       hooks: false,
       ...userConfig,

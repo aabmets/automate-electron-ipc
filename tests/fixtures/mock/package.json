@@ -1,0 +1,11 @@
+{
+   "name": "fixture-mock",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "mock": true,
+         "getPathForFile": true
+      }
+   }
+}

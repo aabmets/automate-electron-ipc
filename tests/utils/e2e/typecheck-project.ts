@@ -85,15 +85,23 @@ const workerPreloadFiles: ExtraFilesFinder = async (dir, ipcDataDir) => {
    return files ? [files.preload] : [];
 };
 
+/** The finder of a file in the data directory, which exists only if its config is on. */
+const dataDirFile =
+   (name: string): ExtraFilesFinder =>
+   async (dir, ipcDataDir) => {
+      const file = `${ipcDataDir}/${name}`;
+      const exists = await fsp.access(path.join(dir, file)).then(
+         () => true,
+         () => false,
+      );
+      return exists ? [file] : [];
+   };
+
 /** The React hooks, if the config asks for them. */
-const hooksFiles: ExtraFilesFinder = async (dir, ipcDataDir) => {
-   const file = `${ipcDataDir}/hooks.react.ts`;
-   const exists = await fsp.access(path.join(dir, file)).then(
-      () => true,
-      () => false,
-   );
-   return exists ? [file] : [];
-};
+const hooksFiles = dataDirFile("hooks.react.ts");
+
+/** The mock of the API, if the config `mock` is on. */
+const mockFiles = dataDirFile("mock.ts");
 
 /**
  * The extra generated files of the check of the page. A new output that the check must include
@@ -103,6 +111,7 @@ export const extraGeneratedFiles: ExtraFilesFinder[] = [
    workerPreloadFiles,
    utilityFiles,
    hooksFiles,
+   mockFiles,
 ];
 
 /** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */

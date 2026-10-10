@@ -106,6 +106,7 @@ const IPCOptionalConfigStruct = object({
    ),
    autoExpose: optional(boolean()),
    getPathForFile: optional(boolean()),
+   mock: optional(boolean()),
    format: optional(
       refine(any(), "formatter", (value) =>
          value === "biome" || value === "prettier" || value === false

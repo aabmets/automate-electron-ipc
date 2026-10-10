@@ -76,6 +76,7 @@ export interface OutputPaths {
    preloadBindingsFilePath: string;
    rendererTypesFilePath: string;
    typesFilePath: string;
+   mockFilePath: string;
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;
@@ -126,6 +127,7 @@ export function deriveOutputPaths(
       ),
       rendererTypesFilePath: outputPath(config.rendererTypesPath, ipcDataDir, "window.d.ts", cwd),
       typesFilePath: outputPath(undefined, ipcDataDir, "types.ts", cwd),
+      mockFilePath: outputPath(undefined, ipcDataDir, "mock.ts", cwd),
       utilityBindingsFilePath: outputPath(
          config.utilityBindingsPath,
          ipcDataDir,
@@ -186,8 +188,10 @@ export async function assertOutputsDistinct(
       ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
       outputs.serviceWorkerTypesFilePath,
       outputs.typesFilePath,
-      // The hooks file is written only for the `hooks` option, so only then can it be clashed with.
+      // The files of the options `hooks` and `mock` are written only for them, so only then can
+      // they be clashed with.
       ...(config.hooks ? [outputs.hooksFilePath] : []),
+      ...(config.mock ? [outputs.mockFilePath] : []),
    ].map(fold);
    for (const [option, value, file] of configured) {
       if (taken.includes(fold(file))) {

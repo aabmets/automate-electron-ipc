@@ -27,6 +27,7 @@ function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolvedConfi
       preloadBindingsFilePath: path.join(dir, "out/preload.ts"),
       rendererTypesFilePath: path.join(dir, "out/window.d.ts"),
       typesFilePath: path.join(dir, "out/types.ts"),
+      mockFilePath: path.join(dir, "out/mock.ts"),
       utilityBindingsFilePath: path.join(dir, "out/utility.ts"),
       serviceWorkerPreloadFilePath: path.join(dir, "out/service-worker-preload.ts"),
       serviceWorkerTypesFilePath: path.join(dir, "out/service-worker.d.ts"),

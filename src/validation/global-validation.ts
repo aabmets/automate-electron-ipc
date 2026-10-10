@@ -41,26 +41,35 @@ export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
    }
 }
 
+/** The members that the config adds to the API of the page, and the config that adds them. */
+const ADDED_MEMBERS: { config: "getPathForFile" | "mock"; names: string[] }[] = [
+   { config: "getPathForFile", names: ["getPathForFile"] },
+   // The helpers of the mock, which stand next to the channels of its API.
+   { config: "mock", names: ["emit", "ask"] },
+];
+
 /**
  * Checks that no channel takes the name of a member that the library adds to the API of the page.
- * That is `getPathForFile`, while the config asks for it: a channel of that name would be
- * overwritten by the helper, or the other way round.
+ * That is `getPathForFile`, while the config asks for it, and `emit` and `ask` while the config
+ * `mock` is on: a channel of that name would be overwritten by the helper, or the other way round.
  */
 export function validateReservedApiNames(
    files: t.ParsedFileSpecs[],
-   config: Pick<t.IPCOptionalConfig, "getPathForFile">,
+   config: Pick<t.IPCOptionalConfig, "getPathForFile" | "mock">,
 ): void {
-   if (!config.getPathForFile) {
-      return;
-   }
-   for (const file of files) {
-      for (const spec of file.specs.channelSpecArray) {
-         if (spec.name === "getPathForFile") {
-            throw new Error(
-               `${schemaFilePrefix(file.relativePath, spec.loc)}Channel name 'getPathForFile' is reserved, ` +
-                  "since the config 'getPathForFile' adds a member of that name to the API. " +
-                  "Rename the channel, or turn the config off.",
-            );
+   for (const { config: option, names } of ADDED_MEMBERS) {
+      if (!config[option]) {
+         continue;
+      }
+      for (const file of files) {
+         for (const spec of file.specs.channelSpecArray) {
+            if (names.includes(spec.name)) {
+               throw new Error(
+                  `${schemaFilePrefix(file.relativePath, spec.loc)}Channel name '${spec.name}' is reserved, ` +
+                     `since the config '${option}' adds a member of that name to the API. ` +
+                     "Rename the channel, or turn the config off.",
+               );
+            }
          }
       }
    }

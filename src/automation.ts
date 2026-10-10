@@ -34,6 +34,7 @@ import { PreloadBindingsWriter } from "./writer/preload/preload-bindings.js";
 import { ServiceWorkerPreloadWriter } from "./writer/preload/service-worker-preload.js";
 import { HelperTypesWriter } from "./writer/renderer/helper-types.js";
 import { ReactHooksWriter } from "./writer/renderer/hooks-react.js";
+import { MockWriter } from "./writer/renderer/mock-writer.js";
 import { RendererTypesWriter } from "./writer/renderer/renderer-types.js";
 import { ServiceWorkerTypesWriter } from "./writer/renderer/service-worker-types.js";
 import { UtilityBindingsWriter } from "./writer/utility/utility-bindings.js";
@@ -100,6 +101,8 @@ function collectWriters(config: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs
          new HelperTypesWriter(config, surface, scope),
       ]),
       ...(config.hooks === "react" ? [new ReactHooksWriter(config, pfsArray)] : []),
+      // The mock fakes the surface of no scope, which is the first of the surfaces.
+      ...(config.mock ? [new MockWriter(config, pageSurfaces[0][1])] : []),
       ...(utilityWriter.hasChannels() ? [utilityWriter] : []),
       ...workerWriters.filter((worker) => worker.hasChannels()),
    ];

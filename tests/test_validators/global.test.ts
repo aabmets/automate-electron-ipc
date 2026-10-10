@@ -94,6 +94,46 @@ describe("validateReservedApiNames", () => {
    });
 });
 
+describe("validateReservedApiNames, mock", () => {
+   const file = (relativePath: string, names: string[]): t.ParsedFileSpecs => ({
+      fullPath: `/project/${relativePath}`,
+      relativePath,
+      specs: {
+         channelSpecArray: names.map((name) => ({
+            name,
+            kind: "Unicast",
+            direction: "RendererToMain",
+            signature: {} as t.CallableSignature,
+         })),
+         channelMapExport: { kind: "default" },
+         importSpecArray: [],
+         typeSpecArray: [],
+      },
+   });
+
+   it.each(["emit", "ask"])("accepts a channel named %s while the config is off", (name) => {
+      expect(() => validateReservedApiNames([file("a.ts", [name])], {})).not.toThrowError();
+      expect(() =>
+         validateReservedApiNames([file("a.ts", [name])], { mock: false }),
+      ).not.toThrowError();
+   });
+
+   it.each(["emit", "ask"])(
+      "rejects a channel named %s while the config is on, and names its file",
+      (name) => {
+         const files = [file("a.ts", ["ok"]), file("b.ts", [name])];
+         expect(() => validateReservedApiNames(files, { mock: true })).toThrowError(
+            `Schema file 'b.ts': Channel name '${name}' is reserved, since the config 'mock' adds a member of that name to the API.`,
+         );
+      },
+   );
+
+   it("accepts other channels while the config is on", () => {
+      const files = [file("a.ts", ["emitIt", "asks", "getPathForFile"])];
+      expect(() => validateReservedApiNames(files, { mock: true })).not.toThrowError();
+   });
+});
+
 describe("validateTypeSpecs", () => {
    it("should accept exported types", () => {
       validateTypeSpecs([

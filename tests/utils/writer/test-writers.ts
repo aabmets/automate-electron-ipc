@@ -16,6 +16,7 @@ import { PreloadBindingsWriter } from "@src/writer/preload/preload-bindings.js";
 import { ServiceWorkerPreloadWriter } from "@src/writer/preload/service-worker-preload.js";
 import { HelperTypesWriter } from "@src/writer/renderer/helper-types.js";
 import { ReactHooksWriter } from "@src/writer/renderer/hooks-react.js";
+import { MockWriter } from "@src/writer/renderer/mock-writer.js";
 import { RendererTypesWriter } from "@src/writer/renderer/renderer-types.js";
 import { ServiceWorkerTypesWriter } from "@src/writer/renderer/service-worker-types.js";
 import { UtilityBindingsWriter } from "@src/writer/utility/utility-bindings.js";
@@ -105,6 +106,7 @@ export const VitestPreloadBindingsWriter = createTestWriter(PreloadBindingsWrite
 export const VitestRendererTypesWriter = createTestWriter(RendererTypesWriter);
 export const VitestHelperTypesWriter = createTestWriter(HelperTypesWriter);
 export const VitestReactHooksWriter = createTestWriter(ReactHooksWriter);
+export const VitestMockWriter = createTestWriter(MockWriter);
 export const VitestUtilityBindingsWriter = createTestWriter(UtilityBindingsWriter);
 export const VitestServiceWorkerPreloadWriter = createTestWriter(ServiceWorkerPreloadWriter);
 export const VitestServiceWorkerTypesWriter = createTestWriter(ServiceWorkerTypesWriter);

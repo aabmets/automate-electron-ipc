@@ -36,6 +36,7 @@ Node library for generating IPC components for Electron apps.
 12) Typed channels between the main process and a service worker (Electron 35 or later, experimental),
     with a generated preload script and typings for the worker
 13) Optional React hooks for the channels of a page, in a generated `hooks.react.ts`
+14) A generated mock of the API of the page for renderer tests, Storybook and a plain browser
 
 
 ### Installation
@@ -72,6 +73,7 @@ The same options can live in a config file instead, see [Config file](#config-fi
          "exposeAs": "ipc",
          "autoExpose": true,
          "getPathForFile": false,
+         "mock": false,
          "format": false,
          "hooks": false
       }
@@ -137,6 +139,10 @@ Config explanation:
    throws for a value that is not a `File`. A channel cannot be named `getPathForFile` while this is on.
    It is in the API of every scope, and in the empty API of a schema without channels for the page.
    Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
+ - `mock` - Writes `mock.ts` next to the other generated files, `false` by default: a fake of the API of
+   the page for unit tests of the renderer, Storybook and a UI that runs in a plain browser. See
+   [Mocking in renderer tests](#mocking-in-renderer-tests). A channel cannot be named `emit` or `ask`
+   while this is on.
  - `format` - Formats the generated files with the formatter of your project: `"biome"` or `"prettier"`,
    `false` by default (the files are written as they are rendered). The formatter runs from
    `node_modules/.bin` of the project root, with the project root as its working directory, so your own
@@ -1542,6 +1548,58 @@ the state. The other channel kinds (`send`, `ask`, `stream` and the ports) have 
 `hooks.react.ts` also exports the types `EventName`, `EventCallback<N>`, `InvokeName`, `InvokeArgs<N>` and
 `InvokeReturn<N>`, which are picked out of `IpcApi`. A name that is not a channel of that kind, such as an
 `invoke` channel in `useIpcEvent`, is a type error.
+
+#### Mocking in renderer tests
+
+With `"mock": true`, `ipcgen` writes `mock.ts` (in the data directory) for the surface of no scope. It is a fake
+of `window.ipc` for unit tests of the renderer, Storybook and a UI that runs in a plain browser, where there is no
+Electron and no preload script. It imports `IpcApi` from `types.ts` and nothing else: there is no mocking library
+and no dependency on this library, and the stubs are written out in the file. It is typed by the schema, so a
+call with the wrong arguments does not compile.
+
+```typescript
+import { createIpcMock, installIpcMock } from "./autoipc/mock";
+
+const mock = createIpcMock({
+   getUser: { invoke: async (id) => ({ id, name: "Ann" }) },   // the implementation of one call
+});
+const uninstall = installIpcMock(mock);   // sets mock as `ipc` of globalThis; installIpcMock(mock, window) for a window
+
+renderUserCard(1);                          // the code under test calls window.ipc.getUser.invoke(1)
+expect(mock.getUser.invoke.calls).toStrictEqual([[1]]);
+
+mock.getUser.invoke.impl(async () => { throw new Error("offline"); });   // another implementation, from now on
+mock.getUser.invoke.reset();                // clears the calls and puts the default back
+mock.emit.titleChanged("Home");             // the main process emits: calls the listeners of the page
+await mock.ask.hasUnsaved(3);               // the main process asks: calls the responder of the page
+
+uninstall();                                // puts back what `ipc` was before
+```
+
+| Channel | The mock |
+|---------|----------|
+| `invoke`, and a call to a utility process | `mock.<name>.invoke` is a `Stub`; it resolves `undefined` until a test gives it an implementation |
+| `send` | `mock.<name>.send` is a `Stub`; it returns `undefined` |
+| `stream`, and a stream from a utility process | `mock.<name>.stream` is a `Stub` that returns a stream without chunks, which has `next`, `return`, `cancel` and `Symbol.asyncIterator` |
+| `emit` | `on` and `once` keep their listeners, and return a function that removes that one. `mock.emit.<name>(...args)` calls them |
+| `ask` | `handle(callback)` keeps the one responder, and a new one replaces it. `mock.ask.<name>(...args)` calls it and returns a promise of its answer, which is rejected with the code `IPC_ASK_NO_HANDLER` if the page has registered none |
+| `port` | not mocked: every method throws `Error("ports are not mocked")` |
+
+A `Stub<F>` is a function of the type of the call, with `calls` (the arguments of every call, in order), `impl(fn)`
+(replace the implementation) and `reset()` (clear the calls and the implementation). The listeners of `emit` channels
+follow the preload script: they run in the order of subscription, a `once` listener is removed before it runs, a
+listener that throws is logged with `console.error` and does not stop the others. `getPathForFile`, when the config
+adds it, is a `Stub` that returns an empty path.
+
+`createIpcMock(overrides)` takes any part of the API: the function of a call becomes its first implementation, and any other
+member (a port method, say) is replaced. A member that the API does not have is an error. Each mock has its own listeners,
+responders and stubs, so make one per test. `installIpcMock` installs the mock under the `exposeAs` name of the config,
+also with `isolatedWorldId`, on the target that you give (`globalThis` by default), and the function it returns
+restores the previous value of the target, once.
+
+The mock covers the channels of the page that have no scope; the channels of a scope are a follow-up. The channels between the
+main process and a utility process or a service worker are not part of the API of the page. `mock.ts` is not moved by a
+config option, and is removed as a stale file when `mock` is turned off again.
 
 #### Migrating from 0.2
 
