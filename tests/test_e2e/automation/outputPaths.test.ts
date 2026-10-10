@@ -20,17 +20,24 @@ const TYPES = "types/ipc-window.d.ts";
 /** The options of the fixture, which moves all three files. */
 const MOVED = { mainBindingsPath: MAIN, preloadBindingsPath: PRELOAD, rendererTypesPath: TYPES };
 
+/** Whether the file exists; `fsp.access` resolves to undefined under Node but to null under Bun. */
+const exists = (file: string): Promise<boolean> =>
+   fsp.access(file).then(
+      () => true,
+      () => false,
+   );
+
 describe("the paths of the generated files of the page", () => {
    it("are set by the config, each in a directory of its own, and the files type-check", async () => {
       const project = await fixtures.run("output-paths");
 
       await Promise.all(
          [MAIN, PRELOAD, TYPES].map((file) =>
-            expect(fsp.access(path.join(project.dir, file))).resolves.toBeUndefined(),
+            expect(exists(path.join(project.dir, file))).resolves.toBe(true),
          ),
       );
       // The data directory holds the schema, its imports and types.ts, which no option moves.
-      await expect(fsp.access(path.join(project.dir, "src/ipc/main.ts"))).rejects.toThrowError();
+      await expect(exists(path.join(project.dir, "src/ipc/main.ts"))).resolves.toBe(false);
       // The files that import the types of the schema reach them from their own directory.
       expect(project.generated["main.ts"]).toContain('"../../ipc/models"');
       expect(project.generated["main.ts"]).toContain('"../../shared/shapes"');
@@ -50,14 +57,12 @@ describe("the paths of the generated files of the page", () => {
       });
 
       const [file] = Object.values(moved);
-      await expect(fsp.access(path.join(project.dir, file))).resolves.toBeUndefined();
+      await expect(exists(path.join(project.dir, file))).resolves.toBe(true);
       await Promise.all(
          ["main.ts", "preload.ts", "window.d.ts"]
             .filter((other) => other !== name)
             .map((other) =>
-               expect(
-                  fsp.access(path.join(project.dir, "src/ipc", other)),
-               ).resolves.toBeUndefined(),
+               expect(exists(path.join(project.dir, "src/ipc", other))).resolves.toBe(true),
             ),
       );
       expect(await project.typecheck()).toBe("");

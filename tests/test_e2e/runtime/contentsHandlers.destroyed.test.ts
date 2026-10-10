@@ -98,8 +98,10 @@ describe("the webContents option of listeners and handlers", () => {
       describe("a handler that another one replaced", () => {
          /** Whether the callback of a handler which `count` newer ones replaced can be collected. */
          async function isReleased(options: (contents: Contents) => object): Promise<boolean> {
+            // Bun does not expose `gc` through V8 flags; it has its own synchronous collector.
+            const bun = (globalThis as { Bun?: { gc(sync: boolean): void } }).Bun;
             v8.setFlagsFromString("--expose-gc");
-            const gc = runInNewContext("gc") as () => void;
+            const gc = bun ? () => bun.gc(true) : (runInNewContext("gc") as () => void);
             const { ipc, globalIpc } = await loadMain();
             const contents = createContents();
             let first: (() => Promise<string>) | undefined = async () => "first";
