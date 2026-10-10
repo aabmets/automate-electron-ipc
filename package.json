@@ -1,6 +1,6 @@
 {
    "name": "automate-electron-ipc",
-   "version": "1.0.0",
+   "version": "0.2.6",
    "description": "Node library for automating the generation of IPC components for Electron apps.",
    "keywords": [
       "electron",
@@ -16,6 +16,7 @@
    ],
    "type": "module",
    "license": "Apache-2.0",
+   "homepage": "https://aabmets.github.io/automate-electron-ipc/",
    "repository": {
       "type": "git",
       "url": "https://github.com/aabmets/automate-electron-ipc.git"

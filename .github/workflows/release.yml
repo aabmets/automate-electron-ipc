@@ -1,0 +1,193 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: New package version (semver, greater than package.json, with Unreleased changelog notes)
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require the main branch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Releases can be made from main only"
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Require a new, greater semver version
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const re = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+            const parse = (v) => re.exec(v)?.slice(1);
+            const next = parse(process.env.NEW_VERSION);
+            const cur = parse(JSON.parse(readFileSync("package.json", "utf8")).version);
+            if (!next) throw new Error(`Not a valid semver version: ${process.env.NEW_VERSION}`);
+            for (let i = 0; i < 3; i++) {
+               const d = Number(next[i]) - Number(cur[i]);
+               if (d > 0) process.exit(0);
+               if (d < 0) break;
+            }
+            // Same x.y.z: only a release replacing a prerelease of it is greater.
+            const same = next.slice(0, 3).join() === cur.slice(0, 3).join();
+            if (same && cur[3] && !next[3]) process.exit(0);
+            throw new Error(`${process.env.NEW_VERSION} is not greater than the current version`);
+          '
+
+      - name: Require Unreleased changelog notes
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: bun scripts/changelog-release.ts check
+
+      - name: Require an unused tag and npm version
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$NEW_VERSION" >/dev/null; then
+            echo "::error::Tag $NEW_VERSION already exists"
+            exit 1
+          fi
+          if npm view "automate-electron-ipc@$NEW_VERSION" version >/dev/null 2>&1; then
+            echo "::error::Version $NEW_VERSION is already published on npm"
+            exit 1
+          fi
+
+  vitest-codecov:
+    needs: gate
+    uses: ./.github/workflows/vitest-codecov.yaml
+    secrets: inherit
+
+  bump:
+    needs: vitest-codecov
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Promote Unreleased changelog notes
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: bun scripts/changelog-release.ts promote
+
+      - name: Bump package.json version
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: npm version "$NEW_VERSION" --no-git-tag-version
+
+      - name: Commit version bump
+        id: commit
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git push origin "HEAD:$RELEASE_BRANCH"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: bump
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.bump.outputs.sha }}
+
+  publish:
+    needs: [build, bump]
+    runs-on: ubuntu-latest
+    # Configure this environment name as the one allowed by the npm trusted publisher.
+    environment: npm
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: automate-electron-ipc-dist
+          path: packages
+
+      # Trusted publishing (OIDC) needs npm >= 11.5.1, which Node 24 ships with. No token is used,
+      # and provenance is attached automatically. Prereleases go to the "next" dist-tag.
+      - name: Publish to npm
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: |
+          TAG=latest
+          if [[ "$NEW_VERSION" == *-* ]]; then TAG=next; fi
+          npm publish packages/*.tgz --access public --provenance --tag "$TAG"
+
+      - name: Require changelog notes for this version
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: bun scripts/changelog-release.ts verify
+
+      - name: Extract release notes
+        env:
+          NEW_VERSION: ${{ inputs.version }}
+        run: bun scripts/changelog-release.ts notes > "$RUNNER_TEMP/release_notes.md"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_VERSION: ${{ inputs.version }}
+          TARGET_SHA: ${{ needs.bump.outputs.sha }}
+        run: |
+          PRERELEASE=()
+          if [[ "$NEW_VERSION" == *-* ]]; then PRERELEASE=(--prerelease); fi
+          gh release create "$NEW_VERSION" packages/*.tgz \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "automate-electron-ipc $NEW_VERSION" \
+            --notes-file "$RUNNER_TEMP/release_notes.md" \
+            "${PRERELEASE[@]}"
