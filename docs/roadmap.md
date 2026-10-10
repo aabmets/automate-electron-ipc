@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 152 delivered, 0 remaining, 1 dropped.
+**Progress:** 153 delivered, 0 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -124,8 +124,8 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 ## Phase 3b: Module structure
 
 Runs before Phase 4 on purpose: a task is picked by its place in this file, and the features of
-Phase 4 would otherwise grow the big files first. `size-baseline.json` lists the files that these
-tasks work down, and `bun run check` fails when one of them grows.
+Phase 4 would otherwise grow the big files first. `bun run check` fails for any file over the
+hard limit.
 
 - [x] [T102: The file size gate and the project skills](./tasks/T102-file-size-gate-and-project-skills.md) · depends on: none
 - [x] [T103: Split `main-bindings.ts`, part 1: imports, support, scopes and validation](./tasks/T103-main-bindings-part-1-support-scopes-validation.md) · depends on: T102
@@ -164,6 +164,7 @@ tasks work down, and `bun run check` fails when one of them grows.
 - [x] [T136: One `render` helper for the writer tests](./tasks/T136-writer-test-render-helper.md) · depends on: T124
 - [x] [T137: Shared preambles of the automation and config validator tests](./tasks/T137-automation-and-validator-test-preambles.md) · depends on: T124
 - [x] [T138: Fixed sleeps, weak assertions and needless exports in the tests](./tasks/T138-test-sleeps-weak-assertions-and-exports.md) · depends on: T133, T134, T135
+- [x] [T174: Remove the size baseline](./tasks/T174-remove-size-baseline.md) · depends on: T138
 
 ## Phase 4: Developer experience
 

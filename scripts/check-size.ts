@@ -11,7 +11,7 @@
 
 import { run } from "./size-gate.js";
 
-const { code, output } = run(process.argv.slice(2), process.cwd());
+const { code, output } = run(process.cwd());
 for (const line of output) {
    console.error(line);
 }

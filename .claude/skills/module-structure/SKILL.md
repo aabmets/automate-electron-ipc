@@ -1,8 +1,7 @@
 ---
 name: module-structure
 description: >-
-  File size gate (soft 280 lines, hard 300, for src, tests and types), the ratchet baseline
-  `size-baseline.json`, how to split a module or a test file along feature seams without a
+  File size gate (soft 280 lines, hard 300, for src, tests and types), how to split a module or a test file along feature seams without a
   barrel file, and the anti-patterns of stub files and premature directories. Read before
   adding a file, before adding code to a file that is close to or over the limit, when
   `bun run check` reports a size error, and when a task is a T103+ split task.
@@ -28,28 +27,14 @@ input for the generator, not code.
 
 `bun run check` runs `scripts/check-size.ts` after tsc and Biome. Its logic is `scripts/size-gate.ts`.
 
-## The baseline: files that are already too big
-
-`size-baseline.json` lists every file that was over the hard limit when the gate arrived, with its
-size. The split tasks (see the roadmap, "Module structure") work it down to nothing.
-
-- A file in the baseline may **only shrink**. One line more is an error.
-- A file which shrank must have its entry lowered, and one which fits the hard limit must have its
-  entry removed. Run `bun scripts/check-size.ts --update`; it only lowers and removes.
-- **Never raise an entry, and never add a file to it.** A new file over 300 lines is split, not
-  baselined. If you think a file needs an exception, stop and ask the user.
-- Commit the baseline change in the same commit as the shrink.
-
 ## When your change touches a big file
 
 Putting new code into a file at or near the limit is the habit that made the big files. Instead:
 
-1. Put the new code in a **new module** that the old file calls. This is the right shape even when
-   the old file is still in the baseline and could, on paper, hold the lines.
-2. Do **not** split a baselined file as a drive-by. Only the task whose goal is that split does it.
-   Make the minimal change the current task asks for, and say in your reply that the file is over the
-   gate and that splitting it is out of scope.
-3. If the current task is itself a split task, follow "How to split" below.
+1. Put the new code in a **new module** that the old file calls.
+2. If the current task is itself a split task, follow "How to split" below.
+3. Never add an exception for a file over 300 lines. If you think one is needed, stop and ask the
+   user.
 
 ## The stub exemption (280 to 300)
 

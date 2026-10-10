@@ -25,8 +25,8 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
 
 - Type check, lint and file size gate: `bun run check`. The gate (`scripts/check-size.ts`) allows at
   most 300 lines per file in `src/`, `tests/` and `types/` (license header not counted; 280 is the
-  soft limit, and draws a warning). Files that were already over are in `size-baseline.json` and may
-  only shrink: never add or raise an entry. Put new code in a new module, not in a big file. Read
+  soft limit, and draws a warning). There are no exceptions: put new code in a new module, not in a
+  big file. Read
   `.claude/skills/module-structure` before adding, splitting or growing files.
 - Tests: `bunx vitest run` (tests live in `tests/**`, named `*.test.ts`; helpers in `tests/utils/`)
 - Real-Electron tests: `bun run test:electron` (`tests/test_electron/`). They run the generated bindings
