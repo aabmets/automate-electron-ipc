@@ -34,7 +34,7 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Compile
-        run: bunx tsc -p tsconfig.json
+        run: bunx --package typescript@7.0.2 tsc -p tsconfig.json
 
       - name: Pack tarball
         run: |

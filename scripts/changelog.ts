@@ -46,7 +46,7 @@ function body(lines: string[], section: Section): string {
 
 /** True when the section holds at least one bullet, not just empty `### Added` style headings. */
 function hasNotes(text: string): boolean {
-   return /^\s*[-*] \S/m.test(text);
+   return /^[ \t]*[-*] \S/m.test(text);
 }
 
 /** Version headings (`## [x.y.z] - date`), newest first. Unreleased is not one. */

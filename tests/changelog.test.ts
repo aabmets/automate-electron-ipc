@@ -76,6 +76,16 @@ describe("hasUnreleasedNotes", () => {
       );
    });
 
+   it.each(["  - indented", "\t* tabbed star"])("accepts the bullet %j", (bullet) => {
+      const log = `# Changelog\n\n## [Unreleased]\n\n### Added\n\n${bullet}\n\n[Unreleased]: ${BASE}/compare/1.0.0...HEAD\n`;
+      expect(hasUnreleasedNotes(log)).toBe(true);
+   });
+
+   it("rejects a dash without a following text", () => {
+      const log = `# Changelog\n\n## [Unreleased]\n\n-\n- \n\n[Unreleased]: ${BASE}/compare/1.0.0...HEAD\n`;
+      expect(hasUnreleasedNotes(log)).toBe(false);
+   });
+
    it("handles CRLF line endings", () => {
       expect(hasUnreleasedNotes(WITH_NOTES.replaceAll("\n", "\r\n"))).toBe(true);
    });
