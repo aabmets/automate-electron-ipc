@@ -69,11 +69,13 @@ The scenarios are functions that are turned into text and run inside Electron, s
 
 ## Documentation
 
-The pages in `docs/` are built with MkDocs Material. Build the site with the same command as the Pages workflow, which fails on a broken link or anchor:
+The pages in `docs/` are built with MkDocs Material, at the versions locked with hashes in `.github/docs-requirements.txt`. Build the site with the packages that the Pages workflow installs; the build fails on a broken link or anchor:
 
 ```bash
-uv run --with "mkdocs-material>=9.7.7" mkdocs build --strict
+uv run --no-project --with-requirements .github/docs-requirements.txt mkdocs build --strict
 ```
+
+To update MkDocs Material, change its pin in `.github/docs-requirements.in` and run the `uv pip compile` command at the top of the lock file.
 
 Replace `build --strict` with `serve` to preview the pages while you edit them.
 

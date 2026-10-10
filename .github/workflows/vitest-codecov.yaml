@@ -14,18 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
       - name: Set up bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Type check and lint
         run: bun run check
@@ -40,10 +40,10 @@ jobs:
           # Node is what users run the generator with, so it is the primary target.
           - runtime: node 22
             node-version: 22
-            command: npx vitest run
+            command: node node_modules/vitest/vitest.mjs run
           - runtime: node 24
             node-version: 24
-            command: npx vitest run
+            command: node node_modules/vitest/vitest.mjs run
             upload-coverage: true
           # The package manager and dev runtime of the repo. `--bun` forces the Bun runtime,
           # whereas a plain `bunx vitest run` hands over to Node because of vitest's shebang.
@@ -52,20 +52,20 @@ jobs:
             command: bun --bun vitest run
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node-version }}
 
       - name: Set up bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Print runtime versions
         run: |
@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ matrix.upload-coverage }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -91,42 +91,42 @@ jobs:
         node-version: [22, 24]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node-version }}
 
       - name: Set up bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       # Runs the schema fixtures through the generator under Node, then type-checks
       # the schema files together with the generated main.ts, preload.ts and window.d.ts.
       # Coverage is off, because the thresholds apply to the whole suite, not to this subset.
       - name: Run e2e tests
-        run: npx vitest run tests/test_e2e --coverage.enabled=false
+        run: node node_modules/vitest/vitest.mjs run tests/test_e2e --coverage.enabled=false
 
   electron:
     name: electron integration (node 24)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
       - name: Set up bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       # bun install does not run the postinstall script of electron, which downloads the binary.
       - name: Install the Electron binary

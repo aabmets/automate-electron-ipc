@@ -56,7 +56,7 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
   `REQUIRE_ELECTRON=1` when the Electron binary and a display are available, else say that the
   Electron tests skipped). The Node e2e job of CI must pass as well.
 - Keep the user docs in `docs/` (published with MkDocs Material, see `mkdocs.yml`) in step with
-  behavior changes, and check them with `uv run --with "mkdocs-material>=9.7.7" mkdocs build --strict`.
+  behavior changes, and check them with `uv run --no-project --with-requirements .github/docs-requirements.txt mkdocs build --strict`.
 - Do not mix unrelated changes in one commit. If a change turns out too large for one reviewable
   commit, split it into parts and deliver the first one.
 - When several sessions work on the same branch, run `git pull --rebase origin <branch>` before
