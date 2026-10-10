@@ -232,8 +232,14 @@ export class BaseWriter {
       const [first = "", ...rest] = components;
       let out = first;
       for (const component of rest) {
-         const trailing = out.length - out.replace(/\n+$/, "").length;
-         const leading = component.length - component.replace(/^\n+/, "").length;
+         let trailing = 0;
+         while (out[out.length - 1 - trailing] === "\n") {
+            trailing++;
+         }
+         let leading = 0;
+         while (component[leading] === "\n") {
+            leading++;
+         }
          const newlines = Math.min(trailing + 1 + leading, 2);
          out =
             out.slice(0, out.length - trailing) + "\n".repeat(newlines) + component.slice(leading);

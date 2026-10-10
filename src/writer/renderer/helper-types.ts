@@ -93,9 +93,10 @@ export class HelperTypesWriter extends RendererTypesWriter {
             "export type ChannelReturn<N extends ChannelName> = N extends ChannelName ? never : never;",
          ].join("\n");
       }
+      const channelMaps = mapNames.map((local) => `typeof ${local}`).join(" & ");
       return [
          ...name,
-         `\ntype ChannelMaps = ${mapNames.map((local) => `typeof ${local}`).join(" & ")};`,
+         `\ntype ChannelMaps = ${channelMaps};`,
          "\ntype SignatureOf<T> = T extends ChannelDef<infer S extends (...args: any[]) => any, any>",
          `${i0}? S`,
          `${i0}: T extends (...args: any[]) => any`,

@@ -11,6 +11,7 @@
 
 import type * as t from "@types";
 import { ImportPathResolver } from "./import-paths.js";
+import { findAlias, findTarget, namedImport } from "./import-targets.js";
 
 /** One import line of a generated file, shared by every schema file that refers to the type. */
 interface Binding {
@@ -19,13 +20,6 @@ interface Binding {
    /** Renders the import line for `local`. */
    render: (local: string) => string;
    emitted: boolean;
-}
-
-/** What a name in a signature stands for, before a local name in the generated file is chosen. */
-interface Target {
-   /** Identifies the declaration: the module that it lives in and the name it is exported under. */
-   key: string;
-   render: (local: string) => string;
 }
 
 export class ImportsGenerator {
@@ -66,53 +60,13 @@ export class ImportsGenerator {
       return this.paths.fileImportPath(filePath);
    }
 
-   /**
-    * Finds what a name used in a signature of the schema file refers to: a namespace import,
-    * a type that the schema file declares or a named import. Returns null for unknown names.
-    */
-   private findTarget(pfs: t.ParsedFileSpecs, name: string): Target | null {
-      const { importSpecArray, typeSpecArray } = pfs.specs;
-      const nsSpec = importSpecArray.find((spec) => spec.namespace === name);
-      if (nsSpec) {
-         const nsPath = this.paths.resolveImportPath(nsSpec.fromPath, pfs.fullPath);
-         return {
-            key: `${this.paths.moduleId(nsSpec.fromPath, pfs.fullPath)}*`,
-            render: (local) => `import type * as ${local} from "${nsPath}";`,
-         };
-      }
-      const typeSpec = typeSpecArray.find((spec) => spec.name === name);
-      if (typeSpec) {
-         const exported = typeSpec.isDefault ? "default" : (typeSpec.exportedAs ?? name);
-         const filePath = this.paths.fileImportPath(pfs.fullPath);
-         const fileId = this.paths.scriptId(pfs.fullPath);
-         return { key: `${fileId}#${exported}`, render: this.namedImport(exported, filePath) };
-      }
-      // Entries are `Foo`, `Foo as Bar` or `default as Foo`. The local name is what signatures use.
-      for (const spec of importSpecArray) {
-         for (const entry of spec.customTypes) {
-            const [exported, local = exported] = entry.split(" as ");
-            if (local === name) {
-               const fromPath = this.paths.resolveImportPath(spec.fromPath, pfs.fullPath);
-               const key = `${this.paths.moduleId(spec.fromPath, pfs.fullPath)}#${exported}`;
-               return { key, render: this.namedImport(exported, fromPath) };
-            }
-         }
-      }
-      return null;
-   }
-
-   private namedImport(exported: string, fromPath: string): (local: string) => string {
-      return (local) => {
-         const entry = exported === local ? local : `${exported} as ${local}`;
-         return `import type { ${entry} } from "${fromPath}";`;
-      };
-   }
-
    /** The first name that is free in the generated file: `User`, then `User_2`, `User_3`... */
    private uniqueName(name: string): string {
       let candidate = name;
-      for (let n = 2; this.usedNames.has(candidate); n++) {
+      let n = 2;
+      while (this.usedNames.has(candidate)) {
          candidate = `${name}_${n}`;
+         n++;
       }
       return candidate;
    }
@@ -129,11 +83,11 @@ export class ImportsGenerator {
       if (this.resolved.has(memoKey)) {
          return this.resolved.get(memoKey) ?? null;
       }
-      const alias = this.findAlias(pfs, name);
+      const alias = findAlias(pfs, name);
       if (alias !== null) {
          return this.resolveAlias(pfs, name, alias, memoKey);
       }
-      const target = this.findTarget(pfs, name);
+      const target = findTarget(this.paths, pfs, name);
       let binding: Binding | null = null;
       if (target) {
          binding = this.bindings.get(target.key) ?? null;
@@ -151,20 +105,6 @@ export class ImportsGenerator {
       }
       this.resolved.set(memoKey, binding);
       return binding;
-   }
-
-   /**
-    * The qualified name that `name` stands for, when the schema file declares it with
-    * `import X = Ns.Y` and does not export it. Such a name cannot be imported from the schema
-    * file, so the generated files use its target in its place.
-    */
-   private findAlias(pfs: t.ParsedFileSpecs, name: string): string | null {
-      const { importSpecArray, typeSpecArray } = pfs.specs;
-      if (importSpecArray.some((spec) => spec.namespace === name)) {
-         return null;
-      }
-      const spec = typeSpecArray.find((item) => item.name === name);
-      return spec && !spec.isExported && spec.aliasOf !== undefined ? spec.aliasOf : null;
    }
 
    /**
@@ -213,10 +153,13 @@ export class ImportsGenerator {
          const local = this.uniqueName(ref.name);
          this.usedNames.add(local);
          const fromPath = this.paths.resolveImportPath(ref.fromPath, pfs.fullPath);
-         const render = (name: string) =>
-            ref.exported === "default"
-               ? `import ${name} from "${fromPath}";`
-               : `import { ${ref.exported === name ? name : `${ref.exported} as ${name}`} } from "${fromPath}";`;
+         const render = (name: string) => {
+            if (ref.exported === "default") {
+               return `import ${name} from "${fromPath}";`;
+            }
+            const entry = ref.exported === name ? name : `${ref.exported} as ${name}`;
+            return `import { ${entry} } from "${fromPath}";`;
+         };
          binding = { local, render, emitted: false };
          this.bindings.set(key, binding);
       }
@@ -247,7 +190,7 @@ export class ImportsGenerator {
          const render =
             channelMapExport.kind === "default"
                ? (name: string) => `import type ${name} from "${filePath}";`
-               : this.namedImport(channelMapExport.name, filePath);
+               : namedImport(channelMapExport.name, filePath);
          binding = { local, render, emitted: false };
          this.bindings.set(key, binding);
       }

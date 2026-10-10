@@ -144,17 +144,18 @@ export function buildArgumentValidation(
    const hasPages = eventTypes.length > 0;
    const hasWorkers = workerEvents.length > 0;
    // The page hook is called when no `report` is given. A file with only worker calls has no such hook.
-   const notify = hasWorkers
-      ? hasPages
-         ? [
-              `${i3}if (report) {`,
-              `${i3}${i1}report(event as ${workerEvent}, channel, error);`,
-              `${i3}} else {`,
-              `${i3}${i1}ipcConfig.onRejected?.(event as ${pageEvent}, channel, error);`,
-              `${i3}}`,
-           ]
-         : [`${i3}report(event as ${workerEvent}, channel, error);`]
-      : [`${i3}ipcConfig.onRejected?.(event, channel, error);`];
+   let notify = [`${i3}ipcConfig.onRejected?.(event, channel, error);`];
+   if (hasWorkers && hasPages) {
+      notify = [
+         `${i3}if (report) {`,
+         `${i3}${i1}report(event as ${workerEvent}, channel, error);`,
+         `${i3}} else {`,
+         `${i3}${i1}ipcConfig.onRejected?.(event as ${pageEvent}, channel, error);`,
+         `${i3}}`,
+      ];
+   } else if (hasWorkers) {
+      notify = [`${i3}report(event as ${workerEvent}, channel, error);`];
+   }
    const report = hasWorkers
       ? [
            `${i1}report${hasPages ? "?" : ""}: (event: ${workerEvent}, channel: string, error: IpcValidationError) => void,`,

@@ -58,7 +58,8 @@ export function buildRendererToMainChannel(ctx: PreloadContext, spec: t.ChannelS
    }
    if (serialized && spec.kind === "Unicast") {
       // A synchronous failure to serialize must reject the promise, not throw.
-      const implementation = `async (...args: any[]) => ${decode(`await ${ipcRenderer}`)}`;
+      const awaited = decode(`await ${ipcRenderer}`);
+      const implementation = `async (...args: any[]) => ${awaited}`;
       return buildChannel(ctx.indents, spec.name, method, implementation);
    }
    return buildChannel(ctx.indents, spec.name, method, `(...args: any[]) => ${ipcRenderer}`);

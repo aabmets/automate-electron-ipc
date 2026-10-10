@@ -163,11 +163,12 @@ export function parseSignature(
    // What a stream sends are its chunks, one by one, not the iterable that the handler returns.
    const chunkNode = streaming ? getChunkNode(returnNode as AstNode, locals) : null;
    // The result of an async signature is the value that the Promise resolves to.
-   const result: AstNode[] = chunkNode
-      ? [chunkNode]
-      : isAsync
-        ? (unwrapTypeParentheses(returnNode as AstNode).typeParams?.params ?? [])
-        : [returnNode as AstNode];
+   let result: AstNode[] = [returnNode as AstNode];
+   if (chunkNode) {
+      result = [chunkNode];
+   } else if (isAsync) {
+      result = unwrapTypeParentheses(returnNode as AstNode).typeParams?.params ?? [];
+   }
    for (const node of result) {
       walkCloneType(node, {
          ...walk,

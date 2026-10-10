@@ -48,6 +48,70 @@ function declaredTypeParams(node: AstNode): string[] {
    return names;
 }
 
+function collectTypeReference(
+   node: AstNode,
+   src: Source,
+   set: Set<string>,
+   inScope: ReadonlySet<string>,
+   locals: ReadonlySet<string>,
+   refs?: SpanRef[],
+): void {
+   // A qualified name such as `Kind.A` is kept whole. Its head is resolved by the writers.
+   const typeName = src.text(node.typeName);
+   const head = headOf(typeName);
+   if (isBuiltinType(head, locals) || inScope.has(head)) {
+      return;
+   }
+   set.add(typeName);
+   const identifier = headNode(node.typeName);
+   if (identifier) {
+      refs?.push({ name: head, span: identifier.span });
+   }
+}
+
+function collectTypeQuery(
+   node: AstNode,
+   set: Set<string>,
+   inScope: ReadonlySet<string>,
+   refs?: SpanRef[],
+): void {
+   const identifier = headNode(node.exprName);
+   if (identifier && !inScope.has(identifier.value)) {
+      set.add(identifier.value);
+      refs?.push({ name: identifier.value, span: identifier.span });
+   }
+}
+
+/** Records what the node itself refers to, apart from its children. */
+function collectOwnReferences(
+   node: AstNode,
+   src: Source,
+   set: Set<string>,
+   inScope: ReadonlySet<string>,
+   locals: ReadonlySet<string>,
+   refs?: SpanRef[],
+): void {
+   if (node.type === "TsTypeReference") {
+      collectTypeReference(node, src, set, inScope, locals, refs);
+   } else if (node.type === "TsTypeQuery") {
+      collectTypeQuery(node, set, inScope, refs);
+   } else if (node.type === "TsImportType") {
+      // `import("./models").User` names its module by a path relative to the schema file, so the
+      // path is recorded to be rebased. Its qualifier and type arguments are visited as children.
+      const argument = node.argument;
+      if (argument?.type === "StringLiteral" && argument.value.startsWith(".")) {
+         refs?.push({ name: "import()", span: argument.span, importPath: argument.value });
+      }
+   } else if (node.type === "ImportDeclaration") {
+      for (const element of node.specifiers) {
+         const name = element.local.value;
+         if (element.type === "ImportSpecifier" && (node.typeOnly || element.isTypeOnly)) {
+            set.add(name);
+         }
+      }
+   }
+}
+
 /**
  * Collects the names of the types that a node refers to and that the generated files must import.
  * `scope` are the type parameters in scope, `locals` the names that the schema file binds itself.
@@ -67,37 +131,6 @@ export function collectCustomTypes(
    }
    const declared = declaredTypeParams(node);
    const inScope = declared.length > 0 ? new Set([...scope, ...declared]) : scope;
-   if (node.type === "TsTypeReference") {
-      // A qualified name such as `Kind.A` is kept whole. Its head is resolved by the writers.
-      const typeName = src.text(node.typeName);
-      const head = headOf(typeName);
-      if (!(isBuiltinType(head, locals) || inScope.has(head))) {
-         set.add(typeName);
-         const identifier = headNode(node.typeName);
-         if (identifier) {
-            refs?.push({ name: head, span: identifier.span });
-         }
-      }
-   } else if (node.type === "TsTypeQuery") {
-      const identifier = headNode(node.exprName);
-      if (identifier && !inScope.has(identifier.value)) {
-         set.add(identifier.value);
-         refs?.push({ name: identifier.value, span: identifier.span });
-      }
-   } else if (node.type === "TsImportType") {
-      // `import("./models").User` names its module by a path relative to the schema file, so the
-      // path is recorded to be rebased. Its qualifier and type arguments are visited as children.
-      const argument = node.argument;
-      if (argument?.type === "StringLiteral" && argument.value.startsWith(".")) {
-         refs?.push({ name: "import()", span: argument.span, importPath: argument.value });
-      }
-   } else if (node.type === "ImportDeclaration") {
-      for (const element of node.specifiers) {
-         const name = element.local.value;
-         if (element.type === "ImportSpecifier" && (node.typeOnly || element.isTypeOnly)) {
-            set.add(name);
-         }
-      }
-   }
+   collectOwnReferences(node, src, set, inScope, locals, refs);
    forEachChild(node, (child) => collectCustomTypes(child, src, set, inScope, locals, refs));
 }

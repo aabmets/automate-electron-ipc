@@ -42,7 +42,7 @@ function relativeTsPath(option: string) {
       if (path.isAbsolute(value)) {
          return `${option} must be relative to the project root`;
       }
-      return /\.ts$/.test(value) && utils.isSchemaSourceFile(value)
+      return value.endsWith(".ts") && utils.isSchemaSourceFile(value)
          ? true
          : `${option} must be the path of a .ts file`;
    });
@@ -54,7 +54,7 @@ function relativeDeclarationPath(option: string) {
       if (path.isAbsolute(value)) {
          return `${option} must be relative to the project root`;
       }
-      return /\.d\.ts$/.test(value) ? true : `${option} must be the path of a .d.ts file`;
+      return value.endsWith(".d.ts") ? true : `${option} must be the path of a .d.ts file`;
    });
 }
 

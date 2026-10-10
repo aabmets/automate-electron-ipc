@@ -54,8 +54,22 @@ type DirectoryEntry = string | typeof PACKAGE_DIRECTORY | null;
  * specifier with one is not extensionless, so NodeNext does not add `.js` to it. Other dots in
  * the file name, as in `user.model`, belong to the name.
  */
-const DATA_EXTENSION =
-   /\.(json|node|wasm|css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|ico|html?|txt|md|csv|ya?ml|toml)$/i;
+/** `value` without the slashes at its end. */
+function trimTrailingSlashes(value: string): string {
+   let end = value.length;
+   while (end > 0 && value[end - 1] === "/") {
+      end--;
+   }
+   return value.slice(0, end);
+}
+
+const DATA_EXTENSION_PATTERNS = [
+   /\.(json|node|wasm|css|scss|sass|less|svg|png)$/i,
+   /\.(jpe?g|gif|webp|avif|ico|html?|txt|md|csv|ya?ml|toml)$/i,
+];
+const DATA_EXTENSION = {
+   test: (name: string): boolean => DATA_EXTENSION_PATTERNS.some((pattern) => pattern.test(name)),
+};
 
 /**
  * Spells the import specifiers of a generated file: where the file is written decides how a path of a
@@ -180,7 +194,7 @@ export class ImportPathResolver {
    private withDirectoryIndex(fromPath: string, sourceFilePath: string): string {
       const entry = this.directoryEntry(fromPath, sourceFilePath);
       return entry && entry !== PACKAGE_DIRECTORY
-         ? `${fromPath.replace(/\/+$/, "")}/${entry}`
+         ? `${trimTrailingSlashes(fromPath)}/${entry}`
          : fromPath;
    }
 

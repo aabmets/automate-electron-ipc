@@ -25,7 +25,7 @@ import {
    findIndirectlyExportedMap,
 } from "./channel-exports.js";
 import { collectImportBindings, type ParseContext, parseChannelConfig } from "./channel-options.js";
-import { VERBS } from "./channel-verbs.js";
+import { VERBS, type VerbInfo } from "./channel-verbs.js";
 
 /**
  * Parses the second type argument of `invoke`, the error types of the channel. The text is kept
@@ -51,6 +51,53 @@ function parseErrors(node: AstNode, ctx: ParseContext): t.ErrorsSpec {
          }))
          .sort((a, b) => a.start - b.start),
    };
+}
+
+type Fail = (message: string, node?: AstNode) => SchemaError;
+
+/** The library verb that a channel property calls; throws for an unknown one. */
+function resolveVerb(
+   value: AstNode,
+   ctx: ParseContext,
+   fail: Fail,
+): { verb: string; info: VerbInfo } {
+   const verb = resolveLibraryName(value.callee, ctx.imports);
+   const info = verb ? VERBS.get(verb) : undefined;
+   if (!(verb && info)) {
+      const callee = ctx.src.text(value.callee);
+      throw fail(
+         `unknown verb '${callee}'. Use one of: ${Array.from(VERBS.keys()).join(", ")}.`,
+         value.callee,
+      );
+   }
+   return { verb, info };
+}
+
+/** Throws unless the signature exists and is a function type without a `this` parameter. */
+function assertValidSignature(
+   signature: AstNode | null,
+   verb: string,
+   value: AstNode,
+   ctx: ParseContext,
+   fail: Fail,
+): asserts signature is AstNode {
+   if (!signature) {
+      throw fail(
+         `no signature. Write ${verb}<(arg: string) => void>() ` +
+            `or ${verb}() as (arg: string) => void.`,
+         value,
+      );
+   } else if (signature.type !== "TsFunctionType") {
+      const text = ctx.src.text(signature as { span: Span });
+      throw fail(`the signature must be a function type, found '${text}'.`, signature);
+   } else if (
+      (signature.params as AstNode[]).some((p) => p.type === "Identifier" && p.value === "this")
+   ) {
+      throw fail(
+         "a 'this' parameter is not supported, since IPC does not transfer 'this'.",
+         signature,
+      );
+   }
 }
 
 /**
@@ -89,15 +136,7 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
    } else if (value.type !== "CallExpression") {
       throw fail(`expected a call to one of: ${Array.from(VERBS.keys()).join(", ")}.`, value);
    }
-   const verb = resolveLibraryName(value.callee, ctx.imports);
-   const info = verb ? VERBS.get(verb) : undefined;
-   if (!(verb && info)) {
-      const callee = ctx.src.text(value.callee);
-      throw fail(
-         `unknown verb '${callee}'. Use one of: ${Array.from(VERBS.keys()).join(", ")}.`,
-         value.callee,
-      );
-   }
+   const { verb, info } = resolveVerb(value, ctx, fail);
 
    const config = parseChannelConfig(value, verb, info, name, ctx);
    const typeArgs: AstNode[] = value.typeArguments?.params ?? [];
@@ -117,23 +156,7 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
       );
    }
    const signature = asType ?? (typeArgs.length > 0 ? unwrapTypeParentheses(typeArgs[0]) : null);
-   if (!signature) {
-      throw fail(
-         `no signature. Write ${verb}<(arg: string) => void>() ` +
-            `or ${verb}() as (arg: string) => void.`,
-         value,
-      );
-   } else if (signature.type !== "TsFunctionType") {
-      const text = ctx.src.text(signature as { span: Span });
-      throw fail(`the signature must be a function type, found '${text}'.`, signature);
-   } else if (
-      (signature.params as AstNode[]).some((p) => p.type === "Identifier" && p.value === "this")
-   ) {
-      throw fail(
-         "a 'this' parameter is not supported, since IPC does not transfer 'this'.",
-         signature,
-      );
-   }
+   assertValidSignature(signature, verb, value, ctx, fail);
    const parsed = parseSignature(
       signature as unknown as TsFunctionType,
       ctx.src,
@@ -227,7 +250,7 @@ export function parseChannelMapModule(
          { span: exportAssignment.span, src },
       );
    }
-   if (!found || found.call !== calls[0]) {
+   if (found?.call !== calls[0]) {
       throw new SchemaError(
          file,
          "the defineChannels call must be exported, with " +

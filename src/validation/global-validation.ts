@@ -28,8 +28,10 @@ export function validateGlobalChannelSpecs(files: t.ParsedFileSpecs[]): void {
       for (const spec of file.specs.channelSpecArray) {
          const first = channelOwners.get(spec.name);
          if (first !== undefined) {
-            const at = (path: string, loc?: t.SourcePosition) =>
-               `'${path}'${loc ? ` (${loc.line}:${loc.column})` : ""}`;
+            const at = (path: string, loc?: t.SourcePosition) => {
+               const suffix = loc ? ` (${loc.line}:${loc.column})` : "";
+               return `'${path}'${suffix}`;
+            };
             throw new Error(
                `Channel name '${spec.name}' is declared in both ${at(first.path, first.loc)} and ` +
                   `${at(file.relativePath, spec.loc)}. ` +

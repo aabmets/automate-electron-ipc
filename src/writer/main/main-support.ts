@@ -51,26 +51,27 @@ interface SupportUses {
 /** The helpers that the channels of the file use, in the order that they are declared. */
 export function buildSupport(ctx: MainContext, uses: SupportUses, eventTypes: string[]): string[] {
    const { indents } = ctx;
-   const support: string[] = [];
-   if (uses.scopes.length > 0) {
-      support.push(buildScopeRegistry(indents, uses.scopes));
-   }
-   if (uses.usesIpcMain) {
-      support.push(
-         buildSenderValidation(indents, eventTypes, uses.usesValidation, uses.usesScopedGuards),
-         buildTargetResolver(indents),
-      );
-   }
-   if (uses.usesValidation || uses.workerValidators.size > 0) {
-      support.push(
-         buildArgumentValidation(
-            indents,
-            uses.usesValidation ? eventTypes : [],
-            getValidatedWorkerEvents(uses.workerValidators),
-         ),
-      );
-   }
-   if (uses.usesEnvelope) {
+   const needsValidation = uses.usesValidation || uses.workerValidators.size > 0;
+   // Each entry is a condition and the helpers that it adds, built only when it holds.
+   const sections: [boolean, () => string[]][] = [
+      [uses.scopes.length > 0, () => [buildScopeRegistry(indents, uses.scopes)]],
+      [
+         uses.usesIpcMain,
+         () => [
+            buildSenderValidation(indents, eventTypes, uses.usesValidation, uses.usesScopedGuards),
+            buildTargetResolver(indents),
+         ],
+      ],
+      [
+         needsValidation,
+         () => [
+            buildArgumentValidation(
+               indents,
+               uses.usesValidation ? eventTypes : [],
+               getValidatedWorkerEvents(uses.workerValidators),
+            ),
+         ],
+      ],
       // The envelope of `invoke` channels: `settleInvoke` runs the handler and answers with
       // `{ ok: true, value }`, or with `{ ok: false, error }` when anything fails, including the
       // rejection of the sender and the validation of the arguments. `toIpcError` reduces what was
@@ -78,48 +79,27 @@ export function buildSupport(ctx: MainContext, uses: SupportUses, eventTypes: st
       // renderer as the text `Error invoking remote method`, so these fields would be lost, and the
       // stack never leaves the main process. `data` is dropped when it cannot be cloned, since it
       // would otherwise fail the whole reply.
-      support.push(buildErrorEnvelope(indents));
-   }
-   if (uses.usesSerializer) {
+      [uses.usesEnvelope, () => [buildErrorEnvelope(indents)]],
       // The serializer of the config, for the channels between the main process and a page and for
       // the ones between the main process and a utility process (see `buildSerializerRuntime`).
       // `IpcSerializationError` reaches the caller of a `send`, `emit` or `ask`, and the page as the
       // `{ name, message, code }` of the usual error envelope. Deserializing is done only after the
       // sender is checked, so that a rejected sender reaches no code of the serializer.
-      support.push(buildSerializerRuntime(indents));
-   }
-   if (uses.usesSenders) {
-      support.push(buildSenderHelpers(indents, uses.usesEmits));
-   }
-   if (uses.usesEventWatch) {
-      support.push(buildEventWatch(indents));
-   }
-   if (uses.usesAsks) {
-      support.push(buildAskHelpers(ctx));
-   }
-   if (uses.workerSpecs.length > 0) {
-      support.push(buildWorkerHelpers(ctx, uses.workerSpecs, uses.usesAsks, uses.workerValidators));
-   }
-   if (uses.usesStreams) {
-      support.push(buildStreamHelpers(ctx));
-   }
-   if (uses.usesUtility) {
-      support.push(buildUtilityHelpers(indents, uses.usesSerializer));
-   }
-   if (uses.usesPorts) {
-      support.push(buildPortRegistry(indents));
-   }
-   if (uses.usesPorts || uses.usesBrokers) {
-      support.push(buildPageLoadWatch(indents));
-   }
-   if (uses.usesBrokers) {
-      support.push(buildBrokerHelpers(indents));
-   }
-   if (uses.usesRendererPorts) {
-      support.push(buildPortHelpers(indents));
-   }
-   if (uses.usesMainPorts) {
-      support.push(buildMainPortHelpers(ctx));
-   }
-   return support;
+      [uses.usesSerializer, () => [buildSerializerRuntime(indents)]],
+      [uses.usesSenders, () => [buildSenderHelpers(indents, uses.usesEmits)]],
+      [uses.usesEventWatch, () => [buildEventWatch(indents)]],
+      [uses.usesAsks, () => [buildAskHelpers(ctx)]],
+      [
+         uses.workerSpecs.length > 0,
+         () => [buildWorkerHelpers(ctx, uses.workerSpecs, uses.usesAsks, uses.workerValidators)],
+      ],
+      [uses.usesStreams, () => [buildStreamHelpers(ctx)]],
+      [uses.usesUtility, () => [buildUtilityHelpers(indents, uses.usesSerializer)]],
+      [uses.usesPorts, () => [buildPortRegistry(indents)]],
+      [uses.usesPorts || uses.usesBrokers, () => [buildPageLoadWatch(indents)]],
+      [uses.usesBrokers, () => [buildBrokerHelpers(indents)]],
+      [uses.usesRendererPorts, () => [buildPortHelpers(indents)]],
+      [uses.usesMainPorts, () => [buildMainPortHelpers(ctx)]],
+   ];
+   return sections.flatMap(([used, build]) => (used ? build() : []));
 }

@@ -34,10 +34,10 @@ export interface WatchDeps {
    /** How long the watcher waits for more changes before it runs. Default 100. */
    debounceMs?: number;
    /** Called after every run, with the error that the run failed with, or `null`. */
-   onRun?: (error: unknown | null) => void;
+   onRun?: (error: unknown) => void;
 }
 
-const MANIFEST_FILES = ["package.json", "tsconfig.json"];
+const MANIFEST_FILES = new Set(["package.json", "tsconfig.json"]);
 
 /** The names in the project root that configure a run: the manifest, tsconfig and the config file. */
 function rootTargets(projectRoot: string, configFile?: string): WatchTarget[] {
@@ -47,7 +47,7 @@ function rootTargets(projectRoot: string, configFile?: string): WatchTarget[] {
          dir: projectRoot,
          recursive: false,
          classify: (name) =>
-            MANIFEST_FILES.includes(name) || (CONFIG_FILE_NAMES as readonly string[]).includes(name)
+            MANIFEST_FILES.has(name) || (CONFIG_FILE_NAMES as readonly string[]).includes(name)
                ? "config"
                : null,
       },

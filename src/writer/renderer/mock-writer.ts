@@ -163,6 +163,7 @@ export class MockWriter extends BaseWriter {
       const ofKind = (kind: MockKind) => channels.filter((channel) => channel.kind === kind);
       const emits = ofKind("emit");
       const asks = ofKind("ask");
+      const portStubs = PORT_METHODS.map((method) => `${method}: unavailable`).join(", ");
       const entry = ({ name, kind }: MockChannel): string => {
          switch (kind) {
             case "invoke":
@@ -176,7 +177,7 @@ export class MockWriter extends BaseWriter {
             case "ask":
                return `{ handle: responders.${name}.handle }`;
             default:
-               return `{ ${PORT_METHODS.map((method) => `${method}: unavailable`).join(", ")} }`;
+               return `{ ${portStubs} }`;
          }
       };
       const registry = (name: string, items: MockChannel[], make: (item: string) => string) =>

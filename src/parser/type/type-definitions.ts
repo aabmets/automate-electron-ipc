@@ -78,13 +78,7 @@ export function parseTypeDefinitions(
    array: t.TypeSpec[],
 ): void {
    const isExported = item.type === "ExportDeclaration" || item.type === "ExportDefaultDeclaration";
-   const node = (
-      item.type === "ExportDeclaration"
-         ? item.declaration
-         : item.type === "ExportDefaultDeclaration"
-           ? item.decl
-           : item
-   ) as AstNode;
+   const node = declarationOf(item);
 
    let generics: string | null = null;
    if (node.typeParams && node.typeParams.parameters.length > 0) {

@@ -80,7 +80,7 @@ export function parseModule(code: string): { module: Module; src: Source } {
    // swc spans are 1-based offsets into the source of each parse call, counted in UTF-8 bytes
    // and not in UTF-16 code units, and swc does not count a leading BOM.
    const base = 1;
-   const text = code.charCodeAt(0) === BOM ? code.slice(1) : code;
+   const text = code.codePointAt(0) === BOM ? code.slice(1) : code;
    const bytes = Buffer.from(text, "utf8");
    const isAscii = bytes.length === text.length;
    const indexOf = (offset: number) =>

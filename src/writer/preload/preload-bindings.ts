@@ -225,7 +225,7 @@ export class PreloadBindingsWriter extends BaseWriter {
             'import type { IpcRendererEvent } from "electron";',
             buildPortComponents(this.ctx),
             ...portSpecs
-               .sort((a, b) => utils.compareStrings(a.name, b.name))
+               .toSorted((a, b) => utils.compareStrings(a.name, b.name))
                .map((spec) => buildPortInitializer(this.ctx, spec)),
          );
       }
@@ -246,7 +246,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          out.push(
             buildAskComponents(this.ctx),
             ...askNames
-               .sort(utils.compareStrings)
+               .toSorted(utils.compareStrings)
                .map((askName) => buildAskListener(this.ctx, askName)),
          );
       }
@@ -254,7 +254,7 @@ export class PreloadBindingsWriter extends BaseWriter {
          out.push(
             buildStreamComponents(this.ctx),
             ...streamSpecs
-               .sort((a, b) => utils.compareStrings(a.name, b.name))
+               .toSorted((a, b) => utils.compareStrings(a.name, b.name))
                .map((spec) => buildStreamListener(this.ctx, spec.name)),
             "",
          );

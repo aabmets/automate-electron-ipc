@@ -143,9 +143,12 @@ export function buildWorkerChannel(ctx: MainContext, spec: t.ChannelSpec): Chann
    // A serialized message is one argument, the list of the arguments, as the serializer made it.
    const serialized = ctx.usesSerializer;
    const wired = serialized ? `encodeValue('${spec.name}', [${senderParams}])` : senderParams;
-   const rest = serialized ? `[${wired}]` : senderParams ? `[${senderParams}]` : "[]";
    // A question is serialized by `askServiceWorker`, so that a failure rejects the promise.
    const askArgs = senderParams ? `[${senderParams}]` : "[]";
+   const rest = serialized ? `[${wired}]` : askArgs;
+   const workerParam = `${workerName}: ServiceWorkerMain`;
+   const sessionParam = `${sessionName}: Session`;
+   const optionsParam = `${optionsName}: IpcAskOptions`;
    if (spec.direction === "ServiceWorkerToMain") {
       const eventType = getWorkerEventType(spec);
       const signature = ctx.injectEventTypehint(spec.signature, eventType, eventName);
@@ -172,9 +175,9 @@ export function buildWorkerChannel(ctx: MainContext, spec: t.ChannelSpec): Chann
       return {
          name: spec.name,
          members: [
-            `\n${i1}send: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`)}): void =>`,
+            `\n${i1}send: ${typeParams}(${params(workerParam)}): void =>`,
             `\n${i2}sendToWorker(${channel}, ${wire}, ${workerName}, ${rest}),`,
-            `\n${i1}broadcast: ${typeParams}(${params(`${sessionName}: Session`)}): void =>`,
+            `\n${i1}broadcast: ${typeParams}(${params(sessionParam)}): void =>`,
             `\n${i2}broadcastToWorkers(${wire}, ${sessionName}, ${rest}),`,
          ],
       };
@@ -184,13 +187,14 @@ export function buildWorkerChannel(ctx: MainContext, spec: t.ChannelSpec): Chann
       : `Promise<Awaited<${spec.signature.returnType}>>`;
    const ask = (options: string) =>
       `askServiceWorker(${channel}, ${wire}, ${workerName}, ${askArgs}${options}) as ${returned}`;
+   const askWith = ask(`, ${optionsName}`);
    return {
       name: spec.name,
       members: [
-         `\n${i1}invoke: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`)}): ${returned} =>`,
+         `\n${i1}invoke: ${typeParams}(${params(workerParam)}): ${returned} =>`,
          `\n${i2}${ask("")},`,
-         `\n${i1}invokeWith: ${typeParams}(${params(`${workerName}: ServiceWorkerMain`, `${optionsName}: IpcAskOptions`)}): ${returned} =>`,
-         `\n${i2}${ask(`, ${optionsName}`)},`,
+         `\n${i1}invokeWith: ${typeParams}(${params(workerParam, optionsParam)}): ${returned} =>`,
+         `\n${i2}${askWith},`,
       ],
    };
 }

@@ -28,12 +28,10 @@ export function validateCloneIssues(spec: Partial<t.ChannelSpec>, file?: string)
    }
    const where = schemaFilePrefix(file, spec.loc);
    const lines = errors.map((issue) => {
-      const hint =
-         issue.reason === "a Promise"
-            ? issue.where.startsWith("parameter")
-               ? PROMISE_HINT
-               : NESTED_PROMISE_HINT
-            : CLONE_HINT;
+      let hint = CLONE_HINT;
+      if (issue.reason === "a Promise") {
+         hint = issue.where.startsWith("parameter") ? PROMISE_HINT : NESTED_PROMISE_HINT;
+      }
       return `${where}${describeCloneIssue(spec.name ?? "", issue)}. ${hint}`;
    });
    throw new Error(lines.join("\n"));

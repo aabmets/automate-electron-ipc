@@ -86,8 +86,6 @@ export function buildWorkerHelpers(
       `${i1}}`,
       "}",
       "",
-   );
-   out.push(
       ...buildWorkerConfigLines(ctx.indents, {
          inbound,
          events,
@@ -112,32 +110,11 @@ export function buildWorkerHelpers(
       out.push(...table("workerAsks", asks, (spec) => ctx.wireName(spec.name, ":reply")));
    }
    out.push(
-      ...(sends.length > 0
-         ? ["interface WorkerListener {", `${i1}callback: unknown;`, `${i1}once: boolean;`, "}", ""]
-         : []),
-      ...(asks.length > 0
-         ? [
-              "interface PendingWorkerAsk {",
-              `${i1}channel: string;`,
-              `${i1}versionId: number;`,
-              `${i1}answer: (envelope: unknown) => void;`,
-              `${i1}fail: (error: IpcAskError) => void;`,
-              "}",
-              "",
-           ]
-         : []),
-      "interface WorkerHub {",
-      ...(calls.length > 0 ? [`${i1}handlers: { [channel: string]: unknown };`] : []),
-      ...(sends.length > 0
-         ? [`${i1}listeners: { [channel: string]: WorkerListener[] | undefined };`]
-         : []),
-      ...(asks.length > 0 ? [`${i1}asks: { [id: string]: PendingWorkerAsk | undefined };`] : []),
-      "}",
-      "",
-      "const sessionHubs = new WeakMap<Session, WorkerHub>();",
-      "const workerHubs = new WeakMap<ServiceWorkerMain, WorkerHub>();",
-      ...(asks.length > 0 ? ["let lastWorkerAskId = 0;"] : []),
-      "",
+      ...buildWorkerHubTypes(i1, {
+         hasCalls: calls.length > 0,
+         hasSends: sends.length > 0,
+         hasAsks: asks.length > 0,
+      }),
    );
    if (inbound) {
       out.push(...buildWorkerSenderCheck(ctx.indents, events, validates));
@@ -154,9 +131,45 @@ export function buildWorkerHelpers(
    if (times) {
       out.push(...buildWorkerTimer(ctx.indents));
    }
-   out.push(buildWorkerRouting(ctx, calls, sends, asks, times));
-   out.push(...buildWorkerSenders(ctx.indents, specs));
+   out.push(
+      buildWorkerRouting(ctx, calls, sends, asks, times),
+      ...buildWorkerSenders(ctx.indents, specs),
+   );
    return out.join("\n");
+}
+
+/** The interfaces of the listeners, of the pending questions and of the hub of a session. */
+function buildWorkerHubTypes(
+   i1: string,
+   has: { hasCalls: boolean; hasSends: boolean; hasAsks: boolean },
+): string[] {
+   const { hasCalls, hasSends, hasAsks } = has;
+   return [
+      ...(hasSends
+         ? ["interface WorkerListener {", `${i1}callback: unknown;`, `${i1}once: boolean;`, "}", ""]
+         : []),
+      ...(hasAsks
+         ? [
+              "interface PendingWorkerAsk {",
+              `${i1}channel: string;`,
+              `${i1}versionId: number;`,
+              `${i1}answer: (envelope: unknown) => void;`,
+              `${i1}fail: (error: IpcAskError) => void;`,
+              "}",
+              "",
+           ]
+         : []),
+      "interface WorkerHub {",
+      ...(hasCalls ? [`${i1}handlers: { [channel: string]: unknown };`] : []),
+      ...(hasSends ? [`${i1}listeners: { [channel: string]: WorkerListener[] | undefined };`] : []),
+      ...(hasAsks ? [`${i1}asks: { [id: string]: PendingWorkerAsk | undefined };`] : []),
+      "}",
+      "",
+      "const sessionHubs = new WeakMap<Session, WorkerHub>();",
+      "const workerHubs = new WeakMap<ServiceWorkerMain, WorkerHub>();",
+      ...(hasAsks ? ["let lastWorkerAskId = 0;"] : []),
+      "",
+   ];
 }
 
 /** `IpcWorkerConfig`, `configureServiceWorkerIpc` and the type of the entries of the tables of channels. */

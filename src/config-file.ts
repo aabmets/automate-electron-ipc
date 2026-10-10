@@ -73,10 +73,8 @@ export async function findConfigFile(
    const exists = await Promise.all(candidates.map(isFile));
    const found = candidates.filter((_, index) => exists[index]);
    if (found.length > 1) {
-      throw new Error(
-         `The project has more than one config file: ${found.map((f) => `'${f}'`).join(" and ")}. ` +
-            "Keep one.",
-      );
+      const names = found.map((f) => `'${f}'`).join(" and ");
+      throw new Error(`The project has more than one config file: ${names}. Keep one.`);
    }
    return found[0] ?? null;
 }

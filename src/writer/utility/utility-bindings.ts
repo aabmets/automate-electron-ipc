@@ -97,28 +97,41 @@ export class UtilityBindingsWriter extends BaseWriter {
    protected renderEmptyFileContents(): string {
       return "export const ipc = {};";
    }
+   /** Builds the channels of one file into `channels`, and returns the custom types they use. */
+   private collectChannels(parsedFileSpecs: t.ParsedFileSpecs, channels: ChannelEntry[]) {
+      const customTypes = new Set<string>();
+      for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
+         if (!(isUtilitySpec(spec) || isBrokeredSpec(spec))) {
+            continue;
+         }
+         channels.push(this.buildChannel(spec));
+         for (const customType of spec.signature.customTypes) {
+            customTypes.add(customType);
+         }
+      }
+      return customTypes;
+   }
+
+   /** The import declarations of the custom types that a file uses. */
+   private getImportDeclarations(parsedFileSpecs: t.ParsedFileSpecs, customTypes: Set<string>) {
+      const declarations: string[] = [];
+      for (const customType of customTypes) {
+         const declaration = this.importsGenerator.getDeclaration(parsedFileSpecs, customType);
+         if (declaration) {
+            declarations.push(declaration);
+         }
+      }
+      return declarations;
+   }
+
    protected renderFileContents(): string {
       const channels: ChannelEntry[] = [];
       const importDeclarations: string[] = [];
       for (const parsedFileSpecs of this.pfsArray) {
-         const customTypes = new Set<string>();
-         for (const spec of this.getChannelSpecs(parsedFileSpecs)) {
-            if (!(isUtilitySpec(spec) || isBrokeredSpec(spec))) {
-               continue;
-            }
-            channels.push(this.buildChannel(spec));
-            for (const customType of spec.signature.customTypes) {
-               customTypes.add(customType);
-            }
-         }
-         for (const customType of customTypes) {
-            const declaration = this.importsGenerator.getDeclaration(parsedFileSpecs, customType);
-            if (declaration) {
-               importDeclarations.push(declaration);
-            }
-         }
+         const customTypes = this.collectChannels(parsedFileSpecs, channels);
+         importDeclarations.push(...this.getImportDeclarations(parsedFileSpecs, customTypes));
       }
-      const out = importDeclarations.sort(utils.compareStrings);
+      const out = importDeclarations.toSorted(utils.compareStrings);
       const brokered = this.getBrokeredSpecs();
       if (this.hasSerializedChannels()) {
          out.push(buildSerializerImport(this.config, this.importsGenerator));

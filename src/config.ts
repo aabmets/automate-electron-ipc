@@ -130,11 +130,7 @@ export async function getResolvedConfig(
       ...defined,
    };
    // Any source that sets the option wins over the tsconfig of the project.
-   if (mergedConfig.projectUsesNodeNext === undefined) {
-      mergedConfig.projectUsesNodeNext = await detectNodeNext(
-         utils.resolveUserProjectPath("", cwd),
-      );
-   }
+   mergedConfig.projectUsesNodeNext ??= await detectNodeNext(utils.resolveUserProjectPath("", cwd));
    validateOptionalConfig(mergedConfig, source, Object.keys(defined));
 
    const projectRoot = utils.resolveUserProjectPath("", cwd);

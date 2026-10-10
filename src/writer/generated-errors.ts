@@ -60,7 +60,8 @@ export interface ReplyReaderOptions {
 export function replyReaderLines(indents: string[], options: ReplyReaderOptions): string[] {
    const [i1, i2] = indents;
    const { fn, errorClass, invalidCode, invalidMessage, missingMessage, extraParam } = options;
-   const params = `channel: string, envelope: unknown${extraParam ? `, ${extraParam}` : ""}`;
+   const extra = extraParam ? `, ${extraParam}` : "";
+   const params = `channel: string, envelope: unknown${extra}`;
    return [
       `function ${fn}(${params}): { value: unknown } | { error: ${errorClass} } {`,
       `${i1}const source = typeof envelope === 'object' && envelope !== null ? (envelope as { [key: string]: unknown }) : null;`,

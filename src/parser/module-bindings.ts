@@ -15,11 +15,10 @@ import type { AstNode } from "./ast.js";
 
 /** The declaration of a module item, unwrapping `export` and `export default`. */
 export function declarationOf(item: AstNode): AstNode {
-   return item.type === "ExportDeclaration"
-      ? item.declaration
-      : item.type === "ExportDefaultDeclaration"
-        ? item.decl
-        : item;
+   if (item.type === "ExportDeclaration") {
+      return item.declaration;
+   }
+   return item.type === "ExportDefaultDeclaration" ? item.decl : item;
 }
 
 export const TYPE_KINDS = new Map<string, t.TypeKind>([
@@ -62,12 +61,7 @@ export function collectModuleBindings(module: Module): Set<string> {
          }
          continue;
       }
-      const declaration =
-         item.type === "ExportDeclaration"
-            ? item.declaration
-            : item.type === "ExportDefaultDeclaration"
-              ? item.decl
-              : item;
+      const declaration = declarationOf(item);
       if (isTypeDefinition(declaration)) {
          names.add((declaration.id ?? declaration.identifier).value);
       }
@@ -93,12 +87,7 @@ export function collectTypeDeclarations(module: Module): TypeDeclarations {
    const declarations = new Map<string, AstNode[]>();
    for (const node of module.body) {
       const item = node as AstNode;
-      const declaration =
-         item.type === "ExportDeclaration"
-            ? item.declaration
-            : item.type === "ExportDefaultDeclaration"
-              ? item.decl
-              : item;
+      const declaration = declarationOf(item);
       if (!RESOLVABLE_DECLARATIONS.has(declaration.type)) {
          continue;
       }

@@ -121,6 +121,25 @@ export function typeParamScope(
    return result;
 }
 
+/** Walks the members and the parents of an interface that the schema file declares. */
+function walkLocalInterface(name: string, declaration: AstNode, walk: CloneWalk): void {
+   const inner = {
+      ...walk,
+      promiseOk: false,
+      awaited: false,
+      active: [...walk.active, name],
+      scope: typeParamScope(declaration, walk.scope),
+   };
+   for (const member of declaration.body.body as AstNode[]) {
+      walkCloneType(member, inner);
+   }
+   for (const parent of declaration.extends as AstNode[]) {
+      if (parent.expression.type === "Identifier") {
+         walkLocalType(parent.expression.value, parent, inner);
+      }
+   }
+}
+
 /** Follows a reference to a type that the schema file declares. */
 function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
    const declarations = walk.declarations.get(name);
@@ -136,21 +155,7 @@ function walkLocalType(name: string, node: AstNode, walk: CloneWalk): void {
          };
          walkCloneType(declaration.typeAnnotation, inner);
       } else if (declaration.type === "TsInterfaceDeclaration") {
-         const inner = {
-            ...walk,
-            promiseOk: false,
-            awaited: false,
-            active: [...walk.active, name],
-            scope: typeParamScope(declaration, walk.scope),
-         };
-         for (const member of declaration.body.body as AstNode[]) {
-            walkCloneType(member, inner);
-         }
-         for (const parent of declaration.extends as AstNode[]) {
-            if (parent.expression.type === "Identifier") {
-               walkLocalType(parent.expression.value, parent, inner);
-            }
-         }
+         walkLocalInterface(name, declaration, walk);
       } else {
          // Class instances are sent as plain objects: the prototype and the methods are lost.
          reportCloneIssue(walk, "warning", node, `an instance of the class '${name}'`);
@@ -202,6 +207,14 @@ function walkCloneReference(node: AstNode, walk: CloneWalk): void {
    }
 }
 
+function walkTypeOperator(node: AstNode, walk: CloneWalk): void {
+   if (node.op === "unique") {
+      reportCloneIssue(walk, "error", node, "a symbol");
+   } else if (node.op !== "keyof") {
+      walkCloneType(node.typeAnnotation, walk);
+   }
+}
+
 /**
  * Collects what the structured clone algorithm cannot send from a type, including the members
  * of object types, arrays, tuples, unions, type arguments and the local types it refers to.
@@ -221,11 +234,7 @@ export function walkCloneType(node: AstNode | undefined, walk: CloneWalk): void 
          reportCloneIssue(walk, "error", node, "a symbol");
       }
    } else if (node.type === "TsTypeOperator") {
-      if (node.op === "unique") {
-         reportCloneIssue(walk, "error", node, "a symbol");
-      } else if (node.op !== "keyof") {
-         walkCloneType(node.typeAnnotation, walk);
-      }
+      walkTypeOperator(node, walk);
    } else if (node.type === "TsTypeReference") {
       walkCloneReference(node, walk);
    } else if (node.type === "TsConditionalType") {

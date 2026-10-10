@@ -35,7 +35,7 @@ export class ServiceWorkerTypesWriter extends RendererTypesWriter {
    /** The typings stand alone: they hold the types, and are not imported from a types module. */
    protected renderModule({ channels, imports }: CollectedChannels): string {
       return [
-         ...imports.sort(utils.compareStrings),
+         ...imports.toSorted(utils.compareStrings),
          renderStandaloneDeclaration(channels, this.getDeclarationOptions()),
       ].join("\n");
    }

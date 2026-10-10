@@ -66,12 +66,15 @@ export function buildRendererToMainChannel(
    const wire = ctx.wireName(spec.name);
    const isBroadcast = spec.kind === "Broadcast";
    // The origins come before the scopes, so a channel with scopes only passes `undefined` for them.
-   const scopes = spec.scopes ? `, [${spec.scopes.map((scope) => `'${scope}'`).join(", ")}]` : "";
-   const origins = spec.allowedOrigins
-      ? `, [${spec.allowedOrigins.map((origin) => JSON.stringify(origin)).join(", ")}]`
-      : scopes
-        ? ", undefined"
-        : "";
+   const scopeList = spec.scopes?.map((scope) => `'${scope}'`).join(", ");
+   const scopes = spec.scopes ? `, [${scopeList}]` : "";
+   const originList = spec.allowedOrigins?.map((origin) => JSON.stringify(origin)).join(", ");
+   let origins = "";
+   if (spec.allowedOrigins) {
+      origins = `, [${originList}]`;
+   } else if (scopes) {
+      origins = ", undefined";
+   }
    // The generated names that the listener calls must not be shadowed by its parameters,
    // so the listener only calls the local functions below, whose names are unique.
    const serialized = ctx.isSerializedSpec(spec);
@@ -127,17 +130,21 @@ export function buildRendererToMainChannel(
          ? [`${i3}if (!${guardName}(${eventName})) {`, `${i4}return;`, `${i3}}`]
          : [`${i3}${guardName}(${eventName});`];
       // With the envelope, the registered listener wraps the one that runs the handler.
-      const inner = validator
-         ? buildValidatedListener(ctx.indents, { ...names, listener: innerName }, check, once)
-         : serialized
-           ? buildDecodedListener(ctx.indents, { ...names, listener: innerName }, check, once)
-           : [
-                `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
-                ...check,
-                ...(once ? [`${i3}${removeName}();`] : []),
-                `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
-                `${i2}};`,
-             ];
+      const innerNames = { ...names, listener: innerName };
+      let inner: string[];
+      if (validator) {
+         inner = buildValidatedListener(ctx.indents, innerNames, check, once);
+      } else if (serialized) {
+         inner = buildDecodedListener(ctx.indents, innerNames, check, once);
+      } else {
+         inner = [
+            `${i2}const ${innerName} = ${typeParams}(${params}) => {`,
+            ...check,
+            ...(once ? [`${i3}${removeName}();`] : []),
+            `${i3}return ${callbackName}(${forwarded.filter(Boolean).join(", ")});`,
+            `${i2}};`,
+         ];
+      }
       const listener = buildOuterListener(ctx, spec, names, inner, {
          innerName,
          argsName,
@@ -164,18 +171,22 @@ export function buildRendererToMainChannel(
             `${i2}${targetName}.handlers[${channel}] = ${listenerName};`,
          );
       }
+      const watchChannel = isBroadcast ? "" : `, ${channel}`;
       lines.push(
-         `${i2}const ${unwatchName} = ${targetName}.watch(${removeName}${isBroadcast ? "" : `, ${channel}`});`,
+         `${i2}const ${unwatchName} = ${targetName}.watch(${removeName}${watchChannel});`,
          `${i2}return ${removeName};`,
          `${i1}},`,
       );
       return lines.join("\n");
    };
    // A stream has no `handleOnce`: a call does not use up a handler that is a generator.
-   const members = isBroadcast
-      ? [register("on", false), register("once", true)]
-      : isStream
-        ? [register("handle", false)]
-        : [register("handle", false), register("handleOnce", true)];
+   let members: string[];
+   if (isBroadcast) {
+      members = [register("on", false), register("once", true)];
+   } else if (isStream) {
+      members = [register("handle", false)];
+   } else {
+      members = [register("handle", false), register("handleOnce", true)];
+   }
    return { name: spec.name, members };
 }

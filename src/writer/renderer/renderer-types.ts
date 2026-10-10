@@ -118,17 +118,19 @@ export class RendererTypesWriter extends BaseWriter {
          if (names.length > 0) {
             files.push({ pfs: parsedFileSpecs, names });
          }
-         for (const customType of customTypes) {
-            const importDeclaration = this.importsGenerator.getDeclaration(
-               parsedFileSpecs,
-               customType,
-            );
-            if (importDeclaration) {
-               imports.push(importDeclaration);
-            }
-         }
+         imports.push(...this.getImportDeclarations(parsedFileSpecs, customTypes));
       }
       return { channels, imports, files };
+   }
+   private getImportDeclarations(pfs: t.ParsedFileSpecs, customTypes: Set<string>): string[] {
+      const declarations: string[] = [];
+      for (const customType of customTypes) {
+         const declaration = this.importsGenerator.getDeclaration(pfs, customType);
+         if (declaration) {
+            declarations.push(declaration);
+         }
+      }
+      return declarations;
    }
    /** The isolated world that the API is exposed in, or `undefined` for the main world. */
    protected getWorldId(): number | undefined {
@@ -180,7 +182,8 @@ export class RendererTypesWriter extends BaseWriter {
       const errorType = [declared, times ? "IpcTimeoutError" : undefined]
          .filter(Boolean)
          .join(" | ");
-      const doc = `/** @throws {${errorType ? `IpcError<${errorType}>` : "IpcError"}} */`;
+      const thrown = errorType ? `IpcError<${errorType}>` : "IpcError";
+      const doc = `/** @throws {${thrown}} */`;
       return {
          name: spec.name,
          throws: true,
@@ -275,6 +278,7 @@ export class RendererTypesWriter extends BaseWriter {
    }
    private method(name: string, type: string, doc?: string): string {
       const i1 = this.indents[1];
-      return `${doc ? `\n${i1}${doc}` : ""}\n${i1}${name}: ${type};`;
+      const docLine = doc ? `\n${i1}${doc}` : "";
+      return `${docLine}\n${i1}${name}: ${type};`;
    }
 }

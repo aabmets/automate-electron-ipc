@@ -117,6 +117,26 @@ export function buildWorkerAskLines(ctx: MainContext): string[] {
    ];
 }
 
+/** The loop that registers the handlers of the calls of a worker. */
+function buildCallRoute(ctx: MainContext, times: boolean): string[] {
+   const [i1, i2, i3] = ctx.indents;
+   const call = "callWorkerHandler(hub, worker, event, info, args)";
+   const timed = times ? `timeWorkerCall(info, ${call})` : call;
+   // A serialized result is encoded once the handler has answered in time.
+   const result = ctx.usesSerializer ? `encodeValue(info.channel, await ${timed})` : timed;
+   const params = "event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]";
+   const settle = ctx.usesSerializer ? `async () => ${result}` : `() => ${timed}`;
+   const asyncRaw = ctx.config.rawErrors && ctx.usesSerializer;
+   const handle = `${i2}worker.ipc.handle(info.wire, ${asyncRaw ? "async " : ""}(${params}) =>`;
+   return [
+      `${i1}for (const info of workerCalls) {`,
+      handle,
+      ctx.config.rawErrors ? `${i3}${result},` : `${i3}settleInvoke(${settle}),`,
+      `${i2});`,
+      `${i1}}`,
+   ];
+}
+
 /** `routeWorker`, `getWorkerHub` and `attachServiceWorkers`, which connect the hubs to the workers. */
 export function buildWorkerRouting(
    ctx: MainContext,
@@ -128,23 +148,7 @@ export function buildWorkerRouting(
    const [i1, i2, i3, i4] = ctx.indents;
    const route: string[] = [];
    if (calls.length > 0) {
-      const call = "callWorkerHandler(hub, worker, event, info, args)";
-      const timed = times ? `timeWorkerCall(info, ${call})` : call;
-      // A serialized result is encoded once the handler has answered in time.
-      const result = ctx.usesSerializer ? `encodeValue(info.channel, await ${timed})` : timed;
-      const params = "event: IpcMainServiceWorkerInvokeEvent, ...args: unknown[]";
-      const settle = ctx.usesSerializer ? `async () => ${result}` : `() => ${timed}`;
-      route.push(
-         `${i1}for (const info of workerCalls) {`,
-         ctx.config.rawErrors
-            ? ctx.usesSerializer
-               ? `${i2}worker.ipc.handle(info.wire, async (${params}) =>`
-               : `${i2}worker.ipc.handle(info.wire, (${params}) =>`
-            : `${i2}worker.ipc.handle(info.wire, (${params}) =>`,
-         ctx.config.rawErrors ? `${i3}${result},` : `${i3}settleInvoke(${settle}),`,
-         `${i2});`,
-         `${i1}}`,
-      );
+      route.push(...buildCallRoute(ctx, times));
    }
    if (sends.length > 0) {
       route.push(

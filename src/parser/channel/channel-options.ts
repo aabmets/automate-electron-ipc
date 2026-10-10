@@ -34,12 +34,12 @@ export function collectImportBindings(module: Module): Map<string, ImportBinding
          continue;
       }
       for (const element of item.specifiers as AstNode[]) {
-         const exported =
-            element.type === "ImportDefaultSpecifier"
-               ? "default"
-               : element.type === "ImportNamespaceSpecifier"
-                 ? "*"
-                 : (element.imported?.value ?? element.local.value);
+         let exported: string = element.imported?.value ?? element.local.value;
+         if (element.type === "ImportDefaultSpecifier") {
+            exported = "default";
+         } else if (element.type === "ImportNamespaceSpecifier") {
+            exported = "*";
+         }
          bindings.set(element.local.value, {
             exported,
             fromPath: item.source.value,

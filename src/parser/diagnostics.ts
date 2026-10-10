@@ -175,7 +175,7 @@ function columnInSource(
 /** The position just after the last character of the text, as 1-based line and column. */
 function endOfInput(source: string): { line: number; column: number } {
    const lines = source.replaceAll(BOM_CHAR, "").split("\n");
-   const last = lines[lines.length - 1].replace(/\r$/, "");
+   const last = (lines.at(-1) ?? "").replace(/\r$/, "");
    return { line: lines.length, column: last.length + 1 };
 }
 

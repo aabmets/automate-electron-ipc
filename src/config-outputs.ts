@@ -157,6 +157,23 @@ export interface OutputInputs {
    serializerFilePath: string | undefined;
 }
 
+/** The generated files that no option moves, which sit in the data directory. */
+function takenOutputFiles(
+   config: t.IPCOptionalConfig,
+   outputs: OutputPaths,
+   options: [string, string | undefined, string][],
+): string[] {
+   return [
+      ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
+      outputs.serviceWorkerTypesFilePath,
+      outputs.typesFilePath,
+      // The files of the options `hooks` and `mock` are written only for them, so only then can
+      // they be clashed with.
+      ...(config.hooks ? [outputs.hooksFilePath] : []),
+      ...(config.mock ? [outputs.mockFilePath] : []),
+   ];
+}
+
 /**
  * Throws if a path that the config sets for an output is the path of another generated file, or
  * of an input of the run, which the run would overwrite.
@@ -183,16 +200,7 @@ export async function assertOutputsDistinct(
    const fold = (await utils.isCaseInsensitiveFileSystem(inputs.ipcDataDir))
       ? (file: string) => file.toLowerCase()
       : (file: string) => file;
-   // The files that no option moves are in the data directory, where an option can hit them.
-   const taken = [
-      ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
-      outputs.serviceWorkerTypesFilePath,
-      outputs.typesFilePath,
-      // The files of the options `hooks` and `mock` are written only for them, so only then can
-      // they be clashed with.
-      ...(config.hooks ? [outputs.hooksFilePath] : []),
-      ...(config.mock ? [outputs.mockFilePath] : []),
-   ].map(fold);
+   const taken = takenOutputFiles(config, outputs, options).map(fold);
    for (const [option, value, file] of configured) {
       if (taken.includes(fold(file))) {
          throw new Error(

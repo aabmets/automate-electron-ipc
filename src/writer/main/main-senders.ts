@@ -109,7 +109,8 @@ export function buildMainToRendererChannel(ctx: MainContext, spec: t.ChannelSpec
    const ipcSignature = `${typeParams}(${targetName}: ${targetType}, ${ipcParams})`;
    const filterType = `(contents: WebContents) => boolean`;
    const eventType = "{ readonly senderFrame: WebFrameMain | null }";
-   const rest = serialized ? `[${wired}]` : senderParams ? `[${senderParams}]` : "[]";
+   const plainRest = senderParams ? `[${senderParams}]` : "[]";
+   const rest = serialized ? `[${wired}]` : plainRest;
    const members = [
       `\n${i1}send: ${ipcSignature} =>`,
       `\n${i2}${sender},`,
@@ -150,11 +151,16 @@ function buildAskChannel(ctx: MainContext, spec: t.ChannelSpec): ChannelEntry {
    const params = (generated: string[]) => [...generated, ipcParams].filter(Boolean).join(", ");
    const ask = (options: string) =>
       `askRenderer(${channel}, ${ctx.wireName(spec.name)}, ${ctx.wireName(spec.name, ":reply")}, ${targetName}, ${rest}${options}) as ${returned}`;
+   const targetParam = `${targetName}: ${targetType}`;
+   const optionsParam = `${optionsName}: IpcAskOptions`;
+   const invokeParams = params([targetParam]);
+   const invokeWithParams = params([targetParam, optionsParam]);
+   const askWith = ask(`, ${optionsName}`);
    const members = [
-      `\n${i1}invoke: ${typeParams}(${params([`${targetName}: ${targetType}`])}): ${returned} =>`,
+      `\n${i1}invoke: ${typeParams}(${invokeParams}): ${returned} =>`,
       `\n${i2}${ask("")},`,
-      `\n${i1}invokeWith: ${typeParams}(${params([`${targetName}: ${targetType}`, `${optionsName}: IpcAskOptions`])}): ${returned} =>`,
-      `\n${i2}${ask(`, ${optionsName}`)},`,
+      `\n${i1}invokeWith: ${typeParams}(${invokeWithParams}): ${returned} =>`,
+      `\n${i2}${askWith},`,
    ];
    return { name: spec.name, members };
 }

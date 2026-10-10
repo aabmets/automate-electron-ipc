@@ -20,7 +20,7 @@ export function buildUtilityClient(ctx: PreloadContext, specs: t.ChannelSpec[]):
    return [
       buildUtilityClientComponents(ctx, hasBrokeredStreams(specs)),
       ...specs
-         .sort((a, b) => utils.compareStrings(a.name, b.name))
+         .toSorted((a, b) => utils.compareStrings(a.name, b.name))
          .map((spec) => buildUtilityClientListener(ctx, spec.name)),
       "",
    ];

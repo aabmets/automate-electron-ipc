@@ -45,22 +45,31 @@ export function findExportedMap(item: AstNode, imports: LibraryImports): Exporte
  */
 function findExportOfLocal(body: AstNode[], local: string): t.ChannelMapExport | null {
    for (const item of body) {
-      if (item.type === "ExportDefaultExpression") {
-         const expr = unwrapExpression(item.expression);
-         if (expr.type === "Identifier" && expr.value === local) {
-            return { kind: "default" };
-         }
-      } else if (item.type === "ExportNamedDeclaration" && !item.source) {
-         const spec = (item.specifiers as AstNode[]).find(
-            (s) => s.type === "ExportSpecifier" && s.orig.value === local,
-         );
-         if (spec) {
-            const name: string = spec.exported?.value ?? local;
-            return name === "default" ? { kind: "default" } : { kind: "named", name };
-         }
+      const exported = exportOfLocalIn(item, local);
+      if (exported) {
+         return exported;
       }
    }
    return null;
+}
+
+/** The export that one module item makes of the local `local`, if it does. */
+function exportOfLocalIn(item: AstNode, local: string): t.ChannelMapExport | null {
+   if (item.type === "ExportDefaultExpression") {
+      const expr = unwrapExpression(item.expression);
+      return expr.type === "Identifier" && expr.value === local ? { kind: "default" } : null;
+   }
+   if (item.type !== "ExportNamedDeclaration" || item.source) {
+      return null;
+   }
+   const spec = (item.specifiers as AstNode[]).find(
+      (s) => s.type === "ExportSpecifier" && s.orig.value === local,
+   );
+   if (!spec) {
+      return null;
+   }
+   const name: string = spec.exported?.value ?? local;
+   return name === "default" ? { kind: "default" } : { kind: "named", name };
 }
 
 /**

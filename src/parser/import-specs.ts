@@ -43,11 +43,7 @@ export function parseImportDeclarations(
          const exportedName = element.imported ? element.imported.value : null;
          // An import takes precedence over a global of the same name, such as `Error`.
          if (!KEYWORD_TYPES.has(exportedName || localName)) {
-            customTypes.add(
-               exportedName && exportedName !== localName
-                  ? `${exportedName} as ${localName}`
-                  : localName,
-            );
+            customTypes.add(namedImportText(exportedName, localName));
          }
       }
    }
@@ -55,6 +51,13 @@ export function parseImportDeclarations(
    if (node.specifiers.length > 0) {
       array.push(importSpec);
    }
+}
+
+/** The text of a named import: `Name`, or `Name as Local` when it is renamed. */
+function namedImportText(exportedName: string | null, localName: string): string {
+   return exportedName && exportedName !== localName
+      ? `${exportedName} as ${localName}`
+      : localName;
 }
 
 /** The dotted text of an entity name: `Models.User` for `Models.User`. */

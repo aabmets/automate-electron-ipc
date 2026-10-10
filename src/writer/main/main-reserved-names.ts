@@ -30,8 +30,14 @@ interface ReservedNameUses {
 export function getMainReservedNames(uses: ReservedNameUses): string[] {
    // The globals that only the helpers of port channels use.
    const portGlobals = uses.rendererPorts || uses.mainPorts;
+   let mapGlobals: string[] = [];
+   if (portGlobals) {
+      mapGlobals = ["Map", "Set"];
+   } else if (uses.brokered) {
+      mapGlobals = ["Map"];
+   }
    return [
-      ...(portGlobals ? ["Map", "Set"] : uses.brokered ? ["Map"] : []),
+      ...mapGlobals,
       ...(uses.mainPorts ? ["Function"] : []),
       "ipc",
       "electronIpcMain",

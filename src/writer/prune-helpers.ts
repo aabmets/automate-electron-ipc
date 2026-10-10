@@ -83,7 +83,7 @@ function findBlocks(lines: string[]): Block[] {
 
 /** Whether the word is in the lines, outside of the block. */
 function isReferenced(lines: string[], word: string, skip?: Block): boolean {
-   const pattern = new RegExp(`\\b${word}\\b`);
+   const pattern = new RegExp(String.raw`\b${word}\b`);
    return lines.some((line, index) => {
       return !(skip && index >= skip.start && index <= skip.end) && pattern.test(line);
    });
