@@ -1,8 +1,11 @@
-# invoke
+# invoke channels
 
-An `invoke` channel is a request from a page to the main process that is answered with a value, which is
-`ipcRenderer.invoke` and `ipcMain.handle` of Electron with types. The signature takes the arguments of
-the call and returns the answer, as a value or a promise.
+An `invoke` channel is a request from a page to the main process that is answered with a value. It is
+`ipcRenderer.invoke` and `ipcMain.handle` of Electron, with types, and with errors that keep their class
+name and code. The signature takes the arguments of the call and returns the answer, as a value or a
+promise.
+
+## Declaring, handling and calling
 
 <!-- readme-example: kind-invoke src/autoipc/schema.ts -->
 ```ts
@@ -44,6 +47,37 @@ async function showUser(): Promise<void> {
 showUser();
 ```
 
+## Handlers
+
+`handle` and `handleOnce` return a function which removes that registration (`ipcMain.removeHandler`).
+`handleOnce` serves a single call: the first call removes the handler before it runs. With a `validate`
+option, it is used up by the first call that is valid.
+
+An `invoke` channel has one handler. Registering `handle` or `handleOnce` again replaces the previous
+handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or hot-restarting the
+main process works. The disposer of a replaced handler does nothing.
+
+A call to a channel with no registered handler fails with Electron's own error, which says that no handler
+is registered for `'autoipc:getUser'`.
+
+A handler can also be registered for the contents of one window (see
+[Handlers for one window](send.md#handlers-for-one-window)).
+
+## Options
+
+| Option | Meaning |
+|---|---|
+| `timeoutMs` | The time limit of the call (see [Timeouts](#timeouts)). |
+| `allowedOrigins` | The origins that may call the channel (see [Sender validation](../security/sender-validation.md)). |
+| `validate` | A schema of the arguments (see [Validating arguments](../security/validating-arguments.md)). |
+| `scopes` | The windows that have the channel (see [Scopes](../security/scopes.md)). |
+
+A second type argument declares the errors of the handler (see [Errors](#errors)).
+
+## What the library generates
+
+The generated code is abridged below. You do not write it, but it explains the behavior that follows.
+
 The preload script of the page forwards the call, and unwraps the answer of the main process:
 
 ```ts
@@ -59,10 +93,8 @@ getUser: {
 },
 ```
 
-The handler of the main process is wrapped to answer with `{ ok: true, value }` or `{ ok: false, error }`
-(see [Errors](#errors)), and checks the sender before it runs. The wire names such as `autoipc:getUser`
-are the name of the channel behind the `channelPrefix` of the config (`"autoipc:"` by default; see
-[Configuration](../tooling/configuration.md)). The code below is abridged:
+The handler of the main process is wrapped to answer with `{ ok: true, value }` or
+`{ ok: false, error }` (see [Errors](#errors)), and checks the sender before it runs:
 
 ```ts
 // main.ts
@@ -80,22 +112,6 @@ getUser: {
 },
 ```
 
-`handle` and `handleOnce` return a function which removes that registration (`ipcMain.removeHandler`).
-`handleOnce` serves a single call: the first call removes the handler before it runs. An `invoke` channel has one handler: registering `handle` or
-`handleOnce` again replaces the previous handler, instead of throwing as `ipcMain.handle` does, so that
-re-creating a window or hot-restarting the main process works. The disposer of a replaced handler does
-nothing.
-
-The options of `invoke` are `timeoutMs` (see [Timeouts](#timeouts)), `allowedOrigins` and `validate`
-(see [Sender validation](../security/sender-validation.md) and
-[Validating arguments](../security/validating-arguments.md)), and `scopes` (see
-[Scopes](../security/scopes.md)). A second type argument declares the errors of the handler (see
-[Errors](#errors)).
-
-When the config names a `serializer`, the arguments and the result of the call go through it (see
-[Custom serializers](../schema/custom-serializers.md)). A handler can also be registered for the
-contents of one window (see [Handlers for one window](send.md#handlers-for-one-window)).
-
 ## Errors
 
 Electron reports an error that an `invoke` handler throws to the renderer as the text
@@ -103,7 +119,8 @@ Electron reports an error that an `invoke` handler throws to the renderer as the
 field are lost. The generated bindings keep them: the main process answers every `invoke` with
 `{ ok: true, value }` or `{ ok: false, error }`, and the renderer's `ipc.<name>.invoke` returns the
 value or rejects with the error. Declare the errors that a handler may throw in a second type argument
-of `invoke`; they are documented in the generated `types.ts`:
+of `invoke`; they are documented in the generated `types.ts`. The second type argument needs the generic
+form of the signature: the `as` form cannot declare error types (see [The as form](../schema/as-form.md)).
 
 <!-- readme-example: kind-errors src/errors.ts -->
 ```ts
@@ -172,21 +189,31 @@ async function showUser(): Promise<void> {
 showUser();
 ```
 
+### What the rejection value is
+
 The rejection value is a plain object with `name`, `message`, and, when the thrown error has them,
 `code` (a string or a number) and `data`. It is not an `Error` and has no stack, since `contextBridge`
 copies a thrown `Error` with only its message and stack, and so loses `name`, `code` and `data`.
-Check `error.name` or `error.code` instead of `instanceof`. `data` is copied with the structured
-clone algorithm, and is left out when it cannot be cloned (it holds a function, for example). Anything
-that is thrown but is not an object, such as a string, becomes the `message`. A call from a sender
-that is not allowed, and one with invalid arguments, reject the same way, with the codes
-`IPC_FORBIDDEN` and `IPC_VALIDATION` (see [Sender validation](../security/sender-validation.md) and
-[Validating arguments](../security/validating-arguments.md)). A call to a channel with no registered handler still fails with
-the message of Electron.
+Check `error.name` or `error.code` instead of `instanceof`.
 
-The `as` form cannot declare error types (see [The as form](../schema/as-form.md)).
+- `data` is copied with the structured clone algorithm, and is left out when it cannot be cloned (it
+  holds a function, for example).
+- A `name` that is missing or empty becomes `"Error"`.
+- Anything that is thrown but is not an object, such as a string, becomes the `message`.
+
+### Errors of the library
+
+A call can also be rejected before or instead of the handler. These errors have the same shape:
+
+| `code` | `name` | When |
+|---|---|---|
+| `IPC_FORBIDDEN` | `IpcForbiddenError` | The sender is not allowed: its origin is not in `allowedOrigins`, its window is not in a scope of the channel, or `validateSender` refused it. The message is `The sender of the message is not allowed to use the channel '<channel>'`. See [Sender validation](../security/sender-validation.md). |
+| `IPC_VALIDATION` | `IpcValidationError` | The arguments do not match the `validate` schema. The message is `The arguments of the channel '<channel>' are invalid: ` and the messages of the issues, joined with `; `, and `data` lists the issues as `{ message, path? }`. See [Validating arguments](../security/validating-arguments.md). |
+| `IPC_TIMEOUT` | `IpcTimeoutError` | The channel has a time limit and the handler did not answer in time (see [Timeouts](#timeouts)). |
+| `IPC_SERIALIZATION` | `IpcSerializationError` | The config names a `serializer`, and it failed (see [Custom serializers](../schema/custom-serializers.md)). |
 
 Set `rawErrors` to `true` in the config to turn all of this off: handlers then answer with their value
-and Electron reports their errors as it always did.
+and Electron reports their errors as it always did. Only the timeout still rejects with its plain object.
 
 ## Timeouts
 
@@ -207,7 +234,8 @@ export default defineChannels({
 ```
 
 When the time has passed without a reply, the preload script rejects the promise with a plain object,
-like the other errors of the library, and `types.ts` documents it as `IpcTimeoutError`:
+like the other errors of the library, and `types.ts` documents it as `IpcTimeoutError`. Its message is
+`The channel '<channel>' did not answer within <timeoutMs> ms`:
 
 <!-- readme-example: kind-timeouts src/renderer/app.ts -->
 ```ts
@@ -225,25 +253,29 @@ async function exportAll(): Promise<void> {
 exportAll();
 ```
 
-Only the wait of the page ends. The handler in the main process keeps running, since it cannot be
-stopped from the renderer, and its late reply is dropped. The option takes a non-negative integer
-literal, and a delay beyond 2147483647 ms, the longest that a timer can hold, counts as 2147483647 ms.
-It applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
-[`invokeWith`](ask.md#timeouts). With `rawErrors`, the timeout still rejects with this object, while the errors of the
-handlers stay Electron's.
+Things to know:
 
-The calls to and from a utility process (see [Utility processes](../processes/utility-processes.md)) take the same option: `callUtility`, `callMain` and
-`invokeUtility` reject with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT` (for the page, the
-plain object of the same shape), and the default of the config applies to them. A `streamUtility` takes
-`timeoutMs` as well, but only as the wait for its first chunk, its end or an error, and the default of
-the config does not apply to it: a timed-out stream is cancelled in the child and fails the read of the
-page. The handler of a call is not stopped, and its late reply is dropped.
+- Only the wait of the page ends. The handler in the main process keeps running, since it cannot be
+  stopped from the renderer, and its late reply is dropped.
+- `timeoutMs` is a non-negative integer literal in the schema. A delay beyond 2147483647 ms, the longest
+  that a timer can hold, counts as 2147483647 ms.
+- It applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
+  [`invokeWith`](ask.md#timeouts). A `stream` has no time limit.
 
-`invokeFromWorker` (see [Service workers](../processes/service-workers.md)) takes `timeoutMs` too, and the default of the config applies to it. The preload
-script of a service worker has no timers (`setTimeout` is not defined there), so the main process times
-the call: from the moment it arrives, over the schema of `validate` and the handler. The worker gets the
-plain object `{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is not stopped,
-and its late reply is dropped. With `rawErrors` the main process still rejects the call, but the worker
-gets the error of Electron, and the typings do not declare `IpcTimeoutError`. A question to a worker,
-`askWorker`, has no schema option: `invokeWith(worker, { timeoutMs }, ...args)` times it.
+### Timeouts of other callers
 
+The calls to and from a utility process (see [Utility processes](../processes/utility-processes.md)) take
+the same option: `callUtility`, `callMain` and `invokeUtility` reject with an `IpcUtilityError` of the code
+`IPC_UTILITY_TIMEOUT` (for the page, the plain object of the same shape), and the default of the config
+applies to them. A `streamUtility` takes `timeoutMs` as well, but only as the wait for its first chunk, its
+end or an error, and the default of the config does not apply to it: a timed-out stream is cancelled in the
+child and fails the read of the page. The handler of a call is not stopped, and its late reply is dropped.
+
+`invokeFromWorker` (see [Service workers](../processes/service-workers.md)) takes `timeoutMs` too, and the
+default of the config applies to it. The preload script of a service worker has no timers (`setTimeout` is
+not defined there), so the main process times the call: from the moment it arrives, over the schema of
+`validate` and the handler. The worker gets the plain object
+`{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is not stopped, and its late reply
+is dropped. With `rawErrors` the main process still rejects the call, but the worker gets the error of
+Electron, and the typings do not declare `IpcTimeoutError`. A question to a worker, `askWorker`, has no
+schema option: `invokeWith(worker, { timeoutMs }, ...args)` times it.

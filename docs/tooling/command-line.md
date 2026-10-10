@@ -1,11 +1,18 @@
 # Command line
 
-`ipcgen` generates the bindings of the project that contains the working directory. This page lists its
-flags, and describes the two modes that do not simply write the files: `--check` for CI and `--watch`.
+`ipcgen` is the command that generates the bindings of the project that contains the working
+directory. This page lists its flags and what it prints, and describes the two modes that do not simply
+write the files: `--check` for CI, and `--watch`.
+
+```sh
+npx ipcgen              # generate the files once
+npx ipcgen --check      # write nothing; fail if the files are out of date
+npx ipcgen --watch      # generate again on every change of the schema or the config
+```
 
 ## Flags
 
-`ipcgen` takes these flags, which win over the config:
+The flags win over the config (see [Precedence](configuration.md#precedence)).
 
 | Flag | Description |
 |:--|:--|
@@ -23,35 +30,66 @@ The path of an `--out-*` flag, unlike the one in the config, is relative to the 
 `--cwd` names), and `ipcgen` converts it to a path from the project root. The imports in each generated file
 are written for the directory that the file ends up in.
 
+## What a run prints
+
+`ipcgen` prints its messages to the standard error stream, so the standard output stays empty. A run
+that succeeds lists the schema files and how many channels each one holds:
+
+```text
+✔ – Successfully generated IPC bindings:
+     3 channels from path 'src/autoipc/schema.ts'
+```
+
+Other lines you can see:
+
+ - `Removed stale generated files:` and the list, when the run deleted files that it no longer
+   generates. See [Generated files](generated-files.md#stale-files).
+ - `Skipping IPC automation, because no channels were found in path:` and the schema path, when the
+   schema has no channels. The files that every project gets are still written, with an empty API.
+ - Warnings about signatures with types that Electron cannot send as they are (see
+   [What can be sent](../schema/what-can-be-sent.md)), and a warning for a formatter that is not
+   installed (see `format` in [Configuration](configuration.md)).
+ - `IPC automation failed:` and the message, for an error.
+
 A run that fails, such as one with a schema that does not parse or validate, prints the error and exits
-with `1`. When the schema file or directory does not exist, the run creates `ipcDataDir` and prints a warning
-that says where to create the schema; see [Quickstart](../getting-started/quickstart.md).
+with `1`. When the schema file or directory does not exist, the run creates `ipcDataDir` and prints a
+warning that says where to create the schema, and exits with `0`:
+
+```text
+⚠️ – Skipping IPC automation, because schema path does not exist:
+     /path/to/my-app/src/autoipc/schema.ts
+```
+
+See [Quickstart](../getting-started/quickstart.md) for writing the schema.
 
 ## Checking that the generated files are up to date
 
 `ipcgen --check` renders the files in memory and compares them with the ones on disk. It writes
 nothing, lists the files that are out of date or missing (relative to the project root), and exits
-with `1` if there are any. It also exits with `1` when the schema path does not exist, and creates
-no directory. Use it in CI to catch a schema change whose generated files were not committed:
+with `1` if there are any. It prints `Generated files are up to date.` when there are none. It also exits
+with `1` when the schema path does not exist, and creates no directory. Use it in CI to catch a schema
+change whose generated files were not committed:
 
 ```yaml
 - run: npx ipcgen --check
 ```
 
-It takes `--cwd` and `--config` like a normal run. A generated file that a run would delete (see
-[Generated files](generated-files.md#stale-files)) is listed as out of date too. The check compares the text
-byte for byte, so run it with the same version of the library, and the same `format`, as the run that wrote
-the files.
+It takes `--cwd`, `--config` and the `--out-*` flags like a normal run. A generated file that a run would
+delete (see [Generated files](generated-files.md#stale-files)) is listed as out of date too. The check
+compares the text byte for byte, so run it with the same version of the library, and the same `format`,
+as the run that wrote the files.
 
 ## Watch mode
 
 `ipcgen --watch` generates the bindings once, then again whenever the schema or the config changes,
-until you stop it with Ctrl+C (`SIGINT` or `SIGTERM`). It takes the same flags as a normal run (`--cwd`,
-`--config` and the `--out-*` flags), and cannot be combined with `--check`.
+until you stop it with Ctrl+C (`SIGINT` or `SIGTERM`, which end it with exit code `0`). It takes the same
+flags as a normal run (`--cwd`, `--config` and the `--out-*` flags), and cannot be combined with
+`--check`. It starts by printing the directories it watches, after `Watching for changes in:`.
 
- - These changes start a run: a `schema.ts` file or a `.ts` file under the `schema` directory in the
-   `ipcDataDir`, and `package.json`, `tsconfig.json` and the `autoipc.config.*` file (or the one that
-   `--config` names) in the project root. The generated files do not, so a run never starts the next.
+ - These changes start a run: a `schema.ts` file or a `.ts`, `.mts` or `.cts` file (not a declaration
+   file) under the `schema` directory in the `ipcDataDir`, and `package.json`, `tsconfig.json` and the
+   `autoipc.config.*` file (or the one that `--config` names) in the project root. The generated files do
+   not, so a run never starts the next.
  - Changes that come in a burst, like the ones of a save-all, start one run. Changes that come while a
    run is going start one more run after it.
  - A run that fails, such as one with a syntax error in the schema, prints the error and keeps

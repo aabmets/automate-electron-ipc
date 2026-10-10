@@ -14,5 +14,24 @@ This section covers what you can write in a schema:
 - [Custom serializers](custom-serializers.md): sending values that the structured clone algorithm cannot carry, such as class instances.
 - [The `as` form](as-form.md): the alternative way to write a signature.
 
-How the schema file itself is laid out (the channel map, `defineChannels` and where the files live) is described in
-[Channel maps](../getting-started/channel-maps.md).
+How the schema file itself is laid out (the channel map, `defineChannels`, where the files live and how its
+errors read) is described in [Channel maps](../getting-started/channel-maps.md).
+
+## What the package exports
+
+The main entry point, `automate-electron-ipc`, exports:
+
+- `defineChannels` and the 17 verbs (`invoke`, `send`, `emit`, `ask`, `stream`, `port`, `mainPort`, `callUtility`,
+  `notifyUtility`, `callMain`, `notifyMain`, `invokeUtility`, `streamUtility`, `invokeFromWorker`,
+  `sendFromWorker`, `askWorker` and `emitToWorker`). They exist for the compiler and the editor: `ipcgen` only reads
+  the schema, and running one just prints a warning, once.
+- `defineConfig` and the `AutoIpcConfig` type, for the [config file](../tooling/configuration.md).
+- Types: the option types of the verbs (`InvokeConfig`, `SendConfig`, `StreamConfig`, `EmitConfig`, ...), the
+  signature types `ChannelSignature`, `ChannelDef` and `ChannelResult`, and the Standard Schema types that
+  `validate` takes (`StandardSchemaV1` and its parts).
+
+The entry points `automate-electron-ipc/api` and `automate-electron-ipc/vite` are described in
+[Node API](../tooling/node-api.md) and [Vite and electron-vite](../tooling/vite.md).
+
+For the behavior of each kind of channel at run time, see [Channels](../channels/index.md) and
+[Processes](../processes/index.md).

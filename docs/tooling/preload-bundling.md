@@ -1,39 +1,50 @@
 # Preload bundling and the sandbox
 
 A window with `sandbox: true` (the default since Electron 20) runs its preload script with a small,
-polyfilled `require`. It can load `electron` (only `contextBridge`, `crashReporter`, `ipcRenderer`,
-`nativeImage`, `webFrame` and `webUtils`), `events`, `timers` and `url`, and nothing else: not a local
-file, not a package from `node_modules`, and not an ES module. Electron also does not load TypeScript.
-So the script that a window loads has to be one compiled, single CommonJS file, and `preload.ts` gets
-there through your bundler: build it as the entry of the preload build, or import it from your own
-preload entry.
+polyfilled `require`. This page explains what that means for the generated `preload.ts`, and how to
+expose the API yourself (`autoExpose`) or to an isolated world (`isolatedWorldId`).
+
+## Why the preload script must be bundled
+
+A sandboxed preload script can load only `electron` (and there only `contextBridge`, `crashReporter`,
+`ipcRenderer`, `nativeImage`, `webFrame` and `webUtils`), `events`, `timers` and `url`. It cannot load a
+local file, a package from `node_modules`, or an ES module, and Electron does not load TypeScript.
+
+So the script that a window loads has to be one compiled, single CommonJS file. `preload.ts` gets there
+through your bundler: build it as the entry of the preload build, or import it from your own preload
+entry.
 
 ## What the generated preload imports
 
-`contextBridge` and `ipcRenderer` from `electron`, and
-`webUtils` too with `getPathForFile`. All of them are available in a sandboxed preload script. The
-generated code has no other import at run time (type-only imports are erased), and none from this library. The one exception is the module of the
-[`serializer`](../schema/custom-serializers.md), which `preload.ts` imports when the schema has channels that it
-applies to. The bundler must inline that module, so keep it out of what the build leaves external. In
-electron-vite the config of the template externalizes the dependencies of the preload build, so add
-the serializer package to the `exclude` of its `externalizeDepsPlugin`. Without a serializer, the compiled script
-has a single `require("electron")`, and works as it is.
+ - `contextBridge` and `ipcRenderer` from `electron`, and `webUtils` too with `getPathForFile`. All of
+   them are available in a sandboxed preload script.
+ - Nothing else at run time: type-only imports are erased, and the code imports nothing from this
+   library.
+ - The one exception is the module of the [`serializer`](../schema/custom-serializers.md), which
+   `preload.ts` imports when the schema has channels that it applies to. The bundler must inline that
+   module, so keep it out of what the build leaves external. In electron-vite the config of the template
+   externalizes the dependencies of the preload build, so add the serializer package to the `exclude`
+   of its `externalizeDepsPlugin`.
+
+Without a serializer, the compiled script has a single `require("electron")`, and works as it is.
 
 ## Format
 
-A sandboxed preload script cannot be an ES module, because Electron loads ES module
-preload scripts only for windows with `sandbox: false`. Check that your build emits CommonJS for the
-preload entry, and point `preload` of the window at that file. electron-vite builds CommonJS for the preload
-by default; if your `package.json` has `"type": "module"`, the preload build may emit an ES module
-(`.mjs`), which only an unsandboxed window can load, so set the output format of that build to `cjs`. Keep `sandbox: true` and
-`contextIsolation: true` on the windows that show anything but your own pages. The generated
-`preload.ts` was written for them, and the [tests that run in Electron](../contributing/index.md) use them.
-For the tsconfig of the preload code, see [TypeScript configuration](typescript-configuration.md).
+A sandboxed preload script cannot be an ES module: Electron loads ES module preload scripts only for
+windows with `sandbox: false`. Check that your build emits CommonJS for the preload entry, and point
+`preload` of the window at that file.
+
+electron-vite builds CommonJS for the preload by default. If your `package.json` has `"type": "module"`,
+the preload build may emit an ES module (`.mjs`), which only an unsandboxed window can load, so set the
+output format of that build to `cjs`.
+
+Keep `sandbox: true` and `contextIsolation: true` on the windows that show anything but your own pages.
+The generated `preload.ts` was written for them, and the [tests that run in Electron](../contributing/index.md)
+use them. For the tsconfig of the preload code, see [TypeScript configuration](typescript-configuration.md).
 
 ## `autoExpose`: let the file expose the API, or do it yourself
 
-`preload.ts` exports the API it builds,
-and a function that exposes it:
+`preload.ts` exports the API it builds, and a function that exposes it:
 
 ```ts
 export const api = { /* one object per channel */ };
@@ -93,10 +104,11 @@ declares (`exposeAs`) is typed for the page.
 
 ## `isolatedWorldId`: expose the API to an isolated world
 
-By default `expose` uses
-`contextBridge.exposeInMainWorld`, so the API is a global of the page. With `isolatedWorldId` set,
+By default `expose` uses `contextBridge.exposeInMainWorld`, so the API is a global of the page. With `isolatedWorldId` set,
 `expose` uses `contextBridge.exposeInIsolatedWorld(isolatedWorldId, key, api)`: the page does not see
 the API, and only code that runs in that world does, such as a script that the preload script runs with
 `webFrame.executeJavaScriptInIsolatedWorld`. Electron's own worlds have the ids below 1000 (`999` is the
 one of `contextIsolation`), so the config accepts 1000 up to 2147483647. `window.d.ts` still declares
-the global, with a comment that only that world has it. The generated code only exposes the API in the world: your own code decides what runs there.
+the global, with a comment that only that world has it.
+
+The generated code only exposes the API in the world: your own code decides what runs there.

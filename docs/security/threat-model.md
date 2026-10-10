@@ -2,9 +2,9 @@
 
 This page says what the library assumes about the renderer, and which checks the generated `main.ts` makes when you set no options.
 
-## Threat model
+## What the library assumes
 
-The security guide assumes that a renderer can be compromised, and treats everything that comes from one as untrusted input:
+The library assumes that a renderer can be compromised, and treats everything that comes from one as untrusted input:
 
 - **Script that you did not write runs in the page.** A cross-site scripting hole, a bad dependency, or a remote page that a window loads can call every function that the preload script exposes, with any arguments. TypeScript types are erased at runtime, so `ipc.getUser.invoke("x")` reaches the main process although the signature says `number`.
 - **A frame that is not yours has the same API.** A child window opened by `window.open` loads the preload script of its parent unless you say otherwise, and an iframe does when `nodeIntegrationInSubFrames` is on. Both can show another origin, and the call of any of them reaches the same handler as a call of the top page.
@@ -24,7 +24,15 @@ Without any option, these are the checks of the generated `main.ts`:
 | `invokeUtility`, `streamUtility`, `callUtility`, `notifyUtility`, `callMain`, `notifyMain` | The two ends are your own code, so they have no `allowedOrigins` or `validate`. The main process connects the page to the child. |
 | `invokeFromWorker`, `sendFromWorker` | Nothing, as for the page. A worker has no `senderFrame`, so `allowedOrigins` compares the origin of its scope, and the hook is `configureServiceWorkerIpc`. See [Service workers](../processes/service-workers.md). |
 
-What a page gets back is limited too: a handler's error reaches the page as `name`, `message`, `code` and `data`, without a stack (see [Errors](../channels/invoke.md#errors)), but those four are yours to keep free of secrets. With `rawErrors`, there is no such envelope: Electron puts the message of the error in the text that the page sees.
+So for the three channels that a page calls, you turn the checks on per channel (`allowedOrigins`, `validate`, `scopes`) or for all of them (`validateSender`).
+
+## What a page gets back
+
+A handler's error reaches the page as `name`, `message`, `code` and `data`, without a stack (see [Errors](../channels/invoke.md#errors)). Those four are yours to keep free of secrets. With `rawErrors`, there is no such envelope: Electron puts the message of the error in the text that the page sees.
+
+## Where the API is exposed
+
+The preload script exposes the API with `contextBridge` under the name `exposeAs` (`ipc` by default), and never hands the page `ipcRenderer` itself. By default the API is in the main world, so every script of the page can use it. With `isolatedWorldId`, only scripts that run in that isolated world can. With `autoExpose` off, your own preload code decides when and under which key to expose it. See [Preload bundling and the sandbox](../tooling/preload-bundling.md).
 
 `channelPrefix` puts a prefix in front of the names that Electron sees (`autoipc:` by default), which keeps other code on `ipcMain` from colliding with the channels. It is no defense against a caller that knows the names.
 

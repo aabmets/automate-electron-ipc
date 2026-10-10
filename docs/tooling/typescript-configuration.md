@@ -1,12 +1,12 @@
 # TypeScript configuration
 
 The generated files are TypeScript source, so the projects that compile your app must include them, and
-the compiler options must suit the code in them.
+the compiler options must suit the code in them. This page says which project needs which file, which
+compiler options the files expect, and how to set up an electron-vite project.
 
 ## Which project compiles which file
 
-An Electron app has up to four kinds of code, and the generated
-files follow them:
+An Electron app has up to four kinds of code, and the generated files follow them:
 
 | Code | Files | Needs |
 |:--|:--|:--|
@@ -17,8 +17,9 @@ files follow them:
 
  - `types.ts` imports the channel map from `schema.ts`, so the schema is part of every project that
    includes `types.ts` (the renderer, in the table above). It also has a type-only import from
-   `automate-electron-ipc`, so the package must resolve from the renderer project. `main.ts`, `utility.ts` and `types.ts` import
-   the types that your signatures use from your own files, so those are part of those projects too.
+   `automate-electron-ipc`, so the package must resolve from the renderer project.
+ - `main.ts`, `utility.ts` and `types.ts` import the types that your signatures use from your own files,
+   so those files are part of those projects too.
  - The generated files compile under `strict`, and with a `lib` of `ES2022` and `DOM`. They also compile
    under `noUnusedLocals`, `noUnusedParameters` and `noImplicitReturns`, which the node project of the
    electron-vite template turns on: a file holds only the helpers that its channels use.
@@ -27,10 +28,26 @@ files follow them:
 
 The generated files import each other and your types without an extension, as
 `import type { User } from "../shared/types"`. That resolves with a `moduleResolution` of `bundler` (the
-one of Vite and electron-vite) or `node10`. When `module` and `moduleResolution` are `NodeNext`, the imports
-need extensions, and `projectUsesNodeNext` (detected, see [NodeNext](configuration.md#nodenext)) makes the generated
-files spell them: `"../shared/types.js"`, `"./types.js"`. Your own schema files are compiled by your
-project, so their imports follow its rules.
+one of Vite and electron-vite) or `node10`. The paths are written from the directory of the generated
+file, so they follow the files when you move them with the path options.
+
+When `module` and `moduleResolution` are `NodeNext`, the imports need extensions, and
+`projectUsesNodeNext` (detected, see [NodeNext](configuration.md#nodenext)) makes the generated files
+spell them: `"../shared/types.js"`, `"./types.js"`. Your own schema files are compiled by your project,
+so their imports follow its rules.
+
+How the generated files spell an import of one of your files, from the schema:
+
+| Your import | Without NodeNext | With NodeNext |
+|:--|:--|:--|
+| `./models/user` or `./models/user.ts` | `.../models/user` | `.../models/user.js` |
+| `./models` (a directory with an `index.ts`) | `.../models` | `.../models/index.js` |
+| `./legacy.mts` or `./legacy.cts` | `.../legacy.mjs` or `.../legacy.cjs` | the same |
+| `./data.json` | `.../data.json` | `.../data.json` |
+| a package or an alias | as written | as written |
+
+A directory whose `package.json` names an entry point (`types`, `typings`, `typesVersions` or `main`) is
+kept as written.
 
 ## A plain Electron project
 

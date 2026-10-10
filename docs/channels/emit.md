@@ -1,7 +1,10 @@
-# emit
+# emit channels
 
-An `emit` channel is a message from the main process to pages that gets no answer, which is
-`webContents.send` of Electron with types. The signature returns `void` (or `Promise<void>`).
+An `emit` channel is a message from the main process to pages that gets no answer. It is
+`webContents.send` of Electron, with types. The signature returns `void` (or `Promise<void>`); the schema
+generator rejects any other return type.
+
+## Declaring, sending and receiving
 
 <!-- readme-example: kind-emit src/autoipc/schema.ts -->
 ```ts
@@ -17,8 +20,9 @@ export default defineChannels({
 ```
 
 In the main process, `send` takes the target, which is a window, a view, its contents or one frame, and
-then the arguments of the signature. With a `trigger`, `bind` sends each time that event of the window
-fires:
+then the arguments of the signature. `broadcast` and `broadcastTo` send to several pages, and
+`sendToSender` replies to the frame that sent a message. With a `trigger`, `bind` sends each time that
+event of the window fires:
 
 <!-- readme-example: kind-emit src/main/index.ts -->
 ```ts
@@ -57,24 +61,73 @@ ipc.search.send("electron");
 // Later, to unsubscribe, such as when a component unmounts: stopListening(); stopTheme();
 ```
 
-`once` delivers a single message, and returns the disposer too. The preload script of the page shares
-one `ipcRenderer` listener per channel, which strips the Electron event, and calls the subscribers in
-the order of subscription (a callback that throws is logged and does not stop the others). The listener
-is added with the first subscriber and removed with the last, so any number of subscribers causes no
-`MaxListenersExceededWarning`. The main process sends with the target that the caller hands over (the
-code below is abridged):
+## Listening in the page
 
-```ts
-// preload.ts
-progress: {
-   on: (callback: Function) => {
-      return listenToChannel('autoipc:progress', callback, false);
-   },
-   once: (callback: Function) => {
-      return listenToChannel('autoipc:progress', callback, true);
-   },
-},
+`once` delivers a single message, and returns a disposer too.
+
+The preload script of the page shares one `ipcRenderer` listener per channel, which strips the Electron
+event, and calls the subscribers in the order of subscription. A callback that throws is logged with
+`console.error` and does not stop the others. The listener is added with the first subscriber and removed
+with the last, so any number of subscribers causes no `MaxListenersExceededWarning`.
+
+With a `serializer` in the config, the arguments go through it (see
+[Custom serializers](../schema/custom-serializers.md)). A message that cannot be deserialized is dropped
+and logged.
+
+## Targets of an emit channel
+
+`ipc.<name>.send(target, ...args)` takes a `BrowserWindow`, a `WebContentsView`, a `WebContents` or a
+`WebFrameMain`, so a message can go to a window, to a view inside it, to its contents, or to one frame
+(`ipc.progress.send(view, 50)`, `ipc.progress.send(mainWindow.webContents, 50)`; see the example above).
+It throws Electron's error for a target that is destroyed, since the caller handed it over.
+
+`sendToSender(event, ...args)` replies to the exact frame that sent the event you are handling, such
+as an iframe, which a `send` to the window would not reach. It takes the event of any handler.
+Electron clears `event.senderFrame` once the frame navigates or is destroyed, and `sendToSender`
+reads it at the moment of the call, so call it before the first `await`; after one, the frame may
+already be gone. It returns `true` when the message went out, and `false` when there was nobody to send
+to: no frame, or a frame that is destroyed or detached. A reply to a sender that has gone is not an
+error.
+
+`broadcast(...args)` sends to every open `WebContents`, such as the windows and views of the app,
+for something that all of them show (a theme or a setting). Contents that are destroyed are skipped.
+`broadcast` covers all contents that Electron reports, DevTools included, so use
+`broadcastTo(filter, ...args)` when only some of them should get the message: it sends only to the
+contents that `filter` accepts. The filter comes first, because the options of a signature may end in
+optional or rest parameters, which would swallow an options argument.
+
+With `scopes`, only the pages whose preload script has the channel listen to it (see
+[Scopes](../security/scopes.md)). `send`, `broadcast` and `sendToSender` do not check that: you choose the
+target.
+
+## Triggers and `bind`
+
+The `trigger` option is the name of a `BrowserWindow` event, such as `"focus"`. A channel with a
+`trigger` also has `bind(browserWindow, provider, onError?)`:
+
+- It registers one listener for the event on the window and returns a function which removes it.
+  Calling `bind` twice registers two listeners.
+- Each time the event fires, it calls `provider`, which returns the argument list of the signature (or a
+  promise of it), and sends that list to the contents of the window. If the window is destroyed by
+  then, nothing is sent (the window of a `closed` event is always destroyed already).
+- If `provider` throws or rejects, that send is skipped and later events still send. The error goes to
+  `onError`, or to `console.error` without it.
+
+```typescript
+ipc.progress.bind(mainWindow, () => [currentProgress()], (error) => log.warn(error));
 ```
+
+`ipc.progress.send(browserWindow, n)` always sends immediately, whether the channel has a `trigger` or
+not. The schema generator accepts these events, which are the ones of the Electron documentation for
+`BrowserWindow`, and rejects any other name:
+
+??? note "All events that `trigger` accepts"
+    `show`, `ready-to-show`, `app-command`, `blur`, `close`, `always-on-top-changed`, `closed`, `enter-full-screen`, `enter-html-full-screen`, `focus`, `hide`, `leave-full-screen`, `leave-html-full-screen`, `maximize`, `minimize`, `move`, `moved`, `new-window-for-tab`, `page-title-updated`, `persisted-state-restored`, `query-session-end`, `resize`, `resized`, `responsive`, `restore`, `rotate-gesture`, `session-end`, `sheet-begin`, `sheet-end`, `swipe`, `system-context-menu`, `unmaximize`, `unresponsive`, `will-move`, `will-resize`.
+
+## What the library generates
+
+The main process sends with the target that the caller hands over, and the preload script of the page
+subscribes (both abridged):
 
 ```ts
 // main.ts
@@ -97,41 +150,21 @@ progress: {
 },
 ```
 
-The options of `emit` are `trigger` and `scopes` (see [Scopes](../security/scopes.md)). The `trigger` is
-the name of a `BrowserWindow` event, such as `"focus"`; the schema accepts the events of the Electron
-documentation, among them `show`, `ready-to-show`, `blur`, `close`, `closed`, `focus`, `hide`,
-`maximize`, `minimize`, `move`, `moved`, `resize`, `resized`, `restore`, `unmaximize` and the full-screen
-events. `ipc.progress.send(browserWindow, n)` always sends immediately, and a channel with a
-`trigger` also has `bind(browserWindow, provider)`. It registers one listener for the event, calls
-`provider` each time the event fires, sends the argument list that `provider` returns (or resolves to)
-to the contents of the window, unless the window is destroyed by then, and returns a function which
-removes the listener. If `provider` throws or rejects, that send is
-skipped and later events still send. The error goes to the optional third argument,
-`(error: unknown) => void`, or to `console.error` without it:
-
-```typescript
-ipc.progress.bind(mainWindow, () => [currentProgress()], (error) => log.warn(error));
+```ts
+// preload.ts
+progress: {
+   on: (callback: Function) => {
+      return listenToChannel('autoipc:progress', callback, false);
+   },
+   once: (callback: Function) => {
+      return listenToChannel('autoipc:progress', callback, true);
+   },
+},
 ```
 
-## Targets of an emit channel
+## Options
 
-`ipc.<name>.send(target, ...args)` takes a `BrowserWindow`, a `WebContentsView`, a `WebContents` or a
-`WebFrameMain`, so a message can go to a window, to a view inside it, to its contents, or to one frame
-(`ipc.progress.send(view, 50)`, `ipc.progress.send(mainWindow.webContents, 50)`; see the example above).
-
-`sendToSender(event, ...args)` replies to the exact frame that sent the event you are handling, such
-as an iframe, which a `send` to the window would not reach. It takes the event of any handler.
-Electron clears `event.senderFrame` once the frame navigates or is destroyed, and `sendToSender`
-reads it at the moment of the call, so call it before the first `await`; after one, the frame may
-already be gone. It returns `true` when the message went out, and `false` when there was nobody to send
-to: no frame, or a frame that is destroyed or detached. Unlike `send`, which throws for a target
-that the caller handed over and that is destroyed, a reply to a sender that has gone is not an error.
-
-`broadcast(...args)` sends to every open `WebContents`, such as the windows and views of the app,
-for something that all of them show (a theme or a setting). Contents that are destroyed are skipped.
-`broadcastTo(filter, ...args)` sends only to the contents that `filter` accepts.
-`broadcast` covers all contents that Electron reports, DevTools included, so use `broadcastTo` when
-only some of them should get the message. The filter comes first, because the options of a signature
-may end in optional or rest parameters, which would swallow an options argument. `send` still throws
-for a target that is destroyed, since the caller handed it over.
-
+| Option | Meaning |
+|---|---|
+| `trigger` | The `BrowserWindow` event that `bind` listens to (see [Triggers and `bind`](#triggers-and-bind)). |
+| `scopes` | The windows that have the channel (see [Scopes](../security/scopes.md)). |

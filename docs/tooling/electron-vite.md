@@ -2,8 +2,10 @@
 
 This walk-through takes the project that `npm create @quick-start/electron` makes (the vanilla
 TypeScript template; the React and Vue ones differ in the renderer only) and gives it a typed IPC with
-one request, and one message from the main process to the page. The layout, with the files that you
-write marked:
+one request, and one message from the main process to the page. It assumes that the library is already
+installed (see [Installation](../getting-started/installation.md)).
+
+The layout, with the files that you write marked:
 
 ```text
 my-app/
@@ -40,8 +42,7 @@ export default defineConfig({
 ```
 
 The config of the template has more in it, such as the `externalizeDepsPlugin` and the alias of the
-renderer; leave that as it is and add `autoipc()` to `plugins`. This file is shown, but the docs examples test
-does not type-check it, since that would need the `electron-vite` package.
+renderer; leave that as it is and add `autoipc()` to `plugins`.
 
 **2. Write the schema.** The default `ipcDataDir` is `src/autoipc`, which is next to the folders of the
 template:

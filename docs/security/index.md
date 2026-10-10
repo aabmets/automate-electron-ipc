@@ -1,12 +1,14 @@
 # Security
 
-An IPC channel is a door from the page into the main process, which has the rights of the user. This section gathers what the library does to guard that door, what it leaves to you, and how the pieces map to the [Electron security checklist](https://www.electronjs.org/docs/latest/tutorial/security).
+An IPC channel is a door from the page into the main process, which has the rights of the user. This section explains what the library does to guard that door, what it leaves to you, and how the pieces map to the [Electron security checklist](https://www.electronjs.org/docs/latest/tutorial/security).
 
-The generated bindings give you three tools. Each is off until you ask for it, so a schema that sets none of them checks nothing about who calls.
+The generated bindings give you three tools for the channels that a page calls (`invoke`, `send` and `stream`). Each is off until you ask for it, so a schema that sets none of them checks nothing about who calls or what they send.
 
 - [Sender validation](sender-validation.md) limits a channel to the frames you trust, with `allowedOrigins` and `configureIpc({ validateSender })`.
 - [Validating arguments](validating-arguments.md) checks the arguments of a call against a Standard Schema before your handler runs.
 - [Scopes](scopes.md) give each window its own API, enforced in the main process.
+
+A few checks need no option, such as pairing the answer of an `ask` with the window that was asked. The [threat model](threat-model.md) lists them.
 
 ## Pages
 

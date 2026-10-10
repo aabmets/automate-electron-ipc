@@ -1,8 +1,10 @@
-# send
+# send channels
 
-A `send` channel is a message from a page to the main process that gets no answer, which is
-`ipcRenderer.send` and `ipcMain.on` of Electron with types. The signature returns `void` (or
-`Promise<void>`).
+A `send` channel is a message from a page to the main process that gets no answer. It is
+`ipcRenderer.send` and `ipcMain.on` of Electron, with types. The signature returns `void` (or
+`Promise<void>`); the schema generator rejects any other return type.
+
+## Declaring, listening and sending
 
 <!-- readme-example: kind-send src/autoipc/schema.ts -->
 ```ts
@@ -36,8 +38,19 @@ In the page, `send` sends the message at once:
 ipc.logLine.send("info", "The page has loaded");
 ```
 
+## Listeners
+
+`on` and `once` return a function which removes that registration (`ipcMain.off`). Unlike `invoke`, a
+`send` channel can have any number of listeners, as `ipcMain.on` can. A `once` listener removes itself
+before its callback runs. With a `validate` option it is used up by the first call that is valid, and a
+message that cannot be read does not use it up.
+
+The callbacks of `on` and `once` receive the Electron event first, then the arguments of the signature.
+
+## What the library generates
+
 The generated code of the page is one line, and the one of the main process registers and guards the
-listener:
+listener (abridged):
 
 ```ts
 // preload.ts
@@ -66,19 +79,22 @@ logLine: {
 },
 ```
 
-`on` and `once` return a function which removes that registration (`ipcMain.off`). A `once` listener
-removes itself before its callback runs; with a `validate` option it is used up by the first call that
-is valid, and a message that cannot be read does not use it up. Unlike `invoke`, a
-`send` channel can have any number of listeners, as `ipcMain.on` can. A message from a sender that is not
-allowed, or with invalid arguments, is dropped (see [Sender validation](../security/sender-validation.md) and
-[Validating arguments](../security/validating-arguments.md)). The options of `send` are
-`allowedOrigins`, `validate` and `scopes` (see [Scopes](../security/scopes.md)). With a `serializer` in
-the config, the arguments go through it (see [Custom serializers](../schema/custom-serializers.md)); a
-failure to serialize makes `ipc.<name>.send` throw an error whose message starts with
-`[IPC_SERIALIZATION]`, since a function that throws in the page reaches the caller with the message only.
+## Options and failures
 
-The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
-(`bind` belongs to `emit` channels; see [emit](emit.md).)
+The options of `send` are `allowedOrigins` and `validate` (see
+[Sender validation](../security/sender-validation.md) and
+[Validating arguments](../security/validating-arguments.md)), and `scopes` (see
+[Scopes](../security/scopes.md)).
+
+A `send` has no answer, so the page is not told that a message was rejected:
+
+- A message from a sender that is not allowed, or with invalid arguments, is dropped, and the
+  `onRejected` hook of `configureIpc` hears of it.
+- With a `serializer` in the config, the arguments go through it (see
+  [Custom serializers](../schema/custom-serializers.md)). A failure to serialize makes
+  `ipc.<name>.send` throw an error whose message starts with `[IPC_SERIALIZATION]`, since a function that
+  throws in the page reaches the caller with the message only. A message that cannot be deserialized in
+  the main process is dropped and logged with `console.error`.
 
 ## Handlers for one window
 
@@ -114,10 +130,11 @@ export function openDocument(win: BrowserWindow, text: string): void {
 }
 ```
 
-The registration returns a disposer as usual, and removes itself when the contents are destroyed
-(the disposer can be called afterwards without harm). Contents that are already destroyed throw a
-`TypeError`, because nothing would ever reach them. All the registrations of some contents share one
-`destroyed` listener.
+The second argument has the type `IpcListenOptions`, which the generated `main.ts` exports. The
+registration returns a disposer as usual, and removes itself when the contents are destroyed (the
+disposer can be called afterwards without harm). Contents that are already destroyed throw a
+`TypeError` with the message `Object has been destroyed`, because nothing would ever reach them. All the
+registrations of some contents share one `destroyed` listener.
 
 Electron dispatches a message from a page first to `webContents.ipc` and then to `ipcMain`:
 
@@ -129,7 +146,7 @@ Electron dispatches a message from a page first to `webContents.ipc` and then to
   the contents heard. Register on the contents only when the global listener does not need to run
   for that page.
 
-The checks that apply to the channel (`allowedOrigins`, `scopes`, `configureIpc`, `validate`) run
-for the registrations of the contents as well. Frame-scoped handlers (`webFrameMain.ipc`) are not
-generated.
+The checks that apply to the channel (`allowedOrigins`, `scopes`, the `validateSender` hook of
+`configureIpc`, and `validate`) run for the registrations of the contents as well. Frame-scoped handlers
+(`webFrameMain.ipc`) are not generated.
 

@@ -1,10 +1,10 @@
 # Putting it together
 
-This page shows a complete setup with two windows: scopes decide which window has which channel, origins limit the callers, and validators check the arguments before a handler runs.
+This page shows a complete setup with two windows: scopes decide which window has which channel, origins limit the callers, and validators check the arguments before a handler runs. Read [Sender validation](sender-validation.md), [Validating arguments](validating-arguments.md) and [Scopes](scopes.md) first if the options are new to you.
 
-## The example
+## The schema
 
-A schema with an editor window and a settings window. Every `invoke` is limited to the pages of the app, the settings window is the only one that can save settings, and the arguments are checked before a handler runs. The validators are written by hand here, so that the example needs no library; with zod, `saveSettingsArgs` is `z.tuple([z.enum(["light", "dark"])])`.
+The schema describes an editor window and a settings window. Every `invoke` is limited to the pages of the app, the settings window is the only one that can save settings, and the arguments are checked before a handler runs. The validators are written by hand here, so that the example needs no library; with zod, `saveSettingsArgs` is `z.tuple([z.enum(["light", "dark"])])`.
 
 <!-- readme-example: security-guide src/autoipc/schema.ts -->
 ```ts
@@ -113,6 +113,18 @@ app.whenReady().then(() => {
    });
 });
 ```
+
+## What a bad call does
+
+| Call | Outcome |
+|:--|:--|
+| The editor window calls `saveSettings` | Rejected with an `IpcForbiddenError`, since the window is not in the `settings` scope |
+| A page of another origin calls `getVersion` | Rejected with an `IpcForbiddenError`, since its origin is not `app://.` |
+| An iframe of the settings window calls `saveSettings` | Rejected by `validateSender`, because the frame is not the top frame |
+| The settings window calls `saveSettings("blue")` | Rejected with an `IpcValidationError`, and the handler does not run |
+| The editor window calls `openFile("../secret.txt")` | The shape is valid, so the handler runs and throws; the page gets that error |
+
+In the first four rows `onRejected` logs the call. The page sees a rejected promise with the plain object of the error, with the codes `IPC_FORBIDDEN` or `IPC_VALIDATION` (see [Rejected calls](sender-validation.md#rejected-calls)).
 
 ## What each part does
 

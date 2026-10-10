@@ -1,6 +1,10 @@
 # Migrating from 0.2.x
 
-Version 1.0.0 is a breaking release, and it has no migration messages: nothing tells a 0.2 project what to change. A schema in the old syntax is not an error, since `Channel(...)` statements are ignored. `ipcgen` writes empty bindings and prints the warning that no channels were found, and the schema file fails to type-check, because `Channel` and `type` are gone from the package.
+Version 1.0.0 is a breaking release. It declares channels with a `defineChannels` map and verbs instead of
+`Channel(...)` statements, and it renames the generated API. Nothing tells a 0.2 project what to change: a
+schema in the old syntax is not an error, since `Channel(...)` statements are ignored. `ipcgen` writes empty
+bindings and prints the warning that no channels were found, and the schema file fails to type-check, because
+`Channel` and `type` are gone from the package.
 
 These pages list every breaking change since 0.2.6, in the order in which you meet them.
 
