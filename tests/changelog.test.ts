@@ -127,7 +127,12 @@ describe("promote", () => {
       expect(() => promote(EMPTY, "1.1.0", "2026-02-02")).toThrow(/no notes/);
    });
 
-   it("throws when the version already has a section or a link", () => {
+   it("returns the changelog unchanged when the newest version is the one promoted already", () => {
+      const done = promote(WITH_NOTES, "1.1.0", "2026-02-02");
+      expect(promote(done, "1.1.0", "2026-03-03")).toBe(done);
+   });
+
+   it("throws when the version already has a section below the newest, or a link", () => {
       expect(() => promote(WITH_NOTES, "1.0.0", "2026-02-02")).toThrow(/already has/);
       const linked = FIRST.replace("[Unreleased]:", "[1.2.0]: x\n[Unreleased]:");
       expect(() => promote(linked, "1.2.0", "d")).toThrow(/already has/);

@@ -35,7 +35,7 @@ jobs:
       - name: Set up bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
-      - name: Require a new, greater semver version
+      - name: Require a greater semver version, or the current one if unpublished
         env:
           NEW_VERSION: ${{ inputs.version }}
         run: |
@@ -44,8 +44,12 @@ jobs:
             const re = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
             const parse = (v) => re.exec(v)?.slice(1);
             const next = parse(process.env.NEW_VERSION);
-            const cur = parse(JSON.parse(readFileSync("package.json", "utf8")).version);
+            const current = JSON.parse(readFileSync("package.json", "utf8")).version;
+            const cur = parse(current);
             if (!next) throw new Error(`Not a valid semver version: ${process.env.NEW_VERSION}`);
+            // The version of package.json is allowed: it is a rerun of a release that failed after
+            // the version bump. The npm check below refuses it when it is published already.
+            if (process.env.NEW_VERSION === current) process.exit(0);
             for (let i = 0; i < 3; i++) {
                const d = Number(next[i]) - Number(cur[i]);
                if (d > 0) process.exit(0);
@@ -70,8 +74,12 @@ jobs:
             echo "::error::Tag $NEW_VERSION already exists"
             exit 1
           fi
-          if npm view "automate-electron-ipc@$NEW_VERSION" version >/dev/null 2>&1; then
+          # Only a 404 means "not published"; any other failure must not pass as one.
+          if OUT=$(npm view "automate-electron-ipc@$NEW_VERSION" version 2>&1); then
             echo "::error::Version $NEW_VERSION is already published on npm"
+            exit 1
+          elif ! grep -q "E404" <<<"$OUT"; then
+            echo "::error::Could not query npm: $OUT"
             exit 1
           fi
 
@@ -107,7 +115,7 @@ jobs:
       - name: Bump package.json version
         env:
           NEW_VERSION: ${{ inputs.version }}
-        run: npm version "$NEW_VERSION" --no-git-tag-version
+        run: npm version "$NEW_VERSION" --no-git-tag-version --allow-same-version
 
       - name: Commit version bump
         id: commit
@@ -118,8 +126,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json CHANGELOG.md
-          git commit -m "chore: bump version to $NEW_VERSION"
-          git push origin "HEAD:$RELEASE_BRANCH"
+          # Nothing to commit when a rerun finds the bump on the branch already.
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump version to $NEW_VERSION"
+            git push origin "HEAD:$RELEASE_BRANCH"
+          fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
@@ -165,7 +176,7 @@ jobs:
         run: |
           TAG=latest
           if [[ "$NEW_VERSION" == *-* ]]; then TAG=next; fi
-          npm publish packages/*.tgz --access public --provenance --tag "$TAG"
+          npm publish ./packages/*.tgz --access public --provenance --tag "$TAG"
 
       - name: Require changelog notes for this version
         env:

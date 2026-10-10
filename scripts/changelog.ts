@@ -99,8 +99,16 @@ function rewriteFooter(lines: string[], version: string, previous: string | unde
    return out;
 }
 
-/** Moves the Unreleased notes under a new dated version heading, and fixes the footer links. */
+/**
+ * Moves the Unreleased notes under a new dated version heading, and fixes the footer links.
+ * Returns the changelog unchanged when the newest version heading is the version already.
+ */
 export function promote(changelog: string, version: string, date: string): string {
+   // A rerun of a release whose bump commit is already on the branch: nothing left to promote.
+   const done = versionHeadings(changelog)[0] === version && !hasUnreleasedNotes(changelog);
+   if (done && releaseNotes(changelog, version) !== undefined) {
+      return changelog;
+   }
    if (!hasUnreleasedNotes(changelog)) {
       throw new Error("The Unreleased section of the changelog has no notes");
    }
