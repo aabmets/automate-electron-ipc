@@ -75,29 +75,56 @@ describe("the hooks option and the generated files", () => {
       );
    });
 
-   it("writes no file for vue yet, warns about it, and removes the file of react", async () => {
+   it("writes hooks.vue.ts for vue, and removes the file of react", async () => {
       const { project, listed } = await rerunWith("vue");
       expect(await listed()).toContain("hooks.react.ts");
-      const warn = recordWarnings();
 
       await ipcAutomation(project.dir);
 
       const names = await listed();
       expect(names).not.toContain("hooks.react.ts");
-      expect(names).not.toContain("hooks.vue.ts");
-      const warnings = warn.mock.calls.map((call) => String(call[0]));
-      expect(
-         warnings.filter((text) => text.includes("Vue composables are not generated yet")),
-      ).toHaveLength(1);
+      expect(names).toContain("hooks.vue.ts");
+      expect(await findStaleOutputs({ cwd: project.dir })).toEqual([]);
    });
 
-   it("does not warn for react", async () => {
-      const project = await fixtures.run("react-hooks");
+   it("removes hooks.vue.ts when the option goes back to react, or off", async () => {
+      const project = await fixtures.run("vue-hooks");
+      const dir = path.join(project.dir, project.ipcDataDir);
+      const listed = () => fsp.readdir(dir).then((names) => names.sort());
+      const manifestFile = path.join(project.dir, "package.json");
+      const setHooks = async (hooks: unknown) => {
+         const manifest = JSON.parse(await fsp.readFile(manifestFile, "utf8"));
+         manifest.config.autoipc.hooks = hooks;
+         await fsp.writeFile(manifestFile, JSON.stringify(manifest));
+      };
+      expect(await listed()).toContain("hooks.vue.ts");
+
+      await setHooks("react");
+      await ipcAutomation(project.dir);
+      expect(await listed()).toContain("hooks.react.ts");
+      expect(await listed()).not.toContain("hooks.vue.ts");
+
+      await setHooks("vue");
+      await ipcAutomation(project.dir);
+      await setHooks(false);
+      expect(await findStaleOutputs({ cwd: project.dir })).toEqual([
+         toPosix(path.join(dir, "hooks.vue.ts")),
+      ]);
+      await ipcAutomation(project.dir);
+      expect(await listed()).not.toContain("hooks.vue.ts");
+      expect(await listed()).not.toContain("hooks.react.ts");
+   });
+
+   it("warns about nothing for either framework", async () => {
+      const react = await fixtures.run("react-hooks");
+      const vue = await fixtures.run("vue-hooks");
       const warn = recordWarnings();
 
-      await ipcAutomation(project.dir);
+      await ipcAutomation(react.dir);
+      await ipcAutomation(vue.dir);
 
-      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain("Vue");
+      const warnings = warn.mock.calls.map((call) => String(call[0]));
+      expect(warnings.filter((text) => !text.includes("Successfully generated"))).toEqual([]);
    });
 
    it("lets --check call a project up to date after a run, and stale when the hooks file is gone", async () => {

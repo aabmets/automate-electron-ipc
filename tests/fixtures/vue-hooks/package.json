@@ -1,0 +1,10 @@
+{
+   "name": "fixture-vue-hooks",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "hooks": "vue"
+      }
+   }
+}

@@ -35,7 +35,7 @@ Node library for generating IPC components for Electron apps.
 11) Scopes, which give each kind of window its own API and keep the others out in the main process
 12) Typed channels between the main process and a service worker (Electron 35 or later, experimental),
     with a generated preload script and typings for the worker
-13) Optional React hooks for the channels of a page, in a generated `hooks.react.ts`
+13) Optional React hooks or Vue composables for the channels of a page, in a generated `hooks.react.ts` or `hooks.vue.ts`
 14) A generated mock of the API of the page for renderer tests, Storybook and a plain browser
 
 
@@ -151,8 +151,8 @@ Config explanation:
    notice at the top of each file is not formatted. `--check` and the programmatic API compare the formatted
    text, so run them with the same `format` as the run that wrote the files.
  - `hooks` - `"react"` writes `hooks.react.ts` next to `types.ts`, with the React hooks `useIpcEvent` and
-   `useIpcInvoke`. `false`, the default, writes nothing. `"vue"` is accepted, but Vue composables are not
-   generated yet: the run prints a warning and writes no file. See [Framework hooks](#framework-hooks).
+   `useIpcInvoke`. `"vue"` writes `hooks.vue.ts` instead, with the Vue composables of the same names. `false`,
+   the default, writes nothing. See [Framework hooks](#framework-hooks).
  - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
    crosses between a page, a utility process or a service worker and the main process, and to the messages
    of `port` and `mainPort` channels, so that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
@@ -1548,6 +1548,41 @@ the state. The other channel kinds (`send`, `ask`, `stream` and the ports) have 
 `hooks.react.ts` also exports the types `EventName`, `EventCallback<N>`, `InvokeName`, `InvokeArgs<N>` and
 `InvokeReturn<N>`, which are picked out of `IpcApi`. A name that is not a channel of that kind, such as an
 `invoke` channel in `useIpcEvent`, is a type error.
+
+##### Vue
+
+With `"hooks": "vue"`, `ipcgen` writes `hooks.vue.ts` instead, with composables of the same names and the same
+types. The file imports `vue`; the library itself does not depend on it. Only one of the two files is written:
+changing `hooks` removes the file of the earlier run, if it has the generated header.
+
+```typescript
+<script setup lang="ts">
+import { useIpcEvent, useIpcInvoke } from "./autoipc/hooks.vue";
+
+const title = ref("");
+useIpcEvent("titleChanged", (next) => {
+   title.value = next;
+});
+
+const { invoke, data, error, pending } = useIpcInvoke("getUser");
+</script>
+
+<template>
+   <button type="button" :disabled="pending" @click="invoke(1).catch(() => undefined)">
+      {{ error ? "Failed" : (data?.name ?? "Load") }}
+   </button>
+</template>
+```
+
+| Composable | Does |
+|------------|------|
+| `useIpcEvent(name, callback)` | Subscribes to an `emit` channel at once, and unsubscribes when the active effect scope is disposed, which is when the component unmounts if it is called in `setup` |
+| `useIpcInvoke(name)` | Returns `invoke(...args)` for an `invoke` channel, with the state of the latest call as refs: `data` (a `ShallowRef` with the last result), `error` (a `ShallowRef` with the error of the last call, cleared when a new call starts) and `pending` (a `Ref<boolean>`) |
+
+`invoke` resolves with the result and rejects with the error, and the result of a call that finishes after the
+scope was disposed, or after a newer call started, does not change the refs; this is the same as in the React
+hooks. Call both composables in `setup`, or inside an effect scope: outside of one, `useIpcEvent` never
+unsubscribes, and Vue warns about it.
 
 #### Mocking in renderer tests
 

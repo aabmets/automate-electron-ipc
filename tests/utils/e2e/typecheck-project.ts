@@ -97,8 +97,13 @@ const dataDirFile =
       return exists ? [file] : [];
    };
 
-/** The React hooks, if the config asks for them. */
-const hooksFiles = dataDirFile("hooks.react.ts");
+/** The React or Vue hooks, if the config asks for them. */
+const hooksFiles: ExtraFilesFinder = async (dir, ipcDataDir) =>
+   (
+      await Promise.all(
+         ["hooks.react.ts", "hooks.vue.ts"].map((name) => dataDirFile(name)(dir, ipcDataDir)),
+      )
+   ).flat();
 
 /** The mock of the API, if the config `mock` is on. */
 const mockFiles = dataDirFile("mock.ts");
@@ -141,6 +146,8 @@ function projectCompilerOptions(
          // The generated hooks import React and its JSX runtime.
          react: [path.join(root, "node_modules/@types/react/index.d.ts")],
          "react/jsx-runtime": [path.join(root, "node_modules/@types/react/jsx-runtime.d.ts")],
+         // ... and Vue.
+         vue: [path.join(root, "node_modules/vue/dist/vue.d.ts")],
          ...(compilerOptions.paths as Record<string, string[]> | undefined),
       },
    };

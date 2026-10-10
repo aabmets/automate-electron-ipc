@@ -35,6 +35,7 @@ import { ServiceWorkerPreloadWriter } from "./writer/preload/service-worker-prel
 import { HelperTypesWriter } from "./writer/renderer/helper-types.js";
 import { ReactHooksWriter } from "./writer/renderer/hooks-react.js";
 import { MockWriter } from "./writer/renderer/mock-writer.js";
+import { VueHooksWriter } from "./writer/renderer/hooks-vue.js";
 import { RendererTypesWriter } from "./writer/renderer/renderer-types.js";
 import { ServiceWorkerTypesWriter } from "./writer/renderer/service-worker-types.js";
 import { UtilityBindingsWriter } from "./writer/utility/utility-bindings.js";
@@ -103,6 +104,7 @@ function collectWriters(config: t.IPCResolvedConfig, pfsArray: t.ParsedFileSpecs
       ...(config.hooks === "react" ? [new ReactHooksWriter(config, pfsArray)] : []),
       // The mock fakes the surface of no scope, which is the first of the surfaces.
       ...(config.mock ? [new MockWriter(config, pageSurfaces[0][1])] : []),
+      ...(config.hooks === "vue" ? [new VueHooksWriter(config, pfsArray)] : []),
       ...(utilityWriter.hasChannels() ? [utilityWriter] : []),
       ...workerWriters.filter((worker) => worker.hasChannels()),
    ];
@@ -144,9 +146,6 @@ export async function planRun(options?: t.RunOptions | string): Promise<t.RunPla
       pfsArray.flatMap((pfs) => getCloneWarnings(pfs.specs.channelSpecArray, pfs.relativePath)),
    );
    // The formatter runs before the plan is compared or written, so `--check` sees formatted text.
-   if (config.hooks === "vue") {
-      logger.vueHooksNotGenerated();
-   }
    const format = createFormatter(config) ?? undefined;
    const outputs = collectWriters(config, pfsArray).map((writer) => writer.toOutputFile(format));
    const staleFiles = await findStaleGeneratedFiles(config, outputs);

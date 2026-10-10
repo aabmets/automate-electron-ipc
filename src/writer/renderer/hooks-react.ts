@@ -9,46 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseWriter } from "../base-writer.js";
-
-/** The type aliases which pick the event and the invoke channels out of `IpcApi`. */
-const TYPE_ALIASES = `
-/** The name of a channel that pushes events to the page: one with \`on\` and \`once\`. */
-export type EventName = {
-   [N in keyof IpcApi]: IpcApi[N] extends {
-      on: (...args: any[]) => any;
-      once: (...args: any[]) => any;
-   }
-      ? N
-      : never;
-}[keyof IpcApi];
-
-/** The callback that an event channel passes to its listeners. */
-export type EventCallback<N extends EventName> = IpcApi[N] extends {
-   on: (callback: infer C) => any;
-}
-   ? C
-   : never;
-
-/** The name of a channel that the page calls and the main process answers: one with \`invoke\`. */
-export type InvokeName = {
-   [N in keyof IpcApi]: IpcApi[N] extends { invoke: (...args: any[]) => any } ? N : never;
-}[keyof IpcApi];
-
-/** The parameters of an \`invoke\` channel, as a tuple. */
-export type InvokeArgs<N extends InvokeName> = IpcApi[N] extends {
-   invoke: (...args: infer A) => any;
-}
-   ? A
-   : never;
-
-/** What a call of an \`invoke\` channel resolves to. */
-export type InvokeReturn<N extends InvokeName> = IpcApi[N] extends {
-   invoke: (...args: any[]) => Promise<infer R>;
-}
-   ? R
-   : never;
-`;
+import { FrameworkHooksWriter } from "./hooks-base.js";
 
 /** The hooks. The indent of the template is 3 spaces, which \`reindent\` turns into the configured one. */
 const HOOKS = `
@@ -130,39 +91,11 @@ export function useIpcInvoke<N extends InvokeName>(
  * the API from the global of `exposeAs`, and the types from the types module of the surface of no
  * scope. The generated file imports `react`; the library itself does not depend on it.
  */
-export class ReactHooksWriter extends BaseWriter {
-   protected getTargetFilePath(): string {
-      return this.config.hooksFilePath;
+export class ReactHooksWriter extends FrameworkHooksWriter {
+   protected getFrameworkImports(): string {
+      return 'import { useCallback, useEffect, useRef, useState } from "react";';
    }
-   /** The path of the types module that the hooks take `IpcApi` from. */
-   protected getTypesFilePath(): string {
-      return this.config.typesFilePath;
-   }
-   /** The file exists whatever the schema has: without the channels, the name types are `never`. */
-   protected isEmpty(): boolean {
-      return false;
-   }
-   /** Turns the 3-space indents of a template into the ones of the config. */
-   private reindent(template: string): string {
-      const unit = this.indents[0];
-      return template.replace(/^( {3})+/gm, (spaces) => unit.repeat(spaces.length / 3));
-   }
-   protected renderFileContents(): string {
-      const typesPath = this.importsGenerator.getFileImportPath(this.getTypesFilePath());
-      const api = JSON.stringify(this.getExposeAs());
-      return this.joinComponents([
-         'import { useCallback, useEffect, useRef, useState } from "react";',
-         `import type { IpcApi } from ${JSON.stringify(typesPath)};`,
-         this.reindent(TYPE_ALIASES),
-         this.reindent(
-            [
-               "\n/** The API that the preload script exposed. */",
-               "function api(): IpcApi {",
-               `   return (globalThis as unknown as Record<string, IpcApi>)[${api}];`,
-               "}",
-            ].join("\n"),
-         ),
-         `${this.reindent(HOOKS).trimEnd()}\n`,
-      ]);
+   protected getHooks(): string {
+      return HOOKS;
    }
 }

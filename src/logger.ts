@@ -150,14 +150,6 @@ export function formatterMissing(formatter: string, binary: string, projectRoot?
    ]);
 }
 
-/** Warns that the config asks for Vue composables, which are not generated yet. */
-export function vueHooksNotGenerated(): void {
-   warn([
-      "The config 'hooks' is 'vue', but Vue composables are not generated yet.",
-      "No hooks file is written.",
-   ]);
-}
-
 export default {
    setSilent,
    nonExistentSchemaPath,
@@ -171,5 +163,4 @@ export default {
    watching,
    removedStaleFiles,
    formatterMissing,
-   vueHooksNotGenerated,
 };

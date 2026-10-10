@@ -104,12 +104,13 @@ export interface AutoIpcConfig {
     */
    format?: "biome" | "prettier" | false;
    /**
-    * Writes `hooks.react.ts` to `ipcDataDir`, next to `types.ts`: the React hooks `useIpcEvent(name,
-    * callback)`, which subscribes to an `emit` channel and unsubscribes on unmount, and
+    * Writes `hooks.react.ts` (`"react"`) or `hooks.vue.ts` (`"vue"`) to `ipcDataDir`, next to
+    * `types.ts`: the hooks `useIpcEvent(name, callback)`, which subscribes to an `emit` channel and
+    * unsubscribes on unmount (React) or when the effect scope is disposed (Vue), and
     * `useIpcInvoke(name)`, which wraps an `invoke` channel in `invoke`, `data`, `error` and
-    * `pending`. The hooks are written for the surface of no scope, and reach the API through the
-    * global of `exposeAs`. The generated file imports `react`; the library does not depend on it.
-    * `"vue"` is accepted, but writes no file yet. `false`, the default, writes no hooks.
+    * `pending` (state values in React, refs in Vue). The hooks are written for the surface of no
+    * scope, and reach the API through the global of `exposeAs`. The generated file imports `react`
+    * or `vue`; the library depends on neither. `false`, the default, writes no hooks.
     */
    hooks?: "react" | "vue" | false;
    /**
