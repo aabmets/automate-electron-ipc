@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-10
+
 Changes since v0.2.6, the last published release, following a
 feature-completeness audit of that version against the Electron
 documentation. This is not a drop-in from 0.2.6: the way channels are
@@ -153,4 +155,5 @@ unchanged.
 - The test suite failed under Bun, depended on test order, and left
   temporary directories behind
 
-[Unreleased]: https://github.com/aabmets/automate-electron-ipc/commits/main
+[Unreleased]: https://github.com/aabmets/automate-electron-ipc/compare/1.0.0...HEAD
+[1.0.0]: https://github.com/aabmets/automate-electron-ipc/releases/tag/1.0.0
