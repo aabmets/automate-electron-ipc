@@ -830,12 +830,23 @@ meaning you can use any front-end framework or library like React, Vue or Angula
 
 Each verb declares one kind of channel in one direction:
 
-```typescript
+<!-- readme-example: verbs src/autoipc/schema.ts -->
+```ts
 import {
    defineChannels, invoke, send, emit, ask, stream, port, mainPort,
    callUtility, notifyUtility, callMain, notifyMain, invokeUtility, streamUtility,
    invokeFromWorker, sendFromWorker, askWorker, emitToWorker,
 } from "automate-electron-ipc";
+
+export interface User {
+   id: number;
+}
+export interface Row {
+   id: number;
+}
+export interface Token {
+   value: string;
+}
 
 export default defineChannels({
    // Request from a renderer process to the main process with return data
@@ -913,30 +924,25 @@ export default defineChannels({
 | `askWorker` | MainToServiceWorker | any value or promise            |
 | `emitToWorker` | MainToServiceWorker | `void` or `Promise<void>`    |
 
-`notifyUtility`, `notifyMain`, `askWorker` and `emitToWorker` take no options. `callUtility` and
-`callMain` take `timeoutMs`, and `invokeUtility` and `streamUtility` take `timeoutMs` and `scopes`
-(`streamUtility` also `highWaterMark`); see [Timeouts](#timeouts). None of the utility verbs has
-`allowedOrigins` or `validate`. The channels that a service worker calls have `allowedOrigins` and
-`validate`, and `invokeFromWorker` also `timeoutMs`. The only option of the others that is
-not described in its own section is `trigger` of `emit`, a BrowserWindow event name such as `"focus"`.
-The sender of an `emit` channel, `ipc.progress.send(browserWindow, n)`, always sends immediately.
-With a `trigger`, the channel also has `ipc.progress.bind(browserWindow, provider)`.
-It registers one listener for the event, calls `provider` each time the event fires, sends the
-argument list that `provider` returns (or resolves to), and returns a function which removes the
-listener:
+Each verb accepts these options in its config, an object literal that is the argument of the verb:
 
-```typescript
-const dispose = ipc.progress.bind(browserWindow, () => [currentProgress()]);
-// Later, to stop sending on focus:
-dispose();
-```
+| Verb | Options |
+|------|---------|
+| `invoke` | `allowedOrigins`, `validate`, `timeoutMs`, `scopes` |
+| `send` | `allowedOrigins`, `validate`, `scopes` |
+| `emit` | `trigger`, `scopes` |
+| `ask` | `scopes` |
+| `stream` | `allowedOrigins`, `validate`, `highWaterMark`, `scopes` |
+| `port`, `mainPort` | `maxQueue`, `scopes` |
+| `callUtility`, `callMain` | `timeoutMs` |
+| `invokeUtility` | `timeoutMs`, `scopes` |
+| `streamUtility` | `timeoutMs`, `highWaterMark`, `scopes` |
+| `invokeFromWorker` | `allowedOrigins`, `validate`, `timeoutMs` |
+| `sendFromWorker` | `allowedOrigins`, `validate` |
+| `notifyUtility`, `notifyMain`, `askWorker`, `emitToWorker` | none |
 
-If `provider` throws or rejects, that send is skipped and later events still send. The error goes to
-the optional third argument, `(error: unknown) => void`, or to `console.error` without it:
-
-```typescript
-ipc.progress.bind(browserWindow, () => [currentProgress()], (error) => log.warn(error));
-```
+Each option is described with the kind of channel that has it, below. A channel that is given an option
+its verb does not accept is an error when the bindings are generated.
 
 
 ### The Generated API
@@ -964,22 +970,320 @@ on the verb of the channel and on the process that uses it:
 | `askWorker` | `ipc.<name>.invoke(worker, ...args)`, `invokeWith(worker, options, ...args)` | none: the service worker has `ipc.<name>.handle(callback)` |
 | `emitToWorker` | `ipc.<name>.send(worker, ...args)`, `broadcast(session, ...args)` | none: the service worker has `ipc.<name>.on(callback)` and `once(callback)` |
 
-In the renderer, `on` and `once` of an `emit` channel return a function which removes that one
-listener, so a component can unsubscribe when it unmounts:
+Each kind has a subsection below with its declaration, the generated API of the main process and of the
+renderer, and an excerpt of the generated code. The examples are checked in CI: each is generated and
+type-checked. The excerpts are copied from the generated files, with `// ...` where lines are left out.
 
-```typescript
-useEffect(() => ipc.progress.on((percent) => setPercent(percent)), []);
+#### invoke
+
+An `invoke` channel is a request from a page to the main process that is answered with a value, which is
+`ipcRenderer.invoke` and `ipcMain.handle` of Electron with types. The signature takes the arguments of
+the call and returns the answer, as a value or a promise.
+
+<!-- readme-example: kind-invoke src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invoke } from "automate-electron-ipc";
+
+export interface User {
+   id: number;
+   name: string;
+}
+
+export default defineChannels({
+   getUser: invoke<(id: number) => Promise<User>>(),
+});
 ```
 
-`once` delivers a single message. The callback never receives the Electron event.
+In the main process, `handle` registers the handler, which gets the Electron event first and then the
+arguments of the signature:
 
-In the main process, `on` and `once` of a `send` channel, and `handle` and `handleOnce` of an
-`invoke` channel, return a function which removes that registration (`ipcMain.off` and
-`ipcMain.removeHandler`). `once` and `handleOnce` serve a single message or call.
+<!-- readme-example: kind-invoke src/main/index.ts -->
+```ts
+import { app } from "electron";
+import { ipc } from "../autoipc/main";
 
-An `invoke` channel has one handler. Registering `handle` or `handleOnce` again replaces the
-previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
-hot-restarting the main process works. The disposer of a replaced handler does nothing.
+app.whenReady().then(() => {
+   const dispose = ipc.getUser.handle(async (_event, id) => ({ id, name: `User ${id}` }));
+   // Later, to remove the handler: dispose();
+});
+```
+
+In the page, `invoke` sends the request and returns a promise of the answer:
+
+<!-- readme-example: kind-invoke src/renderer/app.ts -->
+```ts
+async function showUser(): Promise<void> {
+   const user = await ipc.getUser.invoke(7);
+   document.title = user.name;
+}
+
+showUser();
+```
+
+The preload script of the page forwards the call, and unwraps the answer of the main process:
+
+```ts
+// preload.ts
+getUser: {
+   invoke: async (...args: any[]) => {
+      const result = await ipcRenderer.invoke('autoipc:getUser', ...args);
+      if (result.ok) {
+         return result.value;
+      }
+      throw result.error;
+   },
+},
+```
+
+The handler of the main process is wrapped to answer with `{ ok: true, value }` or `{ ok: false, error }`
+(see [Errors](#errors)), and checks the sender before it runs:
+
+```ts
+// main.ts
+getUser: {
+   handle: (callback: (event: IpcMainInvokeEvent, id: number) => Promise<User>, options?: IpcListenOptions) => {
+      // ...
+      const listener = (event: IpcMainInvokeEvent, ...rest: unknown[]) =>
+         settleInvoke(() => (handler as (...rest: unknown[]) => unknown)(event, ...rest));
+      target.ipc.removeHandler('autoipc:getUser');
+      target.ipc.handle('autoipc:getUser', listener);
+      // ...
+      return remove;
+   },
+   handleOnce: /* the same, and the handler removes itself before it runs */,
+},
+```
+
+`handle` and `handleOnce` return a function which removes that registration (`ipcMain.removeHandler`).
+`handleOnce` serves a single call. An `invoke` channel has one handler: registering `handle` or
+`handleOnce` again replaces the previous handler, instead of throwing as `ipcMain.handle` does, so that
+re-creating a window or hot-restarting the main process works. The disposer of a replaced handler does
+nothing.
+
+The options of `invoke` are `timeoutMs` (see [Timeouts](#timeouts)), `allowedOrigins` and `validate`
+(see [Sender validation](#sender-validation)), and `scopes` (see
+[Scopes](#scopes-a-different-api-per-window)). A second type argument declares the errors of the
+handler (see [Errors](#errors)).
+
+#### Errors
+
+Electron reports an error that an `invoke` handler throws to the renderer as the text
+`Error invoking remote method 'getUser': Error: not found`. The class, the `code` and any other
+field are lost. The generated bindings keep them: the main process answers every `invoke` with
+`{ ok: true, value }` or `{ ok: false, error }`, and the renderer's `ipc.<name>.invoke` returns the
+value or rejects with the error. Declare the errors that a handler may throw in a second type argument
+of `invoke`; they are documented in the generated `types.ts`:
+
+<!-- readme-example: kind-errors src/errors.ts -->
+```ts
+export class NotFoundError extends Error {
+   readonly name = "NotFoundError";
+   readonly code = "NOT_FOUND";
+   constructor(readonly data: { id: number }) {
+      super("User not found");
+   }
+}
+
+export class AuthError extends Error {
+   readonly name = "AuthError";
+   readonly code = "UNAUTHORIZED";
+}
+```
+
+<!-- readme-example: kind-errors src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invoke } from "automate-electron-ipc";
+import type { AuthError, NotFoundError } from "../errors";
+
+export interface User {
+   id: number;
+   name: string;
+}
+
+export default defineChannels({
+   getUser: invoke<(id: number) => Promise<User>, NotFoundError | AuthError>(),
+});
+```
+
+<!-- readme-example: kind-errors src/main/index.ts -->
+```ts
+import { app } from "electron";
+import { ipc } from "../autoipc/main";
+import { NotFoundError } from "../errors";
+
+app.whenReady().then(() => {
+   ipc.getUser.handle(async (_event, id) => {
+      throw new NotFoundError({ id });
+   });
+});
+```
+
+The global type `IpcError<E>` describes the object that the promise is rejected with. It follows the
+`name`, `code` and `data` types of the declared classes, so give them literal types, as the classes above
+do with `readonly name = "NotFoundError"`, to tell them apart by `name`:
+
+<!-- readme-example: kind-errors src/renderer/app.ts -->
+```ts
+import type { AuthError, NotFoundError } from "../errors";
+
+async function showUser(): Promise<void> {
+   try {
+      await ipc.getUser.invoke(7);
+   } catch (error) {
+      // { name: "NotFoundError", message: "User not found", code: "NOT_FOUND", data: { id: 7 } }
+      const failure = error as IpcError<NotFoundError | AuthError>;
+      if (failure.name === "NotFoundError") {
+         console.log(failure.data.id); // typed from NotFoundError
+      }
+   }
+}
+
+showUser();
+```
+
+The rejection value is a plain object with `name`, `message`, and, when the thrown error has them,
+`code` (a string or a number) and `data`. It is not an `Error` and has no stack, since `contextBridge`
+copies a thrown `Error` with only its message and stack, and so loses `name`, `code` and `data`.
+Check `error.name` or `error.code` instead of `instanceof`. `data` is copied with the structured
+clone algorithm, and is left out when it cannot be cloned (it holds a function, for example). Anything
+that is thrown but is not an object, such as a string, becomes the `message`. A call from a sender
+that is not allowed, and one with invalid arguments, reject the same way, with the codes
+`IPC_FORBIDDEN` and `IPC_VALIDATION`. A call to a channel with no registered handler still fails with
+the message of Electron.
+
+The `as` form cannot declare error types.
+
+Set `rawErrors` to `true` in the config to turn all of this off: handlers then answer with their value
+and Electron reports their errors as it always did.
+
+#### Timeouts
+
+A handler that never answers leaves the promise of `ipc.<name>.invoke` pending for ever. Give a
+channel a time limit with `timeoutMs`, or set a default for all `invoke` channels in the config:
+
+<!-- readme-example: kind-timeouts src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invoke } from "automate-electron-ipc";
+
+export default defineChannels({
+   exportAll: invoke<() => Promise<string>>({ timeoutMs: 30_000 }),
+   // `0` turns the timeout off for this channel, also when the config sets a default.
+   waitForUser: invoke<() => Promise<boolean>>({ timeoutMs: 0 }),
+});
+```
+
+When the time has passed without a reply, the preload script rejects the promise with a plain object,
+like the other errors of the library, and `types.ts` documents it as `IpcTimeoutError`:
+
+<!-- readme-example: kind-timeouts src/renderer/app.ts -->
+```ts
+async function exportAll(): Promise<void> {
+   try {
+      await ipc.exportAll.invoke();
+   } catch (error) {
+      const failure = error as IpcError<IpcTimeoutError>;
+      if (failure.code === "IPC_TIMEOUT") {
+         console.log("The export took too long");
+      }
+   }
+}
+
+exportAll();
+```
+
+Only the wait of the page ends. The handler in the main process keeps running, since it cannot be
+stopped from the renderer, and its late reply is dropped. The option takes a non-negative integer
+literal and applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
+`invokeWith`. With `rawErrors`, the timeout still rejects with this object, while the errors of the
+handlers stay Electron's.
+
+The calls to and from a utility process take the same option: `callUtility`, `callMain` and
+`invokeUtility` reject with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT` (for the page, the
+plain object of the same shape), and the default of the config applies to them. A `streamUtility` takes
+`timeoutMs` as well, but only as the wait for its first chunk, its end or an error, and the default of
+the config does not apply to it: a timed-out stream is cancelled in the child and fails the read of the
+page. The handler of a call is not stopped, and its late reply is dropped.
+
+`invokeFromWorker` takes `timeoutMs` too, and the default of the config applies to it. The preload
+script of a service worker has no timers (`setTimeout` is not defined there), so the main process times
+the call: from the moment it arrives, over the schema of `validate` and the handler. The worker gets the
+plain object `{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is not stopped,
+and its late reply is dropped. With `rawErrors` the main process still rejects the call, but the worker
+gets the error of Electron, and the typings do not declare `IpcTimeoutError`. A question to a worker,
+`askWorker`, has no schema option: `invokeWith(worker, { timeoutMs }, ...args)` times it.
+
+#### send
+
+A `send` channel is a message from a page to the main process that gets no answer, which is
+`ipcRenderer.send` and `ipcMain.on` of Electron with types. The signature returns `void` (or
+`Promise<void>`).
+
+<!-- readme-example: kind-send src/autoipc/schema.ts -->
+```ts
+import { defineChannels, send } from "automate-electron-ipc";
+
+export default defineChannels({
+   logLine: send<(level: "info" | "warn", line: string) => void>(),
+});
+```
+
+In the main process, `on` registers a listener, which gets the Electron event first, and `once` a
+listener that serves a single message:
+
+<!-- readme-example: kind-send src/main/index.ts -->
+```ts
+import { app } from "electron";
+import { ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   const dispose = ipc.logLine.on((event, level, line) => {
+      console.log(`[${level}] ${line} (from ${event.sender.id})`);
+   });
+   // Later, to remove the listener: dispose();
+});
+```
+
+In the page, `send` sends the message at once:
+
+<!-- readme-example: kind-send src/renderer/app.ts -->
+```ts
+ipc.logLine.send("info", "The page has loaded");
+```
+
+The generated code of the page is one line, and the one of the main process registers and guards the
+listener:
+
+```ts
+// preload.ts
+logLine: {
+   send: (...args: any[]) => ipcRenderer.send('autoipc:logLine', ...args),
+},
+```
+
+```ts
+// main.ts
+logLine: {
+   on: (callback: (event: IpcMainEvent, level: "info" | "warn", line: string) => void, options?: IpcListenOptions) => {
+      const guard = (event: IpcMainEvent) => isSenderAllowed(event, 'logLine');
+      // ...
+      const listener = (event: IpcMainEvent, level: "info" | "warn", line: string) => {
+         if (!guard(event)) {
+            return;
+         }
+         return callback(event, level, line);
+      };
+      target.ipc.on('autoipc:logLine', listener);
+      // ...
+      return remove;
+   },
+   once: /* the same, and the listener removes itself before the callback runs */,
+},
+```
+
+`on` and `once` return a function which removes that registration (`ipcMain.off`). Unlike `invoke`, a
+`send` channel can have any number of listeners, as `ipcMain.on` can. A message from a sender that is not
+allowed, or with invalid arguments, is dropped (see [Sender validation](#sender-validation)). The
+options of `send` are `allowedOrigins`, `validate` and `scopes`.
 
 A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
 The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
@@ -991,10 +1295,30 @@ Every `on`, `once`, `handle` and `handleOnce` of a channel that a page calls (al
 `webContents.ipc` of those contents instead of on the global `ipcMain`, so a window that keeps its own
 state does not have to look it up by `event.sender.id`:
 
-```typescript
-function openDocument(win: BrowserWindow, doc: Document) {
-   ipc.getDocument.handle(async () => doc, { webContents: win.webContents });
-   ipc.documentEdited.on((_event, text) => doc.update(text), { webContents: win.webContents });
+<!-- readme-example: kind-window-handlers src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invoke, send } from "automate-electron-ipc";
+
+export default defineChannels({
+   getDocument: invoke<() => Promise<string>>(),
+   documentEdited: send<(text: string) => void>(),
+});
+```
+
+<!-- readme-example: kind-window-handlers src/main/index.ts -->
+```ts
+import type { BrowserWindow } from "electron";
+import { ipc } from "../autoipc/main";
+
+export function openDocument(win: BrowserWindow, text: string): void {
+   let document = text;
+   ipc.getDocument.handle(async () => document, { webContents: win.webContents });
+   ipc.documentEdited.on(
+      (_event, edited) => {
+         document = edited;
+      },
+      { webContents: win.webContents },
+   );
 }
 ```
 
@@ -1017,28 +1341,121 @@ The checks that apply to the channel (`allowedOrigins`, `scopes`, `configureIpc`
 for the registrations of the contents as well. Frame-scoped handlers (`webFrameMain.ipc`) are not
 generated.
 
-#### Sending to windows
+#### emit
 
-`ipc.<name>.send(target, ...args)` of an `emit` channel takes a `BrowserWindow`, a `WebContentsView`,
-a `WebContents` or a `WebFrameMain`, so a message can go to a window, to a view inside it, to its
-contents, or to one frame:
+An `emit` channel is a message from the main process to pages that gets no answer, which is
+`webContents.send` of Electron with types. The signature returns `void` (or `Promise<void>`).
 
-```typescript
-ipc.progress.send(mainWindow, 50);
-ipc.progress.send(view, 50);
-ipc.progress.send(mainWindow.webContents, 50);
-ipc.progress.send(mainWindow.webContents.mainFrame, 50);
-```
+<!-- readme-example: kind-emit src/autoipc/schema.ts -->
+```ts
+import { defineChannels, emit, send } from "automate-electron-ipc";
 
-`sendToSender(event, ...args)` replies to the exact frame that sent the event you are handling, such
-as an iframe, which a `send` to the window would not reach. It takes the event of any handler:
-
-```typescript
-ipc.search.on((event, query) => {
-   ipc.searchStarted.sendToSender(event, query); // replies to the iframe that asked
+export default defineChannels({
+   // Sent by the main process when the window gets the focus, and whenever the code asks for it.
+   progress: emit<(percent: number) => void>({ trigger: "focus" }),
+   theme: emit<(name: "dark" | "light") => void>(),
+   search: send<(query: string) => void>(),
+   searchStarted: emit<(query: string) => void>(),
 });
 ```
 
+In the main process, `send` takes the target, which is a window, a view, its contents or one frame, and
+then the arguments of the signature. With a `trigger`, `bind` sends each time that event of the window
+fires:
+
+<!-- readme-example: kind-emit src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { ipc } from "../autoipc/main";
+
+let percent = 0;
+
+app.whenReady().then(() => {
+   const mainWindow = new BrowserWindow();
+
+   ipc.progress.send(mainWindow, 50);
+   ipc.progress.send(mainWindow.webContents.mainFrame, 50);
+   ipc.theme.broadcast("dark");
+   ipc.theme.broadcastTo((contents) => contents.getURL().startsWith("app://settings"), "light");
+
+   const dispose = ipc.progress.bind(mainWindow, () => [percent]);
+   // Later, to stop sending on focus: dispose();
+
+   ipc.search.on((event, query) => {
+      ipc.searchStarted.sendToSender(event, query); // replies to the frame that asked
+   });
+});
+```
+
+In the page, `on` registers a listener for the messages of the main process. It gets the arguments of
+the signature, never the Electron event, and returns a function which removes that one listener:
+
+<!-- readme-example: kind-emit src/renderer/app.ts -->
+```ts
+const stopListening = ipc.progress.on((percent) => {
+   document.title = `${percent}%`;
+});
+const stopTheme = ipc.theme.on((name) => document.body.classList.toggle("dark", name === "dark"));
+ipc.search.send("electron");
+// Later, to unsubscribe, such as when a component unmounts: stopListening(); stopTheme();
+```
+
+`once` delivers a single message, and returns the disposer too. The preload script of the page shares one listener per channel, which strips the Electron event, and
+the main process sends with the target that the caller hands over:
+
+```ts
+// preload.ts
+progress: {
+   on: (callback: Function) => {
+      return listenToChannel('autoipc:progress', callback, false);
+   },
+   once: (callback: Function) => {
+      return listenToChannel('autoipc:progress', callback, true);
+   },
+},
+```
+
+```ts
+// main.ts
+progress: {
+   send: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, percent: number) =>
+      resolveSendTarget(target).send('autoipc:progress', percent),
+   sendToSender: (event: { readonly senderFrame: WebFrameMain | null }, percent: number) =>
+      sendToSenderFrame(event, 'autoipc:progress', [percent]),
+   broadcast: (percent: number) =>
+      broadcastMessage('autoipc:progress', [percent]),
+   broadcastTo: (filter: (contents: WebContents) => boolean, percent: number) =>
+      broadcastMessage('autoipc:progress', [percent], filter),
+   bind: (browserWindow: BrowserWindow, provider: () => [percent: number] | Promise<[percent: number]>, onError?: (error: unknown) => void) => {
+      // ...
+      browserWindow.on("focus", listener);
+      return () => {
+         browserWindow.off("focus", listener);
+      };
+   },
+},
+```
+
+The options of `emit` are `trigger` and `scopes`. The `trigger` is the name of a `BrowserWindow` event,
+such as `"focus"`. `ipc.progress.send(browserWindow, n)` always sends immediately, and a channel with a
+`trigger` also has `bind(browserWindow, provider)`. It registers one listener for the event, calls
+`provider` each time the event fires, sends the argument list that `provider` returns (or resolves to),
+and returns a function which removes the listener. If `provider` throws or rejects, that send is
+skipped and later events still send. The error goes to the optional third argument,
+`(error: unknown) => void`, or to `console.error` without it:
+
+```typescript
+ipc.progress.bind(mainWindow, () => [currentProgress()], (error) => log.warn(error));
+```
+
+##### Targets of an emit channel
+
+`ipc.<name>.send(target, ...args)` takes a `BrowserWindow`, a `WebContentsView`, a `WebContents` or a
+`WebFrameMain`, so a message can go to a window, to a view inside it, to its contents, or to one frame
+(`ipc.progress.send(view, 50)`, `ipc.progress.send(mainWindow.webContents, 50)`; see the example above).
+
+`sendToSender(event, ...args)` replies to the exact frame that sent the event you are handling, such
+as an iframe, which a `send` to the window would not reach. It takes the event of any handler.
 Electron clears `event.senderFrame` once the frame navigates or is destroyed, and `sendToSender`
 reads it at the moment of the call, so call it before the first `await`; after one, the frame may
 already be gone. It returns `true` when the message went out, and `false` when there was nobody to send
@@ -1047,36 +1464,80 @@ that the caller handed over and that is destroyed, a reply to a sender that has 
 
 `broadcast(...args)` sends to every open `WebContents`, such as the windows and views of the app,
 for something that all of them show (a theme or a setting). Contents that are destroyed are skipped.
-`broadcastTo(filter, ...args)` sends only to the contents that `filter` accepts:
-
-```typescript
-ipc.theme.broadcast("dark");
-ipc.theme.broadcastTo((contents) => contents.getURL().startsWith("app://settings"), "dark");
-```
-
+`broadcastTo(filter, ...args)` sends only to the contents that `filter` accepts.
 `broadcast` covers all contents that Electron reports, DevTools included, so use `broadcastTo` when
 only some of them should get the message. The filter comes first, because the options of a signature
 may end in optional or rest parameters, which would swallow an options argument. `send` still throws
 for a target that is destroyed, since the caller handed it over.
 
-#### Asking a renderer
+#### ask
 
 Electron has no invoke from the main process to a renderer. An `ask` channel adds one, for questions
-such as "are there unsaved changes?" when a window closes:
+such as "are there unsaved changes?" when a window closes. The signature takes the arguments of the
+question and returns the answer, as a value or a promise.
 
-```typescript
-// schema.ts
-hasUnsavedChanges: ask<(documentId: number) => boolean>(),
+<!-- readme-example: kind-ask src/autoipc/schema.ts -->
+```ts
+import { ask, defineChannels } from "automate-electron-ipc";
 
-// main process
-window.on("close", async (event) => {
-   event.preventDefault();
-   const unsaved = await ipc.hasUnsavedChanges.invoke(window, currentDocument);
-   if (!unsaved) window.destroy();
+export default defineChannels({
+   hasUnsavedChanges: ask<(documentId: number) => boolean>(),
 });
+```
 
-// renderer: one responder per channel, which may answer in a promise
+The main process asks with `invoke(target, ...args)` and gets a promise of the answer:
+
+<!-- readme-example: kind-ask src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { ipc } from "../autoipc/main";
+
+const currentDocument = 1;
+
+app.whenReady().then(() => {
+   const window = new BrowserWindow();
+   window.on("close", async (event) => {
+      event.preventDefault();
+      const unsaved = await ipc.hasUnsavedChanges.invoke(window, currentDocument);
+      if (!unsaved) window.destroy();
+   });
+});
+```
+
+The page registers one responder per channel. It returns what the signature returns, so a signature
+with a `Promise` return type lets it answer later:
+
+<!-- readme-example: kind-ask src/renderer/app.ts -->
+```ts
+const editor = { isDirty: (_documentId: number) => false };
+
 const dispose = ipc.hasUnsavedChanges.handle((documentId) => editor.isDirty(documentId));
+```
+
+The preload script of the page keeps the responder, and the main process sends the question to the
+target that it is given:
+
+```ts
+// preload.ts
+hasUnsavedChanges: {
+   handle: (callback: Function) => {
+      askHandlers['hasUnsavedChanges'] = callback;
+      return () => {
+         if (askHandlers['hasUnsavedChanges'] === callback) {
+            delete askHandlers['hasUnsavedChanges'];
+         }
+      };
+   },
+},
+```
+
+```ts
+// main.ts
+hasUnsavedChanges: {
+   invoke: (target: BrowserWindow | WebContents | WebContentsView | WebFrameMain, documentId: number): Promise<Awaited<boolean>> =>
+      askRenderer('hasUnsavedChanges', 'autoipc:hasUnsavedChanges', 'autoipc:hasUnsavedChanges:reply', target, [documentId]) as Promise<Awaited<boolean>>,
+   invokeWith: /* the same, with the options before the arguments */,
+},
 ```
 
 `invoke(target, ...args)` takes the same targets as the `send` of an `emit` channel (a window, a view,
@@ -1133,33 +1594,85 @@ and the function that `handle` returns removes only its own responder: the dispo
 responder does nothing. The preload script listens from the start, so a question that arrives while
 no responder is registered is answered with `IPC_ASK_NO_HANDLER` at once, and not left to time out.
 
-#### Streaming results
+#### stream
 
 A `stream` channel sends many results for one call, and the renderer can stop it. Use it for
 downloads, exports, long jobs and token streams. The signature takes the arguments of the call and
 returns an `AsyncIterable<Chunk>` (or an `AsyncIterableIterator<Chunk>` or an `AsyncGenerator<Chunk>`),
-and the handler in the main process is an `async function*`:
+and the handler in the main process is an `async function*`. The second type argument lists the
+error types, as for `invoke`:
 
-```typescript
-// schema.ts
-exportRows: stream<(table: string, limit?: number) => AsyncIterable<Row>, DatabaseError>(),
+<!-- readme-example: kind-stream src/autoipc/schema.ts -->
+```ts
+import { defineChannels, stream } from "automate-electron-ipc";
 
-// main process: the event comes first, as for the handler of an invoke
-ipc.exportRows.handle(async function* (event, table, limit) {
-   const cursor = await database.open(table);
-   try {
-      for await (const row of cursor) {
-         yield row;
-      }
-   } finally {
-      await cursor.close(); // also runs when the renderer cancels
-   }
-});
-
-// renderer
-for await (const row of ipc.exportRows.stream("people", 100)) {
-   table.append(row);
+export interface Row {
+   id: number;
+   name: string;
 }
+
+export default defineChannels({
+   exportRows: stream<(table: string, limit?: number) => AsyncIterable<Row>>(),
+});
+```
+
+In the main process the handler is an `async function*`. The event comes first, as for the handler of
+an `invoke`:
+
+<!-- readme-example: kind-stream src/main/index.ts -->
+```ts
+import { app } from "electron";
+import { ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   ipc.exportRows.handle(async function* (_event, table, limit = 100) {
+      const cursor = { close: async () => console.log("closed") };
+      try {
+         for (let id = 1; id <= limit; id++) {
+            yield { id, name: `${table} ${id}` };
+         }
+      } finally {
+         await cursor.close(); // also runs when the renderer cancels
+      }
+   });
+});
+```
+
+In the page, `stream(...)` returns an async iterator at once:
+
+<!-- readme-example: kind-stream src/renderer/app.ts -->
+```ts
+async function fillTable(table: HTMLElement): Promise<void> {
+   for await (const row of ipc.exportRows.stream("people", 100)) {
+      table.append(`${row.id}: ${row.name}`);
+   }
+}
+
+fillTable(document.body);
+```
+
+The page opens the stream, and the handler of the main process is wrapped to start it for every call:
+
+```ts
+// preload.ts
+exportRows: {
+   stream: (...args: any[]) => openStream('exportRows', 'autoipc:exportRows', args, 1024),
+},
+```
+
+```ts
+// main.ts
+exportRows: {
+   handle: (callback: (event: IpcMainInvokeEvent, table: string, limit?: number) => AsyncIterable<Row>, options?: IpcListenOptions) => {
+      // ...
+      const listener = (event: IpcMainInvokeEvent, id: unknown, ...rest: unknown[]) =>
+         settleInvoke(() => startStream(event, 'exportRows', 'autoipc:exportRows', id, 1024, () => (handler as (...rest: unknown[]) => unknown)(event, ...rest)));
+      target.ipc.removeHandler('autoipc:exportRows');
+      target.ipc.handle('autoipc:exportRows', listener);
+      // ...
+      return remove;
+   },
+},
 ```
 
 Every call gets a `MessageChannelMain` of its own, so the chunks of two calls never mix, and they
@@ -1172,10 +1685,16 @@ before it returns, then the first read of the stream rejects instead.
 
 The stream is an async iterator with one more method, `cancel()`:
 
-```typescript
-const stream = ipc.exportRows.stream("people");
-const first = await stream.next();  // { done: false, value: row }
-stream.cancel();                    // or: await stream.return()
+<!-- readme-example: kind-stream src/renderer/cancel.ts -->
+```ts
+async function firstRow(): Promise<void> {
+   const stream = ipc.exportRows.stream("people");
+   const first = await stream.next(); // { done: false, value: row }
+   console.log(first.value);
+   stream.cancel(); // or: await stream.return()
+}
+
+firstRow();
 ```
 
 `cancel()`, `return()` and the `break` of a `for await` loop stop the stream: the main process calls
@@ -1189,9 +1708,14 @@ generator that is waiting for something when the stop arrives is stopped when it
 object (checked in Electron 44.7.0), so the preload script cannot listen to it. A page that has a
 signal stops the stream itself:
 
-```typescript
-const stream = ipc.exportRows.stream("people");
-signal.addEventListener("abort", () => stream.cancel(), { once: true });
+<!-- readme-example: kind-stream src/renderer/abort.ts -->
+```ts
+function exportUntilAborted(signal: AbortSignal): void {
+   const stream = ipc.exportRows.stream("people");
+   signal.addEventListener("abort", () => stream.cancel(), { once: true });
+}
+
+exportUntilAborted(new AbortController().signal);
 ```
 
 If the generator throws, the chunks that came before the error are read first. Then the read rejects
@@ -1225,10 +1749,19 @@ Things to know:
 
 `highWaterMark` is the most chunks that the generator may be ahead of the page:
 
-```typescript
-exportRows: stream<(table: string) => AsyncIterable<Row>>({ highWaterMark: 64 }),
-tokens: stream<(prompt: string) => AsyncIterable<string>>({ highWaterMark: Infinity }), // no limit
-rows: stream<() => AsyncIterable<Row>>({ highWaterMark: 0 }), // pull-based
+<!-- readme-example: kind-backpressure src/autoipc/schema.ts -->
+```ts
+import { defineChannels, stream } from "automate-electron-ipc";
+
+export interface Row {
+   id: number;
+}
+
+export default defineChannels({
+   exportRows: stream<(table: string) => AsyncIterable<Row>>({ highWaterMark: 64 }),
+   tokens: stream<(prompt: string) => AsyncIterable<string>>({ highWaterMark: Infinity }), // no limit
+   rows: stream<() => AsyncIterable<Row>>({ highWaterMark: 0 }), // pull-based
+});
 ```
 
 It is a non-negative integer literal, or `Infinity`. The unit is the chunk, whatever its size, so
@@ -1240,20 +1773,68 @@ where `limit` is the total of chunks that the page allows so far. A reader that 
 message for half a window of chunks. `streamUtility` channels take the same option, and the window
 is per call, though all the streams of a channel share one port.
 
-#### Port channels
+#### port
 
 A `port` channel connects two windows with a `MessagePort` pair, so they talk without the main
-process in between. The main process pairs them, the renderers send and listen:
+process in between. The main process pairs them, the renderers send and listen. The signature types the
+messages in both directions:
 
-```typescript
-// main process
-const connection = ipc.chat.connect(winA, winB); // call connection.close() to end it
+<!-- readme-example: kind-port src/autoipc/schema.ts -->
+```ts
+import { defineChannels, port } from "automate-electron-ipc";
 
-// renderer
-const stop = ipc.chat.on((msg) => show(msg)); // any number of subscribers, each with a disposer
+export default defineChannels({
+   chat: port<(msg: string) => void>(),
+});
+```
+
+<!-- readme-example: kind-port src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   const winA = new BrowserWindow();
+   const winB = new BrowserWindow();
+   const connection = ipc.chat.connect(winA, winB);
+   // Later, to end the connection: connection.close();
+
+   // A hub that talks to several peers gets one connection per pair:
+   const hub = new BrowserWindow();
+   for (const peer of [new BrowserWindow(), new BrowserWindow()]) {
+      ipc.chat.connect(hub, peer);
+   }
+});
+```
+
+<!-- readme-example: kind-port src/renderer/app.ts -->
+```ts
+const stopChat = ipc.chat.on((msg) => console.log(msg)); // any number of subscribers, each with a disposer
 ipc.chat.send("hi"); // queued until the port has arrived, then sent in order
 ipc.chat.onReady(() => console.log("connected")); // for every new port, at once if one is there
 ipc.chat.onClose(() => console.log("the connection ended"));
+```
+
+The main process has only `connect`. The preload script creates the port channel of the page, and
+transfers the ports that the main process sends:
+
+```ts
+// main.ts
+chat: {
+   connect: (winA: BrowserWindow, winB: BrowserWindow) => connectPorts('autoipc:chat', winA, winB),
+},
+```
+
+```ts
+// preload.ts
+ports['chat'] = createPortChannel('chat', 'autoipc:chat', 1000);
+ipcRenderer.on('autoipc:chat', (event: IpcRendererEvent, key: unknown) => {
+   ports['chat'].pair(key, event.ports[0]);
+});
+// ...
+export const api = {
+   chat: ports['chat'].api,
+};
 ```
 
 `connect` can be called before the windows have loaded: it pairs them as soon as both have, and again
@@ -1264,18 +1845,14 @@ either window ends it as well, for the other window. After the end, `send` queue
 new `connect` pairs the windows.
 
 A window can hold any number of connections of a channel, such as a hub with several peers. Call
-`connect` once per pair, and the hub gets each peer as a connection object of its own:
+`connect` once per pair (the loop in the main process above), and the hub gets each peer as a
+connection object of its own:
 
-```typescript
-// main process
-for (const peer of peers) {
-   ipc.chat.connect(hub, peer);
-}
-
-// renderer of the hub
-const stop = ipc.chat.onConnection((peer) => {
+<!-- readme-example: kind-port src/renderer/hub.ts -->
+```ts
+const stopConnections = ipc.chat.onConnection((peer) => {
    peer.send("welcome"); // to this peer alone
-   peer.on((msg) => show(msg)); // from this peer alone
+   peer.on((msg) => console.log(msg)); // from this peer alone
    peer.onClose(() => console.log("a peer left"));
    // peer.close() ends the connection for the peer as well
 });
@@ -1291,27 +1868,55 @@ The methods of the channel itself, `ipc.chat.send`, `on`, `onReady` and `onClose
 connections: `send` goes to each of them (and is queued for the first one while there is none), and
 the others hear every connection. They are what a page with a single peer needs.
 
-#### Ports between the main process and a renderer
+#### mainPort
 
 High-frequency data, such as log tailing, audio meters or progress, pays the overhead of `ipcMain`
 for every message. Electron recommends a `MessagePortMain` for it, and a `mainPort` channel
 generates one. The signature types the messages in both directions, as it does for `port`:
 
-```typescript
-// schema.ts
-logTail: mainPort<(line: string) => void>(),
+<!-- readme-example: kind-main-port src/autoipc/schema.ts -->
+```ts
+import { defineChannels, mainPort } from "automate-electron-ipc";
 
-// main process: a window, a view or contents
-const tail = ipc.logTail.connect(mainWindow);
-tail.send("started"); // queued until the page has the port, then sent in order
-const stop = tail.on((line) => console.log("from the page:", line)); // any number of subscribers
-tail.onReady(() => console.log("the page is connected")); // for every new port, at once if one is there
-tail.onClose(() => console.log("the page is gone"));
-tail.close(); // ends the connection for good
+export default defineChannels({
+   logTail: mainPort<(line: string) => void>(),
+});
+```
 
-// renderer: the API of a `port` channel
-ipc.logTail.on((line) => append(line));
+In the main process, `connect` takes a window, a view or contents and returns the connection:
+
+<!-- readme-example: kind-main-port src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   const mainWindow = new BrowserWindow();
+   const tail = ipc.logTail.connect(mainWindow);
+   tail.send("started"); // queued until the page has the port, then sent in order
+   const stop = tail.on((line) => console.log("from the page:", line)); // any number of subscribers
+   tail.onReady(() => console.log("the page is connected")); // for every new port, at once if one is there
+   tail.onClose(() => console.log("the page is gone"));
+   // Later, to end the connection for good: tail.close();
+});
+```
+
+The page has the API of a `port` channel, with the main process as the peer:
+
+<!-- readme-example: kind-main-port src/renderer/app.ts -->
+```ts
+ipc.logTail.on((line) => document.body.append(line));
 ipc.logTail.send("hello"); // to the main process
+```
+
+The preload script is that of a `port` channel (see above). The main process gets the typed
+connection from `connect`:
+
+```ts
+// main.ts
+logTail: {
+   connect: (target: BrowserWindow | WebContents | WebContentsView): { send: (line: string) => void; on: (callback: (line: string) => void) => () => void; /* ... */ close: () => void } => connectMainPort('autoipc:logTail', 'logTail', 1000, target),
+},
 ```
 
 `connect(target)` returns the connection of the main process, a typed wrapper of the `MessagePortMain`
@@ -1338,11 +1943,15 @@ before the page has loaded, after a port has closed while the contents are still
 the channel itself, while it has no connection yet. A main process that tails a log into a window
 which has not loaded would otherwise hold every line in memory, so these queues are bounded:
 
-```typescript
-// schema.ts
-logTail: mainPort<(line: string) => void>({ maxQueue: 5000 }),
-meters: mainPort<(level: number) => void>({ maxQueue: 0 }), // nothing is queued
-frames: mainPort<(frame: Uint8Array) => void>({ maxQueue: Infinity }), // never drops
+<!-- readme-example: kind-queues src/autoipc/schema.ts -->
+```ts
+import { defineChannels, mainPort } from "automate-electron-ipc";
+
+export default defineChannels({
+   logTail: mainPort<(line: string) => void>({ maxQueue: 5000 }),
+   meters: mainPort<(level: number) => void>({ maxQueue: 0 }), // nothing is queued
+   frames: mainPort<(frame: Uint8Array) => void>({ maxQueue: Infinity }), // never drops
+});
 ```
 
 `maxQueue` is a non-negative integer literal, or `Infinity`, and the default is 1000. Messages are
@@ -1357,21 +1966,35 @@ A message that does not fit is handled by the overflow callback, and the oldest 
 when there is none. A callback is registered at run time, since the schema is only parsed, never
 executed. The page and the main process differ on purpose:
 
-```typescript
-// renderer: gets the new message, and answers with an action
-const stop = ipc.logTail.onOverflow((message, info) => {
+The page gets the new message, and answers with an action:
+
+<!-- readme-example: kind-queues src/renderer/app.ts -->
+```ts
+const stopOverflow = ipc.logTail.onOverflow((message, info) => {
    // message: the argument list, [line]
    // info: { channel: "logTail", max: 5000, dropped: 12, warnings: 1 }
+   console.log(message, info.dropped);
    return "dropOldest"; // or "dropNewest", or "clear" (drop the queue, keep the new message)
 });
-connection.onOverflow(callback); // on a connection from onConnection: wins over the channel's callback
+// On a connection from onConnection, which wins over the callback of the channel:
+// connection.onOverflow(callback);
+```
 
-// main process: gets the queue, and returns the messages to keep
-configurePorts({
-   onOverflow: (queue, message, info) => [...queue.slice(1), message], // the default of all channels
+The main process gets the queue, and returns the messages to keep:
+
+<!-- readme-example: kind-queues src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { configurePorts, ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   configurePorts({
+      onOverflow: (queue, message, _info) => [...queue.slice(1), message], // the default of all channels
+   });
+   const tail = ipc.logTail.connect(new BrowserWindow());
+   tail.onOverflow((queue, message, _info) => [...queue, message]); // for one connection only
+   tail.onOverflow(undefined); // back to the global callback
 });
-tail.onOverflow((queue, message, info) => [...queue, message]); // for one connection only
-tail.onOverflow(undefined); // back to the global callback
 ```
 
 The page callback never gets the queue, because `contextBridge` copies every argument that crosses
@@ -1388,115 +2011,6 @@ never reset, so a queue that drains and overflows again continues them. `configu
 generated when the schema has a `mainPort` channel; a `port` channel queues only in the preload
 script.
 
-#### Errors
-
-Electron reports an error that an `invoke` handler throws to the renderer as the text
-`Error invoking remote method 'getUser': Error: not found`. The class, the `code` and any other
-field are lost. The generated bindings keep them: the main process answers every `invoke` with
-`{ ok: true, value }` or `{ ok: false, error }`, and the renderer's `ipc.<name>.invoke` returns the
-value or rejects with the error:
-
-```typescript
-class NotFoundError extends Error {
-   name = "NotFoundError";
-   code = "NOT_FOUND";
-   constructor(readonly data: { id: number }) {
-      super("User not found");
-   }
-}
-
-ipc.getUser.handle(async (_event, id) => {
-   throw new NotFoundError({ id });
-});
-```
-
-```typescript
-try {
-   await ipc.getUser.invoke(7);
-} catch (error) {
-   // { name: "NotFoundError", message: "User not found", code: "NOT_FOUND", data: { id: 7 } }
-}
-```
-
-The rejection value is a plain object with `name`, `message`, and, when the thrown error has them,
-`code` (a string or a number) and `data`. It is not an `Error` and has no stack, since `contextBridge`
-copies a thrown `Error` with only its message and stack, and so loses `name`, `code` and `data`.
-Check `error.name` or `error.code` instead of `instanceof`. `data` is copied with the structured
-clone algorithm, and is left out when it cannot be cloned (it holds a function, for example). Anything
-that is thrown but is not an object, such as a string, becomes the `message`. A call from a sender
-that is not allowed, and one with invalid arguments, reject the same way, with the codes
-`IPC_FORBIDDEN` and `IPC_VALIDATION`. A call to a channel with no registered handler still fails with
-the message of Electron.
-
-Declare the errors that a handler may throw in a second type argument of `invoke`. They are
-documented in the generated `types.ts`, and the global type `IpcError<E>` describes the object
-that the promise is rejected with:
-
-```typescript
-export default defineChannels({
-   getUser: invoke<(id: number) => Promise<User>, NotFoundError | AuthError>(),
-});
-```
-
-```typescript
-catch (error) {
-   const failure = error as IpcError<NotFoundError | AuthError>;
-   if (failure.name === "NotFoundError") {
-      console.log(failure.data.id); // typed from NotFoundError
-   }
-}
-```
-
-`IpcError` follows the `name`, `code` and `data` types of the declared classes, so give them literal
-types, as `NotFoundError` above does with `name = "NotFoundError"`, to tell them apart by `name`. The
-`as` form cannot declare error types.
-
-Set `rawErrors` to `true` in the config to turn all of this off: handlers then answer with their value
-and Electron reports their errors as it always did.
-
-#### Timeouts
-
-A handler that never answers leaves the promise of `ipc.<name>.invoke` pending for ever. Give a
-channel a time limit with `timeoutMs`, or set a default for all `invoke` channels in the config:
-
-```typescript
-export default defineChannels({
-   exportAll: invoke<() => Promise<string>>({ timeoutMs: 30_000 }),
-   // `0` turns the timeout off for this channel, also when the config sets a default.
-   waitForUser: invoke<() => Promise<boolean>>({ timeoutMs: 0 }),
-});
-```
-
-When the time has passed without a reply, the preload script rejects the promise with a plain object,
-like the other errors of the library, and `types.ts` documents it as `IpcTimeoutError`:
-
-```typescript
-catch (error) {
-   const failure = error as IpcError<IpcTimeoutError>;
-   if (failure.code === "IPC_TIMEOUT") { /* ... */ }
-}
-```
-
-Only the wait of the page ends. The handler in the main process keeps running, since it cannot be
-stopped from the renderer, and its late reply is dropped. The option takes a non-negative integer
-literal and applies to `invoke` only: a `send` has no reply, and `ask` has its own `timeoutMs` in
-`invokeWith`. With `rawErrors`, the timeout still rejects with this object, while the errors of the
-handlers stay Electron's.
-
-The calls to and from a utility process take the same option: `callUtility`, `callMain` and
-`invokeUtility` reject with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT` (for the page, the
-plain object of the same shape), and the default of the config applies to them. A `streamUtility` takes
-`timeoutMs` as well, but only as the wait for its first chunk, its end or an error, and the default of
-the config does not apply to it: a timed-out stream is cancelled in the child and fails the read of the
-page. The handler of a call is not stopped, and its late reply is dropped.
-
-`invokeFromWorker` takes `timeoutMs` too, and the default of the config applies to it. The preload
-script of a service worker has no timers (`setTimeout` is not defined there), so the main process times
-the call: from the moment it arrives, over the schema of `validate` and the handler. The worker gets the
-plain object `{ name: "IpcTimeoutError", message, code: "IPC_TIMEOUT" }`. The handler is not stopped,
-and its late reply is dropped. With `rawErrors` the main process still rejects the call, but the worker
-gets the error of Electron, and the typings do not declare `IpcTimeoutError`. A question to a worker,
-`askWorker`, has no schema option: `invokeWith(worker, { timeoutMs }, ...args)` times it.
 
 #### Utility processes
 
@@ -1514,30 +2028,80 @@ traffic between the main process and a utility process, with request and respons
 Besides `main.ts`, the generator writes `utility.ts` (see `utilityBindingsPath`), with the same
 `ipc` object for the code that runs in the utility process. It talks over `process.parentPort`, needs
 no import from `electron`, and, like the other generated files, no dependency on this library. It is
-written only when the schema has such a channel. Import it in the entry file of the child:
+written only when the schema has such a channel.
 
-```typescript
-// main process
-import { forkUtility, ipc } from "./autoipc/main";
+<!-- readme-example: kind-utility src/autoipc/schema.ts -->
+```ts
+import { callMain, callUtility, defineChannels, notifyMain, notifyUtility } from "automate-electron-ipc";
 
-// forkUtility takes the arguments of utilityProcess.fork. Do not fork the child with
-// utilityProcess.fork, unless you call attachUtility(child) right after, see below.
-const child = forkUtility(path.join(__dirname, "indexer.js"));
-ipc.getSetting.handle(child, async (key) => settings.get(key));
-ipc.indexed.on(child, (done, total) => console.log(`${done}/${total}`));
-ipc.setLogLevel.send(child, "debug");
-const count = await ipc.indexFile.invoke(child, "/home/me/notes"); // a number
+export default defineChannels({
+   // The main process asks the child, which answers with a number.
+   indexFile: callUtility<(path: string) => Promise<number>>(),
+   // The main process tells the child something.
+   setLogLevel: notifyUtility<(level: "debug" | "info") => void>(),
+   // The child asks the main process.
+   getSetting: callMain<(key: string) => Promise<string | undefined>>(),
+   // The child tells the main process something.
+   indexed: notifyMain<(done: number, total: number) => void>(),
+});
 ```
 
-```typescript
-// indexer.ts, the entry of the utility process
-import { ipc } from "./autoipc/utility";
+In the main process, `forkUtility` forks the child and every channel takes the child as its first
+argument:
+
+<!-- readme-example: kind-utility src/main/index.ts -->
+```ts
+import path from "node:path";
+import { forkUtility, ipc } from "../autoipc/main";
+
+const settings = new Map<string, string>([["theme", "dark"]]);
+
+export async function startIndexer(): Promise<number> {
+   // forkUtility takes the arguments of utilityProcess.fork. Do not fork the child with
+   // utilityProcess.fork, unless you call attachUtility(child) right after, see below.
+   const child = forkUtility(path.join(__dirname, "indexer.js"));
+   ipc.getSetting.handle(child, async (key) => settings.get(key));
+   ipc.indexed.on(child, (done, total) => console.log(`${done}/${total}`));
+   ipc.setLogLevel.send(child, "debug");
+   return ipc.indexFile.invoke(child, "/home/me/notes"); // a number
+}
+```
+
+The entry file of the child imports the generated `utility.ts`:
+
+<!-- readme-example: kind-utility src/utility/indexer.ts -->
+```ts
+import { ipc } from "../autoipc/utility";
+
+let level = "info";
 
 ipc.indexFile.handle(async (path) => {
    const theme = await ipc.getSetting.invoke("theme");
-   return scan(path, theme);
+   ipc.indexed.send(1, 1);
+   return `${level}:${theme}:${path}`.length;
 });
-ipc.setLogLevel.on((level) => setLevel(level));
+ipc.setLogLevel.on((next) => {
+   level = next;
+});
+```
+
+The generated `main.ts` and `utility.ts` are mirror images: what one side handles or listens to, the
+other side calls or sends. For `indexFile`, the main process calls with the child, and the child handles:
+
+```ts
+// main.ts
+indexFile: {
+   invoke: (child: UtilityProcess, path: string): Promise<number> =>
+      callUtilityChild(child, 'autoipc:indexFile', [path]) as Promise<number>,
+},
+```
+
+```ts
+// utility.ts
+indexFile: {
+   handle: (callback: (path: string) => Promise<number>) =>
+      setUtilityHandler(getUtilityPeer(), 'autoipc:indexFile', callback),
+},
 ```
 
 Every `child` is a `UtilityProcess`, so any number of children can run, each with its own handlers,
@@ -1592,18 +2156,50 @@ every query. `invokeUtility` and `streamUtility` let the page talk to the child 
 process only brokers a `MessageChannelMain` between a window and the child, and sees none of the
 traffic afterwards.
 
-```typescript
-// main process
-const child = forkUtility(path.join(__dirname, "indexer.js")); // or attachUtility(child) right after fork
-const win = new BrowserWindow({ webPreferences: { preload } });
-const link = ipc.queryRows.connect(child, win); // a window, a view or contents
-ipc.scanRows.connect(child, win);
-// Later, to end the connection: link.close()
+<!-- readme-example: kind-utility-page src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invokeUtility, streamUtility } from "automate-electron-ipc";
+
+export interface Row {
+   id: number;
+   title: string;
+}
+
+export default defineChannels({
+   queryRows: invokeUtility<(sql: string) => Promise<Row[]>>(),
+   scanRows: streamUtility<(table: string) => AsyncIterable<Row>>(),
+});
 ```
 
-```typescript
-// indexer.ts, the entry of the utility process
-import { ipc } from "./autoipc/utility";
+The main process forks the child and connects it to the window. The connection takes a window, a view
+or contents:
+
+<!-- readme-example: kind-utility-page src/main/index.ts -->
+```ts
+import path from "node:path";
+import { BrowserWindow } from "electron";
+import { forkUtility, ipc } from "../autoipc/main";
+
+export function openWindow(preload: string): void {
+   const child = forkUtility(path.join(__dirname, "indexer.js")); // or attachUtility(child) right after fork
+   const win = new BrowserWindow({ webPreferences: { preload } });
+   const link = ipc.queryRows.connect(child, win);
+   ipc.scanRows.connect(child, win);
+   // Later, to end the connection: link.close()
+   console.log(link);
+}
+```
+
+The child registers the handlers when it starts:
+
+<!-- readme-example: kind-utility-page src/utility/indexer.ts -->
+```ts
+import { ipc } from "../autoipc/utility";
+
+const db = {
+   all: async (_sql: string) => [{ id: 1, title: "first" }],
+   iterate: (_table: string) => [{ id: 1, title: "first" }],
+};
 
 ipc.queryRows.handle(async (sql) => db.all(sql));
 ipc.scanRows.handle(async function* (table) {
@@ -1613,12 +2209,38 @@ ipc.scanRows.handle(async function* (table) {
 });
 ```
 
-```typescript
-// renderer
-const rows = await ipc.queryRows.invoke("select * from notes");
-for await (const row of ipc.scanRows.stream("notes")) {
-   render(row);
+The page calls them like an `invoke` and a `stream` channel:
+
+<!-- readme-example: kind-utility-page src/renderer/app.ts -->
+```ts
+async function showRows(): Promise<void> {
+   const rows = await ipc.queryRows.invoke("select * from notes");
+   console.log(rows.length);
+   for await (const row of ipc.scanRows.stream("notes")) {
+      document.body.append(row.title);
+   }
 }
+
+showRows();
+```
+
+The main process only connects. The preload script gives the page a client for each channel:
+
+```ts
+// main.ts
+queryRows: {
+   connect: (child: UtilityProcess, target: BrowserWindow | WebContents | WebContentsView): { close: () => void } => connectUtilityPort('autoipc:queryRows', child, target),
+},
+```
+
+```ts
+// preload.ts
+queryRows: {
+   invoke: (...args: any[]) => callUtilityPort(utilityClients['queryRows'], args),
+},
+scanRows: {
+   stream: (...args: any[]) => openUtilityStream(utilityClients['scanRows'], args, 1024),
+},
 ```
 
 The page API is that of `invoke` and `stream`, and the types of `types.ts` declare the errors: the
@@ -1684,34 +2306,114 @@ name `exposeAs`. The page files leave these channels out. Register the script wi
 include the typings in the project that compiles the worker, which has its own `tsconfig.json`: the
 typings declare the same global variable as `window.d.ts` does, so a project includes only one of them.
 
-```typescript
-// main process
-import { app, session } from "electron";
-import { attachServiceWorkers, ipc } from "./autoipc/main";
+<!-- readme-example: kind-service-worker src/autoipc/schema.ts -->
+```ts
+import {
+   askWorker,
+   defineChannels,
+   emitToWorker,
+   invokeFromWorker,
+   sendFromWorker,
+} from "automate-electron-ipc";
 
-app.whenReady().then(() => {
-   const ses = session.defaultSession;
-   // The compiled service-worker-preload.ts, as an absolute path.
-   ses.registerPreloadScript({ type: "service-worker", filePath: path.join(__dirname, "sw-preload.js") });
-   attachServiceWorkers(ses); // optional, see below
-
-   ipc.getToken.handle(ses, async (event, scope) => tokens.get(scope));
-   ipc.syncDone.on(ses, (event, pending) => console.log(event.versionId, pending));
+export default defineChannels({
+   // The worker asks the main process.
+   getToken: invokeFromWorker<(scope: string) => Promise<string>>(),
+   // The worker tells the main process something.
+   syncDone: sendFromWorker<(pending: number) => void>(),
+   // The main process asks the worker.
+   flushQueue: askWorker<(force: boolean) => Promise<number>>(),
+   // The main process tells the worker something.
+   configChanged: emitToWorker<(key: string) => void>(),
 });
-
-// Later, to talk to a worker:
-const worker = ses.serviceWorkers.getWorkerFromVersionID(versionId); // a ServiceWorkerMain
-ipc.configChanged.send(worker, "theme");
-ipc.configChanged.broadcast(ses, "theme"); // all the workers of the session that run
-const flushed = await ipc.flushQueue.invoke(worker, true); // a number
 ```
 
-```typescript
-// sw.ts, the service worker (compiled with service-worker.d.ts)
-const token = await ipc.getToken.invoke("app");
-ipc.syncDone.send(0);
+In the main process, register the preload script, and answer the worker. `handle` and `on` take the
+session, since a worker starts and stops on its own:
+
+<!-- readme-example: kind-service-worker src/main/index.ts -->
+```ts
+import path from "node:path";
+import { app, session } from "electron";
+import { attachServiceWorkers, ipc } from "../autoipc/main";
+
+const tokens = new Map<string, string>();
+
+app.whenReady().then(async () => {
+   const ses = session.defaultSession;
+   // The compiled service-worker-preload.ts, as an absolute path.
+   ses.registerPreloadScript({
+      type: "service-worker",
+      filePath: path.join(__dirname, "sw-preload.js"),
+   });
+   attachServiceWorkers(ses); // optional, see below
+
+   ipc.getToken.handle(ses, async (_event, scope) => tokens.get(scope) ?? "");
+   ipc.syncDone.on(ses, (event, pending) => console.log(event.versionId, pending));
+
+   // Later, to talk to a worker:
+   const worker = ses.serviceWorkers.getWorkerFromVersionID(1); // a ServiceWorkerMain
+   if (worker) {
+      ipc.configChanged.send(worker, "theme");
+      const flushed = await ipc.flushQueue.invoke(worker, true); // a number
+      console.log(flushed);
+   }
+   ipc.configChanged.broadcast(ses, "theme"); // all the workers of the session that run
+});
+```
+
+The worker is compiled with `service-worker.d.ts`, which declares the global `ipc`, and registers its
+responders and listeners at the top of its script:
+
+<!-- readme-example: kind-service-worker src/sw/sw.ts -->
+```ts
+const queue = { flush: async (_force: boolean) => 0 };
+
+async function start(): Promise<void> {
+   const token = await ipc.getToken.invoke("app");
+   console.log(token);
+   ipc.syncDone.send(0);
+}
+
 ipc.flushQueue.handle(async (force) => queue.flush(force));
-ipc.configChanged.on((key) => reloadConfig(key));
+ipc.configChanged.on((key) => console.log(`reload ${key}`));
+start();
+```
+
+The main process takes the session for the channels that the worker calls, and the worker for the ones
+it answers:
+
+```ts
+// main.ts
+getToken: {
+   handle: (session: Session, callback: (event: IpcMainServiceWorkerInvokeEvent, scope: string) => Promise<string>): (() => void) =>
+      registerWorkerHandler(session, 'getToken', callback, false),
+   handleOnce: /* the same, and the handler is used up by the first call */,
+},
+flushQueue: {
+   invoke: (worker: ServiceWorkerMain, force: boolean): Promise<number> =>
+      askServiceWorker('flushQueue', 'autoipc:flushQueue', worker, [force]) as Promise<number>,
+   invokeWith: /* the same, with the options before the arguments */,
+},
+```
+
+The preload script of the worker is that of a page for these channels. It calls `ipcRenderer.invoke` and
+`ipcRenderer.send` itself, and keeps the responder:
+
+```ts
+// service-worker-preload.ts
+getToken: {
+   invoke: async (...args: any[]) => {
+      const result = await ipcRenderer.invoke('autoipc:getToken', ...args);
+      if (result.ok) {
+         return result.value;
+      }
+      throw result.error;
+   },
+},
+syncDone: {
+   send: (...args: any[]) => ipcRenderer.send('autoipc:syncDone', ...args),
+},
 ```
 
 A worker starts and stops on its own, and its messages go to the `ipc` of its `ServiceWorkerMain`, never
@@ -2589,7 +3291,14 @@ It does not apply to the `data` of an error, which is cloned as before.
 The signature can also be written after the call with `as`. It is an alternative to the type argument,
 and the two cannot be combined on one channel:
 
-```typescript
+<!-- readme-example: as-form src/autoipc/schema.ts -->
+```ts
+import { defineChannels, emit, invoke } from "automate-electron-ipc";
+
+export interface User {
+   id: number;
+}
+
 export default defineChannels({
    getUser: invoke() as (id: number) => Promise<User>,
    progress: emit({ trigger: "focus" }) as (n: number) => void,

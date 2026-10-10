@@ -41,16 +41,28 @@ async function checkExample(example: ReadmeExample): Promise<void> {
    const userFiles = example.files
       .map(({ file }) => file)
       .filter((file) => file.endsWith(".ts") && !file.startsWith(`${project.ipcDataDir}/schema`));
-   if (userFiles.length > 0) {
-      // The typings of the page declare the global `ipc` that the code of a renderer uses.
+   // The code of a service worker is a file in a `sw` directory. It is checked with the typings of
+   // the worker, since they declare the same global `ipc` as the typings of the page do.
+   const isWorkerFile = (file: string) => /(^|\/)sw\//.test(file);
+   // The typings declare the global `ipc` that the code of a renderer or a worker uses. The checks
+   // share the tsconfig of the project, so they run one after the other.
+   const checkCode = async (codeFiles: string[], typings: string) => {
+      if (codeFiles.length === 0) {
+         return;
+      }
       const userDiagnostics = await project.typecheckFiles([
-         ...userFiles,
-         `${project.ipcDataDir}/window.d.ts`,
+         ...codeFiles,
+         `${project.ipcDataDir}/${typings}`,
       ]);
       if (userDiagnostics !== "") {
          fail(`its code does not type-check:\n${userDiagnostics}`);
       }
-   }
+   };
+   await checkCode(
+      userFiles.filter((file) => !isWorkerFile(file)),
+      "window.d.ts",
+   );
+   await checkCode(userFiles.filter(isWorkerFile), "service-worker.d.ts");
 }
 
 const schema = (body: string) =>

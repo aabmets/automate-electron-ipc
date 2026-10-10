@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 149 delivered, 3 remaining, 1 dropped.
+**Progress:** 150 delivered, 2 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -189,7 +189,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [x] [T47b: Vue composables (optional output)](./tasks/T47b-vue-composables.md) · depends on: T47a
 - [-] [T45: Generic DSL syntax](./tasks/T45-generic-dsl-syntax.md)
 - [x] [T48a: README reference sections and the README example check](./tasks/T48a-readme-reference-and-example-harness.md) · depends on: T38b, T38c, T41b, T42b, T43b, T46, T47b
-- [ ] [T48b: README channel kinds with their generated output](./tasks/T48b-readme-channel-kinds.md) · depends on: T48a
+- [x] [T48b: README channel kinds with their generated output](./tasks/T48b-readme-channel-kinds.md) · depends on: T48a
 - [x] [T48c: README electron-vite example, preload bundling and sandbox notes](./tasks/T48c-readme-electron-vite-and-preload.md) · depends on: T48a
 - [x] [T48d: README security guide and migration notes](./tasks/T48d-readme-security-guide-and-migration.md) · depends on: T48a
 - [ ] [T172: A removed scope leaves its `types.<scope>.ts` behind](./tasks/T172-remove-stale-scope-types-files.md) · depends on: T43a, T48a
