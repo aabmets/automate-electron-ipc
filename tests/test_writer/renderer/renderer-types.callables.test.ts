@@ -82,7 +82,7 @@ describe("HelperTypesWriter", () => {
    });
 
    it("should type senders by channel kind, not by the declared return type", async () => {
-      // Regression for B7: `ipcRenderer.send` returns `undefined`, so Broadcast senders are
+      // `ipcRenderer.send` returns `undefined`, so Broadcast senders are
       // `void` even when the declared signature returns a promise.
       const pfsArray = buildFileSpecs(
          {
@@ -116,7 +116,7 @@ describe("HelperTypesWriter", () => {
       expect(output).toContain(
          "syncIt: {\n      /** @throws {IpcError} */\n      invoke: () => Promise<Awaited<number>>;",
       );
-      // Regression for T56: a user type whose name starts with "Promise" is not a promise.
+      // A user type whose name starts with "Promise" is not a promise.
       expect(output).toContain(
          "lookalikeIt: {\n      /** @throws {IpcError} */\n      invoke: () => Promise<Awaited<PromiseResult>>;",
       );

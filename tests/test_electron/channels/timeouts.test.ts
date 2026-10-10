@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// Invoke timeouts (T28) in real Electron: the timer runs in the sandboxed preload script, and the
+// Invoke timeouts in real Electron: the timer runs in the sandboxed preload script, and the
 // rejection crosses the context bridge to the page.
 
 import { describeElectron, type Scenario } from "@testutils/electron/electron-utils.js";

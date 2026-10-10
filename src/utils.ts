@@ -124,13 +124,7 @@ export function isSchemaSourceFile(fileName: string): boolean {
    return /\.[mc]?ts$/.test(fileName) && !/\.d\.[mc]?ts$/.test(fileName);
 }
 
-/**
- * Checks if a given path is inside another path.
- *
- * @param childPath - The path to check.
- * @param parentPath - The parent path.
- * @returns True if childPath is inside parentPath, false otherwise.
- */
+/** Checks if a given path is inside another path. */
 export function isPathInside(childPath: string, parentPath: string): boolean {
    const relative = path.relative(parentPath, childPath);
    return (

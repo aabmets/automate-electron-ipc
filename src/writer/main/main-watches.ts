@@ -9,8 +9,6 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-/** The watches of the generated `main.ts` on the events of contents, windows and children. */
-
 /**
  * `watchEvent(emitter, event, callback)`, which the calls and connections that the main process
  * holds open use to learn when the contents, the window or the child they depend on goes away.

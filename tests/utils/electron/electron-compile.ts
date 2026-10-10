@@ -13,7 +13,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { transformSync } from "@swc/core";
 
-/** Compiles a TypeScript file to CommonJS the way the runner does. */
 async function compileFile(source: string): Promise<string> {
    return transformSync(await fsp.readFile(source, "utf8"), {
       jsc: { parser: { syntax: "typescript" }, target: "es2022" },

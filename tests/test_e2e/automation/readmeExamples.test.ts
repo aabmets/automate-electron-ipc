@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
 
 const docsDir = path.resolve(import.meta.dirname, "../../../docs");
 
-/** Every `.md` file below `docs/` in sorted path order,. */
+/** Every `.md` file below `docs/` in sorted path order. */
 async function readDocs(): Promise<string> {
    const entries = await fsp.readdir(docsDir, { recursive: true });
    const pages = entries

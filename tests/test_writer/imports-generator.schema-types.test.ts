@@ -63,7 +63,6 @@ describe("ImportsGenerator", () => {
       );
    });
 
-   // Regression for T61.
    it("imports a type that the schema exports under another name", () => {
       const pfs: t.ParsedFileSpecs = {
          fullPath: "/project/src/autoipc/schema.ts",

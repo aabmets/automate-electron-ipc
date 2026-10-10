@@ -230,8 +230,8 @@ describeElectron(
 
          expect(first).toBe(0);
          expect(after).toBe(0);
-         // The calls reject with a plain object, which contextBridge carries with its fields (T82 is about
-         // the errors that the preload script throws synchronously).
+         // The calls reject with a plain object, which contextBridge carries with its fields (unlike the
+         // errors that the preload script throws synchronously).
          for (const failure of [argument, streamArgument, chunk]) {
             expect(failure).toStrictEqual({
                name: "IpcSerializationError",

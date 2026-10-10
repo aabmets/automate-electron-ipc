@@ -23,7 +23,7 @@ describe("validateOptionalConfig", () => {
    });
 
    it("should throw an error if codeIndent is not an integer", () => {
-      // Regression: 2.5 was accepted and silently rounded down by `repeat`.
+      // 2.5 was accepted and silently rounded down by `repeat`.
       expect(() => validateOptionalConfig({ ...baseConfig, codeIndent: 2.5 })).toThrowError(
          /integer/,
       );

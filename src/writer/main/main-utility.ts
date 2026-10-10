@@ -13,9 +13,6 @@ import type * as t from "@types";
 import { buildUtilityPeer } from "../utility/utility-peer.js";
 import type { ChannelEntry, MainContext } from "./main-bindings.js";
 
-/** The channels with a utility process, and the ones between a page and a utility process. */
-
-/** The electron types that the helpers of the channels between a renderer and a utility process use. */
 const BROKER_TYPES = ["BrowserWindow", "WebContents", "WebContentsView", "UtilityProcess"];
 
 /**
@@ -29,7 +26,7 @@ const BROKER_TYPES = ["BrowserWindow", "WebContents", "WebContentsView", "Utilit
  * known from its fork: `forkUtility(...)` forks and attaches it at once, and `attachUtility(child)`
  * does the same for a child that was forked elsewhere, right after `utilityProcess.fork`. A
  * channel that is given a child which was never attached fails with
- * `IPC_UTILITY_NOT_ATTACHED`, since it would otherwise wait for a child that is gone (T86).
+ * `IPC_UTILITY_NOT_ATTACHED`, since it would otherwise wait for a child that is gone.
  * A child which calls the main process also needs its peer from the start. `serialized` is whether
  * any channel of the file goes through the serializer.
  */

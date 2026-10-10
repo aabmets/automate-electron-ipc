@@ -14,7 +14,7 @@ import { vi } from "vitest";
 import { FakePortMain } from "./fake-ports.js";
 import { wire } from "./wire-utils.js";
 
-/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made (T86). */
+/** `attachUtility` of the loaded `main.ts`: the children of the tests are attached when made. */
 let attachChild: ((child: unknown) => void) | undefined;
 
 /** Sets the `attachUtility` that `createChild` attaches the children with, or none. */

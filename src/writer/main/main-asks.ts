@@ -12,8 +12,6 @@
 import { CLAMPED_TIMEOUT, errorClassLines, replyReaderLines } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
-/** The helpers of the `ask` channels, which the questions to a service worker share. */
-
 /** The `IpcAskError` and `IpcAskOptions` of the `ask` channels, and of the questions to a service worker. */
 export function askErrorLines(indents: string[]): string[] {
    const [i1] = indents;
@@ -28,7 +26,6 @@ export function askErrorLines(indents: string[]): string[] {
    ];
 }
 
-/** `readAskReply`, which reads the envelope of the answer to a question. */
 export function readAskReplyLines(indents: string[]): string[] {
    return [
       ...replyReaderLines(indents, {
@@ -62,7 +59,7 @@ export function readAskReplyLines(indents: string[]): string[] {
  * every frame below it. The commit is watched and not the start, so the old document can still
  * answer while a navigation is pending, and a navigation that `beforeunload` cancels changes
  * nothing. The events are watched through `watchEvent`, so any number of pending questions
- * adds one listener of each event to the contents, and not one of its own each (T87).
+ * adds one listener of each event to the contents, and not one of its own each.
  * `IpcAskError` carries the `name`, `message`, `code` and `data` of an error of the responder,
  * and the code `IPC_ASK_TIMEOUT`, `IPC_ASK_DESTROYED`, `IPC_ASK_NO_HANDLER` or
  * `IPC_ASK_INVALID_REPLY` for the failures of the library itself.

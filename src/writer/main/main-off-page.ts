@@ -43,7 +43,7 @@ export function buildOffPageChannels(
       types.add("UtilityProcess");
       return [buildUtilityChannel(ctx, spec)];
    } else if (ctx.isBrokeredSpec(spec)) {
-      // The page is connected to a child which the peers know, so that its exit is seen (T86).
+      // The page is connected to a child which the peers know, so that its exit is seen.
       uses.utility = true;
       uses.envelope = true;
       uses.brokers = true;

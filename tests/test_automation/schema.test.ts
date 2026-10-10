@@ -77,8 +77,8 @@ describe("ipcAutomation", () => {
    });
 
    it("generates identical output however readdir orders files and reads complete", async () => {
-      // Regression for T06: files were pushed in read completion order, so the order of the
-      // generated imports and members changed between runs.
+      // Files were pushed in read completion order, so the order of the generated imports and
+      // members changed between runs.
       const schemaDir = path.join(automation.dir, "schema");
       await fsp.mkdir(path.join(schemaDir, "nested"), { recursive: true });
       const files: Record<string, string> = {
@@ -158,7 +158,7 @@ describe("ipcAutomation", () => {
    });
 
    it("reports a single schema file under the configured data dir", async () => {
-      // Regression for T58: a stale "src/ipc" fallback disagreed with the "src/autoipc" default.
+      // A stale "src/ipc" fallback once disagreed with the "src/autoipc" default.
       const schemaPath = path.join(automation.dir, "src/autoipc/schema.ts");
       await fsp.mkdir(path.dirname(schemaPath), { recursive: true });
       await fsp.writeFile(
@@ -176,14 +176,14 @@ describe("ipcAutomation", () => {
 
       await ipcAutomation();
 
-      // T92: the relative path names the schema file, and not its directory.
+      // The relative path names the schema file, and not its directory.
       expect(success.mock.calls[0][0].map((pfs) => pfs.relativePath)).toStrictEqual([
          "src/autoipc/schema.ts",
       ]);
    });
 
    it("passes the project root to the success report", async () => {
-      // Regression for T71: the report cut paths at the first occurrence of the data dir name.
+      // The report used to cut paths at the first occurrence of the data dir name.
       const schemaPath = path.join(automation.dir, "schema.ts");
       await fsp.writeFile(
          schemaPath,
@@ -205,7 +205,6 @@ describe("ipcAutomation", () => {
    });
 
    it("reads only .ts, .mts and .cts files, ignoring declaration files", async () => {
-      // Regression for T08: every file under schema/ was read and parsed.
       const schemaDir = path.join(automation.dir, "schema");
       await fsp.mkdir(schemaDir, { recursive: true });
       const source = (channel: string) =>
@@ -234,7 +233,6 @@ describe("ipcAutomation", () => {
    });
 
    it("rejects with the file position when a schema file has a syntax error", async () => {
-      // Regression for T08: swc parse errors were swallowed.
       const schemaPath = path.join(automation.dir, "schema.ts");
       await fsp.writeFile(schemaPath, "export default defineChannels({ a: ;\n});");
       automation.mockConfig({

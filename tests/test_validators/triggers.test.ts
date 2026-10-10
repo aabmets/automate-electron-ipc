@@ -32,7 +32,7 @@ describe("trigger validation", () => {
       }
    });
 
-   // Regression for B5: the `as` form and untyped schemas bypass the type-level check.
+   // The `as` form and untyped schemas bypass the type-level check.
    it("rejects a trigger which is not a BrowserWindow event", () => {
       expect(() => validateChannelSpecs([triggerSpec("not-an-event")])).toThrowError(
          /'not-an-event' is not a BrowserWindow event\. Use one of: show, ready-to-show/,

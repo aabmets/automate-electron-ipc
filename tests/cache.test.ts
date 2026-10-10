@@ -17,14 +17,14 @@ describe("LRUCache Singleton Behavior", () => {
       const cache1 = LRUCache.getInstance("cache1", 2);
       const cache2 = LRUCache.getInstance("cache1", 2);
 
-      expect(cache1).toBe(cache2); // Same instance for the same identifier
+      expect(cache1).toBe(cache2);
    });
 
    it("should return different instances for different identifiers", () => {
       const cache1 = LRUCache.getInstance("cache1", 2);
       const cache2 = LRUCache.getInstance("cache2", 2);
 
-      expect(cache1).not.toBe(cache2); // Different instances for different identifiers
+      expect(cache1).not.toBe(cache2);
    });
 });
 
@@ -47,7 +47,7 @@ describe("LRUCache Core Functionality", () => {
       const cache = LRUCache.getInstance("testCache3", 2);
       cache.put("a", 1);
       cache.put("b", 2);
-      cache.put("c", 3); // should evict 'a'
+      cache.put("c", 3);
 
       expect(cache.get("a")).toEqual([false, null]);
       expect(cache.get("b")).toEqual([true, 2]);
@@ -58,8 +58,8 @@ describe("LRUCache Core Functionality", () => {
       const cache = LRUCache.getInstance("testCache4", 2);
       cache.put("a", 1);
       cache.put("b", 2);
-      cache.get("a"); // 'a' becomes the most recent
-      cache.put("c", 3); // should evict 'b' now
+      cache.get("a");
+      cache.put("c", 3);
 
       expect(cache.get("a")).toEqual([true, 1]);
       expect(cache.get("b")).toEqual([false, null]);
@@ -69,7 +69,7 @@ describe("LRUCache Core Functionality", () => {
    it("should overwrite existing keys", () => {
       const cache = LRUCache.getInstance("testCache5", 2);
       cache.put("a", 1);
-      cache.put("a", 2); // should overwrite 'a' with new value
+      cache.put("a", 2);
 
       expect(cache.get("a")).toEqual([true, 2]);
    });
@@ -77,7 +77,7 @@ describe("LRUCache Core Functionality", () => {
    it("should handle limit of 1 correctly", () => {
       const cache = LRUCache.getInstance("testCache6", 1);
       cache.put("a", 1);
-      cache.put("b", 2); // should evict 'a' since limit is 1
+      cache.put("b", 2);
 
       expect(cache.get("a")).toEqual([false, null]);
       expect(cache.get("b")).toEqual([true, 2]);

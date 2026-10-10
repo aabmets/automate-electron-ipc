@@ -16,7 +16,7 @@ import { fixtures } from "../fixture-tracker.js";
 import { createContents as createFakeContents } from "./fake-contents.js";
 import { wire } from "./wire-utils.js";
 
-// T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }` and register
+// `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }` and register
 // on `webContents.ipc` instead of the global `ipcMain`. The fake contents here follow the dispatch
 // of Electron: a message goes to `webContents.ipc` first and then to `ipcMain`. An `invoke` goes
 // to the first of the two that has a handler, and a `send` goes to the listeners of both.

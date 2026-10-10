@@ -82,7 +82,7 @@ const scenarios: Record<string, Scenario> = {
       return { peers: await ctx.evaluate(a, () => (window as any).peers.length) };
    },
 
-   // The scenarios below find T76. They read the state after a pause and do not wait for it, so
+   // The scenarios below read the state after a pause and do not wait for it, so
    // that they return what happened, and do not fail with a timeout.
 
    chatConnectBeforeLoad: async (ctx) => {
@@ -136,7 +136,7 @@ const scenarios: Record<string, Scenario> = {
       };
    },
 
-   // A window that was destroyed before `connect` (T78): Electron's own error, and no leftovers.
+   // A window that was destroyed before `connect`: Electron's own error, and no leftovers.
    chatDestroyedBeforeConnect: async (ctx) => {
       ctx.serve("app://main/chat.html", ctx.data.chatPage);
       const a = await ctx.open({ url: "app://main/chat.html" });

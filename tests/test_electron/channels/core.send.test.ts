@@ -49,7 +49,7 @@ const scenarios: Record<string, Scenario> = {
       return got;
    },
 
-   // The disposers of the listeners on both sides (T14, T15), which cross the context bridge in
+   // The disposers of the listeners on both sides, which cross the context bridge in
    // the page.
    listenerDisposers: async (ctx) => {
       const win = await ctx.open();
@@ -176,7 +176,7 @@ describeElectron(
          });
       });
 
-      // The page of the preload script used one ipcRenderer listener per subscription (T94).
+      // The page of the preload script used one ipcRenderer listener per subscription.
       it("lets a page subscribe many times to one channel without a MaxListenersExceededWarning", () => {
          expect(group.value("manySubscribers")).toStrictEqual({
             first: [1, 2],

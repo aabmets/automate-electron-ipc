@@ -28,7 +28,7 @@ describe("ImportsGenerator", () => {
       });
       const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
 
-      // Regression for T54: `Kind.A` was only resolved against namespace imports.
+      // `Kind.A` was only resolved against namespace imports.
       it("imports a named import by the head of a qualified name", () => {
          const pfs = pfsOf({
             importSpecArray: [{ fromPath: "./kind", customTypes: ["Kind"], namespace: null }],
@@ -74,7 +74,7 @@ describe("ImportsGenerator", () => {
          expect(generator().getDeclaration(pfsOf({}), "Missing.A")).toBeNull();
       });
 
-      // Regression for T62: `typeof config` of a value declared in the schema file got no import.
+      // `typeof config` of a value declared in the schema file got no import.
       it("imports a value of the schema file that a typeof query refers to", () => {
          const pfs = pfsOf({
             typeSpecArray: [

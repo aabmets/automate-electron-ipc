@@ -12,8 +12,6 @@
 import type * as t from "@types";
 import type { ChannelEntry, MainContext } from "./main-bindings.js";
 
-/** The channels between the main process and service workers: their API and their imports. */
-
 /**
  * The names that the helpers of the channels to a service worker declare, import or use, which a
  * schema type of the same name must not shadow.
@@ -59,14 +57,12 @@ export const WORKER_RESERVED_NAMES = [
    "console",
 ];
 
-/** Whether the results and errors of the handler of a channel that a worker calls are an envelope. */
 export function usesWorkerEnvelope(ctx: MainContext, spec: t.ChannelSpec): boolean {
    return (
       spec.direction === "ServiceWorkerToMain" && spec.kind === "Unicast" && !ctx.config.rawErrors
    );
 }
 
-/** Adds the electron types that the helpers of the channels to a service worker use. */
 export function addWorkerImports(specs: t.ChannelSpec[], types: Set<string>): void {
    if (specs.length === 0) {
       return;

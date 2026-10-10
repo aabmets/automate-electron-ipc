@@ -13,11 +13,6 @@ import type * as t from "@types";
 import { anySpec } from "../channel-kinds.js";
 
 /**
- * The registries of the generated `main.ts` which the channels from a renderer consult: the scopes
- * of the windows, and where a listener or a handler is registered.
- */
-
-/**
  * Whether a call from a renderer is checked against a scope: the channels that a page calls in
  * the main process (`invoke`, `send` and `stream`) with `scopes`.
  */

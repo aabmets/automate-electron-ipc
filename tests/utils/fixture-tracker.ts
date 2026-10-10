@@ -24,7 +24,6 @@ export function createFixtureTracker() {
       },
       /** The project that was run last and not cleaned up yet, for a test which reads its files. */
       current: (): E2EProject | undefined => projects.at(-1),
-      /** Removes the temp dir of every project that was run. */
       async cleanup(): Promise<void> {
          await Promise.all(projects.splice(0).map((project) => project.cleanup()));
       },

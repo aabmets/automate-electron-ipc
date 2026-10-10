@@ -57,7 +57,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(channelsMade).toHaveLength(1);
    });
 
-   // Node warns about more than ten listeners of one event (T87).
+   // Node warns about more than ten listeners of one event.
    it("adds one 'exit' listener to the child and one 'destroyed' listener to each page, however many connections", async () => {
       const ipc = await loadMain();
       const { child } = createChild();
@@ -190,7 +190,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(child.postMessage).not.toHaveBeenCalled();
    });
 
-   it("throws IPC_UTILITY_NOT_ATTACHED for a child that was never attached, and registers nothing (T86)", async () => {
+   it("throws IPC_UTILITY_NOT_ATTACHED for a child that was never attached, and registers nothing", async () => {
       const ipc = await loadMain();
       const { child } = createChild({ attached: false });
       const contents = createContents();
@@ -211,7 +211,7 @@ describe("utility ports, main process, ipc.<name>.connect", () => {
       expect(channelsMade).toHaveLength(0);
    });
 
-   it("throws IPC_UTILITY_EXITED for a child that exited, registers nothing and keeps the earlier connection of the page (T86)", async () => {
+   it("throws IPC_UTILITY_EXITED for a child that exited, registers nothing and keeps the earlier connection of the page", async () => {
       const ipc = await loadMain();
       const { child: other } = createChild();
       const { child } = createChild();

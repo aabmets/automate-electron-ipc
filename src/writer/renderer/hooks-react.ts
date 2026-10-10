@@ -11,7 +11,7 @@
 
 import { FrameworkHooksWriter } from "./hooks-base.js";
 
-/** The hooks. The indent of the template is 3 spaces, which \`reindent\` turns into the configured one. */
+/** The hooks. The indent of the template is 3 spaces, which `reindent` turns into the configured one. */
 const HOOKS = `
 /**
  * Subscribes to an event channel while the component is mounted, and unsubscribes when it unmounts

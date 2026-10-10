@@ -54,7 +54,7 @@ const scenarios: Record<string, Scenario> = {
       return { whilePending, afterwards, sendAfterwards };
    },
 
-   // The child exits before a channel of the bindings first used it (T86). It was forked by
+   // The child exits before a channel of the bindings first used it. It was forked by
    // forkUtility, so the bindings saw the exit. The scenario races the call with a pause, so that
    // it returns what happened and does not fail with a timeout.
    exitedBeforeFirstUse: async (ctx) => {
@@ -81,7 +81,7 @@ const scenarios: Record<string, Scenario> = {
    },
 
    // A child that the bindings never saw is rejected, instead of leaving the call waiting for a
-   // child that may be gone (T86). attachUtility, called right after the fork, makes it known.
+   // child that may be gone. attachUtility, called right after the fork, makes it known.
    notAttached: async (ctx) => {
       const child = await ctx.fork(
          () => {

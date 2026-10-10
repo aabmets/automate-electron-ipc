@@ -44,7 +44,7 @@ describe("validateChannelSpecs", () => {
       }
    });
 
-   // T72: the 3 character, 'on' and lowercase rules came from the listener names, which are gone.
+   // The 3 character, 'on' and lowercase rules came from the listener names, which are gone.
    it("should accept short, 'on'-prefixed and capitalized channel names", () => {
       const names = [
          "ok",
@@ -127,7 +127,7 @@ describe("validateChannelSpecs", () => {
       }
    });
 
-   // Regression for T69: the check compared the text, so `Promise<void >` was rejected.
+   // The check compared the text, so `Promise<void >` was rejected.
    it("should accept the void return types that the parser reports, whatever the spacing", () => {
       const csg = new ChannelSpecGenerator();
       for (const kind of ["Broadcast", "Port"] as const) {

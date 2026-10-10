@@ -51,7 +51,7 @@ describe("ImportsGenerator", () => {
             "Foo0",
          );
 
-      // Regression for T97: NodeNext does not resolve "./models.js" to "./models/index.ts".
+      // NodeNext does not resolve "./models.js" to "./models/index.ts".
       it("names the index file of a directory under NodeNext", () => {
          touch("models/index.ts");
          expect(importOf("./models", true)).toStrictEqual(
@@ -124,7 +124,7 @@ describe("ImportsGenerator", () => {
          fs.writeFileSync(path.join(root, "ipc", directory, "package.json"), manifest);
       };
 
-      // Regression for T101: "./models" became "./models.js", or named the index file, which the
+      // "./models" became "./models.js", or named the index file, which the
       // package.json of the directory comes before.
       it.each(["types", "typings", "typesVersions", "main"])(
          "keeps a directory whose package.json has '%s' under NodeNext",

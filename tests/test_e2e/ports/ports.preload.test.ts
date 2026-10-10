@@ -31,7 +31,7 @@ describe("generated preload script of a port channel", () => {
       ]);
    });
 
-   // Regression for B9: `sendMessage` threw before the port arrived.
+   // `sendMessage` threw before the port arrived.
    it("queues the sends until the port arrives, and flushes them in order", async () => {
       const { chat, connect } = await loadPreload();
 

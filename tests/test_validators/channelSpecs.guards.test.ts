@@ -113,7 +113,7 @@ describe("validateChannelSpecs, allowedOrigins", () => {
       "http://[::1]:80x",
       "app://.:abc",
    ])("rejects '%s', whose port is not a number from 0 to 65535", (origin) => {
-      // Regression for T98: the pattern let a malformed port through.
+      // The pattern let a malformed port through.
       const specs = make("RendererToMain", "Unicast", ["app://.", origin]);
       expect(() => validateChannelSpecs(specs)).toThrowError(
          /which is not a number from 0 to 65535/,

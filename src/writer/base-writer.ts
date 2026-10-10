@@ -100,7 +100,6 @@ export class BaseWriter {
       return `'${this.config.channelPrefix ?? ""}${name}${suffix}'`;
    }
 
-   /** The name that the API is exposed as in the page. */
    protected getExposeAs(): string {
       return this.config.exposeAs ?? "ipc";
    }
@@ -110,7 +109,6 @@ export class BaseWriter {
       return this.config.autoExpose ?? true;
    }
 
-   /** Whether the API of the page has the `getPathForFile` helper. */
    protected getPathForFileEnabled(): boolean {
       return this.config.getPathForFile ?? false;
    }
@@ -133,9 +131,6 @@ export class BaseWriter {
       return timeoutMs > 0 ? `, ${timeoutMs}` : "";
    }
 
-   /**
-    * Whether the files serialize what the channels carry, when the config names a serializer.
-    */
    protected usesSerializer(): boolean {
       return !!this.config.serializer;
    }
@@ -213,7 +208,6 @@ export class BaseWriter {
       return signature.definition.slice(0, signature.paramsStart - 1).trim();
    }
 
-   /** The parameters of the channel, with their types or only their names (see `resolveParams`). */
    protected getOriginalParams(spec: t.ChannelSpec, onlyNames: boolean): string {
       return getOriginalParams(spec, onlyNames);
    }

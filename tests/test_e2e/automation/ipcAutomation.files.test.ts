@@ -39,7 +39,7 @@ describe("ipcAutomation, single schema file", () => {
 });
 
 describe("e2e harness", () => {
-   // Regression for T50: `skipLibCheck` hid every error in the generated `window.d.ts`.
+   // `skipLibCheck` hid every error in the generated `window.d.ts`.
    it("reports errors in the generated window.d.ts", async () => {
       const project = await fixtures.run("single-file");
       const windowTypes = path.join(project.dir, project.ipcDataDir, "window.d.ts");
@@ -60,7 +60,7 @@ describe("e2e harness", () => {
 
 describe("ipcAutomation, schema directory", () => {
    it("reads channels from nested files, without relying on Bun-only fs APIs", async () => {
-      // Regression for B1: `fsp.exists` exists only in Bun, so directory mode threw on Node.
+      // `fsp.exists` exists only in Bun, so directory mode threw on Node.
       const original = Object.getOwnPropertyDescriptor(fsp, "exists");
       Object.defineProperty(fsp, "exists", {
          configurable: true,
@@ -84,7 +84,7 @@ describe("ipcAutomation, schema directory", () => {
       expect(generated["types.ts"]).toContain("logStream");
    });
 
-   // Regression for T08: a README, a JSON file and a `.d.ts` that repeats a channel name used
+   // A README, a JSON file and a `.d.ts` that repeats a channel name used
    // to be read from the schema directory.
    it("ignores files that are not schema sources", async () => {
       const project = await fixtures.run("schema-dir");
@@ -99,7 +99,7 @@ describe("ipcAutomation, schema directory", () => {
 
 describe("ipcAutomation, duplicate channels across files", () => {
    it("rejects the same channel name declared in two schema files", async () => {
-      // Regression for B2: validation ran per file, so this produced duplicate keys in the output.
+      // Validation ran per file, so this produced duplicate keys in the output.
       await expect(runFixture("duplicate-channels")).rejects.toThrowError(
          /Channel name 'getUser' is declared in both 'a\.ts' \(\d+:\d+\) and 'b\.ts' \(\d+:\d+\)\. /,
       );
@@ -107,7 +107,7 @@ describe("ipcAutomation, duplicate channels across files", () => {
 });
 
 describe("ipcAutomation, workspace", () => {
-   // Regression for T07: the project root was the first .git above the library, which is the
+   // The project root was the first .git above the library, which is the
    // repo root of a workspace. The root package.json here points at a different, wrong dir.
    it("generates into the app package when run from one of its sub-directories", async () => {
       const project = await fixtures.run("workspace", {
@@ -133,7 +133,7 @@ describe("ipcAutomation, workspace", () => {
 });
 
 describe("ipcAutomation, wrapped channel map export", () => {
-   // Regression for T58: `export default defineChannels({...}) satisfies X` was rejected.
+   // `export default defineChannels({...}) satisfies X` was rejected.
    it("generates bindings for a map followed by satisfies", async () => {
       const project = await fixtures.run("export-forms");
       expect(project.generated["main.ts"]).toContain("getUser");
@@ -147,7 +147,7 @@ describe("ipcAutomation, wrapped channel map export", () => {
 });
 
 describe("ipcAutomation, generated file start", () => {
-   // Regression for T65: every generated file started with a blank line.
+   // Every generated file started with a blank line.
    it.each(["single-file", "no-channels", "port-only"])(
       "starts every generated file of '%s' with the notice",
       async (fixture) => {
@@ -161,7 +161,7 @@ describe("ipcAutomation, generated file start", () => {
 });
 
 describe("ipcAutomation, schema without channels", () => {
-   // Regression for T51: the empty window.d.ts had no import or export, so tsc rejected the
+   // The empty window.d.ts had no import or export, so tsc rejected the
    // global augmentation with TS2669. It imports `IpcApi` now, which makes it a module.
    it("generates an empty window.d.ts that is a module, and an empty types.ts", async () => {
       const project = await fixtures.run("no-channels");
@@ -177,7 +177,7 @@ describe("ipcAutomation, schema without channels", () => {
 });
 
 describe("ipcAutomation, schema with only port channels", () => {
-   // Regression for T52: the empty callables line left a lone comma in main.ts and preload.ts.
+   // The empty callables line left a lone comma in main.ts and preload.ts.
    it("generates bindings without a dangling comma", async () => {
       const project = await fixtures.run("port-only");
       const { generated } = project;
@@ -196,7 +196,7 @@ describe("ipcAutomation, schema with only port channels", () => {
       expect(await project.typecheck()).toBe("");
    });
 
-   // Regression for T65: main.ts imported `ipcMain` without using it. T25 uses it, to hear a page
+   // main.ts imported `ipcMain` without using it. A port channel uses it, to hear a page
    // end a connection.
    it("imports nothing unused, so the files type-check under noUnusedLocals", async () => {
       const project = await fixtures.run("port-only");

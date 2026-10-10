@@ -13,14 +13,11 @@ import type * as t from "@types";
 import utils from "../../utils.js";
 import type { ImportsGenerator } from "../imports-generator.js";
 
-/** The import lines of the generated `main.ts`, and the `electron` imports that its helpers use. */
-
 /** The import of `ipcMain`, if the generated code registers a listener or a handler. */
 export function getIpcMainImport(used: boolean): string[] {
    return used ? ["ipcMain as electronIpcMain"] : [];
 }
 
-/** Adds the import lines for the custom types that the channels of the file use. */
 export function importCustomTypes(
    importsGenerator: ImportsGenerator,
    pfs: t.ParsedFileSpecs,

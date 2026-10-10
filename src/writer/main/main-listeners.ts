@@ -12,8 +12,6 @@
 import type * as t from "@types";
 import type { MainContext } from "./main-bindings.js";
 
-/** The listeners and handlers of the channels from a renderer to the main process. */
-
 /** The names that a generated listener uses, which differ from the names of its signature. */
 export interface ListenerNames {
    event: string;
@@ -32,7 +30,6 @@ export interface ListenerNames {
    spent: string;
    /** The name of the decoded arguments of a serialized channel. */
    decoded: string;
-   /** Whether the arguments arrive through the serializer. */
    serialized: boolean;
 }
 

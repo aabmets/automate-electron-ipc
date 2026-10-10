@@ -14,7 +14,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, type names that collide across schema files", () => {
-   // Regression for T53: imports were deduped by local name only, so two `User` types were
+   // Imports were deduped by local name only, so two `User` types were
    // either declared twice (TS2300) or the second one was dropped and its channels used the first.
 
    /** The name under which the generated file imports `exported` from `from`. */
@@ -87,7 +87,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
    });
 
    it("injects the event and repeats type params after a renamed type param bound", async () => {
-      // Regression for the T53/T57 combination: renaming `User` to `User_3` lengthened the
+      // Renaming `User` to `User_3` lengthened the
       // text before the parameter list, so `paramsStart` pointed into the wrong place.
       const project = await fixtures.run("name-collisions");
       const main = project.generated["main.ts"];
@@ -104,7 +104,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
       );
    });
 
-   // Regression for T69: a type inside `${...}` kept its old name, and a member name was renamed.
+   // A type inside `${...}` kept its old name, and a member name was renamed.
    it("renames types inside template literal types, but not member names", async () => {
       const project = await fixtures.run("name-collisions");
       const main = project.generated["main.ts"];
@@ -144,7 +144,7 @@ describe("ipcAutomation, type names that collide across schema files", () => {
 });
 
 describe("ipcAutomation, schema types named like generated names", () => {
-   // Regression for T59: a schema type called `BrowserWindow`, `Window` or `IpcMainEvent` was
+   // A schema type called `BrowserWindow`, `Window` or `IpcMainEvent` was
    // imported under that name and clashed with the declaration of the generated file (TS2300).
    const importLine = (text: string, exported: string, from: string): string | undefined =>
       new RegExp(`^import type \\{ ${exported}(?: as \\w+)? \\} from "${from}";$`, "m").exec(
@@ -199,7 +199,7 @@ describe("ipcAutomation, schema types named like generated names", () => {
       expect(importLine(main, "IpcApi", "./schema")).toBe(
          'import type { IpcApi } from "./schema";',
       );
-      // T15: the registry of the handlers is declared by main.ts, so the type takes an alias.
+      // The registry of the handlers is declared by main.ts, so the type takes an alias.
       expect(importLine(main, "registeredHandlers", "./schema")).toBe(
          'import type { registeredHandlers as registeredHandlers_2 } from "./schema";',
       );

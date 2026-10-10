@@ -168,7 +168,6 @@ describe("parseSpecs", () => {
 describe("parseSpecs, names of globals that the schema binds", () => {
    const parse = (contents: string) => parseSpecs({ contents, relativePath: "", fullPath: "" });
 
-   // Regression for T60.
    it("collects a declared type that is named like a global", () => {
       const { channelSpecArray, typeSpecArray } = parse(`
          import { defineChannels, invoke } from "automate-electron-ipc";

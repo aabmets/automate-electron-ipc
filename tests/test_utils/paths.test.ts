@@ -97,7 +97,7 @@ describe("resolveUserProjectPath", () => {
    const posix = (value: string) => value.replaceAll("\\", "/");
 
    it("resolves to the nearest package.json above the working directory", () => {
-      // Regression for T07: the root was found from the install location of the library,
+      // The root used to be found from the install location of the library,
       // by the first .git, which is the repo root of a workspace, not the app package.
       vi.spyOn(process, "cwd").mockReturnValue(path.join(app(), "src/main"));
       expect(utils.resolveUserProjectPath("ipc")).toBe(posix(path.join(app(), "ipc")));

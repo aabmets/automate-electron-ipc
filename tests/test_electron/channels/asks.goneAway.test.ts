@@ -46,7 +46,7 @@ const scenarios: Record<string, Scenario> = {
       return { whilePending, afterwards };
    },
 
-   // The scenarios below cover T84 and T87. They read the state of the question after a pause, and
+   // The scenarios below read the state of the question after a pause, and
    // do not await it, so that they return what happened and do not fail with a timeout.
 
    // The page that was asked goes away, but its contents stay: a reload of the window, or a
@@ -153,7 +153,7 @@ describeElectron(
          });
       });
 
-      // Every question used to add a 'destroyed' and a 'render-process-gone' listener of its own (T87).
+      // Every question used to add a 'destroyed' and a 'render-process-gone' listener of its own.
       it("asks a window many questions at once without a MaxListenersExceededWarning", () => {
          expect(group.value("manyAsksAtOnce")).toStrictEqual({ answers: 12, warnings: [] });
       });
@@ -167,7 +167,7 @@ describeElectron(
       });
 
       // The webContents of a destroyed BrowserWindow throws a TypeError in Electron, and not in the
-      // fakes of the unit tests (T77).
+      // fakes of the unit tests.
       it("rejects with IPC_ASK_DESTROYED when the window was destroyed before it is asked", () => {
          expect(group.value("destroyed").afterwards).toMatchObject({
             rejected: true,

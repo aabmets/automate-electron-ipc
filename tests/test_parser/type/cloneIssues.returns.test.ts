@@ -81,7 +81,7 @@ describe("cloneIssues, return types", () => {
       ]);
    });
 
-   // Regression for T96: `Awaited` unwraps a Promise, so `Awaited<Promise<X>>` is `X`.
+   // `Awaited` unwraps a Promise, so `Awaited<Promise<X>>` is `X`.
    it.each([
       ["a result", "() => Awaited<Promise<string>>"],
       ["a nested Promise", "() => Awaited<Promise<Promise<string>>>"],

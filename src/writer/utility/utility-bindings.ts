@@ -175,7 +175,6 @@ export class UtilityBindingsWriter extends BaseWriter {
          "",
       ].join("\n");
    }
-   /** The wire names of the channels between a page and the child, and their kinds. */
    private getBrokeredSpecs(): t.ChannelSpec[] {
       return allSpecs(this.pfsArray).filter(isBrokeredSpec);
    }

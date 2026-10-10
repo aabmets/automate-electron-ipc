@@ -16,7 +16,6 @@ import { buildChannel } from "./preload-invoke.js";
 import { hasBrokeredStreams } from "./preload-streams.js";
 import { buildUtilityCalls } from "./preload-utility-calls.js";
 
-/** The client of the channels to a utility process, and the listeners for the ports of the channels. */
 export function buildUtilityClient(ctx: PreloadContext, specs: t.ChannelSpec[]): string[] {
    return [
       buildUtilityClientComponents(ctx, hasBrokeredStreams(specs)),

@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// Where the generated preload script puts the API (T31, T32), in a real sandboxed preload:
+// Where the generated preload script puts the API, in a real sandboxed preload:
 // under the key of `exposeAs`, in the isolated world of `isolatedWorldId`, or nowhere until the
 // preload script of the application composes it (`autoExpose: false`).
 

@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 describe("ipc.<name>.connect of a mainPort channel", () => {
-   // Regression for T78, which found that `connect` of a `port` channel leaves entries behind when
-   // its second window is destroyed. A `mainPort` channel takes one target, and resolves it first.
+   // `connect` of a `port` channel left entries behind when its second window was destroyed.
+   // A `mainPort` channel takes one target, and resolves it first.
    describe("a target that was destroyed before connect", () => {
       const eventsOf = ["did-navigate", "did-fail-load", "did-finish-load", "did-stop-loading"];
 

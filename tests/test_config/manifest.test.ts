@@ -52,7 +52,7 @@ describe("getConfigFromUserPackage with a manifest that is not valid JSON", () =
    afterEach(vi.restoreAllMocks);
 
    it("names the manifest in the error", async () => {
-      // Regression for T92: the error was the bare message of `JSON.parse`, which names no file.
+      // The error used to be the bare message of `JSON.parse`, which names no file.
       vi.spyOn(fsp, "readFile").mockResolvedValue('{ "name": "broken", }' as never);
       const resolved = utils.resolveUserProjectPath("package.json");
 
@@ -72,7 +72,7 @@ describe("getConfigFromUserPackage with a manifest of the wrong shape", () => {
    beforeEach(mockResolveUserProjectPath);
    afterEach(vi.restoreAllMocks);
 
-   // Regression for T98: these fell through to the validation of the config, with a message
+   // These used to fall through to the validation of the config, with a message
    // that names neither the manifest nor the entry.
    it.each([
       ["null", null, "null"],

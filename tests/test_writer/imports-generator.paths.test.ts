@@ -31,7 +31,7 @@ describe("ImportsGenerator", () => {
             "Foo",
          );
 
-      // Regression for T55: everything after the last dot was stripped, "user.model" -> "user".
+      // Everything after the last dot was stripped, "user.model" -> "user".
       it("keeps dots that belong to the file name", () => {
          expect(importOf("./types/user.model", false)).toStrictEqual(
             'import type { Foo } from "./types/user.model";',
@@ -68,7 +68,7 @@ describe("ImportsGenerator", () => {
          }
       });
 
-      // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
+      // "./settings.json" became "./settings.json.js" under NodeNext.
       it("adds no script extension to the specifier of a data file", () => {
          for (const fromPath of ["./settings.json", "../a/b.c.json", "./logo.svg", "./data.node"]) {
             for (const nodeNext of [false, true]) {

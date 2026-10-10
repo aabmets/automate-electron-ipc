@@ -11,7 +11,7 @@ declare const win: BrowserWindow;
 declare const contents: WebContents;
 declare const view: WebContentsView;
 
-// Main: a child is forked with forkUtility, or attached right after the fork (T86).
+// Main: a child is forked with forkUtility, or attached right after the fork.
 export const forked: UtilityProcess = forkUtility("child.js", ["--flag"], { serviceName: "db" });
 attachUtility(child);
 

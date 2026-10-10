@@ -23,7 +23,7 @@ describe("getResolvedConfig", () => {
    afterEach(vi.restoreAllMocks);
 
    it("should resolve the manifest and the data dir from the given cwd", async () => {
-      // Regression for T07: the project root was found from the library install location.
+      // The project root was once found from the library install location.
       mockFspStatsByPath({});
       mockFspReadFile({ config: { autoipc: { ipcDataDir: "ipc" } } });
       const resolve = vi.spyOn(utils, "resolveUserProjectPath");

@@ -49,7 +49,7 @@ const scenarios: Record<string, Scenario> = {
    },
 
    // A navigation which never commits, such as one that will-navigate prevents (Electron security
-   // checklist #13), leaves the page and its port as they were (T85).
+   // checklist #13), leaves the page and its port as they were.
    abortedNavigation: async (ctx) => {
       const child = await ctx.fork(() => {
          ipc.whoami.handle(async () => 7);
@@ -79,7 +79,7 @@ const scenarios: Record<string, Scenario> = {
       return { before, ...page };
    },
 
-   // The child exits before the main process connects a page to it (T86). It was forked by
+   // The child exits before the main process connects a page to it. It was forked by
    // forkUtility, so the bindings saw the exit, and connect fails instead of leaving the page
    // waiting for a port which never comes.
    connectExitedChild: async (ctx) => {

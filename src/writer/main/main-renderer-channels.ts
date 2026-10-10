@@ -18,8 +18,6 @@ import {
    type ListenerNames,
 } from "./main-listeners.js";
 
-/** The channels from a renderer to the main process: `send`, `invoke` and `stream`. */
-
 /**
  * Whether the results and errors of the handler of the channel are sent as an envelope. A
  * stream always does, since the start of a stream has no error of Electron's to leave it to.

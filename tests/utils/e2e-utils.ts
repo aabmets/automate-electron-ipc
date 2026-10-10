@@ -97,7 +97,6 @@ export interface E2EProject {
    typecheckFiles: (files: string[], compilerOptions?: Record<string, unknown>) => Promise<string>;
    /** Reads another generated file, such as `preload.settings.ts`. */
    read: (name: string) => Promise<string>;
-   /** Deletes the temp dir. */
    cleanup: () => Promise<void>;
 }
 

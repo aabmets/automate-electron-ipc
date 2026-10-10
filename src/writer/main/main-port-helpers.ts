@@ -11,8 +11,6 @@
 
 import type { MainContext } from "./main-bindings.js";
 
-/** The helpers of the `mainPort` channels, whose one end is in the main process. */
-
 /**
  * `connectMainPort`, which `ipc.<name>.connect` of a `mainPort` channel calls, and
  * `configurePorts`, which sets the overflow callback that the send queues use by default. The main process

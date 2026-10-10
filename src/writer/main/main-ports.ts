@@ -12,9 +12,6 @@
 import type * as t from "@types";
 import type { ChannelEntry, MainContext } from "./main-bindings.js";
 
-/** The `port` and `mainPort` channels: the registry of their ends, and the pairing of pages. */
-
-/** The electron types that the helpers of a port channel use. */
 function getPortTypes(spec: t.ChannelSpec): string[] {
    const types = ["BrowserWindow", "IpcMainEvent", "WebContents"];
    return spec.direction === "MainToRenderer"

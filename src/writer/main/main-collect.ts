@@ -128,7 +128,6 @@ export function hasChannels(pfsArray: t.ParsedFileSpecs[], kind: t.ChannelKind):
    return anySpec(pfsArray, (spec) => spec.direction === "MainToRenderer" && spec.kind === kind);
 }
 
-/** Whether any schema file declares a port channel with the direction. */
 export function hasPorts(pfsArray: t.ParsedFileSpecs[], direction: t.ChannelDirection): boolean {
    return anySpec(pfsArray, (spec) => spec.kind === "Port" && spec.direction === direction);
 }

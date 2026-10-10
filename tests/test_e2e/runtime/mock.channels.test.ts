@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// T46: the channels of the generated `mock.ts` that the main process talks to, and its installation.
+// The channels of the generated `mock.ts` that the main process talks to, and its installation.
 
 import { type LoadedMock, loadMock } from "@testutils/e2e/mock-utils.js";
 import { beforeAll, describe, expect, it, vi } from "vitest";

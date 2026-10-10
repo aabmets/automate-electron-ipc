@@ -237,7 +237,7 @@ describe("UtilityBindingsWriter", () => {
       expect(output).toContain("    progress: {\n        send: (): void =>");
    });
 
-   // T173: a helper that no channel calls fails noUnusedLocals in the file of the project.
+   // A helper that no channel calls fails noUnusedLocals in the file of the project.
    it("writes the helpers of the peer that the channels use, and no other", async () => {
       const output = await render([callUtility, notifyMain]);
 

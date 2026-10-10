@@ -111,7 +111,7 @@ describe("ipc.<name>.connect", () => {
       });
    });
 
-   // Regression for T78: the first end was registered before the `webContents` of the second
+   // The first end was registered before the `webContents` of the second
    // window was read, and that getter throws for a destroyed window.
    describe("a window that was destroyed before connect", () => {
       /** Makes a connection, which registers the listener for the pages, and returns what a test needs. */

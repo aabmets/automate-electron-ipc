@@ -25,7 +25,7 @@ describe("fixture error-envelope", () => {
       const project = await fixtures.run("error-envelope");
       const types = project.generated["types.ts"];
 
-      // The names are in the tags only, which TypeScript does not count as a use of an import (T173).
+      // The names are in the tags only, which TypeScript does not count as a use of an import.
       expect(types).not.toMatch(/import type \{[^}]*(AuthError|NotFoundError)/);
       expect(types).toContain(
          "getUser: {\n      /** @throws {IpcError<NotFoundError | AuthError>} */\n      invoke:",
@@ -91,7 +91,7 @@ describe("fixture error-collisions", () => {
       const project = await fixtures.run("error-collisions");
       const types = project.generated["types.ts"];
 
-      // The tags name the errors without importing them, since only a tag uses them (T173).
+      // The tags name the errors without importing them, since only a tag uses them.
       expect(types).not.toMatch(/import type \{[^}]*(Conflict|Ok)\b/);
       // Each channel names the declaration of its own schema file.
       expect(types).toContain("/** @throws {IpcError<Conflict | Ok>} */");

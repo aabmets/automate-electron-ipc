@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// T34: `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }`.
+// `ipc.<name>.on` / `handle` (and `once` and `handleOnce`) take `{ webContents }`.
 
 import { createContents, loadMain } from "@testutils/e2e/contents-handlers-utils.js";
 import { ok } from "@testutils/e2e/wire-utils.js";

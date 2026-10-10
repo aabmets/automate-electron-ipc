@@ -12,9 +12,6 @@
 import type * as t from "@types";
 import type { ChannelEntry, MainContext } from "./main-bindings.js";
 
-/** The channels from the main process to a renderer: `emit`, `ask` and their sender helpers. */
-
-/** The electron types that the channels which send to a renderer use. */
 export function getSenderTypes(spec: t.ChannelSpec): string[] {
    const types = ["BrowserWindow", "WebContents", "WebContentsView", "WebFrameMain"];
    // The listener of the replies of an `ask` channel takes the event of `ipcMain.on`.

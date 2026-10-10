@@ -11,8 +11,6 @@
 
 import type { MainContext } from "./main-bindings.js";
 
-/** The helpers of the `stream` channels. */
-
 /**
  * `startStream`, which the listener of a `stream` channel calls with the iterable that the
  * handler returned. It makes a `MessageChannelMain` for the call, hands one port to the frame

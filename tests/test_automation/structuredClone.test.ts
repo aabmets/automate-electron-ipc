@@ -59,7 +59,7 @@ describe("ipcAutomation", () => {
       });
 
       it("rejects a function parameter and writes nothing", async () => {
-         // Regression for T19: Electron threw 'An object could not be cloned' when it was called.
+         // Electron threw 'An object could not be cloned' when it was called.
          vi.spyOn(logger, "cloneWarnings").mockImplementation(() => undefined);
 
          await expect(run(schema("(cb: () => void) => Promise<void>"))).rejects.toThrowError(

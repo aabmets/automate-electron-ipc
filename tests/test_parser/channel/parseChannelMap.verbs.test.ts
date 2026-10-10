@@ -63,7 +63,7 @@ describe("parseChannelMapModule", () => {
    });
 
    describe("this parameters", () => {
-      // Regression for T69: the wrappers declared `this` as an ordinary parameter (TS2680).
+      // The wrappers declared `this` as an ordinary parameter (TS2680).
       it("rejects a this parameter in the generic and the as form", () => {
          const message =
             "Schema file 'schema.ts': channel 'chan': " +

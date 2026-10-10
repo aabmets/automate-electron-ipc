@@ -160,7 +160,7 @@ describe("cli", () => {
    });
 
    it("prints the error and exits non-zero when the automation fails", async () => {
-      // Regression for T08: failures surfaced as an unhandled rejection stack trace.
+      // Failures used to surface as an unhandled rejection stack trace.
       process.argv = ["node", "ipcgen"];
       ipcAutomation.mockRejectedValue(new Error("Syntax error in schema file 'a.ts:1:2': oops"));
       const err = vi.spyOn(console, "error").mockImplementation(() => undefined);

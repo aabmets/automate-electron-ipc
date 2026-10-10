@@ -233,7 +233,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
          expect(contents.postMessage).toHaveBeenCalledOnce();
       });
 
-      // Node warns about more than ten listeners of one event (T87).
+      // Node warns about more than ten listeners of one event.
       it("adds one listener of each event to the contents, however many connections they have", async () => {
          const ipc = await loadMain();
          const contents = createContents();

@@ -24,7 +24,6 @@ export const rawPorts: MessagePort[] = [];
 /** The project that the last helper generated, for a test which reads its files. */
 export const currentProject = fixtures.current;
 
-/** Restores the mocks and closes the raw ports. */
 export function cleanupStreams() {
    vi.restoreAllMocks();
    for (const port of rawPorts.splice(0)) {

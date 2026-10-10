@@ -16,7 +16,6 @@ import { fixtures } from "../fixture-tracker.js";
 /** The project that the last helper generated, for a test which reads its files. */
 export const currentProject = fixtures.current;
 
-/** Restores the real timers. */
 export function cleanupAsks() {
    vi.useRealTimers();
 }

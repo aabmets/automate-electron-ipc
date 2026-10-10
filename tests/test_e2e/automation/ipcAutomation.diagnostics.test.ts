@@ -18,7 +18,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, schema with a syntax error", () => {
-   // Regression for T08: the parse error was swallowed and reported as "no channels found".
+   // The parse error was swallowed and reported as "no channels found".
    it("rejects with the file path, line and column", async () => {
       await expect(runFixture("syntax-error")).rejects.toThrowError(
          /Syntax error in schema file '.*schema\.ts:4:\d+': /,
@@ -74,7 +74,7 @@ describe("ipcAutomation, config values that would break the output", () => {
 
 describe("ipcAutomation, diagnostics that name a path", () => {
    it("names the schema file, and not its directory, in an error about one of its channels", async () => {
-      // Regression for T92: the single schema file was reported as its directory, 'ipc'.
+      // The single schema file was reported as its directory, 'ipc'.
       const failure = await fixtures.run("schema-file-reserved-name").then(
          () => "the run did not fail",
          (error: Error) => error.message,
@@ -85,7 +85,7 @@ describe("ipcAutomation, diagnostics that name a path", () => {
    });
 
    it("names the package.json which is not valid JSON", async () => {
-      // Regression for T92: the error was the bare message of `JSON.parse`.
+      // The error was the bare message of `JSON.parse`.
       const root = await fsp.mkdtemp(path.join(tmpdir(), "vitest-e2e-"));
       try {
          await fsp.writeFile(path.join(root, "package.json"), '{ "name": "broken", }');

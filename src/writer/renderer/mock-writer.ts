@@ -65,7 +65,6 @@ export class MockWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.config.mockFilePath;
    }
-   /** The path of the types module that the mock takes `IpcApi` from. */
    protected getTypesFilePath(): string {
       return this.config.typesFilePath;
    }

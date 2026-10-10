@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// One-to-many port topologies (T25) in real Electron: one hub window with several peers, each over
+// One-to-many port topologies in real Electron: one hub window with several peers, each over
 // a connection of its own, which the unit tests only ran with the `MessageChannel` of Node.
 
 import {

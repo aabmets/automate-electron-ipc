@@ -16,7 +16,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, handler and sender types", () => {
-   // Regression for B6 and B7: `handle` listeners got the wrong event type, and Broadcast
+   // `handle` listeners got the wrong event type, and Broadcast
    // senders were typed as promises although `ipcRenderer.send` returns `undefined`.
    it("types Unicast handlers with IpcMainInvokeEvent and Broadcast ones with IpcMainEvent", async () => {
       const project = await fixtures.run("handler-types");
@@ -55,7 +55,7 @@ describe("ipcAutomation, handler and sender types", () => {
 });
 
 describe("ipcAutomation, rest, optional and destructured parameters", () => {
-   // Regression for B4: the sender dropped the spread, so `webContents.send` received one array.
+   // The sender dropped the spread, so `webContents.send` received one array.
    it("forwards rest parameters with their spread", async () => {
       const project = await fixtures.run("param-shapes");
       const main = project.generated["main.ts"];
@@ -80,7 +80,7 @@ describe("ipcAutomation, rest, optional and destructured parameters", () => {
 });
 
 describe("ipcAutomation, non-ASCII schema source", () => {
-   // Regression for T66: swc spans are UTF-8 byte offsets, so non-ASCII text (and a BOM) in front
+   // swc spans are UTF-8 byte offsets, so non-ASCII text (and a BOM) in front
    // of a signature shifted every later slice and garbled the generated signatures.
    it("generates intact signatures from a schema with a BOM and non-ASCII text", async () => {
       const project = await fixtures.run("non-ascii");
@@ -112,7 +112,7 @@ describe("ipcAutomation, non-ASCII schema source", () => {
 });
 
 describe("ipcAutomation, locale-independent output order", () => {
-   // Regression for T67: members were ordered with `localeCompare`, which depends on the locale
+   // Members were ordered with `localeCompare`, which depends on the locale
    // of the process and compared the whole callable, so `sendItem` and `sendItem2` swapped places.
    const members = (text: string): string[] =>
       Array.from(
@@ -164,7 +164,7 @@ describe("ipcAutomation, locale-independent output order", () => {
    });
 });
 
-// T72: channel names are free of the rules that came from the old listener names.
+// Channel names are free of the rules that came from the old listener names.
 describe("ipcAutomation, channel names", () => {
    it("accepts short, 'on'-prefixed, capitalized and symbol-led channel names", async () => {
       const project = await fixtures.run("short-names");

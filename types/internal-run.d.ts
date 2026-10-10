@@ -18,7 +18,6 @@ export interface OutputFile {
    contents: string;
 }
 
-/** Options of a run. */
 export interface RunOptions {
    /** Directory to find the project root from. Defaults to the process working directory. */
    cwd?: string;

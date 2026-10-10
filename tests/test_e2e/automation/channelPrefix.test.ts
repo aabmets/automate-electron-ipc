@@ -138,7 +138,7 @@ describe.each([
          dispose();
       }
 
-      // The subscriptions of a channel share one listener of ipcRenderer (T94).
+      // The subscriptions of a channel share one listener of ipcRenderer.
       const { ipcRenderer } = fake.electron;
       const channels = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.map((c) => c[0]);
       expect(channels(ipcRenderer.on).filter((name) => name === `${prefix}progress`)).toStrictEqual(

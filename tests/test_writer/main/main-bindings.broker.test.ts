@@ -78,7 +78,7 @@ describe("MainBindingsWriter, renderer to utility channels", () => {
       expect(output).toContain(
          "unwatch.push(watchEvent(contents, 'destroyed', close), watchEvent(child, 'exit', close));",
       );
-      // The single listener of attachUtility remains, and the connection adds none of its own (T87).
+      // The single listener of attachUtility remains, and the connection adds none of its own.
       expect(output.match(/child\.(once|on)\('exit'/g)).toHaveLength(1);
       expect(output).not.toContain("child.removeListener('exit'");
       expect(output).toContain("utilityLinks.get(linkKey)?.();");

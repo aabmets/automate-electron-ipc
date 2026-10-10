@@ -28,7 +28,7 @@ describe("parseSignature, async detection", () => {
       },
    );
 
-   // Regression for T56: the check was `returnType.startsWith("Promise")`.
+   // The check was `returnType.startsWith("Promise")`.
    it.each([
       "PromiseResult",
       "PromiseLike<string>",
@@ -49,7 +49,6 @@ describe("parseSignature, async detection", () => {
 });
 
 describe("parseSignature, names that the schema file binds", () => {
-   // Regression for T60.
    it("collects a global name that the schema file binds itself", () => {
       const { customTypes } = parseSignature("(e: Error, d: Date) => Map<string, X>", [
          "Error",
@@ -91,7 +90,7 @@ describe("parseSignature, start of the parameter list", () => {
       expect(restAfterParen("() => void")).toBe(") => void");
    });
 
-   // Regression for T57: the first `(` of the text belonged to a constraint of a type parameter.
+   // The first `(` of the text belonged to a constraint of a type parameter.
    it("skips the type parameters of generic signatures", () => {
       expect(restAfterParen("<T extends (x: number) => void>(cb: T) => void")).toBe(
          "cb: T) => void",
@@ -106,7 +105,7 @@ describe("parseSignature, start of the parameter list", () => {
 });
 
 describe("parseSignature, void return types", () => {
-   // Regression for T69: the check compared the text with "void" and "Promise<void>".
+   // The check compared the text with "void" and "Promise<void>".
    it.each([
       "void",
       "(void)",
@@ -192,7 +191,7 @@ describe("parseSignature, type references", () => {
       expect(refsOf("(a: Error) => void", ["Error"])).toStrictEqual([["Error", "Error"]]);
    });
 
-   // Regression for T89: the path of an import type is relative to the schema file.
+   // The path of an import type is relative to the schema file.
    it("records the path of an import type as a reference to its specifier", () => {
       const signature = parseSignature(
          '(a: import("./models").User, b: typeof import("../x.mjs")) => import("zod").Z<import(\'./y\').Q>',

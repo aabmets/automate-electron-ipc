@@ -15,7 +15,7 @@ import { FIXTURES, runForGeneratedFiles } from "@testutils/e2e/all-fixtures.js";
 import { describe, expect, it } from "vitest";
 
 describe("generated files, blank lines", () => {
-   // Regression for T100: the components of preload.ts were joined as they were, so two of them
+   // The components of preload.ts were joined as they were, so two of them
    // could leave two blank lines in a row between them.
    it.each(FIXTURES)("has no two blank lines in a row in the files of '%s'", async (fixture) => {
       const { project, files } = await runForGeneratedFiles(fixture);

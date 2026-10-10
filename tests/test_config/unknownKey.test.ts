@@ -23,7 +23,7 @@ describe("unknown config key", () => {
    const project = withConfigProject();
 
    it("is named with the manifest as the source", async () => {
-      // Regression for T38a: the message was superstruct's "Expected a value of type `never`".
+      // The message used to be superstruct's "Expected a value of type `never`".
       await project.write({}, { name: "project", config: { autoipc: { listner: true } } });
       await expect(cfg.getResolvedConfig(project.dir)).rejects.toThrowError(
          `Unknown config key 'listner' in package.json#config.autoipc. Known keys: ${KNOWN_KEYS}.`,

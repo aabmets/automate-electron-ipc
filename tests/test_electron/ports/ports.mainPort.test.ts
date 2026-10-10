@@ -113,7 +113,7 @@ const scenarios: Record<string, Scenario> = {
       return { events: await ctx.evaluate(win, () => (window as any).events), warnings };
    },
 
-   // The scenarios below found T85 and T87, both fixed. They read the state after a pause.
+   // The scenarios below read the state after a pause.
 
    // A main-frame load fails, and Electron shows its error page, with a did-finish-load of its own.
    mainPortFailedLoad: async (ctx) => {

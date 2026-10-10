@@ -49,7 +49,6 @@ export interface ChannelEntry {
 export interface MainContext {
    indents: string[];
    config: t.IPCResolvedConfig;
-   /** Whether the config names a serializer. */
    usesSerializer: boolean;
    wireName: (name: string, suffix?: string) => string;
    isSerializedSpec: (spec: t.ChannelSpec) => boolean;

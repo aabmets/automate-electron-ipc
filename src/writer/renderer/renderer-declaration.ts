@@ -133,7 +133,6 @@ export function renderTypes(
          : []),
    ]).flatMap((member) => member.lines);
    const body = members.length > 0 ? `${members.join("")}\n` : "";
-   // The stream type is declared only if a stream channel uses it.
    const streamType = channels.some((channel) => channel.streams)
       ? [
            `\n${out}interface IpcStream<T> {`,
@@ -147,7 +146,6 @@ export function renderTypes(
            "}",
         ]
       : [];
-   // The types of the overflow callbacks, declared only if a port channel has them.
    const overflowTypes = channels.some((channel) => channel.overflows)
       ? [
            `\n${out}interface IpcPortOverflowInfo {`,

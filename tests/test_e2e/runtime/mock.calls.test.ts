@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// T46: the calls of the generated `mock.ts`: stubs, `impl`, `reset` and overrides.
+// The calls of the generated `mock.ts`: stubs, `impl`, `reset` and overrides.
 
 import { type LoadedMock, loadMock } from "@testutils/e2e/mock-utils.js";
 import { beforeAll, describe, expect, it, vi } from "vitest";

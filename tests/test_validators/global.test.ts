@@ -46,7 +46,7 @@ describe("validateGlobalChannelSpecs", () => {
       );
    });
 
-   // Regression for T67: the files were compared with `localeCompare`, and `\\` was not
+   // The files were compared with `localeCompare`, and `\\` was not
    // normalized like in ipcAutomation, so the file named first was not the first one processed.
    it("should name the files in code unit order of their normalized paths", () => {
       const files = [file("a.ts", [spec("getUser")]), file("B.ts", [spec("getUser")])];
@@ -155,7 +155,7 @@ describe("validateTypeSpecs", () => {
    const channelUsing = (...customTypes: string[]) =>
       ({ name: "vitestChannel", signature: { customTypes } }) as unknown as t.ChannelSpec;
 
-   // T09: a helper type in the schema file no longer has to be exported.
+   // A helper type in the schema file no longer has to be exported.
    it("should accept non-exported types that no channel uses", () => {
       expect(validateTypeSpecs([hiddenSpec])).toStrictEqual([hiddenSpec]);
       expect(validateTypeSpecs([hiddenSpec], [channelUsing("Other")])).toStrictEqual([hiddenSpec]);

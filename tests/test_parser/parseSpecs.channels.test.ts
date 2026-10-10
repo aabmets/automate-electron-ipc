@@ -159,7 +159,7 @@ describe("parseSpecs", () => {
    });
 
    it("should report syntax errors with the file path, line and column", () => {
-      // Regression for T08: parse errors were swallowed and reported as "no channels found".
+      // Parse errors were swallowed and reported as "no channels found".
       const parse = () =>
          parseSpecs({
             contents: "const a = 1;\nexport default defineChannels({ a: ;\n});",

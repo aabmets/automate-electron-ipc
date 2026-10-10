@@ -18,7 +18,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it, vi } from "vitest";
 
 describe("ipcAutomation, parameter names and generic signatures", () => {
-   // Regression for T57: `(browserWindow: number)` produced a duplicate parameter (TS2300),
+   // `(browserWindow: number)` produced a duplicate parameter (TS2300),
    // and `event` and `callback` could shadow the names that the wrappers use.
    it("renames generated parameters that clash with the ones of the signature", async () => {
       const project = await fixtures.run("param-clashes");
@@ -97,7 +97,7 @@ describe("ipcAutomation, parameter names and generic signatures", () => {
 });
 
 describe("ipcAutomation, async return types", () => {
-   // Regression for T56: a user type `PromiseResult` and `PromiseLike<T>` counted as async,
+   // A user type `PromiseResult` and `PromiseLike<T>` counted as async,
    // so their invoke senders were not typed as promises.
    it("types every invoke sender as a promise of the awaited result", async () => {
       const project = await fixtures.run("async-types");
@@ -120,7 +120,7 @@ describe("ipcAutomation, async return types", () => {
 });
 
 describe("ipcAutomation, results that are Promises, thenables or both", () => {
-   // Regression for T96: `Awaited<Promise<X>>` was reported as a Promise, and a handler of
+   // `Awaited<Promise<X>>` was reported as a Promise, and a handler of
    // `Promise<void> | void` was refused for a `send` channel.
    it("types a result of `Promise<X> | X`, `Awaited` and `PromiseLike` as a promise of X", async () => {
       const project = await fixtures.run("promise-unions");

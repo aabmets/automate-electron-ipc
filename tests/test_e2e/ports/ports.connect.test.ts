@@ -37,7 +37,7 @@ describe("ipc.<name>.connect", () => {
       expect(posted(two)).toStrictEqual([[wire("chat"), "1:b", [{ name: "port2 of 1" }]]]);
    });
 
-   // Regression for B9: the ports were posted only on `ready-to-show`, which a shown window
+   // The ports were posted only on `ready-to-show`, which a shown window
    // never emits again.
    it("does not wait for ready-to-show, which a window that is already shown has emitted", async () => {
       const ipc = await loadMain();

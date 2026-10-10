@@ -84,7 +84,7 @@ describe("stream, main process, cancelling", () => {
       expect(lastChannel().port1.close).toHaveBeenCalledOnce();
    });
 
-   // Node warns about more than ten listeners of one event (T87).
+   // Node warns about more than ten listeners of one event.
    it("keeps one 'destroyed' listener on the contents of any number of open streams", async () => {
       const context = await loadMain();
       const contents = createContents();

@@ -12,7 +12,7 @@
 /**
  * The shared helpers of the generated files that a schema may not use. The writers emit them as
  * a whole, since which of them a file needs depends on the mix of channels, and a file that
- * declares one which nothing calls fails `noUnusedLocals` (T173). `pruneUnusedHelpers` takes the
+ * declares one which nothing calls fails `noUnusedLocals`. `pruneUnusedHelpers` takes the
  * unused ones out. A name of another declaration is never touched, so the list holds only the
  * names that the files reserve (see the `getReservedNames` of the writers).
  */

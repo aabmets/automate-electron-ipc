@@ -13,8 +13,6 @@ import type * as t from "@types";
 import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
-/** The routes that a hub gives each service worker, and the questions of the main process to a worker. */
-
 /**
  * `answerWorkerAsk`, `failWorkerAsks` and `askServiceWorker`: the questions to a worker, and the
  * answers that settle them.

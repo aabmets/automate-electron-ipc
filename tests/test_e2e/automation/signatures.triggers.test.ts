@@ -46,7 +46,7 @@ describe("ipcAutomation, triggers", () => {
          return loadGenerated(project.generated["main.ts"], { electron: createFakeElectron() }).ipc;
       };
 
-      // Regression for B5: every call registered a window listener, and nothing was sent.
+      // Every call registered a window listener, and nothing was sent.
       it("sends immediately and registers no listener when the sender is called", async () => {
          const ipc = await load();
          const win = createFakeWindow();
@@ -179,7 +179,7 @@ describe("ipcAutomation, triggers", () => {
                expect(onError.mock.calls[0][0]).toMatchObject({ message: "boom" });
                expect(win.webContents.send).not.toHaveBeenCalled();
 
-               // Regression for T63: later events must still send.
+               // Later events must still send.
                failing = false;
                win.emit("focus");
                await flush();

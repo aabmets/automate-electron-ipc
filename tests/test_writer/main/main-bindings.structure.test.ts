@@ -24,7 +24,7 @@ describe("MainBindingsWriter", () => {
    mockGetTargetFilePath(VitestMainBindingsWriter);
 
    it("should import only the event types that the channels use", async () => {
-      // Regression for B6: Unicast handlers get an IpcMainInvokeEvent, Broadcast ones an IpcMainEvent.
+      // Unicast handlers get an IpcMainInvokeEvent, Broadcast ones an IpcMainEvent.
       const render = (...channels: SimpleChannel[]) =>
          renderWith(VitestMainBindingsWriter, channels);
 
@@ -122,7 +122,7 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should import ipcMain from electron only where it is used", async () => {
-      // Regression for T65: the import was unused, and failed under noUnusedLocals, without them.
+      // The import was unused, and failed under noUnusedLocals, without them.
       const render = (...channels: SimpleChannel[]) =>
          renderWith(VitestMainBindingsWriter, channels);
       const toRenderer = await render({

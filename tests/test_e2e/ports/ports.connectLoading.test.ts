@@ -235,7 +235,7 @@ describe("ipc.<name>.connect", () => {
          expect(posted(two)).toHaveLength(1);
       });
 
-      // Node warns about more than ten listeners of one event (T87).
+      // Node warns about more than ten listeners of one event.
       it("adds one listener of each event to the windows, however many connections they share", async () => {
          const ipc = await loadMain();
          const one = createWindow();

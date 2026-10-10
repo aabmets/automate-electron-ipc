@@ -12,8 +12,6 @@
 import { CLAMPED_TIMEOUT } from "../generated-errors.js";
 import type { MainContext } from "./main-bindings.js";
 
-/** The calls and sends of a service worker to the main process, and their timeouts. */
-
 /**
  * `timeWorkerCall`, which rejects the call of a worker that the handler has not answered in time.
  * The preload script of a worker has no timers, so the main process times its calls. The error is

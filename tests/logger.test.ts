@@ -109,8 +109,8 @@ describe("logger", () => {
          expect(output()).toContain("1 channels from path '/elsewhere/other.ts'");
       });
 
-      // Regression for T71: the path was cut at the first occurrence of the data dir name,
-      // which was found inside the name of the project directory.
+      // The path was cut at the first occurrence of the data dir name, which was found inside the
+      // name of the project directory.
       it("does not cut the path at a data dir name inside the project path", () => {
          logger.reportSuccess(
             [file("/work/automate-electron-ipc/ipc/schema.ts", "ipc")],

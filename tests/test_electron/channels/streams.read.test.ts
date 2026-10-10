@@ -138,7 +138,7 @@ const scenarios: Record<string, Scenario> = {
       return { main, frame: inFrame };
    },
 
-   // Twelve streams that one page reads at once are normal use (T87).
+   // Twelve streams that one page reads at once are normal use.
    manyStreams: async (ctx) => {
       const warnings: string[] = [];
       const onWarning = (warning: Error) => warnings.push(`${warning.name}: ${warning.message}`);
@@ -217,7 +217,7 @@ describeElectron(
          });
       });
 
-      // Every open stream used to add a 'destroyed' listener of its own to the contents of its page (T87).
+      // Every open stream used to add a 'destroyed' listener of its own to the contents of its page.
       it("reads many streams of one page at once without a MaxListenersExceededWarning", () => {
          expect(group.value("manyStreams")).toStrictEqual({ chunks: 60, warnings: [] });
       });

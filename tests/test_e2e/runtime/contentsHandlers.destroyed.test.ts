@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// T34: the registrations on `webContents.ipc` are removed when the contents are destroyed.
+// The registrations on `webContents.ipc` are removed when the contents are destroyed.
 
 import v8 from "node:v8";
 import { runInNewContext } from "node:vm";
@@ -128,7 +128,7 @@ describe("the webContents option of listeners and handlers", () => {
          });
 
          // The record of the contents used to keep the remover of each replaced registration until
-         // the contents were destroyed, and the remover holds the replaced callback (T87).
+         // the contents were destroyed, and the remover holds the replaced callback.
          it("is released when the handler is registered on the contents", async () => {
             expect(await isReleased((contents) => ({ webContents: contents }))).toBe(true);
          });

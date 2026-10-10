@@ -68,7 +68,7 @@ describe("MainBindingsWriter", () => {
          expect(output).toContain(
             "frame ? watchEvent(asked, 'did-frame-navigate', onFrameNavigate) : watchEvent(asked, 'did-navigate', onGone),",
          );
-         // A question adds no listener of its own to the contents (T87).
+         // A question adds no listener of its own to the contents.
          expect(output).not.toMatch(/contents\??\.(on|once|removeListener)\(/);
          expect(output).not.toContain("did-start-navigation");
          expect(output).not.toContain("will-navigate");

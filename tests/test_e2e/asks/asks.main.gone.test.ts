@@ -164,7 +164,7 @@ describe("ask, main process, a target that is gone", () => {
       expect(contents.listenerCount("did-navigate")).toBe(0);
    });
 
-   // Node warns about more than ten listeners of one event (T87).
+   // Node warns about more than ten listeners of one event.
    it("keeps one listener per event on the contents, however many questions are pending", async () => {
       const { ipc, reply } = await loadMain();
       const contents = createContents({ id: 1 });

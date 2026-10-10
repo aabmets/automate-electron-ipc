@@ -38,7 +38,6 @@ interface ScenarioContext {
    electron: any;
    /** The exports of the generated `main.ts`, loaded fresh for each scenario. */
    main: any;
-   /** `main.ipc`. */
    ipc: any;
    /** The `data` of the group: the only way to share values with the scenarios. */
    data: Record<string, any>;

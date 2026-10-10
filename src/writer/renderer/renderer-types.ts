@@ -44,7 +44,6 @@ export class RendererTypesWriter extends BaseWriter {
    protected getTargetFilePath(): string {
       return this.getScopedFilePath(this.config.rendererTypesFilePath);
    }
-   /** The path of the types module that the file of the global takes the types from. */
    protected getTypesFilePath(): string {
       return this.getScopedFilePath(this.config.typesFilePath);
    }
@@ -94,7 +93,6 @@ export class RendererTypesWriter extends BaseWriter {
    protected importsErrorTypes(): boolean {
       return true;
    }
-   /** Gathers the channels of the page (see `CollectedChannels`). */
    protected collectChannels(): CollectedChannels {
       const imports: string[] = [];
       const channels: ChannelEntry[] = [];

@@ -52,7 +52,7 @@ describe("ImportsGenerator", () => {
       const generator = () => new ImportsGenerator(false, "/project/src/autoipc/main.ts");
       const dir = "/project/src/autoipc/schema";
 
-      // Regression for T53: both files generated `import type { User }` (TS2300).
+      // Both files generated `import type { User }` (TS2300).
       it("imports types of the same name that two files declare under distinct names", () => {
          const a = fileOf(`${dir}/a.ts`, { typeSpecArray: [ownType("User")] }, "User");
          const b = fileOf(`${dir}/b.ts`, { typeSpecArray: [ownType("User")] }, "User");
@@ -69,7 +69,7 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(b, "User")).toBeNull();
       });
 
-      // Regression for T53: the declaration of b.ts was dropped, its channels used the import.
+      // The declaration of b.ts was dropped, its channels used the import.
       it("imports an imported type and a declared type of the same name under distinct names", () => {
          const a = fileOf(
             `${dir}/a.ts`,
@@ -179,7 +179,7 @@ describe("ImportsGenerator", () => {
          expect(ig.getDeclaration(c, "User")).toContain("{ User as User_3 }");
       });
 
-      // Regression for T59: a schema type named like a declaration of the generated file clashed.
+      // A schema type named like a declaration of the generated file clashed.
       it("imports a type that is named like a reserved name under an alias", () => {
          const a = fileOf(
             `${dir}/a.ts`,
@@ -231,7 +231,7 @@ describe("ImportsGenerator", () => {
          );
       });
 
-      // Regression for T60: the schema's own `Error` and `Map` must be imported, not left global.
+      // The schema's own `Error` and `Map` must be imported, not left global.
       it("imports types that are named like globals under their own names", () => {
          const a = fileOf(
             `${dir}/a.ts`,

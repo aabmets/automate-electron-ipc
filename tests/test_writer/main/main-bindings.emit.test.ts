@@ -82,7 +82,7 @@ describe("MainBindingsWriter", () => {
    });
 
    it("should write an immediate sender and a separate binder for triggered channels", async () => {
-      // Regression for B5: the sender used to register a window listener on every call.
+      // The sender used to register a window listener on every call.
       const pfsArray = buildFileSpecs({
          name: "focused",
          kind: "Broadcast",

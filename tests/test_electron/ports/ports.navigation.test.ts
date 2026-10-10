@@ -93,7 +93,7 @@ describeElectron(
          });
       });
 
-      // Every connection used to add its own 'destroyed' listener and four load listeners (T87).
+      // Every connection used to add its own 'destroyed' listener and four load listeners.
       it("connects a window many times without a MaxListenersExceededWarning", () => {
          expect(group.value("manyConnections")).toStrictEqual([]);
       });

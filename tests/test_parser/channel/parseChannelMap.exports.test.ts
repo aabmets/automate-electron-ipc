@@ -95,7 +95,7 @@ describe("parseChannelMapModule", () => {
          expect(aliased.channelMapExport).toStrictEqual({ kind: "named", name: "ipc" });
       });
 
-      // Regression for T58: only parentheses were unwrapped, so a wrapped call was reported
+      // Only parentheses were unwrapped, so a wrapped call was reported
       // as not exported.
       const wrappers = ["satisfies Foo", "as Foo", "as const", "as unknown as Foo", "!"];
       for (const wrapper of wrappers) {
@@ -161,7 +161,7 @@ describe("parseChannelMapModule", () => {
          expect(msg).toContain("must be exported");
       });
 
-      // T97: `export = channels` is not an export that the generated files can import.
+      // `export = channels` is not an export that the generated files can import.
       it("rejects a map that is exported with 'export ='", () => {
          const msg = parseError(
             "const channels = defineChannels({ chan: invoke<() => void>() });\nexport = channels;",

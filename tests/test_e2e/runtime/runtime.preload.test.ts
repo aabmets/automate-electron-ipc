@@ -103,7 +103,7 @@ describe("generated preload script", () => {
 
       expect(typeof dispose).toBe("function");
       expect(dispose).not.toBe(ipcRenderer);
-      // The subscriptions of a channel share one listener of ipcRenderer (T94).
+      // The subscriptions of a channel share one listener of ipcRenderer.
       const listeners = ipcRenderer.on.mock.calls
          .filter(([name]: [string]) => name === wire("progress"))
          .map(([, listener]: [string, (...args: unknown[]) => void]) => listener);

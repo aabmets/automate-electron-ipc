@@ -3,7 +3,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, value imports used as types", () => {
-   // Regression for B3: only `import type` names were recorded, so a class, enum, default or
+   // Only `import type` names were recorded, so a class, enum, default or
    // aliased import that a signature referenced was missing from the generated files.
    it("imports every named, aliased, default and package import that a signature uses", async () => {
       const project = await fixtures.run("value-imports");
@@ -29,7 +29,7 @@ describe("ipcAutomation, value imports used as types", () => {
 });
 
 describe("ipcAutomation, namespace imports", () => {
-   // Regression for T49: the second type from a namespace generated a bogus named import.
+   // The second type from a namespace generated a bogus named import.
    it("imports the namespace once, however many of its types are used", async () => {
       const project = await fixtures.run("namespace-imports");
       const { generated } = project;
@@ -49,7 +49,7 @@ describe("ipcAutomation, namespace imports", () => {
 });
 
 describe("ipcAutomation, import order", () => {
-   // Regression for T06: import lines followed the order of the schema files, so it depended
+   // Import lines followed the order of the schema files, so it depended
    // on the order that the files were read in.
    it("sorts the type imports of main.ts and window.d.ts", async () => {
       const project = await fixtures.run("import-order");
@@ -73,7 +73,7 @@ describe("ipcAutomation, import order", () => {
 });
 
 describe("ipcAutomation, import paths with dots in the file name", () => {
-   // Regression for T55: "./types/user.model" was imported as "./types/user" (TS2307).
+   // "./types/user.model" was imported as "./types/user" (TS2307).
    it("keeps the dotted file names, and maps script extensions for NodeNext", async () => {
       const project = await fixtures.run("dotted-imports");
       const { generated } = project;
@@ -97,7 +97,7 @@ describe("ipcAutomation, import paths with dots in the file name", () => {
 });
 
 describe("ipcAutomation, import paths of script extensions, JSON modules and import types", () => {
-   // Regression for T89: the extension of `api.mts` and of `./models.mjs` was dropped (TS2307).
+   // The extension of `api.mts` and of `./models.mjs` was dropped (TS2307).
    it("keeps .mjs for the .mts schema files and the .mjs specifiers", async () => {
       const project = await fixtures.run("script-extensions");
       for (const file of ["main.ts", "types.ts"] as const) {
@@ -118,7 +118,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
       expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 
-   // Regression for T89: "./settings.json" became "./settings.json.js" under NodeNext.
+   // "./settings.json" became "./settings.json.js" under NodeNext.
    it("keeps the specifier of a JSON module under NodeNext, without a script extension", async () => {
       const project = await fixtures.run("json-import-node-next");
       for (const file of ["main.ts", "types.ts"] as const) {
@@ -128,7 +128,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
       expect(await project.typecheck({ ...NODE_NEXT_OPTIONS, resolveJsonModule: true })).toBe("");
    });
 
-   // Regression for T89: the path of `import("./models")` is relative to the schema file, and it
+   // The path of `import("./models")` is relative to the schema file, and it
    // was copied as it is into the generated files, which are in another directory.
    it("rebases the path of an import type to the generated files", async () => {
       const project = await fixtures.run("inline-import-types");
@@ -141,7 +141,7 @@ describe("ipcAutomation, import paths of script extensions, JSON modules and imp
 });
 
 describe("ipcAutomation, directory imports, import-equals in namespaces and export =", () => {
-   // Regression for T97: "./models" became "./models.js" under NodeNext, which does not resolve
+   // "./models" became "./models.js" under NodeNext, which does not resolve
    // to "./models/index.ts".
    it("names the index file of a directory import under NodeNext", async () => {
       const project = await fixtures.run("directory-imports");
@@ -159,7 +159,7 @@ describe("ipcAutomation, directory imports, import-equals in namespaces and expo
       expect(await project.typecheck(NODE_NEXT_OPTIONS)).toBe("");
    });
 
-   // Regression for T101: "./models" became "./models.js", or named the index file, although the
+   // "./models" became "./models.js", or named the index file, although the
    // package.json of the directory comes before it. Path mappings are kept as they are written.
    it("keeps package directories and path mappings under NodeNext", async () => {
       const project = await fixtures.run("directory-packages");

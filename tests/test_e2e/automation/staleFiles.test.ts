@@ -25,7 +25,6 @@ export default defineChannels({
 });
 `;
 
-/** Whether the file exists. */
 const exists = (file: string) =>
    fsp.access(file).then(
       () => true,

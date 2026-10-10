@@ -81,7 +81,7 @@ describe("BaseWriter", () => {
       ).toBe("(_event: IpcMainInvokeEvent) => void");
    });
 
-   // Regression for T57: the event was inserted at the first `(` of the text.
+   // The event was inserted at the first `(` of the text.
    it("should not insert the event into the constraint of a type parameter", () => {
       const signature = {
          definition: "<T extends (x: number) => void>(cb: T) => void",
@@ -102,7 +102,7 @@ describe("BaseWriter", () => {
       expect(writer.joinComponents(["a", "b"])).toBe("a\nb");
       expect(writer.joinComponents(["a\n", "b"])).toBe("a\n\nb");
       expect(writer.joinComponents(["a", "\nb"])).toBe("a\n\nb");
-      // Regression for T100: the newlines of both sides added up to two blank lines.
+      // The newlines of both sides added up to two blank lines.
       expect(writer.joinComponents(["a\n", "\nb"])).toBe("a\n\nb");
       expect(writer.joinComponents(["a\n\n", "\n\nb\n"])).toBe("a\n\nb\n");
       expect(writer.joinComponents(["a\n", "", "\nb", ""])).toBe("a\n\nb\n");
@@ -139,7 +139,7 @@ describe("BaseWriter", () => {
    });
 
    it("should forward rest parameters with their spread", () => {
-      // Regression for B4: the spread was dropped, so the renderer received one array argument.
+      // The spread was dropped, so the renderer received one array argument.
       const spec = {
          signature: {
             params: [
@@ -179,7 +179,7 @@ describe("BaseWriter", () => {
             .sortChannels(names.map((name) => ({ name })))
             .map((channel) => channel.name);
 
-      // Regression for T67: whole callables were compared with `localeCompare`.
+      // Whole callables were compared with `localeCompare`.
       it("puts a name before the same name with a suffix", () => {
          expect(sort("getFoo2", "getFoo")).toStrictEqual(["getFoo", "getFoo2"]);
       });
@@ -222,7 +222,7 @@ describe("BaseWriter", () => {
       const config = { projectRoot: "/p", ipcSchema: { path: "/p/ipc/schema.ts" } };
       const obj = new VitestBaseWriter(config as t.IPCResolvedConfig, [{} as t.ParsedFileSpecs]);
       const text = obj.render();
-      // Regression for T65: the file started with a blank line.
+      // The file started with a blank line.
       expect(text).toStrictEqual(`${notice(config as t.IPCResolvedConfig)}\n\nconst asdfg = 123;`);
       expect(text).not.toContain("PLUGIN");
    });

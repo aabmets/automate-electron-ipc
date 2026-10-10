@@ -14,8 +14,6 @@ import utils from "../../utils.js";
 import type { ImportsGenerator } from "../imports-generator.js";
 import { getWorkerEventType } from "./main-workers.js";
 
-/** The sender and argument validation of the generated `main.ts`. */
-
 /**
  * Imports the validator of the channel, if it has one, and returns its local name. The import
  * line goes to `declarations` once, however many channels use the same validator.

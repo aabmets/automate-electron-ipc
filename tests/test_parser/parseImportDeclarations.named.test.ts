@@ -62,7 +62,7 @@ describe("parseImportDeclarations", () => {
          ]);
       });
 
-      // Regression for T60: an import takes precedence over the global of the same name.
+      // An import takes precedence over the global of the same name.
       it("should record imports that are named like globals", () => {
          const result = parseImportDeclarations(
             `import type { Error, Map as M, Date as D } from 'module';`,

@@ -44,7 +44,6 @@ function createContext(config, ipcDir) {
 
    const ctx = {
       electron: require("electron"),
-      /** The exports of the generated `main.ts`. */
       main: require(mainPath),
       data: config.data,
       webPreferences,
@@ -174,7 +173,6 @@ function createContext(config, ipcDir) {
          return win;
       },
 
-      /** Opens a hidden window that has not loaded anything. */
       blank(options = {}) {
          return new BrowserWindow({ show: false, webPreferences: webPreferences(options) });
       },

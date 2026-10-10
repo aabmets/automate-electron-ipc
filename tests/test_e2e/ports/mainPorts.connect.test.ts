@@ -97,7 +97,7 @@ describe("ipc.<name>.connect of a mainPort channel", () => {
    });
 
    describe("a page which reloads", () => {
-      // Regression for B9: a port that was posted once was lost when the page loaded again.
+      // A port that was posted once was lost when the page loaded again.
       it("gets a fresh port on every load, and the old port is closed", async () => {
          const ipc = await loadMain();
          const contents = createContents();

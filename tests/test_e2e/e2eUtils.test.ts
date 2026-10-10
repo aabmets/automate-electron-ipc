@@ -96,7 +96,7 @@ describe("runTsc", () => {
       await fsp.rm(dir, { recursive: true, force: true });
    });
 
-   // Regression for T70: the exit status was ignored, so a crashed tsc gave "" (no errors).
+   // The exit status counts: a crashed tsc must not read as "no errors".
    it("throws when tsc is killed by a signal", async () => {
       const tsc = await fakeTsc("kill -KILL $$");
       expect(() => runTsc(dir, tsc)).toThrowError("tsc was killed by signal SIGKILL");

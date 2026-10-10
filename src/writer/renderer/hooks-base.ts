@@ -11,7 +11,6 @@
 
 import { BaseWriter } from "../base-writer.js";
 
-/** The type aliases which pick the event and the invoke channels out of `IpcApi`. */
 const TYPE_ALIASES = `
 /** The name of a channel that pushes events to the page: one with \`on\` and \`once\`. */
 export type EventName = {
@@ -56,14 +55,12 @@ export type InvokeReturn<N extends InvokeName> = IpcApi[N] extends {
  * the global of `exposeAs`. A subclass names the imports of its framework and the hooks.
  */
 export abstract class FrameworkHooksWriter extends BaseWriter {
-   /** The imports of the framework, as lines of code. */
    protected abstract getFrameworkImports(): string;
    /** The hooks, in a template whose indent is 3 spaces, which `reindent` turns into the configured one. */
    protected abstract getHooks(): string;
    protected getTargetFilePath(): string {
       return this.config.hooksFilePath;
    }
-   /** The path of the types module that the hooks take `IpcApi` from. */
    protected getTypesFilePath(): string {
       return this.config.typesFilePath;
    }

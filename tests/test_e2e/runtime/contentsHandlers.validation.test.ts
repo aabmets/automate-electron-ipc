@@ -9,7 +9,7 @@
  *   SPDX-License-Identifier: Apache-2.0
  */
 
-// T34: sender validation of the contents, the stream channels and the types of the option.
+// Sender validation of the contents, the stream channels and the types of the option.
 
 import fsp from "node:fs/promises";
 import path from "node:path";

@@ -48,7 +48,6 @@ export interface ChannelEntry {
    property: string;
 }
 
-/** The channels of the page, by the components that they need. */
 export interface ChannelGroups {
    portSpecs: t.ChannelSpec[];
    askNames: string[];
@@ -67,7 +66,6 @@ export interface ChannelGroups {
 export interface PreloadContext {
    indents: string[];
    config: t.IPCResolvedConfig;
-   /** Whether the config names a serializer. */
    usesSerializer: boolean;
    wireName: (name: string, suffix?: string) => string;
    isSerializedSpec: (spec: t.ChannelSpec) => boolean;
@@ -167,7 +165,6 @@ export class PreloadBindingsWriter extends BaseWriter {
       return this.config.isolatedWorldId;
    }
 
-   /** Sorts the channels of the page into the groups that need components of their own. */
    protected groupChannels(): ChannelGroups {
       const groups: ChannelGroups = {
          portSpecs: [],

@@ -22,7 +22,7 @@ function firstAlias(code: string) {
 }
 
 describe("parseModule, non-ASCII source", () => {
-   // Regression for T66: swc spans are UTF-8 byte offsets, the slices used UTF-16 indices.
+   // Swc spans are UTF-8 byte offsets, the slices used UTF-16 indices.
    it("slices the text of a node after a non-ASCII comment", () => {
       const { alias, src } = firstAlias(
          "// Käyttäjä 日本\nconst a = 1;\ntype T = (a: string) => void;",

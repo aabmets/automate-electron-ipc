@@ -71,7 +71,7 @@ describe("collectCustomTypes", () => {
       });
    });
 
-   // Regression for T60: a name that the schema binds itself is not the global of that name.
+   // A name that the schema binds itself is not the global of that name.
    it("should collect a global name that the schema file binds itself", () => {
       const customTypes = collectCustomTypes(
          `const x = type as (a: Error, b: Map<string, Date>, c: Intl.Thing) => Promise<void>;`,
@@ -169,7 +169,7 @@ describe("collectCustomTypes", () => {
       expect(customTypes).toStrictEqual(new Set(["CustomType1", "CustomType2"]));
    });
 
-   // Regression for T54: `{ abc: renamed }` binds `renamed`, it is not a type annotation.
+   // `{ abc: renamed }` binds `renamed`, it is not a type annotation.
    it("should not collect the bindings of destructured params", () => {
       const customTypes = collectCustomTypes(`
          const x = type as ({ abc: renamed, def }: CustomType) => void

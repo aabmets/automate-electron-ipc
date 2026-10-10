@@ -254,7 +254,6 @@ export function buildStreamListener(ctx: PreloadContext, name: string): string {
    return `listenForStreamPorts(${ctx.wireName(name, ":port")});`;
 }
 
-/** Whether any of the channels to a utility process is a `streamUtility` channel. */
 export function hasBrokeredStreams(specs: t.ChannelSpec[]): boolean {
    return specs.some((spec) => spec.kind === "Stream");
 }

@@ -40,7 +40,7 @@ describe("serializer, service workers", () => {
          const script = await workerPreload([channel]);
          const page = await preload([channel]);
 
-         // Only the names that the channel calls stay in the import (T173).
+         // Only the names that the channel calls stay in the import.
          expect(output).toMatch(SERIALIZER_IMPORT);
          expect(output).toContain("export class IpcSerializationError extends Error {");
          expect(script).toMatch(SERIALIZER_IMPORT);

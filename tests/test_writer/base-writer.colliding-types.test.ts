@@ -91,7 +91,7 @@ describe("BaseWriter", () => {
          expect(spec.signature.chunkType).toBe("User");
       });
 
-      // Regression for T69: the `${...}` part of a template literal type was skipped as a string.
+      // The `${...}` part of a template literal type was skipped as a string.
       it("should rename a reference inside a template literal type", () => {
          const signature = renamed("(key: `k-${User}`, u: User) => `${User}-v`");
          expect(signature.definition).toBe("(key: `k-${User_2}`, u: User_2) => `${User_2}-v`");
@@ -105,7 +105,7 @@ describe("BaseWriter", () => {
          );
       });
 
-      // Regression for T69: the member name of a method type was renamed.
+      // The member name of a method type was renamed.
       it("should not rename the name of a method or an accessor", () => {
          const signature = renamed("(o: { User(): User; get User(): User; User?: User }) => void");
          expect(signature.definition).toBe(
@@ -156,7 +156,7 @@ describe("BaseWriter", () => {
       });
    });
 
-   // Regression for T89: the path of an import type is relative to the schema file, and was
+   // The path of an import type is relative to the schema file, and was
    // copied as it is into the generated files.
    describe("import types in signatures", () => {
       class InIpcDir extends VitestBaseWriter {

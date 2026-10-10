@@ -21,7 +21,7 @@ describe("parseSpecs, export specifiers and default classes", () => {
    const channels = (...types: string[]) =>
       `export default defineChannels({ ${types.map((x, i) => `chan${i}: invoke<() => ${x}>()`).join(", ")} });`;
 
-   // Regression for T61: `interface X {}` + `export { X }` failed with "must be exported".
+   // `interface X {}` + `export { X }` failed with "must be exported".
    it("accepts a type that `export { X }` exports", () => {
       const { typeSpecArray } = parse(`interface X {}\nexport { X };\n${channels("X")}`);
       expect(typeSpecArray).toStrictEqual([
@@ -125,7 +125,7 @@ describe("parseSpecs, typeof of values declared in the schema file", () => {
       ...extra,
    });
 
-   // Regression for T62: `typeof x` of a value declared in the schema file was never imported.
+   // `typeof x` of a value declared in the schema file was never imported.
    it("records the exported values that a signature queries", () => {
       const { typeSpecArray, channelSpecArray } = parse(
          `export const config = { a: 1 };\n${using("config")}`,

@@ -15,11 +15,6 @@
  * when provided with the same ID. It manages a limited number of entries and evicts the least
  * recently accessed items when the limit is reached. When the limit is set to 0, the cache size
  * is unlimited.
- *
- * Methods:
- * - getInstance(id: string, limit?: number): Returns an instance associated with the given ID.
- * - get(key: unknown): [boolean, unknown] - Retrieves a value by key if present, marking it as recently used.
- * - put(key: unknown, value: unknown): void - Inserts a key-value pair, evicting the least recently used item if necessary.
  */
 export class LRUCache {
    private static readonly instances: Map<string, LRUCache> = new Map();

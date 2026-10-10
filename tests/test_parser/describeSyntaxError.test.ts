@@ -31,7 +31,7 @@ describe("describeSyntaxError", () => {
       });
    });
 
-   // Regression for T71: the column was read from the frame, which expands tabs and counts the
+   // The column was read from the frame, which expands tabs and counts the
    // display width of wide characters.
    describe("with the parsed source", () => {
       const describeError = (code: string) => {

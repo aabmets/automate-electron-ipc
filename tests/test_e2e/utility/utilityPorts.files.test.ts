@@ -38,7 +38,7 @@ describe("utility ports, files", () => {
       expect(await project.typecheck()).toBe("");
       expect(project.generated["utility.ts"]).toContain("setBrokerCall(");
       expect(project.generated["main.ts"]).toContain("function connectUtilityPort(");
-      // The peers of the children come with it, so that the exit of a child is seen (T86).
+      // The peers of the children come with it, so that the exit of a child is seen.
       expect(project.generated["main.ts"]).toContain("export function attachUtility(");
       expect(project.generated["main.ts"]).toContain("export function forkUtility(");
       expect(project.generated["main.ts"]).not.toContain("ipcMain");

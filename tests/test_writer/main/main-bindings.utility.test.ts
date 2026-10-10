@@ -64,7 +64,7 @@ describe("MainBindingsWriter, utility channels", () => {
       }
    });
 
-   // T173: a helper that no channel calls fails noUnusedLocals in the file of the project.
+   // A helper that no channel calls fails noUnusedLocals in the file of the project.
    it.each([
       ["callUtility", [callUtility], ["callUtilityPeer", "callUtilityChild", "lastUtilityCallId"]],
       ["notifyUtility", [notifyUtility], ["sendUtilityPeer"]],

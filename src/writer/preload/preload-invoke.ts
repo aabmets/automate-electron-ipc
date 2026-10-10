@@ -128,13 +128,11 @@ export function buildSerializerComponents(indents: string[]): string {
    ].join("\n");
 }
 
-/** `withTimeout`, if any channel needs it. */
 export function getTimeoutComponents(ctx: PreloadContext, pfsArray: t.ParsedFileSpecs[]): string[] {
    const used = anySpec(pfsArray, (spec) => hasTimeout(ctx, spec));
    return used ? [buildTimeoutComponents(ctx.indents)] : [];
 }
 
-/** Whether the promise of an `invoke` channel is rejected after a timeout. */
 function hasTimeout(ctx: PreloadContext, spec: t.ChannelSpec): boolean {
    return (
       spec.kind === "Unicast" && spec.direction === "RendererToMain" && ctx.getTimeoutMs(spec) > 0

@@ -21,8 +21,6 @@ import {
 import { buildWorkerAskLines, buildWorkerRouting } from "./main-worker-routing.js";
 import { buildWorkerSenders } from "./main-workers.js";
 
-/** The helpers of the channels with service workers: the hubs, the config and the tables of channels. */
-
 /**
  * The helpers of the channels between the main process and service workers.
  *
@@ -202,7 +200,6 @@ function buildWorkerConfigLines(
       : [];
 }
 
-/** The line of a channel in the table of the channels that a hub routes. */
 function describeWorkerChannel(
    ctx: MainContext,
    spec: t.ChannelSpec,

@@ -25,7 +25,6 @@ export interface ErrorSite {
  * With `at`, a code frame of the source follows the message.
  */
 export class SchemaError extends Error {
-   /** The schema file of the error. */
    readonly file: string;
    /** The 1-based line and column of the error in the file, when known. */
    position?: SourcePosition;

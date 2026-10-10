@@ -14,7 +14,7 @@ import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
 
 describe("ipcAutomation, type definition edge cases", () => {
-   // Regression for T09: a non-exported helper type threw, a default exported interface was
+   // A non-exported helper type threw, a default exported interface was
    // imported by name, type parameters and globals were imported as custom types.
    it("imports only the user-defined types that channels use", async () => {
       const project = await fixtures.run("type-edge-cases");
@@ -40,7 +40,7 @@ describe("ipcAutomation, type definition edge cases", () => {
 });
 
 describe("ipcAutomation, types exported by specifiers and default classes", () => {
-   // Regression for T61: `export { X }` failed validation, `export default class` got no import.
+   // `export { X }` failed validation, `export default class` got no import.
    it("imports the types under the names that the schema exports", async () => {
       const project = await fixtures.run("export-specifiers");
       const { generated } = project;
@@ -66,7 +66,7 @@ describe("ipcAutomation, types exported by specifiers and default classes", () =
 });
 
 describe("ipcAutomation, qualified names, typeof queries and destructuring", () => {
-   // Regression for T54: `Kind.A` and `typeof config` produced no import. The renamed binding of
+   // `Kind.A` and `typeof config` produced no import. The renamed binding of
    // a destructured param is covered by the collectCustomTypes unit tests, since TypeScript
    // rejects such a binding in a function type.
    it("imports the heads of qualified names and typeof queries", async () => {
@@ -91,7 +91,7 @@ describe("ipcAutomation, qualified names, typeof queries and destructuring", () 
 });
 
 describe("ipcAutomation, decorators and import-equals in schema files", () => {
-   // Regression for T90: swc parsed without `decorators: true`, so a decorated class was a
+   // swc parsed without `decorators: true`, so a decorated class was a
    // syntax error.
    it("parses a schema file with a decorated class", async () => {
       const project = await fixtures.run("decorators");
@@ -99,7 +99,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
       expect(await project.typecheck({ experimentalDecorators: false })).toBe("");
    });
 
-   // Regression for T90: `export import User = Models.User` bound a name that no generated file
+   // `export import User = Models.User` bound a name that no generated file
    // imported.
    it("imports the name of an exported import-equals alias from the schema file", async () => {
       const project = await fixtures.run("import-equals");
@@ -140,7 +140,7 @@ describe("ipcAutomation, decorators and import-equals in schema files", () => {
 });
 
 describe("ipcAutomation, typeof of values declared in the schema file", () => {
-   // Regression for T62: `typeof config` of a value in the schema file got no import (TS2304).
+   // `typeof config` of a value in the schema file got no import (TS2304).
    it("imports the exported values under the names that the schema exports", async () => {
       const project = await fixtures.run("typeof-local-values");
       const { generated } = project;
@@ -166,7 +166,7 @@ describe("ipcAutomation, typeof of values declared in the schema file", () => {
 });
 
 describe("ipcAutomation, schema types named like globals", () => {
-   // Regression for T60: `Error`, `Map` and the like were treated as globals by name, so a schema
+   // `Error`, `Map` and the like were treated as globals by name, so a schema
    // type of that name got no import and the generated files silently used the global type.
    const importLine = (text: string, exported: string, from: string): string | undefined =>
       new RegExp(`^import type \\{ ${exported}(?: as \\w+)? \\} from "${from}";$`, "m").exec(
