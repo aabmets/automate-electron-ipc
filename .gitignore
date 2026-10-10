@@ -3,6 +3,7 @@ dist
 packages
 coverage
 .DS_Store
+.env
 *.log*
 
 .idea
