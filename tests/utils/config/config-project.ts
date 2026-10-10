@@ -35,8 +35,8 @@ export function withConfigProject() {
       get root() {
          return dir.replaceAll("\\", "/");
       },
-      async write(files: Record<string, string>, manifest: object = { name: "project" }) {
-         const all = { "package.json": JSON.stringify(manifest), ...files };
+      async write(files: Record<string, string>, manifest?: object) {
+         const all = { "package.json": JSON.stringify(manifest ?? { name: "project" }), ...files };
          await Promise.all(
             Object.entries(all).map(async ([name, text]) => {
                await fsp.mkdir(path.dirname(path.join(dir, name)), { recursive: true });

@@ -11,5 +11,7 @@ export const rows: Promise<Row[]> = mainIpc.query.invoke(child, "select 1");
 export const removeRows: () => void = mainIpc.rows.on(child, (received: Row[]) => {
    console.log(received.length);
 });
-export const removeQuery: () => void = utilityIpc.query.handle(async (sql) => [{ id: sql.length }]);
+export const removeQuery: () => void = utilityIpc.query.handle((sql) =>
+   Promise.resolve([{ id: sql.length }]),
+);
 utilityIpc.rows.send([{ id: 1 }]);

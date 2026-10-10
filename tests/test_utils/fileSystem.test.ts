@@ -84,34 +84,30 @@ describe("isCaseInsensitiveFileSystem", () => {
 });
 
 describe("isPathInside", () => {
-   it("should return true when childPath is directly inside parentPath", () => {
-      const parentPath = "/home/user";
-      const childPath = "/home/user/documents/file.txt";
-      expect(utils.isPathInside(childPath, parentPath)).toBe(true);
-   });
-
-   it("should return false when childPath is outside of parentPath", () => {
-      const parentPath = "/home/user";
-      const childPath = "/home/otherUser/documents/file.txt";
-      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
-   });
-
-   it("should return false when childPath is the same as parentPath", () => {
-      const parentPath = "/home/user";
-      const childPath = "/home/user";
-      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
-   });
-
-   it("should handle relative paths correctly", () => {
-      const parentPath = "/home/user";
-      const childPath = path.join(parentPath, "../user2/documents/file.txt");
-      expect(utils.isPathInside(childPath, parentPath)).toBe(false);
-   });
-
-   it("should return true for nested directories within the parentPath", () => {
-      const parentPath = "/home/user";
-      const childPath = "/home/user/documents/subdir/file.txt";
-      expect(utils.isPathInside(childPath, parentPath)).toBe(true);
+   it.each([
+      [
+         "should return true when childPath is directly inside parentPath",
+         "/home/user/documents/file.txt",
+         true,
+      ],
+      [
+         "should return false when childPath is outside of parentPath",
+         "/home/otherUser/documents/file.txt",
+         false,
+      ],
+      ["should return false when childPath is the same as parentPath", "/home/user", false],
+      [
+         "should handle relative paths correctly",
+         path.join("/home/user", "../user2/documents/file.txt"),
+         false,
+      ],
+      [
+         "should return true for nested directories within the parentPath",
+         "/home/user/documents/subdir/file.txt",
+         true,
+      ],
+   ])("%s", (_name, childPath, expected) => {
+      expect(utils.isPathInside(childPath, "/home/user")).toBe(expected);
    });
 
    it("should work with different path separators (cross-platform)", () => {

@@ -27,34 +27,43 @@ async function compileFile(source: string): Promise<string> {
  */
 async function inlineLocalRequires(code: string, sourceFile: string): Promise<string> {
    const pattern = /require\("(\.{1,2}\/[^"]+)"\)/g;
+   const inlined = await Promise.all(
+      [...code.matchAll(pattern)].map(async (match) => {
+         const file = path.resolve(path.dirname(sourceFile), `${match[1]}.ts`);
+         const inner = await inlineLocalRequires(await compileFile(file), file);
+         return {
+            from: match[0],
+            module: `(() => { const module = { exports: {} }; const exports = module.exports; ${inner}\n return module.exports; })()`,
+         };
+      }),
+   );
    let result = code;
-   for (const match of code.matchAll(pattern)) {
-      const file = path.resolve(path.dirname(sourceFile), `${match[1]}.ts`);
-      const inner = await inlineLocalRequires(await compileFile(file), file);
-      const module = `(() => { const module = { exports: {} }; const exports = module.exports; ${inner}\n return module.exports; })()`;
-      result = result.replace(match[0], () => module);
+   for (const { from, module } of inlined) {
+      result = result.replace(from, () => module);
    }
    return result;
 }
 
 export async function compileGenerated(ipcDir: string, outDir: string): Promise<void> {
    const entries = await fsp.readdir(ipcDir, { recursive: true, withFileTypes: true });
-   for (const entry of entries) {
-      if (!(entry.isFile() && entry.name.endsWith(".ts")) || entry.name.endsWith(".d.ts")) {
-         continue;
-      }
-      const source = path.join(entry.parentPath, entry.name);
-      let code = await compileFile(source);
-      if (/^(service-worker-)?preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
-         code = await inlineLocalRequires(code, source);
-      }
-      if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
-         // The preload script is one file which only requires `electron`, as a sandboxed one must.
-         // This tells the tests that it really runs sandboxed and in an isolated context.
-         code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;
-      }
-      const target = path.join(outDir, path.relative(ipcDir, source)).replace(/\.ts$/, ".js");
-      await fsp.mkdir(path.dirname(target), { recursive: true });
-      await fsp.writeFile(target, code);
-   }
+   const sources = entries.filter(
+      (entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts"),
+   );
+   await Promise.all(
+      sources.map(async (entry) => {
+         const source = path.join(entry.parentPath, entry.name);
+         let code = await compileFile(source);
+         if (/^(service-worker-)?preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
+            code = await inlineLocalRequires(code, source);
+         }
+         if (/^preload(\.[\w-]+)?\.ts$/.test(entry.name)) {
+            // The preload script is one file which only requires `electron`, as a sandboxed one must.
+            // This tells the tests that it really runs sandboxed and in an isolated context.
+            code += `\nrequire("electron").contextBridge.exposeInMainWorld("__env", { sandboxed: process.sandboxed, contextIsolated: process.contextIsolated });\n`;
+         }
+         const target = path.join(outDir, path.relative(ipcDir, source)).replace(/\.ts$/, ".js");
+         await fsp.mkdir(path.dirname(target), { recursive: true });
+         await fsp.writeFile(target, code);
+      }),
+   );
 }

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when the channels expose the wrong methods.
 import type { UtilityProcess } from "electron";
@@ -35,9 +34,10 @@ export async function utility(): Promise<string> {
       throw error;
    }
 }
-utilityIpc.slowIndex.handle(async (path) => path.length);
-utilityIpc.slowQuery.handle(async (sql) => sql);
+utilityIpc.slowIndex.handle((path) => Promise.resolve(path.length));
+utilityIpc.slowQuery.handle((sql) => Promise.resolve(sql));
 utilityIpc.slowRows.handle(async function* (table) {
+   await Promise.resolve();
    yield table.length;
 });
 

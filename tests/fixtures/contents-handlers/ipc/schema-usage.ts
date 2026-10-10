@@ -4,37 +4,38 @@ import type { WebContents } from "electron";
 import { ipc } from "./main";
 
 export function serve(contents: WebContents): () => void {
-   const seen: unknown[] = [];
    const disposers: (() => void)[] = [
-      ipc.getDoc.handle(async (_event, id) => ({ id, title: `doc ${id}` }), {
+      ipc.getDoc.handle((_event, id) => Promise.resolve({ id, title: `doc ${id}` }), {
          webContents: contents,
       }),
-      ipc.getDoc.handleOnce(async (_event, id) => ({ id, title: "once" }), {
+      ipc.getDoc.handleOnce((_event, id) => Promise.resolve({ id, title: "once" }), {
          webContents: contents,
       }),
       ipc.log.on(
          (_event, text, ...rest) => {
-            seen.push(text, rest);
+            console.log(text, rest);
          },
          { webContents: contents },
       ),
       ipc.log.once(
          (_event, text) => {
-            seen.push(text);
+            console.log(text);
          },
          { webContents: contents },
       ),
       ipc.rows.handle(
-         // biome-ignore lint/suspicious/useAwait: a generator which has nothing to wait for
          async function* (_event, table) {
+            await Promise.resolve();
             yield { id: table.length, title: table };
          },
          { webContents: contents },
       ),
    ];
    // Without the option, the registration is the global one.
-   disposers.push(ipc.getDoc.handle(async (_event, id) => ({ id, title: "global" })));
-   disposers.push(ipc.log.on(() => undefined, {}));
+   disposers.push(
+      ipc.getDoc.handle((_event, id) => Promise.resolve({ id, title: "global" })),
+      ipc.log.on(() => undefined, {}),
+   );
    return () => {
       for (const dispose of disposers) {
          dispose();

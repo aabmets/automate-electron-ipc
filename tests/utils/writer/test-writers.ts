@@ -83,7 +83,8 @@ function createTestWriter<
       scope?: string | null,
    ) => BaseWriter,
 >(Writer: W) {
-   class TestWriter extends (Writer as new (...args: any[]) => BaseWriter) {
+   const Base: new (...args: any[]) => BaseWriter = Writer;
+   class TestWriter extends Base {
       constructor(
          pfsArray: t.ParsedFileSpecs[],
          config: Partial<t.IPCResolvedConfig> = {},

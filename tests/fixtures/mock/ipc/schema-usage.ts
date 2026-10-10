@@ -5,11 +5,11 @@ import type { IpcApi } from "./types";
 const api: IpcApi = createIpcMock();
 
 const mock: IpcMock = createIpcMock({
-   getUser: { invoke: async (id) => ({ id, name: "Ann" }) },
-   getPathForFile: () => "/tmp/file",
+   getUser: { invoke: (id) => Promise.resolve({ id, name: "Ann" }) },
+   getPathForFile: () => "/files/file",
 });
 
-mock.getUser.invoke.impl(async (id) => ({ id, name: String(id) }));
+mock.getUser.invoke.impl((id) => Promise.resolve({ id, name: String(id) }));
 const userCalls: [number][] = mock.getUser.invoke.calls;
 const lineCalls: [string, (number | undefined)?][] = mock.logLine.send.calls;
 mock.emit.titleChanged("Home");
@@ -27,7 +27,7 @@ mock.emit.titleChanged(1);
 // @ts-expect-error The document ID is a number.
 mock.ask.hasUnsaved("1");
 // @ts-expect-error An override of a call has the type of the call.
-createIpcMock({ getUser: { invoke: async (id: string) => ({ id: 1, name: id }) } });
+createIpcMock({ getUser: { invoke: (id: string) => Promise.resolve({ id: 1, name: id }) } });
 
 const uninstall: () => void = installIpcMock(mock);
 uninstall();

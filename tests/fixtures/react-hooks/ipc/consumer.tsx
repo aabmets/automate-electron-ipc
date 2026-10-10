@@ -3,7 +3,7 @@
 import { useIpcEvent, useIpcInvoke } from "./hooks.react";
 import type { User } from "./schema/main";
 
-export function Profile({ id }: { id: number }) {
+export function Profile({ id }: Readonly<{ id: number }>) {
    useIpcEvent("titleChanged", (title) => {
       const upper: string = title.toUpperCase();
       document.title = upper;

@@ -65,12 +65,14 @@ window.ipc.sendGetUser(1);
 window.ipc.ports.chat.sendMessage("hi");
 
 // Main: each verb allows only its own methods.
-mainIpc.getUser.handle(async (_event, id: number) => `user ${id}`);
+mainIpc.getUser.handle((_event, id: number) => Promise.resolve(`user ${id}`));
 mainIpc.logLine.on((_event, text: string, ...rest: number[]) => console.log(text, rest));
 export const stopLogLine: () => void = mainIpc.logLine.on(() => undefined);
 export const stopLogLineOnce: () => void = mainIpc.logLine.once((_event, text: string) => text);
-export const stopGetUser: () => void = mainIpc.getUser.handle(async () => "user");
-export const stopGetUserOnce: () => void = mainIpc.getUser.handleOnce(async () => "user");
+export const stopGetUser: () => void = mainIpc.getUser.handle(() => Promise.resolve("user"));
+export const stopGetUserOnce: () => void = mainIpc.getUser.handleOnce(() =>
+   Promise.resolve("user"),
+);
 stopLogLine();
 mainIpc.progress.send(win, 50, "half");
 mainIpc.progress.send(contents, 50);

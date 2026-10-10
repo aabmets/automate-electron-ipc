@@ -7,11 +7,11 @@ export async function inWorker(): Promise<void> {
    ipc.checkedTell.send(new Date());
    console.log(shifted, checked);
 
-   ipc.zone.handle(async (at: Date) => new Map([["at", at]]));
+   ipc.zone.handle((at: Date) => Promise.resolve(new Map([["at", at]])));
    ipc.tick.on((at: Date, counts: Map<string, number>) => console.log(at, counts));
 
    // @ts-expect-error the worker sends a Date, not a number
    ipc.shift.invoke(1, 1);
    // @ts-expect-error the question carries a Date
-   ipc.zone.handle(async (at: string) => new Map([["at", new Date(at)]]));
+   ipc.zone.handle((at: string) => Promise.resolve(new Map([["at", new Date(at)]])));
 }

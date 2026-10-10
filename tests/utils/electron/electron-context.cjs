@@ -27,6 +27,21 @@ let sessionCount = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Calls `fn()` every 25 ms until it returns something truthy, and returns it. */
+async function poll(fn, what, deadline) {
+   const value = await fn();
+   if (value) {
+      return value;
+   }
+   if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${what}`);
+   }
+   await sleep(25);
+   return poll(fn, what, deadline);
+}
+
+let workerCalls = 0;
+
 function createContext(config, ipcDir) {
    const mainPath = path.join(ipcDir, "main.js");
    /** The preload script of the surface of a scope, or the one of the surface of no scope. */
@@ -135,11 +150,10 @@ function createContext(config, ipcDir) {
       async inWorker(win, fn, ...args) {
          const reply = await ctx.evaluate(
             win,
-            (source, callArgs) =>
+            (source, callArgs, id) =>
                new Promise((resolve) => {
-                  const id = Math.random();
                   const listener = (event) => {
-                     if (event.data && event.data.id === id) {
+                     if (event.data?.id === id) {
                         navigator.serviceWorker.removeEventListener("message", listener);
                         resolve(event.data);
                      }
@@ -149,6 +163,7 @@ function createContext(config, ipcDir) {
                }),
             fn.toString(),
             args,
+            ++workerCalls,
          );
          if (reply.ok) {
             return reply.value;
@@ -184,33 +199,13 @@ function createContext(config, ipcDir) {
       },
 
       /** Evaluates `fn(...args)` in the page until it returns something truthy, and returns it. */
-      async until(target, fn, ...args) {
-         const deadline = Date.now() + 5000;
-         for (;;) {
-            const value = await ctx.evaluate(target, fn, ...args);
-            if (value) {
-               return value;
-            }
-            if (Date.now() > deadline) {
-               throw new Error(`Timed out waiting for ${fn.toString()}`);
-            }
-            await sleep(25);
-         }
+      until(target, fn, ...args) {
+         return poll(() => ctx.evaluate(target, fn, ...args), fn.toString(), Date.now() + 5000);
       },
 
       /** Calls `fn()` in the main process until it returns something truthy, and returns it. */
-      async waitFor(fn, what = fn.toString()) {
-         const deadline = Date.now() + 5000;
-         for (;;) {
-            const value = await fn();
-            if (value) {
-               return value;
-            }
-            if (Date.now() > deadline) {
-               throw new Error(`Timed out waiting for ${what}`);
-            }
-            await sleep(25);
-         }
+      waitFor(fn, what = fn.toString()) {
+         return poll(fn, what, Date.now() + 5000);
       },
    };
    ctx.ipc = ctx.main.ipc;

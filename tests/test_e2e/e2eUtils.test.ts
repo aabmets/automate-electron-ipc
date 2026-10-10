@@ -45,22 +45,12 @@ const exists = (dir: string) =>
    );
 
 describe("runFixture", () => {
-   it("deletes the temp dir when the generator throws", async () => {
-      const { dirs, error } = await runAndTrackTempDirs("duplicate-channels");
-      expect(error).toBeInstanceOf(Error);
-      expect(dirs).toHaveLength(1);
-      expect(await exists(dirs[0])).toBe(false);
-   });
-
-   it("deletes the temp dir when the schema has a syntax error", async () => {
-      const { dirs, error } = await runAndTrackTempDirs("syntax-error");
-      expect(error).toBeInstanceOf(Error);
-      expect(dirs).toHaveLength(1);
-      expect(await exists(dirs[0])).toBe(false);
-   });
-
-   it("deletes the temp dir when the fixture does not exist", async () => {
-      const { dirs, error } = await runAndTrackTempDirs("no-such-fixture");
+   it.each([
+      ["the generator throws", "duplicate-channels"],
+      ["the schema has a syntax error", "syntax-error"],
+      ["the fixture does not exist", "no-such-fixture"],
+   ])("deletes the temp dir when %s", async (_reason, fixture) => {
+      const { dirs, error } = await runAndTrackTempDirs(fixture);
       expect(error).toBeInstanceOf(Error);
       expect(dirs).toHaveLength(1);
       expect(await exists(dirs[0])).toBe(false);

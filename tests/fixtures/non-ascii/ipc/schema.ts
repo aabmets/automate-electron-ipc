@@ -2,7 +2,8 @@
 import { defineChannels, emit, invoke, send } from "automate-electron-ipc";
 
 export type Üser = { name: "é" | "日本" };
-export interface Größe {
+// The non-ASCII name is what this fixture covers, so it keeps it.
+export interface Größe /* NOSONAR */ {
    value: number;
 }
 

@@ -21,6 +21,12 @@ export const DEBOUNCE = 100;
 
 export const posix = (file: string): string => file.replaceAll("\\", "/");
 
+/** Lets the debounce time pass, and waits until the watcher has reported `runs` runs. */
+async function settle(tracker: ReturnType<typeof createRunTracker>, runs: number) {
+   await vi.advanceTimersByTimeAsync(DEBOUNCE);
+   await tracker.until(runs);
+}
+
 /**
  * The setup of the tests of `watchSchema`: a temp project whose `ipcDataDir` is `ipc`, a fake clock,
  * fake watchers and a mocked `ipcAutomation`, which the caller mocks with `vi.mock`. Registers its
@@ -57,12 +63,6 @@ export function useWatchProject(ipcAutomation: Mock) {
    async function start(options: { cwd?: string; configFile?: string } = {}) {
       const fake = createFakeWatch();
       return { ...fake, ...(await startWith(fake.watch, options)) };
-   }
-
-   /** Lets the debounce time pass, and waits until the watcher has reported `runs` runs. */
-   async function settle(tracker: ReturnType<typeof createRunTracker>, runs: number) {
-      await vi.advanceTimersByTimeAsync(DEBOUNCE);
-      await tracker.until(runs);
    }
 
    beforeEach(async () => {

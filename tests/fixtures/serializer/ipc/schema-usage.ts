@@ -3,16 +3,18 @@
 import { ipc as mainIpc } from "./main";
 import type { Appointment } from "./schema";
 
-mainIpc.getAppointment.handle(async (_event, id: number, since: Date) => ({
-   at: since,
-   tags: new Set([String(id)]),
-   attendees: new Map([["ada", 1]]),
-   budget: 10n,
-}));
+mainIpc.getAppointment.handle((_event, id: number, since: Date) =>
+   Promise.resolve({
+      at: since,
+      tags: new Set([String(id)]),
+      attendees: new Map([["ada", 1]]),
+      budget: 10n,
+   }),
+);
 mainIpc.logVisit.on((_event, at: Date, tags: Map<string, number>) => {
    console.log(at.getTime(), tags.size);
 });
-mainIpc.checked.handle(async (_event, when: Date) => when);
+mainIpc.checked.handle((_event, when: Date) => Promise.resolve(when));
 
 export async function sendNotices(window: Electron.BrowserWindow): Promise<Date> {
    mainIpc.changed.send(window, {
@@ -26,7 +28,7 @@ export async function sendNotices(window: Electron.BrowserWindow): Promise<Date>
 }
 
 export async function readInPage(): Promise<Appointment> {
-   ipc.askClock.handle(async (zone: string) => new Date(zone));
+   ipc.askClock.handle((zone: string) => Promise.resolve(new Date(zone)));
    ipc.changed.on((appointment: Appointment) => console.log(appointment.at.getTime()));
    ipc.logVisit.send(new Date(), new Map());
    for await (const appointment of ipc.history.stream(new Date())) {

@@ -48,6 +48,7 @@ describe("withAutomationDir", () => {
    it("restores what a test spied on", () => {
       vi.spyOn(cfg, "getResolvedConfig").mockResolvedValue({ codeIndent: 9 } as never);
       made.push(automation.dir);
+      expect(vi.isMockFunction(cfg.getResolvedConfig)).toBe(true);
    });
 
    // Its own hooks removed the directories and the mocks when the tests above were done.

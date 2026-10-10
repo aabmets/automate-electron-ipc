@@ -25,7 +25,7 @@ export const unsavedInTime: Promise<boolean> = mainIpc.hasUnsavedChanges.invokeW
    7,
 );
 const options: IpcAskOptions = {};
-mainIpc.describe.invokeWith(win, options, "label", ...[]);
+mainIpc.describe.invokeWith(win, options, "label");
 
 async function ask(): Promise<void> {
    try {
@@ -69,10 +69,12 @@ mainIpc.getUser.invokeWith(win, {}, 1);
 export const stop: () => void = ipc.hasUnsavedChanges.handle(
    (documentId: number) => documentId > 0,
 );
-export const stopAsync: () => void = ipc.getEditorState.handle(async () => ({
-   documentId: 1,
-   text: "text",
-}));
+export const stopAsync: () => void = ipc.getEditorState.handle(() =>
+   Promise.resolve({
+      documentId: 1,
+      text: "text",
+   }),
+);
 ipc.confirmClose.handle((reason: string, ...flags: boolean[]) => console.log(reason, flags));
 ipc.describe.handle((label?: string) => label ?? "none");
 window.ipc.hasUnsavedChanges.handle(() => false);

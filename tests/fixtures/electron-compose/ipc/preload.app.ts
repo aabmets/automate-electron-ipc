@@ -7,6 +7,6 @@ import { api, expose } from "./preload";
 expose();
 expose("second");
 contextBridge.exposeInMainWorld("app", {
-   channels: (): string[] => Object.keys(api).sort(),
+   channels: (): string[] => Object.keys(api).sort((a, b) => a.localeCompare(b)),
    greet: async (id: number): Promise<string> => `hello, ${await api.getUser.invoke(id)}`,
 });

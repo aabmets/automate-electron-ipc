@@ -1,4 +1,3 @@
-// biome-ignore-all lint/suspicious/useAwait: the handlers are async to match the signatures, and have nothing to await
 // Not a schema: it uses the generated bindings the way an application would,
 // so that the type-check fails when the channels expose the wrong methods.
 import type { BrowserWindow, UtilityProcess, WebContents, WebContentsView } from "electron";
@@ -26,39 +25,44 @@ mainIpc.queryRows.connect(win, child);
 mainIpc.queryRows.invoke(child, "select 1");
 
 // Utility: the handlers, which return disposers.
-export const removeQuery: () => void = utilityIpc.queryRows.handle(async (sql, limit) => {
+export const removeQuery: () => void = utilityIpc.queryRows.handle((sql, limit) => {
    const row: Row = { id: sql.length, label: String(limit) };
-   return [row];
+   return Promise.resolve([row]);
 });
 utilityIpc.countRows.handle((table) => table.length);
 utilityIpc.ping.handle(() => undefined);
-utilityIpc.tagged.handle(async (label, ...tags) => `${label}:${tags.join(",")}`);
-utilityIpc.asForm.handle(async (n) => n + 1);
+utilityIpc.tagged.handle((label, ...tags) => Promise.resolve(`${label}:${tags.join(",")}`));
+utilityIpc.asForm.handle((n) => Promise.resolve(n + 1));
 export const removeScan: () => void = utilityIpc.scanRows.handle(async function* (table) {
+   await Promise.resolve();
    yield { id: 1, label: table } satisfies Row;
 });
 utilityIpc.counter.handle(async function* () {
+   await Promise.resolve();
    yield 1;
 });
 utilityIpc.streamForm.handle(async function* (seed) {
+   await Promise.resolve();
    yield seed;
 });
 // @ts-expect-error a stream handler returns an async iterable of the chunks, not a promise of one
-utilityIpc.scanRows.handle(async (table: string) => [{ id: 1, label: table }]);
+utilityIpc.scanRows.handle((table: string) => Promise.resolve([{ id: 1, label: table }]));
 // @ts-expect-error the chunks have the type of the signature
 utilityIpc.counter.handle(async function* () {
+   await Promise.resolve();
    yield "text";
 });
 // @ts-expect-error the result has the type of the signature
 utilityIpc.countRows.handle(() => "text");
 // @ts-expect-error a handler of a call does not return a stream
 utilityIpc.queryRows.handle(async function* () {
+   await Promise.resolve();
    yield 1;
 });
 // @ts-expect-error the child has no invoke for a call of the page
 utilityIpc.queryRows.invoke("select 1");
 // @ts-expect-error the channel to the main process is not in the utility file
-utilityIpc.getUser.handle(async () => "");
+utilityIpc.getUser.handle(() => Promise.resolve(""));
 
 // Renderer: the calls return promises of the awaited results.
 export const rows: Promise<Row[]> = ipc.queryRows.invoke("select 1", 10);
@@ -110,7 +114,7 @@ export const viaStreamForm: AsyncIterable<string> = ipc.streamForm.stream("seed"
 // @ts-expect-error the arguments are those of the signature
 ipc.queryRows.invoke(1);
 // @ts-expect-error the page has no handle
-ipc.queryRows.handle(async () => []);
+ipc.queryRows.handle(() => Promise.resolve([]));
 // @ts-expect-error the page has no connect
 ipc.queryRows.connect(child, win);
 // @ts-expect-error a stream is read with stream(), not invoke()

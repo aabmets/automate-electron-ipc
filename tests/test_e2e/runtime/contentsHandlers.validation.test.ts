@@ -92,21 +92,18 @@ describe("fixture contents-handlers, the types of the webContents option", () =>
       const project = await fixtures.run("contents-handlers");
       const usage = path.join(project.dir, project.ipcDataDir, "schema-usage.ts");
       const text = await fsp.readFile(usage, "utf8");
-      const valid = "disposers.push(ipc.log.on(() => undefined, {}));";
+      const valid = "ipc.log.on(() => undefined, {}),";
       expect(text).toContain(valid);
 
       await fsp.writeFile(
          usage,
-         text.replace(
-            valid,
-            'disposers.push(ipc.log.on(() => undefined, { webContents: "main" }));',
-         ),
+         text.replace(valid, 'ipc.log.on(() => undefined, { webContents: "main" }),'),
       );
       expect(await project.typecheck()).toContain("TS2322");
 
       await fsp.writeFile(
          usage,
-         text.replace(valid, "disposers.push(ipc.log.on(() => undefined, { window: contents }));"),
+         text.replace(valid, "ipc.log.on(() => undefined, { window: contents }),"),
       );
       expect(await project.typecheck()).toContain("TS2353");
    }, 60_000);

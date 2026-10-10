@@ -7,7 +7,9 @@ declare const session: Session;
 declare const worker: ServiceWorkerMain;
 
 // The values have the types of the signatures, not the wire value.
-ipc.shift.handle(session, async (_event, at: Date, by: number) => new Date(at.getTime() + by));
+ipc.shift.handle(session, (_event, at: Date, by: number) =>
+   Promise.resolve(new Date(at.getTime() + by)),
+);
 ipc.checked.handle(session, (_event, at: Date) => at);
 ipc.tell.on(session, (_event, at: Date, tags: Set<string>) => console.log(at, tags));
 ipc.checkedTell.once(session, (_event, at: Date) => console.log(at));
@@ -22,4 +24,4 @@ ipc.tick.broadcast(session, new Date(), new Map([["a", 1]]));
 // @ts-expect-error the main process asks with a Date, not a number
 ipc.zone.invoke(worker, 1);
 // @ts-expect-error the handler takes a Date
-ipc.shift.handle(session, async (_event, at: string) => new Date(at));
+ipc.shift.handle(session, (_event, at: string) => Promise.resolve(new Date(at)));

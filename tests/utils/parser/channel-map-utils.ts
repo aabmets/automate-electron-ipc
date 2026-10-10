@@ -44,7 +44,10 @@ export function parseFullError(code: string, imports = IMPORT): string {
  * `tests/test_parser/diagnostics/positions.test.ts` covers.
  */
 export function parseError(code: string, imports = IMPORT): string {
-   return parseFullError(code, imports)
-      .replace(/^(Schema file '[^']*') \(\d+:\d+\)/, "$1")
-      .replace(/\n\n[\s\S]*$/, "");
+   const message = parseFullError(code, imports).replace(
+      /^(Schema file '[^']*') \(\d+:\d+\)/,
+      "$1",
+   );
+   const frame = message.indexOf("\n\n");
+   return frame < 0 ? message : message.slice(0, frame);
 }

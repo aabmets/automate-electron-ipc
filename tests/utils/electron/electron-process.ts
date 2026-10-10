@@ -98,10 +98,14 @@ export function waitForExit(
 }
 
 /** Waits until the group of `child` is gone, for at most `timeoutMs`. */
-async function waitForGroup(child: ChildProcess, timeoutMs: number): Promise<void> {
-   const deadline = Date.now() + timeoutMs;
-   while (isGroupAlive(child) && Date.now() < deadline) {
+async function waitForGroup(
+   child: ChildProcess,
+   timeoutMs: number,
+   deadline = Date.now() + timeoutMs,
+): Promise<void> {
+   if (isGroupAlive(child) && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 25));
+      await waitForGroup(child, timeoutMs, deadline);
    }
 }
 

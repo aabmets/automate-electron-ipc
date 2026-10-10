@@ -47,7 +47,7 @@ describe("BaseWriter", () => {
    });
 
    it("should not throw an error on subclass instantiation", () => {
-      new VitestBaseWriter({} as t.IPCResolvedConfig, []); // NOSONAR
+      expect(() => new VitestBaseWriter({} as t.IPCResolvedConfig, [])).not.toThrowError();
    });
 
    it("should generate code indents array", () => {

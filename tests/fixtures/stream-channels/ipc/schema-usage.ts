@@ -9,35 +9,44 @@ export const stopRows: () => void = mainIpc.exportRows.handle(async function* (
    table: string,
    limit?: number,
 ) {
+   await Promise.resolve();
+   await Promise.resolve();
    console.log(event.sender.id, event.senderFrame?.origin);
    for (let id = 1; id <= (limit ?? 3); id++) {
       yield { id, label: `${table}-${id}` } satisfies Row;
    }
 });
 mainIpc.tokens.handle(async function* (_event, prompt: string) {
+   await Promise.resolve();
    yield prompt;
 });
 mainIpc.counter.handle(async function* () {
+   await Promise.resolve();
    yield 1;
 });
 mainIpc.progress.handle(async function* (_event, job: string, ...flags: boolean[]) {
+   await Promise.resolve();
    yield { done: flags.length, total: job.length } satisfies Progress;
 });
 mainIpc.genericStream.handle(async function* <T>(_event: unknown, seed: T) {
+   await Promise.resolve();
    yield seed;
 });
 mainIpc.guarded.handle(async function* (_event, count: number) {
+   await Promise.resolve();
    yield count;
 });
 mainIpc.asForm.handle(async function* (_event, count: number) {
+   await Promise.resolve();
    yield count;
 });
 stopRows();
 
 // @ts-expect-error a handler returns an async iterable of the chunks, not a promise of one
-mainIpc.exportRows.handle(async (_event, table: string) => [{ id: 1, label: table }]);
+mainIpc.exportRows.handle((_event, table: string) => Promise.resolve([{ id: 1, label: table }]));
 // @ts-expect-error the chunks have the type of the signature
 mainIpc.counter.handle(async function* () {
+   await Promise.resolve();
    yield "text";
 });
 // @ts-expect-error a stream has no handleOnce

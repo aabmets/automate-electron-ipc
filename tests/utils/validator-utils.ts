@@ -16,11 +16,7 @@ import { parseTestSignature } from "./writer/writer-utils.js";
 export const baseConfig = { projectUsesNodeNext: false, ipcDataDir: "src/autoipc", codeIndent: 3 };
 
 export class ChannelSpecGenerator {
-   private index: number;
-
-   constructor() {
-      this.index = 0;
-   }
+   private index = 0;
 
    generate(
       direction: t.ChannelDirection,

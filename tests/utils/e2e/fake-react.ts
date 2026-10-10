@@ -129,10 +129,7 @@ export function createFakeReact() {
       useEffect(effect: () => Cleanup, deps?: readonly unknown[]) {
          let slot = slotAt("effect");
          const changed =
-            slot === undefined ||
-            slot.deps === undefined ||
-            deps === undefined ||
-            !sameDeps(slot.deps, deps);
+            slot?.deps === undefined || deps === undefined || !sameDeps(slot.deps, deps);
          if (slot === undefined) {
             slot = { kind: "effect", deps, cleanup: undefined };
             slots[cursor] = slot;

@@ -43,7 +43,9 @@ export const removeOnce: () => void = mainIpc.jobDone.once(child, (finished) => 
 });
 
 // Utility: the other side of every channel.
-export const removeIndex: () => void = utilityIpc.indexFile.handle(async (path) => path.length);
+export const removeIndex: () => void = utilityIpc.indexFile.handle((path) =>
+   Promise.resolve(path.length),
+);
 export const removeRun: () => void = utilityIpc.runJob.handle((started, ...tags) => ({
    files: started.id + tags.length,
 }));
@@ -83,7 +85,7 @@ mainIpc.indexFile.invoke(child, 7);
 // @ts-expect-error a notification has no answer
 export const noAnswer: Promise<void> = mainIpc.pause.send(child);
 // @ts-expect-error the main process handles per child
-mainIpc.getSetting.handle(async () => "x");
+mainIpc.getSetting.handle(() => Promise.resolve("x"));
 // @ts-expect-error the callback is the signature
 mainIpc.report.handle(child, (summary: number) => console.log(summary));
 // @ts-expect-error a call of the main process has no listeners, only a handler
@@ -93,7 +95,7 @@ utilityIpc.getSetting.invoke(child, "theme");
 // @ts-expect-error the arguments are those of the signature
 utilityIpc.progress.send("1", 2);
 // @ts-expect-error a handler returns what the signature says
-utilityIpc.indexFile.handle(async (path) => path);
+utilityIpc.indexFile.handle((path) => Promise.resolve(path));
 // @ts-expect-error a notification of the child has no handler
 utilityIpc.progress.handle(() => undefined);
 // @ts-expect-error the renderer channels are not in the utility file

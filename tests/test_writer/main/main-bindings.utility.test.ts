@@ -107,7 +107,7 @@ describe("MainBindingsWriter, utility channels", () => {
    it("writes the envelope once when renderer and utility channels share the file", async () => {
       const output = await render([getUser, callUtility]);
 
-      expect(output.split("function toIpcError(").length).toBe(2);
+      expect(output.split("function toIpcError(")).toHaveLength(2);
       expect(output).toContain(
          'import type { IpcMainInvokeEvent, UtilityProcess, IpcMain, WebContents } from "electron";',
       );

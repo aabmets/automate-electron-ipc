@@ -14,6 +14,9 @@ import vm from "node:vm";
 import { parseSync, transformSync } from "@swc/core";
 import { vi } from "vitest";
 
+/** Orders strings by code unit, which is what `sort()` does, and so keeps the order of the paths. */
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * Runs a generated TypeScript file in this process and returns its exports.
  * The types are stripped with swc, and `require` serves only the given modules,
@@ -31,7 +34,7 @@ export function loadGenerated(source: string, modules: Record<string, unknown>):
       }
       return modules[name];
    };
-   const run = vm.runInThisContext(`(function (exports, require) {${code}\n})`);
+   const run = vm.compileFunction(code, ["exports", "require"]);
    run(exports, require);
    return exports;
 }
@@ -47,9 +50,14 @@ export function loadGenerated(source: string, modules: Record<string, unknown>):
  */
 export async function settlePorts(ms: number, rounds = 5): Promise<void> {
    await new Promise<void>((resolve) => setTimeout(resolve, ms));
-   for (let round = 0; round < rounds; round++) {
-      // biome-ignore lint/performance/noAwaitInLoops: each round waits for the poll phase of the last
+   await afterImmediates(rounds);
+}
+
+/** Waits for `rounds` immediates, each one queued after the last one ran. */
+async function afterImmediates(rounds: number): Promise<void> {
+   if (rounds > 0) {
       await new Promise<void>((resolve) => setImmediate(resolve));
+      await afterImmediates(rounds - 1);
    }
 }
 
@@ -137,7 +145,7 @@ export function createFakeElectron() {
          handleOnce: vi.fn(),
          removeHandler: vi.fn(),
       },
-      MessageChannelMain: class {},
+      MessageChannelMain: vi.fn(),
       utilityProcess: { fork: vi.fn() },
    };
 }
@@ -207,7 +215,7 @@ export function callablePaths(api: Record<string, unknown>, prefix = ""): string
             ? [path]
             : callablePaths(value as Record<string, unknown>, `${path}.`);
       })
-      .sort();
+      .sort(byCodeUnit);
 }
 
 /**
@@ -236,7 +244,7 @@ export function windowIpcPaths(windowTypes: string): string[] {
       }
       return null;
    };
-   return (find(module) ?? []).sort();
+   return (find(module) ?? []).sort(byCodeUnit);
 }
 
 /** An async iterable which the test feeds by hand, and which records `return()`. */
@@ -270,7 +278,7 @@ export function createSource() {
                }
             }),
       ),
-      return: vi.fn(async () => ({ done: true, value: undefined })),
+      return: vi.fn(() => Promise.resolve({ done: true, value: undefined })),
    };
    return {
       iterable: { [Symbol.asyncIterator]: () => iterator },

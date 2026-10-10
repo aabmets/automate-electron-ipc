@@ -14,5 +14,5 @@ configureIpc({
    },
 });
 
-ipc.getSecret.handle(async (_event, id: number) => `secret ${id}`);
+ipc.getSecret.handle((_event, id: number) => Promise.resolve(`secret ${id}`));
 ipc.logLine.on((_event, text: string, ...rest: number[]) => console.log(text, rest));

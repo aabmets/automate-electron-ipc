@@ -12,6 +12,12 @@
 import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 
+/** What was posted through the mock, with the given `__ipc` tag, or all of it. */
+const postedWith = (postMessage: ReturnType<typeof vi.fn>, tag?: string) =>
+   postMessage.mock.calls
+      .map(([message]) => message as Record<string, any>)
+      .filter((message) => tag === undefined || message.__ipc === tag);
+
 /**
  * A `MessagePortMain`: an emitter with the methods that the generated code calls, which records
  * them. A test feeds it the messages of the other end with `fromPage`, or by emitting `message`
@@ -32,9 +38,7 @@ export class FakePortMain extends EventEmitter {
    }
    /** What was posted to the other end, with the given `__ipc` tag, or all of it. */
    posted(tag?: string) {
-      return this.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((message) => tag === undefined || message.__ipc === tag);
+      return postedWith(this.postMessage, tag);
    }
 }
 
@@ -51,7 +55,13 @@ export class FakeChannelMain {
 }
 
 /** The main port of the last channel that was made. */
-export const lastPort = () => channelsMade[channelsMade.length - 1].port1;
+export const lastPort = () => {
+   const last = channelsMade.at(-1);
+   if (last === undefined) {
+      throw new Error("No channel was made");
+   }
+   return last.port1;
+};
 
 /** A `MessagePort` of the page: records what is posted, and delivers what the test says. */
 export class FakePagePort {
@@ -76,8 +86,6 @@ export class FakePagePort {
    }
    /** What the page posted to the other end, with the given `__ipc` tag, or all of it. */
    posted(tag?: string) {
-      return this.postMessage.mock.calls
-         .map(([message]) => message as Record<string, any>)
-         .filter((message) => tag === undefined || message.__ipc === tag);
+      return postedWith(this.postMessage, tag);
    }
 }

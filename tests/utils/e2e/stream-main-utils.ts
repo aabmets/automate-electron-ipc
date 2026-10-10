@@ -81,7 +81,7 @@ export async function loadMainWith(channelClass: unknown, fixture = "stream-chan
 
 export const loadMain = () => loadMainWith(FakeChannelMain);
 
-export const lastChannel = () => channelsMade[channelsMade.length - 1];
+export const lastChannel = () => channelsMade.at(-1) as (typeof channelsMade)[number];
 /** What the main process posted to the page over the port of the last call. */
 export const posted = () => lastChannel().port1.postMessage.mock.calls.map(([message]) => message);
 /** Delivers a message from the page to the main port, the way Electron does. */

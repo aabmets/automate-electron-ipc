@@ -145,9 +145,11 @@ export async function runElectronGroup(options: RunOptions): Promise<ElectronRun
          path.join(appDir, "runner.cjs"),
       );
       // The modules that the runner requires, which sit next to it.
-      for (const name of ["electron-context.cjs", "electron-pages.cjs"]) {
-         await fsp.copyFile(path.join(import.meta.dirname, name), path.join(appDir, name));
-      }
+      await Promise.all(
+         ["electron-context.cjs", "electron-pages.cjs"].map((name) =>
+            fsp.copyFile(path.join(import.meta.dirname, name), path.join(appDir, name)),
+         ),
+      );
       await fsp.writeFile(
          path.join(appDir, "package.json"),
          JSON.stringify({ name: "electron-test-app", main: "runner.cjs" }),

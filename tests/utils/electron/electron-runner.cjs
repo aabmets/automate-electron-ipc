@@ -139,7 +139,7 @@ async function main() {
    const results = {};
    for (const name of Object.keys(scenarios)) {
       // The scenarios share one process, so they run one after another.
-      results[name] = await runScenario(name);
+      results[name] = await runScenario(name); // NOSONAR
    }
    const line = `\n${RESULT_MARK}${JSON.stringify({ results, uncaught })}\n`;
    process.stdout.write(line, () => app.exit(0));

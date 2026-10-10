@@ -3,7 +3,9 @@
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { ipc as mainIpc } from "./main";
 
-mainIpc.getUser.handle(async (event: IpcMainInvokeEvent, id: number) => `${event.sender.id}:${id}`);
+mainIpc.getUser.handle((event: IpcMainInvokeEvent, id: number) =>
+   Promise.resolve(`${event.sender.id}:${id}`),
+);
 mainIpc.echo.on((event: IpcMainEvent, text: string, ...rest: number[]) => {
    event.reply("echoed", text, rest);
 });

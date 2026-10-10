@@ -23,7 +23,12 @@ export const getUser = { name: "getUser", kind: "Unicast", direction: "RendererT
  * `(arg1: T, arg2: T) => R`, where the second parameter may be rest or optional.
  */
 function getParsedFileSpecsArray(vcs: t.VitestChannelSpec): t.ParsedFileSpecs[] {
-   const second = vcs.paramRest ? "...arg2" : vcs.paramOptional ? "arg2?" : "arg2";
+   let second = "arg2";
+   if (vcs.paramRest) {
+      second = "...arg2";
+   } else if (vcs.paramOptional) {
+      second = "arg2?";
+   }
    const secondType = vcs.paramRest ? `${vcs.paramType}[]` : vcs.paramType;
    const definition = `(arg1: ${vcs.paramType}, ${second}: ${secondType}) => ${vcs.sigReturnType}`;
    const channelSpec: t.ChannelSpec = {

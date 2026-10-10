@@ -19,9 +19,12 @@ export function concatRegex(parts: RegExp[], flags = ""): RegExp {
  * relative indentation of the lines.
  */
 export function dedent(text: string): string {
-   const reducer = (minIndent: number, line: string) =>
-      Math.min(minIndent, /^(\s*)/.exec(line)?.[0].length ?? 0);
    const lines = text.split("\n");
-   const indent = lines.filter((line) => line.trim()).reduce(reducer, Number.POSITIVE_INFINITY);
+   const indent = lines
+      .filter((line) => line.trim())
+      .reduce(
+         (minIndent, line) => Math.min(minIndent, /^(\s*)/.exec(line)?.[0].length ?? 0),
+         Number.POSITIVE_INFINITY,
+      );
    return lines.map((line) => line.slice(indent)).join("\n");
 }

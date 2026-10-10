@@ -4,4 +4,5 @@ export interface User {
    id: number;
 }
 
-export { Shapes };
+// `export * as Shapes from` would be a barrel file, which Biome forbids.
+export { Shapes }; // NOSONAR

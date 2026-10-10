@@ -136,14 +136,13 @@ describe("validateReservedApiNames, mock", () => {
 
 describe("validateTypeSpecs", () => {
    it("should accept exported types", () => {
-      validateTypeSpecs([
-         {
-            name: "VitestInterface",
-            kind: "interface" as t.TypeKind,
-            generics: null,
-            isExported: true,
-         },
-      ]);
+      const spec = {
+         name: "VitestInterface",
+         kind: "interface" as t.TypeKind,
+         generics: null,
+         isExported: true,
+      };
+      expect(validateTypeSpecs([spec])).toStrictEqual([spec]);
    });
 
    const hiddenSpec = {

@@ -6,7 +6,7 @@ import { ipc } from "./main";
 declare const win: BrowserWindow;
 
 export const dispose: () => void = ipc.windowFocused.bind(win, () => [true]);
-export const disposeAsync: () => void = ipc.windowFocused.bind(win, async () => [false]);
+export const disposeAsync: () => void = ipc.windowFocused.bind(win, () => Promise.resolve([false]));
 export const disposeRest: () => void = ipc.titleChanged.bind(win, () => ["title", "a", "b"]);
 export const disposeWithOnError: () => void = ipc.windowFocused.bind(
    win,

@@ -112,8 +112,10 @@ export function serializerConnector(run: (fixture: string) => Promise<E2EProject
       };
       const event = { sender: contents, senderFrame: frame };
       page.electron.ipcRenderer.invoke.mockImplementation(
-         async (wire: string, ...args: unknown[]) =>
-            handlers.get(wire)?.(event, ...structuredClone(args)),
+         (wire: string, ...args: unknown[]) =>
+            new Promise((resolve) =>
+               resolve(handlers.get(wire)?.(event, ...structuredClone(args))),
+            ),
       );
       page.electron.ipcRenderer.send.mockImplementation((wire: string, ...args: unknown[]) => {
          for (const listener of mainOn.of(wire)) {

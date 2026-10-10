@@ -11,7 +11,7 @@ configureIpc({
 // @ts-expect-error the validator returns a boolean
 configureIpc({ validateSender: () => "yes" });
 
-ipc.getSecret.handle(async (_event, id: number) => `secret ${id}`);
+ipc.getSecret.handle((_event, id: number) => Promise.resolve(`secret ${id}`));
 ipc.logLine.on((_event, text: string) => console.log(text));
 
 export const isForbidden = (error: unknown): string | null =>
