@@ -981,6 +981,9 @@ An `invoke` channel has one handler. Registering `handle` or `handleOnce` again 
 previous handler, instead of throwing as `ipcMain.handle` does, so that re-creating a window or
 hot-restarting the main process works. The disposer of a replaced handler does nothing.
 
+A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
+The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
+
 #### Handlers for one window
 
 Every `on`, `once`, `handle` and `handleOnce` of a channel that a page calls (also the `handle` of a
@@ -1384,134 +1387,6 @@ text names the channel and `maxQueue`, and gives the counts. The counts belong t
 never reset, so a queue that drains and overflows again continues them. `configurePorts` is
 generated when the schema has a `mainPort` channel; a `port` channel queues only in the preload
 script.
-
-#### Sender validation
-
-By default, any frame of any window can call every `invoke` and `send` channel, iframes and child
-windows included. Restrict a channel to the origins that you trust with `allowedOrigins`:
-
-```typescript
-export default defineChannels({
-   readSecret: invoke<(id: number) => Promise<string>>({
-      allowedOrigins: ["app://.", "http://localhost:5173"],
-   }),
-});
-```
-
-An origin is a scheme, a host and an optional port, in lower case, without a path, a wildcard or
-credentials. The generated main bindings compare it for equality with `event.senderFrame.origin`,
-never as a prefix, so `http://localhost:5173.attacker.com` does not match. A call without a frame
-(`senderFrame` is `null` once the frame is gone) is always rejected.
-
-For rules that depend on more than the origin, call `configureIpc` once at start-up. Its
-`validateSender` runs for every `invoke` and `send` channel, in addition to `allowedOrigins`:
-a call needs to pass both. A validator which throws or returns anything but `true` rejects the call.
-
-```typescript
-import { configureIpc, IpcForbiddenError } from "./main";
-
-configureIpc({
-   validateSender: (event, channel) => event.sender === mainWindow.webContents,
-   onRejected: (event, channel) => console.warn("Rejected", channel, event.senderFrame?.url),
-});
-```
-
-A rejected `invoke` throws an `IpcForbiddenError` in the main process, which the renderer sees as
-a rejected promise (Electron passes on the message of the error only). A rejected `send` is
-dropped. `onRejected` is called for both. `configureIpc` replaces the previous configuration, and
-`configureIpc({})` removes it. Channels with neither `allowedOrigins` nor a validator are not
-checked. `once` and `handleOnce` are not used up by a rejected call.
-
-Renderer input is untrusted, and TypeScript types are erased at runtime. To check the arguments of
-an `invoke` or `send` channel, give it `validate`: a [Standard Schema](https://standardschema.dev)
-(zod, valibot, arktype, ...) of the argument tuple. It must be an identifier which the schema file
-imports as a value. A signature stays required, and `validate` is checked against its parameters.
-
-```typescript
-import { z } from "zod";
-export const getUserArgs = z.tuple([z.number().int().positive()]);
-```
-
-```typescript
-import { getUserArgs } from "./validators";
-
-export default defineChannels({
-   getUser: invoke<(id: number) => Promise<User>>({ validate: getUserArgs }),
-});
-```
-
-The generated `main.ts` imports `getUserArgs` and runs it on the arguments as they arrived, after
-the sender check and before your handler. The handler receives the output of the schema, so a
-transforming schema (a default, a coercion, stripped keys) is honored. An invalid `invoke` throws an
-`IpcValidationError` with the `issues` of the schema, which the renderer sees as a rejected promise
-with the code `IPC_VALIDATION` and the issues as `data` (see [Errors](#errors)). An invalid `send`
-is dropped. `onRejected` is called for both
-and receives the error as its third argument, an `IpcValidationError` or an `IpcForbiddenError`.
-A schema which throws, rejects or answers with anything but an array of arguments counts as a
-failure, and the message of such an error is not passed on. A synchronous schema keeps the call
-synchronous, an asynchronous one is awaited. `once` and `handleOnce` are not used up by an invalid
-call. The generated code does not depend on any validation library.
-
-A channel with an `emit` trigger also has `ipc.<name>.bind(window, provider)` in the main process.
-The callbacks of `handle` and `on` receive the Electron event first, then the arguments of the signature.
-
-#### Scopes: a different API per window
-
-By default every window gets every channel. An app with a privileged settings window and a sandboxed
-window for content or plugins wants a different API for each. Put a channel in scopes with `scopes`:
-
-```typescript
-export default defineChannels({
-   // Open to all windows, also to the ones that are in no scope.
-   getVersion: invoke<() => Promise<string>>(),
-   // The settings window only.
-   saveSettings: invoke<(settings: Settings) => Promise<void>>({ scopes: ["settings"] }),
-   // The settings window and the editor window.
-   notify: send<(text: string) => void>({ scopes: ["settings", "editor"] }),
-   openFile: invoke<(path: string) => Promise<string>>({ scopes: ["editor"] }),
-});
-```
-
-`scopes` is accepted by `invoke`, `send`, `emit`, `ask`, `stream`, `port`, `mainPort`,
-`invokeUtility` and `streamUtility`, which are the channels that a page takes part in. A scope name
-is made of lower case letters and digits, joined by dashes, and `default` is taken.
-The API of a scope is its own channels and the ones without `scopes`.
-
-**One preload script, one declaration file and one types module per scope.** `ipcgen` writes
-`preload.<scope>.ts`, `window.<scope>.d.ts` and `types.<scope>.ts` next to the usual files, here
-`preload.settings.ts`, `window.settings.d.ts`, `types.settings.ts`, `preload.editor.ts`,
-`window.editor.d.ts` and `types.editor.ts`. The usual `preload.ts`, `window.d.ts` and `types.ts` are the API of
-a window that is in no scope, so they have only the channels without `scopes`: all of them in a schema
-that uses no scopes. Use the file of its scope as the preload script of each window, and include only
-one `window*.d.ts` in a renderer project, since each of them declares the same global. A scope that
-you remove from the schema has its `preload.<scope>.ts` and `window.<scope>.d.ts` deleted by the next run, like
-the other [stale files](#stale-files); delete its `types.<scope>.ts` by hand.
-
-**The main process admits a call by the scope of the window.** The preload script is only the API of
-the page, and a compromised page can call `ipcRenderer` itself, so the generated `main.ts` also
-checks. It exports `registerScope` and the type `IpcScope`, and you register each window in its scope:
-
-```typescript
-import { registerScope } from "./autoipc/main";
-
-const settings = new BrowserWindow({ webPreferences: { preload: settingsPreload, sandbox: true } });
-registerScope(settings, "settings");   // a window, a view or contents
-```
-
-A call to an `invoke`, `send` or `stream` channel with `scopes` is admitted only from contents that
-are registered in one of them. Others get an `IpcForbiddenError` (an `invoke`, and the start of a
-`stream`), or are dropped (a `send`), and `onRejected` of `configureIpc` hears of it, as it does for
-`allowedOrigins`. Contents that are in no scope can call the channels without `scopes` only, and
-those are open to all windows. The scope is checked first, then `allowedOrigins`, then
-`validateSender`, and a call has to pass all of them.
-
-`registerScope` returns a function which removes the registration. The registration is also removed
-when the contents are destroyed, and registering the same contents again replaces it. It belongs to
-the contents, so every frame of the window has the scope, and `allowedOrigins` still tells them apart.
-A scope that the schema does not declare throws a `TypeError`. Only the calls of a page are guarded
-in the main process. For `emit`, `ask`, port and utility channels `scopes` decides the API of the
-page: you pick the window that you send to or connect, and a window whose preload script lacks the
-channel has no listener for it.
 
 #### Errors
 
@@ -2054,10 +1929,399 @@ The mock covers the channels of the page that have no scope; the channels of a s
 main process and a utility process or a service worker are not part of the API of the page. `mock.ts` is not moved by a
 config option, and is removed as a stale file when `mock` is turned off again.
 
-#### Migrating from 0.2
+### Security guide
 
-The generated names changed in 1.0.0. The `listeners` option is gone as well: to have several
-subscribers, call `.on()` more than once.
+An IPC channel is a door from the page into the main process, which has the rights of the user. This
+guide gathers what the library does to guard that door, what it leaves to you, and how the pieces map
+to the [Electron security checklist](https://www.electronjs.org/docs/latest/tutorial/security). The parts
+are [sender validation](#sender-validation), [argument validation](#validating-arguments) and
+[scopes](#scopes-a-different-api-per-window); the [checklist](#the-electron-security-checklist) at the end
+says which items they cover.
+
+#### Threat model
+
+The guide assumes that a renderer can be compromised, and treats everything that comes from one as
+untrusted input:
+
+ - **Script that you did not write runs in the page.** A cross-site scripting hole, a bad dependency, or
+   a remote page that a window loads can call every function that the preload script exposes, with any
+   arguments. TypeScript types are erased at runtime, so `ipc.getUser.invoke("x")` reaches the main process
+   although the signature says `number`.
+ - **A frame that is not yours has the same API.** A child window opened by `window.open` loads the
+   preload script of its parent unless you say otherwise, and an iframe does when
+   `nodeIntegrationInSubFrames` is on. Both can show another origin, and the call of any of them reaches
+   the same handler as a call of the top page.
+ - **The renderer process is taken over.** An attacker with code execution in the process does not need your
+   preload script: it sends messages to `ipcMain` on the wire names of the channels (`autoipc:getUser`). So
+   a rule that only the preload script enforces, such as the API of a scope, protects nothing here. Every
+   rule that matters is checked again in the main process, by the generated `main.ts`.
+
+What the library cannot do is make your handlers safe. A handler that reads a path or runs a command
+for the page must decide, for each call, whether the page may ask for that. The checks below keep the wrong
+caller and malformed input out of the handler; they do not tell the handler what is allowed.
+
+#### What the main bindings check by default
+
+Without any option, these are the checks of the generated `main.ts`:
+
+| Channel | Checked without options |
+|:--|:--|
+| `invoke`, `send`, `stream` | Nothing about the sender: any frame of any window may call. Arguments are not checked at runtime. |
+| `ask` | The answer counts only when it comes from the contents (and the frame, for a frame target) that was asked, and for a question that is still pending. |
+| `port`, `mainPort` | The main process pairs the windows; a page cannot pair itself with another. A request to end a connection is honored only from the contents that hold that end. Messages on the port are not checked: validate what a page receives from its peer. |
+| `invokeUtility`, `streamUtility`, `callUtility`, `notifyUtility`, `callMain`, `notifyMain` | The two ends are your own code, so they have no `allowedOrigins` or `validate`. The main process connects the page to the child. |
+| `invokeFromWorker`, `sendFromWorker` | Nothing, as for the page. A worker has no `senderFrame`, so `allowedOrigins` compares the origin of its scope. See [Service workers](#service-workers). |
+
+What a page gets back is limited too: a handler's error reaches the page as `name`, `message`, `code` and
+`data`, without a stack (see [Errors](#errors)), but those four are yours to keep free of secrets. With
+`rawErrors`, Electron puts the message of the error in the text that the page sees.
+
+`channelPrefix` puts a prefix in front of the names that Electron sees, which keeps other code on `ipcMain`
+from colliding with the channels. It is no defense against a caller that knows the names.
+
+The rest of the guide turns the other checks on, per channel.
+
+#### Sender validation
+
+By default, any frame of any window can call every `invoke` and `send` channel, iframes and child
+windows included. Restrict a channel to the origins that you trust with `allowedOrigins`:
+
+```typescript
+export default defineChannels({
+   readSecret: invoke<(id: number) => Promise<string>>({
+      allowedOrigins: ["app://.", "http://localhost:5173"],
+   }),
+});
+```
+
+An origin is a scheme, a host and an optional port, in lower case, without a path, a wildcard or
+credentials. The generated main bindings compare it for equality with `event.senderFrame.origin`,
+never as a prefix, so `http://localhost:5173.attacker.com` does not match. A call without a frame
+(`senderFrame` is `null` once the frame is gone) is always rejected.
+
+For rules that depend on more than the origin, call `configureIpc` once at start-up. Its
+`validateSender` runs for every `invoke` and `send` channel, in addition to `allowedOrigins`:
+a call needs to pass both. A validator which throws or returns anything but `true` rejects the call.
+
+```typescript
+import { configureIpc, IpcForbiddenError } from "./main";
+
+configureIpc({
+   validateSender: (event, channel) => event.sender === mainWindow.webContents,
+   onRejected: (event, channel) => console.warn("Rejected", channel, event.senderFrame?.url),
+});
+```
+
+A rejected `invoke` throws an `IpcForbiddenError` in the main process, which the renderer sees as
+a rejected promise (Electron passes on the message of the error only). A rejected `send` is
+dropped. `onRejected` is called for both. `configureIpc` replaces the previous configuration, and
+`configureIpc({})` removes it. Channels with neither `allowedOrigins` nor a validator are not
+checked. `once` and `handleOnce` are not used up by a rejected call.
+
+#### Validating arguments
+
+Renderer input is untrusted, and TypeScript types are erased at runtime. To check the arguments of
+an `invoke` or `send` channel, give it `validate`: a [Standard Schema](https://standardschema.dev)
+(zod, valibot, arktype, ...) of the argument tuple. It must be an identifier which the schema file
+imports as a value. A signature stays required, and `validate` is checked against its parameters.
+
+```typescript
+import { z } from "zod";
+export const getUserArgs = z.tuple([z.number().int().positive()]);
+```
+
+```typescript
+import { getUserArgs } from "./validators";
+
+export default defineChannels({
+   getUser: invoke<(id: number) => Promise<User>>({ validate: getUserArgs }),
+});
+```
+
+The generated `main.ts` imports `getUserArgs` and runs it on the arguments as they arrived, after
+the sender check and before your handler. The handler receives the output of the schema, so a
+transforming schema (a default, a coercion, stripped keys) is honored. An invalid `invoke` throws an
+`IpcValidationError` with the `issues` of the schema, which the renderer sees as a rejected promise
+with the code `IPC_VALIDATION` and the issues as `data` (see [Errors](#errors)). An invalid `send`
+is dropped. `onRejected` is called for both
+and receives the error as its third argument, an `IpcValidationError` or an `IpcForbiddenError`.
+A schema which throws, rejects or answers with anything but an array of arguments counts as a
+failure, and the message of such an error is not passed on. A synchronous schema keeps the call
+synchronous, an asynchronous one is awaited. `once` and `handleOnce` are not used up by an invalid
+call. The generated code does not depend on any validation library.
+
+#### Scopes: a different API per window
+
+By default every window gets every channel. An app with a privileged settings window and a sandboxed
+window for content or plugins wants a different API for each. Put a channel in scopes with `scopes`:
+
+```typescript
+export default defineChannels({
+   // Open to all windows, also to the ones that are in no scope.
+   getVersion: invoke<() => Promise<string>>(),
+   // The settings window only.
+   saveSettings: invoke<(settings: Settings) => Promise<void>>({ scopes: ["settings"] }),
+   // The settings window and the editor window.
+   notify: send<(text: string) => void>({ scopes: ["settings", "editor"] }),
+   openFile: invoke<(path: string) => Promise<string>>({ scopes: ["editor"] }),
+});
+```
+
+`scopes` is accepted by `invoke`, `send`, `emit`, `ask`, `stream`, `port`, `mainPort`,
+`invokeUtility` and `streamUtility`, which are the channels that a page takes part in. A scope name
+is made of lower case letters and digits, joined by dashes, and `default` is taken.
+The API of a scope is its own channels and the ones without `scopes`.
+
+**One preload script, one declaration file and one types module per scope.** `ipcgen` writes
+`preload.<scope>.ts`, `window.<scope>.d.ts` and `types.<scope>.ts` next to the usual files, here
+`preload.settings.ts`, `window.settings.d.ts`, `types.settings.ts`, `preload.editor.ts`,
+`window.editor.d.ts` and `types.editor.ts`. The usual `preload.ts`, `window.d.ts` and `types.ts` are the API of
+a window that is in no scope, so they have only the channels without `scopes`: all of them in a schema
+that uses no scopes. Use the file of its scope as the preload script of each window, and include only
+one `window*.d.ts` in a renderer project, since each of them declares the same global. A scope that
+you remove from the schema has its `preload.<scope>.ts` and `window.<scope>.d.ts` deleted by the next run, like
+the other [stale files](#stale-files); delete its `types.<scope>.ts` by hand.
+
+**The main process admits a call by the scope of the window.** The preload script is only the API of
+the page, and a compromised page can call `ipcRenderer` itself, so the generated `main.ts` also
+checks. It exports `registerScope` and the type `IpcScope`, and you register each window in its scope:
+
+```typescript
+import { registerScope } from "./autoipc/main";
+
+const settings = new BrowserWindow({ webPreferences: { preload: settingsPreload, sandbox: true } });
+registerScope(settings, "settings");   // a window, a view or contents
+```
+
+A call to an `invoke`, `send` or `stream` channel with `scopes` is admitted only from contents that
+are registered in one of them. Others get an `IpcForbiddenError` (an `invoke`, and the start of a
+`stream`), or are dropped (a `send`), and `onRejected` of `configureIpc` hears of it, as it does for
+`allowedOrigins`. Contents that are in no scope can call the channels without `scopes` only, and
+those are open to all windows. The scope is checked first, then `allowedOrigins`, then
+`validateSender`, and a call has to pass all of them.
+
+`registerScope` returns a function which removes the registration. The registration is also removed
+when the contents are destroyed, and registering the same contents again replaces it. It belongs to
+the contents, so every frame of the window has the scope, and `allowedOrigins` still tells them apart.
+A scope that the schema does not declare throws a `TypeError`. Only the calls of a page are guarded
+in the main process. For `emit`, `ask`, port and utility channels `scopes` decides the API of the
+page: you pick the window that you send to or connect, and a window whose preload script lacks the
+channel has no listener for it.
+
+#### Putting it together
+
+A schema with an editor window and a settings window. Every `invoke` is limited to the pages of the app,
+the settings window is the only one that can save settings, and the arguments are checked before a
+handler runs. The validators are written by hand here, so that the example needs no library; with zod,
+`saveSettingsArgs` is `z.tuple([z.enum(["light", "dark"])])`.
+
+<!-- readme-example: security-guide src/autoipc/schema.ts -->
+```ts
+import { defineChannels, emit, invoke } from "automate-electron-ipc";
+import { openFileArgs, saveSettingsArgs } from "./validators";
+
+export default defineChannels({
+   // Every window may ask, but only a page of the app itself.
+   getVersion: invoke<() => string>({ allowedOrigins: ["app://."] }),
+   // The settings window only, and the argument has to be one of two strings.
+   saveSettings: invoke<(theme: "light" | "dark") => Promise<void>>({
+      scopes: ["settings"],
+      allowedOrigins: ["app://."],
+      validate: saveSettingsArgs,
+   }),
+   // The editor window only.
+   openFile: invoke<(file: string) => Promise<string>>({
+      scopes: ["editor"],
+      allowedOrigins: ["app://."],
+      validate: openFileArgs,
+   }),
+   // The editor hears when the theme changes.
+   themeChanged: emit<(theme: "light" | "dark") => void>({ scopes: ["editor"] }),
+});
+```
+
+<!-- readme-example: security-guide src/autoipc/validators.ts -->
+```ts
+import type { StandardSchemaV1 } from "automate-electron-ipc";
+
+/** A Standard Schema of an argument tuple: any library that implements the interface works. */
+function tuple<T extends unknown[]>(
+   accepts: (args: unknown[]) => boolean,
+   message: string,
+): StandardSchemaV1<unknown, T> {
+   return {
+      "~standard": {
+         version: 1,
+         vendor: "readme",
+         validate: (value) =>
+            Array.isArray(value) && accepts(value)
+               ? { value: value as T }
+               : { issues: [{ message }] },
+      },
+   };
+}
+
+export const saveSettingsArgs = tuple<[theme: "light" | "dark"]>(
+   (args) => args.length === 1 && (args[0] === "light" || args[0] === "dark"),
+   "expected the theme 'light' or 'dark'",
+);
+
+export const openFileArgs = tuple<[file: string]>(
+   (args) => args.length === 1 && typeof args[0] === "string" && args[0].length <= 255,
+   "expected a file name of at most 255 characters",
+);
+```
+
+The main process registers each window in its scope, sets the rules that need code, and still decides in the
+handler what a valid call may do. A well-formed `file` is not a permitted one:
+
+<!-- readme-example: security-guide src/main/index.ts -->
+```ts
+import { app, BrowserWindow } from "electron";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { configureIpc, ipc, registerScope } from "../autoipc/main";
+
+function createWindow(scope: "settings" | "editor", preload: string): BrowserWindow {
+   const window = new BrowserWindow({
+      webPreferences: { preload, sandbox: true, contextIsolation: true },
+   });
+   registerScope(window, scope);
+   return window;
+}
+
+app.whenReady().then(() => {
+   configureIpc({
+      // Only the top frame of a window may call, not an iframe in it.
+      validateSender: (event) => event.senderFrame?.parent === null,
+      onRejected: (event, channel) => {
+         console.warn("Rejected a call of", channel, "from", event.senderFrame?.url);
+      },
+   });
+
+   const settings = createWindow("settings", path.join(__dirname, "preload.settings.js"));
+   const editor = createWindow("editor", path.join(__dirname, "preload.editor.js"));
+
+   const documents = app.getPath("documents");
+
+   ipc.getVersion.handle(() => app.getVersion());
+   ipc.saveSettings.handle(async (_event, theme) => {
+      if (!editor.isDestroyed()) {
+         ipc.themeChanged.send(editor, theme);
+      }
+   });
+   ipc.openFile.handle((_event, file) => {
+      // The schema has checked the shape of `file`. Whether the page may read it is for the handler.
+      const resolved = path.resolve(documents, file);
+      if (!resolved.startsWith(documents + path.sep)) {
+         throw new Error("That file is outside of the documents folder");
+      }
+      return readFile(resolved, "utf8");
+   });
+});
+```
+
+#### The Electron security checklist
+
+The checklist of the Electron documentation numbers its items. This table lists the ones that the library
+touches by their titles. It sets none of the `webPreferences` and none of the other items for you, so
+the rest of the list stays your job.
+
+| Checklist item | What the library does | What you do |
+|:--|:--|:--|
+| Validate the sender of all IPC messages | `allowedOrigins` compares `senderFrame.origin` for equality, `configureIpc({ validateSender })` runs your rule, and `scopes` admits a call by the window. A frame that is gone is always rejected. | Set `allowedOrigins` on every `invoke`, `send` and `stream`, because without it nothing is checked. Add `validateSender` for rules that origins cannot state. |
+| Enable context isolation | The preload script exposes the API with `contextBridge`, and errors cross it as plain objects. | Keep `contextIsolation: true` (the default). |
+| Enable process sandboxing | The generated preload script uses only what a sandboxed preload script may load. | Keep `sandbox: true`, and build `preload.ts` as the sandboxed preload scripts need, see [Composing the preload script](#composing-the-preload-script). |
+| Do not enable Node.js integration for remote content | The API does not need it. | Keep `nodeIntegration: false` (the default), and `nodeIntegrationInSubFrames` off. |
+
+Items that this library has no part in include the secure content and CSP items, the permission
+request handler, navigation and new window limits, `shell.openExternal`, `<webview>`, the fuses
+and the version of Electron. See the documentation of Electron for them.
+
+### Migrating from 0.2.x
+
+Version 1.0.0 is a breaking release, and it has no migration messages: nothing tells a 0.2 project what
+to change. A schema in the old syntax is not an error, since `Channel(...)` statements are ignored.
+`ipcgen` prints the warning that no channels were found and writes empty bindings, and the schema file
+fails to type-check, because `Channel` and `type` are gone from the package. This section lists every
+breaking change since 0.2.6, in the order in which you meet them.
+
+ 1. Update the package, and Node to 22.13 or later (see [Package and Node version](#package-and-node-version)).
+ 2. Rewrite the schema ([Rewriting the schema](#rewriting-the-schema)).
+ 3. Run `ipcgen`, then change the call sites with the table in [Generated names](#generated-names).
+ 4. Include the new `types.ts` in the renderer project (see [Generated files](#generated-files)), and
+    commit the regenerated files, which have a new header and a new order.
+ 5. Read the [changes in behavior](#changes-in-behavior): the channel names on the wire, the errors of
+    `invoke`, and the stricter checks can all change what an app does.
+
+#### Rewriting the schema
+
+Each `Channel(...)` statement becomes a property of one exported channel map. The name is the key, the
+verb replaces the direction and the kind, and the signature is a type argument:
+
+```typescript
+// 0.2
+import { Channel, type } from "automate-electron-ipc";
+
+Channel("GetUser").RendererToMain.Unicast({
+   signature: type as (id: number) => Promise<User>,
+});
+Channel("EchoUserName").RendererToMain.Broadcast({
+   signature: type as (userName: string) => void,
+});
+Channel("Progress").MainToRenderer.Broadcast({
+   signature: type as (percent: number) => void,
+   trigger: "focus",
+});
+Channel("Chat").RendererToRenderer.Port({
+   signature: type as (message: string) => void,
+});
+```
+
+<!-- readme-example: migration-schema src/autoipc/schema.ts -->
+```ts
+// 1.0
+import { defineChannels, emit, invoke, port, send } from "automate-electron-ipc";
+
+export interface User {
+   id: number;
+   name: string;
+}
+
+export default defineChannels({
+   getUser: invoke<(id: number) => Promise<User>>(),
+   echoUserName: send<(userName: string) => void>(),
+   progress: emit<(percent: number) => void>({ trigger: "focus" }),
+   chat: port<(message: string) => void>(),
+});
+```
+
+| 0.2 direction and kind | 1.0 verb |
+|---|---|
+| `RendererToMain.Unicast` | `invoke` |
+| `RendererToMain.Broadcast` | `send` |
+| `MainToRenderer.Broadcast` | `emit` |
+| `RendererToRenderer.Port` | `port` |
+
+ - The map has to be exported: `export default defineChannels({...})` or
+   `export const channels = defineChannels({...})`. A file may have only one.
+ - `Channel`, `type` and the config types of 0.2 (`UnicastConfig`, `BroadcastConfig`, ...) are gone from
+   the package. The `signature` key is gone with them, and so is `listeners`: to have several
+   subscribers, call `.on()` more than once.
+ - The `trigger` option stays on `emit` channels, and its list of events grew.
+ - A channel name can be any identifier now. 0.2 wanted a name of at least three characters that began with
+   a capital letter and not with `on`. The key is the name of the member of the generated API, so a key of
+   `getUser` gives `ipc.getUser`. A name that `Object.prototype` has (`constructor`, `toString`, ...) is
+   refused.
+ - A signature that structured clone cannot send, such as one with a function in a parameter, was listed as
+   unsupported in the types of 0.2 but not checked. It is an error now, see
+   [What Can Be Sent](#what-can-be-sent).
+ - The `as` form, `invoke({ ... }) as (id: number) => Promise<User>`, is still allowed, see
+   [The `as` Form](#the-as-form).
+
+#### Generated names
+
+The names of the generated API changed, and the main process object is no longer called `ipcMain`:
 
 | 0.2                                       | 1.0                                  |
 |-------------------------------------------|--------------------------------------|
@@ -2076,14 +2340,127 @@ subscribers, call `.on()` more than once.
 
 `window.ipc` keeps working, since `ipc` is a global variable.
 
-Channel names on the wire now start with `autoipc:`. This changes nothing in the generated API, but
-other code that talks to a channel by its raw name, such as a handler registered with `ipcMain`
-directly, must use the prefixed name, or set `channelPrefix` to `""`.
+The registrations return something now. `window.ipc.onProgress(cb)` of 0.2 gave back Electron's
+`ipcRenderer`, and `ipc.progress.on(cb)` gives back a function which removes that listener. In the main
+process too, `on` and `handle` return a function that removes the registration, and `handle` replaces the
+handler of the channel when it is called again, where `ipcMain.handle` throws.
 
-An `invoke` that fails now rejects with the error object described in [Errors](#errors), not with an
-`Error` whose message is Electron's `Error invoking remote method`. Code that reads that message
-needs to read `error.message`, which now holds the message of the handler's error. Set `rawErrors` to
-keep the old behavior.
+```typescript
+// 0.2: nothing to unsubscribe with
+useEffect(() => {
+   window.ipc.onProgress((percent) => setPercent(percent));
+}, []);
+```
+
+```typescript
+// 1.0: the return value is the cleanup function
+useEffect(() => ipc.progress.on((percent) => setPercent(percent)), []);
+```
+
+#### Configuration and the command line
+
+The three options of 0.2 (`ipcDataDir`, `codeIndent` and `projectUsesNodeNext`) are still read from
+`package.json#config.autoipc`, with the same defaults except one: when `projectUsesNodeNext` is left out,
+it is detected from `tsconfig.json` and no longer `false`. A project with `module` or `moduleResolution`
+set to `nodenext` can drop the option, and one whose NodeNext settings live in another file keeps it. The
+rest is new (see the table in [Configuration](#configuration)): more options, a config file
+(`autoipc.config.ts`, with `defineConfig`), and the flags of `ipcgen`.
+
+```json
+// 0.2, and still valid
+{
+   "config": { "autoipc": { "ipcDataDir": "src/autoipc", "codeIndent": 3, "projectUsesNodeNext": true } }
+}
+```
+
+```ts
+// 1.0, the same in a config file; the detection makes the last line unnecessary in most projects
+import { defineConfig } from "automate-electron-ipc";
+
+export default defineConfig({ ipcDataDir: "src/autoipc", codeIndent: 3, projectUsesNodeNext: true });
+```
+
+The options may live in the config file or in `package.json`, not in both. A scripted `ipcgen` call needs
+no change; add `ipcgen --check` to your CI to find generated files that were not committed.
+
+#### Changes to the generated files
+
+ - **A new header.** The first line of every generated file was `// NOTICE: THIS FILE WAS GENERATED BY
+   AUTOMATE-ELECTRON-IPC.` It is `// Generated by ipcgen (automate-electron-ipc) from <schema path>. Do not
+   edit.` now, followed by lines that keep ESLint and Biome away from the file, see
+   [Generated file headers](#generated-file-headers). The first run after the upgrade rewrites every
+   file, and so does a `--check` with the old files.
+ - **Stale files are deleted.** A run removes the optional files that the schema or the config no
+   longer needs, if they begin with the new header or the old notice, see [Stale files](#stale-files). A
+   file of your own in the same directory is never touched.
+ - **`types.ts` is always written.** `window.d.ts` imports `IpcApi` from it, so the renderer project has to
+   include it, as the [TypeScript configuration](#typescript-configuration) shows. An electron-vite
+   project that listed only `window.d.ts` fails to type-check until `types.ts` is added.
+ - **The order is fixed.** Channels, imports and types are sorted by their names in code unit order, not by
+   locale, so the files of one schema are the same on every machine. Expect a one-time diff.
+`ChannelResult` and `ChannelReturn` are two different types. `ChannelResult` is exported by the package,
+and it is only what the verb helpers (`invoke`, `send`, ...) return in a schema; your code has no use
+for it. `ChannelReturn<N>` is the result type of the channel `N`, one of the [helper types](#helper-types)
+that the generated `types.ts` exports, along with `ChannelName` and `ChannelArgs<N>`:
+
+```typescript
+import type { ChannelArgs, ChannelReturn } from "./autoipc/types";
+
+type User = ChannelReturn<"getUser">; // the result of the invoke channel getUser
+type Args = ChannelArgs<"getUser">; // [id: number]
+```
+
+#### Changes in behavior
+
+ - **Channel names on the wire start with `autoipc:`.** This changes nothing in the generated API, but
+   other code that talks to a channel by its raw name, such as a handler registered with `ipcMain`
+   directly, must use the prefixed name, or set `channelPrefix` to `""`.
+ - **`invoke` errors are an object, not a string.** An `invoke` that fails rejects with the error object
+   described in [Errors](#errors), not with an `Error` whose message is Electron's `Error invoking remote
+   method`. Code that reads that message needs to read `error.message`, which now holds the message of the
+   handler's error. Set `rawErrors` to keep the old behavior.
+
+   ```typescript
+   // 0.2
+   try {
+      await window.ipc.sendGetUser(7);
+   } catch (error) {
+      // Error: Error invoking remote method 'GetUser': Error: not found
+      if ((error as Error).message.includes("not found")) { /* ... */ }
+   }
+   ```
+
+   ```typescript
+   // 1.0
+   try {
+      await ipc.getUser.invoke(7);
+   } catch (error) {
+      // { name: "Error", message: "not found" }
+      if ((error as { message: string }).message === "not found") { /* ... */ }
+   }
+   ```
+
+ - **Mistakes in the schema are reported with their position.** An error in a schema file names the file
+   and the line and column, shows a code frame of the spot, and several errors of the schema are reported
+   together. A failed run exits with `1`. A tool that parsed the text of the old messages needs to follow
+   the new ones.
+ - **The project root is the nearest `package.json`.** 0.2 fell back to the `node_modules` directory when
+   there was none. A run outside of a project now fails, so run `ipcgen` from the project, or pass `--cwd`.
+ - **Port channels pair when the pages have loaded.** `propagate` of 0.2 posted the ports on the first
+   `ready-to-show` of each window, so a window that was shown already, or one that reloaded, was left
+   without. `ipc.chat.connect(winA, winB)` pairs when both pages have loaded, and again after a reload, and
+   it returns a handle with `close()`. `send` of the page waits for the port instead of throwing. See
+   [Port channels](#port-channels).
+
+#### Package and Node version
+
+ - **Node 22.13 or later** runs `ipcgen` (0.2 asked for 22.0).
+ - **The peer dependencies are gone,** except `electron`, which is optional now (30 or later). `chalk` and
+   `typescript` are not used by the generator, which parses the schema with `@swc/core`, and `commander` and
+   `superstruct` are dependencies of the package, so you can remove all four from your project if only this
+   library needed them.
+ - **There are two new entry points,** `automate-electron-ipc/api` and `automate-electron-ipc/vite`, see
+   [API](#api) and [Vite and electron-vite](#vite-and-electron-vite).
 
 
 ### What Can Be Sent
