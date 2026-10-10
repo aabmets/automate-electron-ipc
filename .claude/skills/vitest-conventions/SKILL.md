@@ -25,7 +25,7 @@ A test that passes both with and without the code it covers is documentation, no
 4. Put the line back.
 
 The size gate tests (`tests/size-gate.test.ts`) were checked this way, and five of five mutations
-were caught. T93 found tests in this suite which could not fail (a "ignores a credit" test that sent
+were caught. A review found tests in this suite which could not fail (a "ignores a credit" test that sent
 the credits while the stream was paused, a `toBeDefined()` on a fake's `close`).
 
 ## Doubles that quietly answer for the code under test
@@ -39,7 +39,7 @@ that cannot fail:
 | Fake timers (`vi.useFakeTimers`) in a test which stages order by delays | The delays collapse, and events finish in the order they started | Stage order with explicit promises or gates that the test releases in the order it wants |
 | An assertion on something already true before the code ran (`toBeDefined()`, a default, a declared member) | Passes if the code under test never ran | Assert the value the run produced |
 
-**A fake must behave like the thing it replaces.** T93 found a `contextBridge` fake that handed the
+**A fake must behave like the thing it replaces.** A review found a `contextBridge` fake that handed the
 page the very object it got and allowed one key twice, which hid real behavior; the real one copies
 and throws. When a fake grows, check it against the Electron docs, not against the test you are
 writing.
@@ -50,7 +50,7 @@ the validators or the writers; the whole value of the suite is that they run for
 ## Time and ordering
 
 - **No fixed sleeps to wait for delivery.** A 20 ms settle was a flaky wait for `MessagePort`
-  messages in nine e2e files (T93). Use `settlePorts` from `tests/utils/e2e/runtime-utils.ts`, or
+  messages in nine e2e files. Use `settlePorts` from `tests/utils/e2e/runtime-utils.ts`, or
   wait on the event itself.
 - A test that needs a long type-check says so with its own timeout, as the e2e tests that run tsc
   more than once do. Do not raise the global timeout.
@@ -59,7 +59,7 @@ the validators or the writers; the whole value of the suite is that they run for
 
 CI runs the suite on Node 22, Node 24 and Bun, and the e2e and Electron suites separately.
 
-- A test must pass alone, in any order, and from any working directory. T68 found tests which only
+- A test must pass alone, in any order, and from any working directory. A review found tests which only
   passed from the repo root because an earlier test left a spy behind.
 - Whatever a test replaces, it restores: `vi.restoreAllMocks`, `vi.useRealTimers`, `process.env`,
   `process.cwd`. Prefer the restoring hook (`afterEach`) to restoring inline, which a failing
@@ -72,8 +72,8 @@ CI runs the suite on Node 22, Node 24 and Bun, and the e2e and Electron suites s
 ## Temp directories and files
 
 The e2e fixtures copy schemas into temp directories. Create them so that cleanup runs on failure too
-(`afterEach` or `finally`; see `cleanup` in `tests/utils/e2e-utils.ts`). T64 fixed leaks left by
-failing tests; a new fixture helper must not bring them back.
+(`afterEach` or `finally`; see `cleanup` in `tests/utils/e2e-utils.ts`). Leaks left by
+failing tests were fixed once; a new fixture helper must not bring them back.
 
 ## Zero warnings
 
@@ -104,8 +104,8 @@ bunx vitest run tests/test_validators/config.options.test.ts -t "ipcDataDir path
 - One file per area, at most 300 lines (see [`module-structure`](../module-structure/SKILL.md)).
   When a `describe` block pushes it over, that block is a new file.
 - Shared builders and fakes go to `tests/utils/`, imported with the `@testutils/` alias, not copied.
-- A regression test names the task and says what broke, as in `tests/test_validators/config.options.test.ts`
-  (`// Regression for T58: 2.5 was accepted and silently rounded down by repeat.`).
+- A regression test says what broke, as in `tests/test_validators/config.options.test.ts`
+  (`// Regression: 2.5 was accepted and silently rounded down by repeat.`).
 - Tests that cover generated code assert on the generated text, and e2e tests type-check it.
 - New test files carry the Apache-2.0 header.
 

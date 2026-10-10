@@ -37,68 +37,27 @@ Code generator (`ipcgen` CLI) that turns declarative channel expressions in a us
   `ELECTRON_NO_SANDBOX=1` for the sandbox helper of Chromium, which leaves `sandbox: true` of the windows
   alone. The scenarios are functions that are turned into text and run in Electron, so they can use
   only their `ctx` argument (`ctx.data` for constants). A scenario that finds a bug in the generated
-  code is not fixed in the same task: add it as `it.fails`, with the new task's ID in a comment.
+  code is not fixed in the same change: add it as `it.fails`, with a comment that says what is wrong.
 - Read `.claude/skills/vitest-conventions` before writing or fixing tests.
 - Biome formats on pre-commit (lefthook). Use 3-space indents, double quotes, and the Apache-2.0 header on new source files.
 
-## Work tracker: one task per session
+## Working conventions
 
-The roadmap lives in [`docs/roadmap.md`](./docs/roadmap.md), imported below. It is the overview of
-every task: what is done, what remains, and each task's dependencies. Each task's goal, scope, tests
-and delivery note are in its own file, `docs/tasks/T<NN>-<slug>.md`. Do not read all task files to
-get an overview; the roadmap is enough. Every session follows this protocol:
-
-1. Read the roadmap. Pick the **first** task marked `[ ]` whose `depends on` tasks are all `[x]`
-   (or `[-]` dropped).
-   If the user names a specific task, do that one instead.
-   Then read that task's file. Read other task files only when the task refers to them.
-2. If the task is marked **Decision needed**, ask the user that question before writing code.
-3. **Plan before editing.** Read the code the task touches, then write a short plan in your reply:
-   files to change, approach, test cases, and anything in the task file that no longer matches the
-   code. Then continue without waiting for approval, unless the plan has to go beyond or against
-   the task's scope; in that case, stop and ask the user.
-4. Implement **only that task**. Do not start, or partially start, any other task.
-   - Every behavior change needs unit tests. Every bug fix also needs a regression test that fails
-     without the fix.
-   - Tests that cover generated code must assert on the generated text. Once T01 exists, they must
-     also type-check the output via the e2e harness.
-   - Keep the generated runtime code sandbox-safe (it runs in a sandboxed preload or the main process)
-     and free of any dependency on this library at runtime.
-5. Before committing, all of these must pass: `bun run check` and `bunx vitest run`.
-   Once T11 lands, the Node e2e job must pass too. Check that `git diff --cached` includes
-   `docs/roadmap.md`; a task commit without a roadmap change is incomplete.
-6. **Update `docs/roadmap.md`** in the same commit. A task is not done until the roadmap says so:
-   - flip the task's marker from `[ ]` to `[x]`;
-   - update the **Progress** line counts to match the markers;
-   - if the task was dropped instead, mark it `[-]` and say why in its task file;
-   - if a **Decision needed** question was answered, remove the flag from the roadmap entry.
-
-   Also in the same commit:
-   - fill in `Delivered:` in the task file with the date and a one-line note on anything notable
-     (deviations, follow-ups);
-   - if new follow-up work was discovered, add it as a new task with the next free ID: a new task
-     file, plus a roadmap entry at the end of the matching phase, with its `depends on` list.
-7. Make exactly **one commit** for the task, with message `T<NN>: <short summary>` followed by a body.
-   Push it to the session's designated branch.
-8. **Stop.** Report what was delivered and which task is next, as read from the updated roadmap.
-   Do not continue to the next task. The user clears the session between tasks.
-
-### Parallel builders
-
-When several builder sessions work on the same branch at the same time, each is given its task by
-name (step 1), and these rules replace parts of steps 5 to 7:
-
-- Run `bun run check`, `bunx vitest run`, and `bun run test:electron` (with `REQUIRE_ELECTRON=1`
-  when the Electron binary and a display are available, else say that it skipped) before committing.
-- In `docs/roadmap.md`, flip only your own task's marker, and recount the **Progress** line from
-  the markers.
-- New follow-up tasks take IDs from the range named in your task file, not the next free ID.
-- Before pushing, `git pull --rebase origin <branch>`. A conflict in `docs/roadmap.md` is always
-  resolved the same way: keep every `[x]`, keep every added entry, and recount **Progress**. Any
-  other conflict: resolve it, then run the three test commands again before pushing.
-
-If a task turns out too large for one reviewable commit, split it into `T<NN>a`, `T<NN>b`, and so
-on, each with its own task file and roadmap entry. Deliver only the first part, mark only that
-part `[x]` in the roadmap, and say so.
-
-@docs/roadmap.md
+- **Plan before editing.** Read the code the change touches, then write a short plan in your reply:
+  files to change, approach and test cases. Continue without waiting for approval, unless the plan
+  has to go beyond or against what the user asked; in that case, stop and ask.
+- Every behavior change needs unit tests. Every bug fix also needs a regression test that fails
+  without the fix.
+- Tests that cover generated code must assert on the generated text, and also type-check the output
+  via the e2e harness.
+- Keep the generated runtime code sandbox-safe (it runs in a sandboxed preload or the main process)
+  and free of any dependency on this library at runtime.
+- Before committing, `bun run check`, `bunx vitest run` and `bun run test:electron` must pass (with
+  `REQUIRE_ELECTRON=1` when the Electron binary and a display are available, else say that the
+  Electron tests skipped). The Node e2e job of CI must pass as well.
+- Keep the user docs in `docs/` (published with MkDocs Material, see `mkdocs.yml`) in step with
+  behavior changes, and check them with `uv run --with "mkdocs-material>=9.7.7" mkdocs build --strict`.
+- Do not mix unrelated changes in one commit. If a change turns out too large for one reviewable
+  commit, split it into parts and deliver the first one.
+- When several sessions work on the same branch, run `git pull --rebase origin <branch>` before
+  pushing, and run the checks again after resolving any conflict.

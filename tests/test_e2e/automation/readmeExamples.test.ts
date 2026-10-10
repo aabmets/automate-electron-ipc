@@ -21,14 +21,12 @@ import { describe, expect, it } from "vitest";
 
 const docsDir = path.resolve(import.meta.dirname, "../../../docs");
 
-/** Every `.md` file below `docs/` in sorted path order, except the planning files that are not published. */
+/** Every `.md` file below `docs/` in sorted path order,. */
 async function readDocs(): Promise<string> {
    const entries = await fsp.readdir(docsDir, { recursive: true });
    const pages = entries
       .map((entry) => entry.split(path.sep).join("/"))
-      .filter(
-         (entry) => entry.endsWith(".md") && !entry.startsWith("tasks/") && entry !== "roadmap.md",
-      )
+      .filter((entry) => entry.endsWith(".md"))
       .sort();
    const texts = await Promise.all(
       pages.map((page) => fsp.readFile(path.join(docsDir, page), "utf8")),

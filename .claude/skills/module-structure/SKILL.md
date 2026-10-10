@@ -4,13 +4,13 @@ description: >-
   File size gate (soft 280 lines, hard 300, for src, tests and types), how to split a module or a test file along feature seams without a
   barrel file, and the anti-patterns of stub files and premature directories. Read before
   adding a file, before adding code to a file that is close to or over the limit, when
-  `bun run check` reports a size error, and when a task is a T103+ split task.
+  `bun run check` reports a size error, and when the work is a split of a big file.
 ---
 
 # Module structure and the size gate
 
-A module of 3000 lines is a failure of structure, not of style. The generator grew one feature per
-task, and each task made `main-bindings.ts` bigger. The gate stops that.
+A module of 3000 lines is a failure of structure, not of style. The generator grew one feature at
+a time, and each feature made `main-bindings.ts` bigger. The gate stops that.
 
 ## The limits
 
@@ -32,7 +32,7 @@ input for the generator, not code.
 Putting new code into a file at or near the limit is the habit that made the big files. Instead:
 
 1. Put the new code in a **new module** that the old file calls.
-2. If the current task is itself a split task, follow "How to split" below.
+2. If the work is itself a split, follow "How to split" below.
 3. Never add an exception for a file over 300 lines. If you think one is needed, stop and ask the
    user.
 
@@ -63,8 +63,8 @@ brokered channels, service workers. One module per group; the writer calls them 
 - **The behavior stays byte-identical.** Before the first edit, generate the output of every fixture
   in `tests/fixtures` into the scratchpad. After the split, generate again and `diff -r`. The
   exact-output tests assert on generated text, so a changed byte fails them as well.
-- A split commit changes no assertion and no behavior. If a split exposes a bug, record it as a new
-  task (the `it.fails` rule of `CLAUDE.md`) and leave it.
+- A split commit changes no assertion and no behavior. If a split exposes a bug, record it separately
+  (the `it.fails` rule of `CLAUDE.md`) and leave it.
 - New files carry the Apache-2.0 header and use the repo's Biome style (3-space indent).
 
 **Splitting a test file** is moving `describe` blocks, not rewriting them:
@@ -114,4 +114,4 @@ brokered channels, service workers. One module per group; the writer calls them 
 ## Related
 
 - Tests: [`vitest-conventions`](../vitest-conventions/SKILL.md)
-- Session protocol and the roadmap: `CLAUDE.md`
+- Working conventions: `CLAUDE.md`

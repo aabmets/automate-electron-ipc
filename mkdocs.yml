@@ -12,10 +12,6 @@ validation:
     absolute_links: warn
     unrecognized_links: warn
 
-exclude_docs: |
-  tasks/
-  roadmap.md
-
 theme:
   name: material
   palette:
