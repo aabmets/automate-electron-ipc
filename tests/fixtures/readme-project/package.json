@@ -1,0 +1,9 @@
+{
+   "name": "fixture-readme-project",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "src/autoipc"
+      }
+   }
+}

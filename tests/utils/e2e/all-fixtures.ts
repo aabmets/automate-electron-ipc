@@ -16,12 +16,16 @@ import { fixtures } from "../fixture-tracker.js";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../../fixtures");
 
-/** The fixtures whose schema or config the run rejects, so that they generate nothing. */
+/**
+ * The fixtures that generate nothing: the schema or the config is rejected, or the fixture has no
+ * schema, since `readme-project` gets its files from the examples of the README.
+ */
 const REJECTED = new Set([
    "declaration-output-paths",
    "default-port-origins",
    "duplicate-channels",
    "output-over-schema",
+   "readme-project",
    "schema-file-reserved-name",
    "syntax-error",
 ]);

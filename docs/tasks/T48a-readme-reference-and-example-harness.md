@@ -34,4 +34,22 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     timeouts were missing; T99 added them).
 - **Tests:** the README example check above, passing on the tagged examples.
 - **Follow-up IDs:** T172-T173.
-- **Delivered:**
+- **Delivered:** 2026-10-10. The README example check is `tests/test_e2e/automation/readmeExamples.test.ts`,
+  with the extractor in `tests/utils/e2e/readme-examples.ts`. A block is an example when the line above it
+  is `<!-- readme-example: <name> <file> -->` and it is a `ts`, `typescript` or `json` block; the blocks of
+  one name are written into a copy of `tests/fixtures/readme-project` (new `files` option of
+  `runFixture`), generated, and type-checked: the schema and the generated files with `typecheck`, and the
+  other `.ts` files of the example with `typecheckFiles`, together with `window.d.ts` for the global
+  `ipc`. A failure names the example. A test also fails when a tag has no matching block. "Getting
+  Started" (`getting-started`) and "Simple Example" (`simple-example`) are tagged.
+  The reference part of the README is now: Installation, Configuration (one table of every key, the config
+  file and its precedence, NodeNext), Command line (every flag, `--check`, `--watch`), API, Vite,
+  TypeScript configuration (which file goes to which project, plain Electron and electron-vite), and
+  Generated files (one table, headers, stale files). Claims were checked against the code; the stale ones
+  fixed: `codeIndent` is limited to 2 to 4, `projectUsesNodeNext`, `isolatedWorldId` and `serializer` had
+  no entry in the defaults, and the Scopes section said that a removed scope leaves all its files behind
+  (the next run deletes two of the three). Found, not fixed: a removed scope leaves `types.<scope>.ts`
+  behind (T172), and the generated `main.ts` and `utility.ts` fail `noUnusedLocals` and
+  `noUnusedParameters`, which the electron-vite template turns on (T173). The README notes both until
+  they are fixed. The utility-call timeouts that the T93 note called missing were already documented
+  by T99.

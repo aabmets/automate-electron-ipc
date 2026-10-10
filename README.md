@@ -49,116 +49,110 @@ Node library for generating IPC components for Electron apps.
 
 `npm install automate-electron-ipc --save-dev`
 
+The package needs Node 22.13 or later to run. `electron` is an optional peer dependency (30 or later),
+since only the generated files talk to it. The generator is the `ipcgen` command, so run it with
+`npx ipcgen` (or `bunx`, `pnpm exec`, `yarn`), or put it in a script:
 
-### Optional Configuration
+```json
+{
+   "scripts": {
+      "ipc": "ipcgen",
+      "ipc:check": "ipcgen --check"
+   }
+}
+```
 
-You can configure IPC automation in the `package.json` file using the following options. 
-If no configuration is provided, IPC automation will use the default values as shown in the example below.
-The same options can live in a config file instead, see [Config file](#config-file).
+New to the library? Start at [Getting Started](#getting-started); the sections up to there are the reference.
+
+
+### Configuration
+
+Without any configuration, IPC automation uses the defaults in the table. To change an option, set it
+in `package.json`, under `config.autoipc`:
 
 ```json
 {
    "config": {
       "autoipc": {
-         "ipcDataDir": "src/autoipc",
-         "codeIndent": 3,
-         "rawErrors": false,
-         "channelPrefix": "autoipc:",
-         "timeoutMs": 0,
-         "mainBindingsPath": "src/autoipc/main.ts",
-         "preloadBindingsPath": "src/autoipc/preload.ts",
-         "rendererTypesPath": "src/autoipc/window.d.ts",
-         "utilityBindingsPath": "src/autoipc/utility.ts",
-         "serviceWorkerPreloadPath": "src/autoipc/service-worker-preload.ts",
-         "exposeAs": "ipc",
-         "autoExpose": true,
-         "getPathForFile": false,
-         "mock": false,
-         "format": false,
-         "hooks": false
+         "ipcDataDir": "src/ipc",
+         "codeIndent": 2,
+         "mock": true
       }
    }
 }
 ```
 
-Config explanation:
- - `projectUsesNodeNext` - Spells the imports of the generated files as NodeNext does (with `.js` extensions).
-   When you leave it out, it is detected: it is `true` when `module` or `moduleResolution` in the
-   `tsconfig.json` of the project root is `node16` or `nodenext`, and `false` otherwise or without
-   that file. Only `tsconfig.json` is read, not `tsconfig.node.json` or `tsconfig.web.json`, since an
-   electron-vite project has two of those and either could apply. A relative `extends` (one path or
-   an array) is followed, and a package such as `@tsconfig/node22` is not. Set the option yourself to
-   override the detection, in any config source or with the run options.
- - `ipcDataDir` - Relative path to a directory within the users project which will contain the IPC schema expressions and where the IPC bindings will be generated into.
- - `codeIndent` - How many spaces will one code indentation level have within the generated IPC bindings.
- - `rawErrors` - Set to true to leave the errors of `invoke` handlers to Electron. See [Errors](#errors).
- - `channelPrefix` - Put in front of every channel name that Electron sees, so that the channels cannot
-   collide with other code that uses `ipcMain` or `ipcRenderer` directly: `getUser` travels as
-   `autoipc:getUser`. The names of the generated API stay as they are in the schema, and so do the names
-   that `validateSender`, `onRejected` and the errors receive. Set it to `""` to turn the prefix off.
-   It can contain letters, digits and `_ . : / @ # -`, up to 64 characters. It separates channel names
-   and is not a security measure: restrict who can call a channel with `allowedOrigins`.
- - `timeoutMs` - The default time in milliseconds after which the promise of an `invoke` is rejected
-   with an `IpcTimeoutError`. `0`, the default, waits for ever. It is also the default of `callUtility`,
-   `callMain` and `invokeUtility`, which reject with an `IpcUtilityError` of the code
-   `IPC_UTILITY_TIMEOUT`, and of `invokeFromWorker`. See [Timeouts](#timeouts).
- - `mainBindingsPath` - Relative path of the generated bindings for the main process, `main.ts` in
-   `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file or of a
-   file that the run reads, such as the schema.
- - `preloadBindingsPath` - Relative path of the generated preload script, `preload.ts` in `ipcDataDir`
-   by default. The preload scripts of the [scopes](#scopes-a-different-api-per-window) are written next to it, as
-   `preload.<scope>.ts`. It must be a `.ts` file, with the same limits as `mainBindingsPath`.
- - `rendererTypesPath` - Relative path of the generated typings of the page, `window.d.ts` in
-   `ipcDataDir` by default. The typings of the scopes are written next to it, as `window.<scope>.d.ts`.
-   It must be a `.d.ts` file, with the same limits as `mainBindingsPath`.
- - `utilityBindingsPath` - Relative path of the generated file for utility processes, `utility.ts` in
-   `ipcDataDir` by default. It must be a `.ts` file, and not the path of another generated file. The
-   file is written only when the schema has a channel to a utility process. See
-   [Utility processes](#utility-processes).
- - `serviceWorkerPreloadPath` - Relative path of the generated preload script for service workers,
-   `service-worker-preload.ts` in `ipcDataDir` by default. The typings of the worker are written next to
-   it, as `service-worker.d.ts`. It must be a `.ts` file, and not the path of another generated file. Both
-   files are written only when the schema has a channel to or from a service worker. See
-   [Service workers](#service-workers).
- - `exposeAs` - The name that the API of the page is exposed as, `ipc` by default: `window.ipc`. The
-   generated `window.d.ts` declares the global variable under the same name. It must be an identifier
-   that is not a reserved word or a global of the page (`name`, `status`, `close`, `open`, `Promise`, ...),
-   since the exposed API would hide it. The `ipc` object of `main.ts` is not affected.
- - `isolatedWorldId` - Exposes the API in the isolated world with this ID, with
-   `contextBridge.exposeInIsolatedWorld`, instead of in the main world. It must be an integer of 1000 or
-   more, since Electron keeps the lower IDs for itself. Only the scripts that run in that world see the
-   API, so the world needs to be created for the page, for example with `webFrame.setIsolatedWorldInfo`.
-   Without it, the API is exposed in the main world.
- - `autoExpose` - Whether the generated `preload.ts` exposes the API as soon as it loads, `true` by
-   default. Set it to `false` to expose the API from your own preload code. See
-   [Composing the preload script](#composing-the-preload-script).
- - `getPathForFile` - Adds `getPathForFile(file: File): string` to the exposed API, `false` by default.
-   `File.path` was removed in Electron 32, so a page that handles dropped or picked files can get their
-   path only from the preload script, through `webUtils.getPathForFile`. The helper wraps that call, and
-   is typed in `window.d.ts`. It returns an empty string for a `File` that is not on the disk, and
-   throws for a value that is not a `File`. A channel cannot be named `getPathForFile` while this is on.
-   It is in the API of every scope, and in the empty API of a schema without channels for the page.
-   Keep in mind that a path tells the page about the disk of the user: pass it on only to code you trust.
- - `mock` - Writes `mock.ts` next to the other generated files, `false` by default: a fake of the API of
-   the page for unit tests of the renderer, Storybook and a UI that runs in a plain browser. See
-   [Mocking in renderer tests](#mocking-in-renderer-tests). A channel cannot be named `emit` or `ask`
-   while this is on.
- - `format` - Formats the generated files with the formatter of your project: `"biome"` or `"prettier"`,
-   `false` by default (the files are written as they are rendered). The formatter runs from
-   `node_modules/.bin` of the project root, with the project root as its working directory, so your own
-   formatter config applies. If the binary is not installed, a warning is printed once per run and the files
-   are written unformatted; a formatter that exits with an error fails the run and names the file. The
-   notice at the top of each file is not formatted. `--check` and the programmatic API compare the formatted
-   text, so run them with the same `format` as the run that wrote the files.
- - `hooks` - `"react"` writes `hooks.react.ts` next to `types.ts`, with the React hooks `useIpcEvent` and
-   `useIpcInvoke`. `"vue"` writes `hooks.vue.ts` instead, with the Vue composables of the same names. `false`,
-   the default, writes nothing. See [Framework hooks](#framework-hooks).
- - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
-   crosses between a page, a utility process or a service worker and the main process, and to the messages
-   of `port` and `mainPort` channels, so that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
-   `"./src/wire.ts"`; any other value is a package, such as `"superjson"`. See
-   [Custom serializers](#custom-serializers).
+The same options can live in a config file instead, see [Config file](#config-file). Paths are relative
+to the project root, which is the directory of the nearest `package.json`. An option with a name that
+does not exist, or a value that is not valid, fails the run with a message that names its source.
 
+| Option | Type | Default | Description |
+|:--|:--|:--|:--|
+| `ipcDataDir` | string | `"src/autoipc"` | The directory with the schema, where the generated files are written. |
+| `codeIndent` | `2`, `3` or `4` | `3` | The spaces of one indentation level in the generated files. |
+| `projectUsesNodeNext` | boolean | detected from `tsconfig.json` | Spells the imports of the generated files as NodeNext does. See [NodeNext](#nodenext). |
+| `rawErrors` | boolean | `false` | Leaves the errors of `invoke` handlers to Electron. See [Errors](#errors). |
+| `channelPrefix` | string | `"autoipc:"` | Put in front of every channel name that Electron sees. `""` turns it off. |
+| `timeoutMs` | integer, 0 or more | `0` | The default time limit of the calls that wait for an answer; `0` waits for ever. See [Timeouts](#timeouts). |
+| `exposeAs` | identifier | `"ipc"` | The name of the API in the page: `window.ipc`. |
+| `isolatedWorldId` | integer, 1000 to 2147483647 | not set | Exposes the API in this isolated world, not in the main world. |
+| `autoExpose` | boolean | `true` | Whether `preload.ts` exposes the API when it loads. See [Composing the preload script](#composing-the-preload-script). |
+| `getPathForFile` | boolean | `false` | Adds `getPathForFile(file)` to the API of the page. |
+| `serializer` | string | not set | A module that serializes what crosses a process boundary. See [Custom serializers](#custom-serializers). |
+| `mainBindingsPath` | `.ts` path | `<ipcDataDir>/main.ts` | Where `main.ts` is written. |
+| `preloadBindingsPath` | `.ts` path | `<ipcDataDir>/preload.ts` | Where `preload.ts` is written. |
+| `rendererTypesPath` | `.d.ts` path | `<ipcDataDir>/window.d.ts` | Where `window.d.ts` is written. |
+| `utilityBindingsPath` | `.ts` path | `<ipcDataDir>/utility.ts` | Where `utility.ts` is written. |
+| `serviceWorkerPreloadPath` | `.ts` path | `<ipcDataDir>/service-worker-preload.ts` | Where the preload script of service workers is written. |
+| `mock` | boolean | `false` | Writes `mock.ts`. See [Mocking in renderer tests](#mocking-in-renderer-tests). |
+| `hooks` | `"react"`, `"vue"` or `false` | `false` | Writes `hooks.react.ts` or `hooks.vue.ts`. See [Framework hooks](#framework-hooks). |
+| `format` | `"biome"`, `"prettier"` or `false` | `false` | Formats the generated files with the formatter of your project. |
+
+Notes on the options:
+
+ - `ipcDataDir` is the directory of `schema.ts` (or of the `schema` directory), and it is where the
+   files that have no path option of their own are written: `types.ts`, `mock.ts` and the hooks. A run that
+   finds no schema creates it.
+ - `codeIndent` is checked: a value below 2 or above 4, or one that is not an integer, is an error.
+ - `rawErrors` makes the errors of `invoke` handlers reach the page as Electron reports them, not as
+   the error object of the library.
+ - `channelPrefix` makes `getUser` travel as `autoipc:getUser`, so that the channels cannot collide
+   with other code that uses `ipcMain` or `ipcRenderer` directly. The names of the generated API stay as
+   they are in the schema, and so do the names that `validateSender`, `onRejected` and the errors
+   receive. It can contain letters, digits and `_ . : / @ # -`, up to 64 characters. It separates channel
+   names and is not a security measure: restrict who can call a channel with `allowedOrigins`.
+ - `timeoutMs` is the default of `invoke`, and also of `callUtility`, `callMain`, `invokeUtility`
+   (which reject with an `IpcUtilityError` of the code `IPC_UTILITY_TIMEOUT`) and `invokeFromWorker`.
+   A channel's own `timeoutMs` wins. See [Timeouts](#timeouts).
+ - `exposeAs` must be an identifier that is not a reserved word or a global of the page (`name`,
+   `status`, `close`, `open`, `Promise`, ...), since the exposed API would hide it. The generated
+   `window.d.ts` declares the global variable under the same name. The `ipc` object of `main.ts` is not
+   affected.
+ - `isolatedWorldId` uses `contextBridge.exposeInIsolatedWorld`. Electron keeps the IDs below 1000 for
+   itself. Only the scripts that run in that world see the API, so the world needs to be created for
+   the page, for example with `webFrame.setIsolatedWorldInfo`.
+ - `getPathForFile` exists because `File.path` was removed in Electron 32, so a page that handles dropped
+   or picked files can get their path only from the preload script, through `webUtils.getPathForFile`.
+   The helper returns an empty string for a `File` that is not on the disk, and throws for a value that is
+   not a `File`. A channel cannot be named `getPathForFile` while this is on. It is in the API of every
+   scope, and in the empty API of a schema without channels for the page. A path tells the page about
+   the disk of the user: pass it on only to code you trust.
+ - `serializer` is applied to everything that crosses between a page, a utility process or a service
+   worker and the main process, and to the messages of `port` and `mainPort` channels. A value that
+   starts with `.` is a path from the project root, such as `"./src/wire.ts"`; any other value is a
+   package, such as `"superjson"`.
+ - The path options must name a file of the right kind, and not the path of another generated file or
+   of a file that the run reads, such as the schema. The files of the scopes are written next to
+   `preloadBindingsPath` and `rendererTypesPath`. `utility.ts` and the service worker files are written
+   only when the schema has a channel for them. See [Generated files](#generated-files).
+ - `mock` and `hooks` cover the surface of no scope. A channel cannot be named `emit` or `ask` while
+   `mock` is on.
+ - `format` runs the formatter from `node_modules/.bin` of the project root, with the project root as its
+   working directory, so your own formatter config applies. If the binary is not installed, a warning is
+   printed once per run and the files are written unformatted; a formatter that exits with an error
+   fails the run and names the file. The header at the top of each file is not formatted. `--check` and
+   the programmatic API compare the formatted text, so run them with the same `format` as the run that
+   wrote the files.
 
 #### Config file
 
@@ -187,20 +181,56 @@ export default defineConfig({
  - An option with a name that does not exist is an error that names the source and lists the known
    options. Every error about the config names the file, or `package.json#config.autoipc`, it comes from.
 
-The `ipcgen` command also takes these flags, which win over the config:
+**Precedence.** An option comes from the first of these that sets it:
 
- - `--cwd <dir>` - Find the project root from this directory instead of the working directory.
- - `--config <file>` - Read this config file (`.json`, `.mjs` or `.ts`, relative to the working directory)
-   instead of looking for `autoipc.config.*` in the project root.
+1. The options of the run: the command line flags (`--out-main`, `--out-preload` and `--out-types` set
+   path options), or `overrides` of the [API](#api) and of the [Vite plugin](#vite-and-electron-vite).
+2. The one config source: the config file, or `package.json#config.autoipc`.
+3. The detection of `projectUsesNodeNext`, which is the only option that is not a constant default.
+4. The defaults of the table above.
 
- - `--out-main <file>`, `--out-preload <file>` and `--out-types <file>` - Set `mainBindingsPath`,
-   `preloadBindingsPath` and `rendererTypesPath`. Unlike in the config, the path is relative to the
-   working directory (the one `--cwd` names), and `ipcgen` converts it to a path from the project root.
-   The imports in each generated file are written for the directory that the file ends up in.
+#### NodeNext
 
-The order of precedence is: command line flags, then the one config source, then the defaults.
+`projectUsesNodeNext` spells the imports of the generated files as NodeNext does, with `.js` extensions.
+When you leave it out, it is detected: it is `true` when `module` or `moduleResolution` in the
+`tsconfig.json` of the project root is `node16` or `nodenext`, and `false` otherwise or without that file.
 
-### Checking that the generated files are up to date
+ - Only `tsconfig.json` is read, not `tsconfig.node.json` or `tsconfig.web.json`, since an electron-vite
+   project has two of those and either could apply. Such a project does not use NodeNext, usually, but if
+   one of its files does, set the option yourself.
+ - A relative `extends` (one path or an array) is followed, and a package such as `@tsconfig/node22` is
+   not.
+ - Set the option to override the detection, in any config source or with the run options.
+ - It also decides how the imports of your own files in the schema, such as the types of a signature,
+   are spelled in the generated files. See [TypeScript configuration](#typescript-configuration).
+
+
+### Command line
+
+`ipcgen` generates the bindings of the project that contains the working directory. It takes these flags,
+which win over the config:
+
+| Flag | Description |
+|:--|:--|
+| `--cwd <dir>` | Find the project root from this directory instead of the working directory. |
+| `--config <file>` | Read this config file (`.json`, `.mjs` or `.ts`, relative to the working directory) instead of looking for `autoipc.config.*` in the project root. |
+| `--out-main <file>` | Set `mainBindingsPath`. |
+| `--out-preload <file>` | Set `preloadBindingsPath`. |
+| `--out-types <file>` | Set `rendererTypesPath`. |
+| `--check` | Write nothing; list the generated files that are out of date, and exit with `1` if there are any. |
+| `--watch` | Generate once, then again whenever the schema or the config changes. Cannot be combined with `--check`. |
+| `-v`, `--version` | Print the version. |
+| `-h`, `--help` | Print the flags. |
+
+The path of an `--out-*` flag, unlike the one in the config, is relative to the working directory (the one
+`--cwd` names), and `ipcgen` converts it to a path from the project root. The imports in each generated file
+are written for the directory that the file ends up in.
+
+A run that fails, such as one with a schema that does not parse or validate, prints the error and exits
+with `1`. When the schema file or directory does not exist, the run creates `ipcDataDir` and prints a warning
+that says where to create the schema; see [Getting Started](#getting-started).
+
+#### Checking that the generated files are up to date
 
 `ipcgen --check` renders the files in memory and compares them with the ones on disk. It writes
 nothing, lists the files that are out of date or missing (relative to the project root), and exits
@@ -212,31 +242,8 @@ no directory. Use it in CI to catch a schema change whose generated files were n
 ```
 
 It takes `--cwd` and `--config` like a normal run. A generated file that a run would delete (see
-below) is listed as out of date too.
-
-### Generated file headers and stale files
-
-Every generated file starts with a header that names the schema it came from, and keeps ESLint and
-Biome from linting or reformatting it:
-
-```ts
-// Generated by ipcgen (automate-electron-ipc) from src/autoipc/schema.ts. Do not edit.
-/* eslint-disable */
-// biome-ignore-all lint: generated file
-// biome-ignore-all assist: generated file
-// biome-ignore-all format: generated file
-```
-
-The schema path is relative to the project root, and is the directory when the schema is a
-`schema/` directory. `.d.ts` files get the same header.
-
-Some files exist only for some schemas: the utility process bindings, the two service worker files,
-and the `preload.<scope>.ts` and `window.<scope>.d.ts` files of each scope. After a run writes its
-files, it deletes the ones that the schema no longer needs, and reports them. A file is deleted only
-when its first line is the header above or the notice of earlier versions (`// NOTICE: THIS FILE
-WAS GENERATED BY AUTOMATE-ELECTRON-IPC.`); a file you wrote by hand, such as `preload.foo.ts`, is
-never touched. A generated file at a custom path that the config no longer names cannot be found,
-so delete it yourself.
+[Generated files](#generated-files)) is listed as out of date too. The check compares the text byte for
+byte, so run it with the same version of the library, and the same `format`, as the run that wrote the files.
 
 #### Watch mode
 
@@ -257,8 +264,7 @@ until you stop it with Ctrl+C. It takes the same flags as a normal run (`--cwd`,
 ### API
 
 The generator can also be run from code, with `automate-electron-ipc/api`. It takes the same
-options as the CLI (`cwd`, `configFile`, and `overrides` for the config options that win over the
-config source) and renders the files with the same pipeline.
+options as the CLI and renders the files with the same pipeline.
 
 ```ts
 import { check, generate } from "automate-electron-ipc/api";
@@ -270,10 +276,17 @@ const { stale } = await check({ overrides: { codeIndent: 2 } });
 // stale: the generated files that are out of date or missing. Nothing is written.
 ```
 
-- `generate(options?)` writes the files like `ipcgen`, and `check(options?)` compares them with the
-  ones on disk like `ipcgen --check`.
-- Both are silent by default and never set `process.exitCode`. Pass `logger: true` to print the same
-  lines as the CLI.
+| Option | Type | Description |
+|:--|:--|:--|
+| `cwd` | string | Find the project root from this directory. Default: the working directory. |
+| `configFile` | string | The config file to read, relative to `cwd` or absolute, instead of the `autoipc.config.*` file in the project root. |
+| `overrides` | `AutoIpcConfig` | Config options that win over the config source and the defaults. |
+| `logger` | boolean | Print the same lines as the CLI. Default: `false`. |
+
+- `generate(options?)` writes the files like `ipcgen`, deletes the stale generated files, and returns
+  `{ files, channels }`. `check(options?)` compares the files with the ones on disk like `ipcgen --check`
+  and returns `{ stale }`.
+- Both are silent by default and never set `process.exitCode`.
 - They throw on errors: a schema that does not parse or validate, and a schema path that does not
   exist, whose message is the one of the CLI warning. Unlike the CLI, `generate` does not create
   the missing directory.
@@ -298,11 +311,147 @@ export default defineConfig({
 
 - `autoipc(options?)` takes the options of [`generate`](#api): `cwd`, `configFile`, `overrides` and
   `logger`. The logger is on unless you set it.
+- In plain Vite, add `autoipc()` to `plugins` of `vite.config.ts` in the same way.
 - electron-vite starts the main, preload and renderer builds in one process. Add the plugin to each
   one that imports the generated files, and it still runs once: the builds share the run.
 - A schema error fails the build. In the dev server it is printed and the server keeps running; the
   generated files of the last good run stay in place. Vite does not reload the page for a change of
   a schema file, because the schema is not part of the app.
+
+### TypeScript configuration
+
+The generated files are TypeScript source, so the projects that compile your app must include them, and
+the compiler options must suit the code in them.
+
+**Which project compiles which file.** An Electron app has up to four kinds of code, and the generated
+files follow them:
+
+| Code | Files | Needs |
+|:--|:--|:--|
+| Main process | `main.ts`, and `utility.ts` for the code of a utility process | The Node types, which `electron` brings in. |
+| Preload script | `preload.ts`, `preload.<scope>.ts` | The `DOM` lib, since the script uses `MessagePort`. |
+| Renderer | `window.d.ts` (or `window.<scope>.d.ts`), `types.ts`, `mock.ts`, `hooks.react.ts` or `hooks.vue.ts` | The `DOM` lib. Include only one `window*.d.ts` in a project, since each declares the same global. |
+| Service worker | `service-worker-preload.ts`, `service-worker.d.ts` | The `WebWorker` lib, in a project of its own: its typings declare the same global as `window.d.ts`. |
+
+ - `types.ts` imports the channel map from `schema.ts`, so the schema is part of every project that
+   includes `types.ts` (the renderer, in the table above). `main.ts`, `utility.ts` and `types.ts` import
+   the types that your signatures use from your own files, so those are part of those projects too.
+ - The generated files compile under `strict`, and with a `lib` of `ES2022` and `DOM`. They do not compile
+   under `noUnusedLocals` or `noUnusedParameters`: `main.ts` and `utility.ts` hold helpers that a schema may
+   not use, which those options report. The node project of the electron-vite template turns both on, so
+   its type check (`tsc`, not the build) fails until you set them to `false` there.
+
+**Module resolution.** The generated files import each other and your types without an extension, as
+`import type { User } from "../shared/types"`. That resolves with a `moduleResolution` of `bundler` (the
+one of Vite and electron-vite) or `node10`. When `module` and `moduleResolution` are `NodeNext`, the imports
+need extensions, and `projectUsesNodeNext` (detected, see [NodeNext](#nodenext)) makes the generated
+files spell them: `"../shared/types.js"`, `"./types.js"`. Your own schema files are compiled by your
+project, so their imports follow its rules.
+
+**A plain Electron project** with one `tsconfig.json` needs only the right `include`:
+
+```json
+{
+   "compilerOptions": {
+      "target": "ES2022",
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "lib": ["ES2022", "DOM"],
+      "strict": true
+   },
+   "include": ["src"]
+}
+```
+
+With `ipcDataDir` at `src/autoipc`, `src` holds every generated file. If you move the files out of `src`
+with the path options, `include` must follow them.
+
+**electron-vite** splits the project in two: `tsconfig.node.json` compiles the main process and the preload
+script, and `tsconfig.web.json` the renderer, and `tsconfig.json` only refers to them. Their `include` lists
+do not reach `src/autoipc`, so add the generated files that each project compiles:
+
+```jsonc
+// tsconfig.node.json
+{
+   "include": [
+      "electron.vite.config.*",
+      "src/main/**/*",
+      "src/preload/**/*",
+      "src/autoipc/main.ts",
+      "src/autoipc/preload.ts"
+   ]
+}
+
+// tsconfig.web.json
+{
+   "include": [
+      "src/renderer/src/**/*",
+      "src/autoipc/window.d.ts",
+      "src/autoipc/types.ts",
+      "src/autoipc/schema.ts"
+   ]
+}
+```
+
+ - Add `utility.ts` to the node project when the schema has channels for a utility process. The preload
+   script needs the `DOM` lib, which the template has, since it sets no `lib` and the default one includes it:
+   a project that sets `lib` must list `"DOM"`.
+ - Both projects of the electron-vite template are `composite`, and a composite project fails with TS6307
+   on every file of its program that `include` does not list. That is why `schema.ts` is in the list of the
+   web project, and why the files that your signatures import types from, such as `src/shared/**/*`,
+   must be in both lists if they are not in them already.
+ - With [scopes](#scopes-a-different-api-per-window), list the `window.<scope>.d.ts` and `types.<scope>.ts`
+   of one scope in each renderer project, instead of `window.d.ts` and `types.ts`.
+ - The `tsconfig.json` of an electron-vite project holds no `compilerOptions`, so NodeNext is not detected
+   from it. The template resolves with `bundler`, for which nothing needs to be set; if a project of yours
+   uses NodeNext, set `projectUsesNodeNext` yourself.
+
+### Generated files
+
+A run writes these files. The page files exist for the surface of no scope, and again for each
+[scope](#scopes-a-different-api-per-window) of the schema, named after it (`preload.settings.ts`).
+
+| File | Path | Written | Content |
+|:--|:--|:--|:--|
+| `main.ts` | `mainBindingsPath` | Always | The `ipc` object of the main process. |
+| `preload.ts` | `preloadBindingsPath` | Always | The preload script that exposes the API of the page. |
+| `window.d.ts` | `rendererTypesPath` | Always | The typings of the global of the page. |
+| `types.ts` | `<ipcDataDir>/types.ts` | Always | `IpcApi`, the error types and the [helper types](#helper-types). |
+| `utility.ts` | `utilityBindingsPath` | When a channel goes to or from a [utility process](#utility-processes) | The API for the code of the utility process. |
+| `service-worker-preload.ts` | `serviceWorkerPreloadPath` | When a channel goes to or from a [service worker](#service-workers) | The preload script of the worker. |
+| `service-worker.d.ts` | next to the preload script of the worker | Together with `service-worker-preload.ts` | The typings of the worker. |
+| `preload.<scope>.ts`, `window.<scope>.d.ts`, `types.<scope>.ts` | next to the files of no scope | One set for each scope in the schema | The API of a window in that scope. |
+| `mock.ts` | `<ipcDataDir>/mock.ts` | With `mock` | The [mock](#mocking-in-renderer-tests) of the surface of no scope. |
+| `hooks.react.ts` or `hooks.vue.ts` | `<ipcDataDir>/` | With `hooks` set to `"react"` or `"vue"` | The [hooks](#framework-hooks) of the surface of no scope. |
+
+A schema without any channel still gets the files marked "Always", with an empty API.
+
+#### Generated file headers
+
+Every generated file starts with a header that names the schema it came from, and keeps ESLint and
+Biome from linting or reformatting it:
+
+```ts
+// Generated by ipcgen (automate-electron-ipc) from src/autoipc/schema.ts. Do not edit.
+/* eslint-disable */
+// biome-ignore-all lint: generated file
+// biome-ignore-all assist: generated file
+// biome-ignore-all format: generated file
+```
+
+The schema path is relative to the project root, and is the directory when the schema is a
+`schema/` directory. `.d.ts` files get the same header.
+
+#### Stale files
+
+Some files exist only for some schemas or some options: `utility.ts`, the two service worker files, `mock.ts`,
+the hooks, and the `preload.<scope>.ts` and `window.<scope>.d.ts` files of each scope. After a run writes its
+files, it deletes the ones that the schema and the config no longer need, and reports them. A file is
+deleted only when its first line is the header above or the notice of earlier versions
+(`// NOTICE: THIS FILE WAS GENERATED BY AUTOMATE-ELECTRON-IPC.`); a file you wrote by hand, such as
+`preload.foo.ts`, is never touched. A generated file at a custom path that the config no longer names cannot be
+found, so delete it yourself. `types.<scope>.ts` is not removed when its scope goes away: delete it by hand.
+
 
 ### Composing the preload script
 
@@ -334,15 +483,74 @@ for the page.
 
 ### Getting Started
 
-IPC bindings are generated by calling the `ipcgen` command provided by this library from the command line. 
-When you initially run this command, you will get a warning about IPC channels not being found. 
-Do not let this warning dissuade you, as it's purpose is to guide you where to create the schema 
-file or directory, which will contain the channel expressions that will be parsed by IPC automation. 
+IPC bindings are generated by calling the `ipcgen` command provided by this library from the command line.
+This walk-through sets up one request from a page to the main process, and one message the other way.
 
-By default, IPC automation looks for a file named `schema.ts` in the IPC data directory. 
-If you create a directory named `schema` into the IPC data directory, then IPC automation 
-will recursively parse all files within it for channel maps, meaning it is possible 
-to structure and segment channels according to the needs of larger applications. 
+**1. Run `ipcgen` once.** It finds no schema, so it creates the IPC data directory (`src/autoipc` by
+default) and prints a warning that names the path where the schema belongs. Do not let this warning
+dissuade you: its purpose is to guide you where to create the schema file or directory, which holds the
+channel expressions that IPC automation parses.
+
+```bash
+npx ipcgen
+```
+
+**2. Write the schema.** By default, IPC automation looks for a file named `schema.ts` in the IPC data
+directory. If you create a directory named `schema` into the IPC data directory instead, IPC automation
+recursively parses all files within it for channel maps, so it is possible to structure and segment
+channels according to the needs of larger applications. Each channel has a name, a verb (the kind of the
+channel) and a signature; see [Channel Maps](#channel-maps) and [Verbs](#verbs).
+
+<!-- readme-example: getting-started src/autoipc/schema.ts -->
+```ts
+import { defineChannels, invoke, send } from "automate-electron-ipc";
+
+export default defineChannels({
+   // The page asks, the main process answers.
+   getVersion: invoke<() => string>(),
+   // The page tells the main process something, and gets no answer.
+   logLine: send<(line: string) => void>(),
+});
+```
+
+**3. Run `ipcgen` again.** It writes `main.ts`, `preload.ts`, `window.d.ts` and `types.ts` next to the
+schema (see [Generated files](#generated-files)). Run it again whenever the schema changes, or keep
+`ipcgen --watch` running, or use the [Vite plugin](#vite-and-electron-vite).
+
+**4. Use the bindings in the main process.** `ipc` is the object of the main process, with one member per
+channel:
+
+<!-- readme-example: getting-started src/main/index.ts -->
+```ts
+import { app } from "electron";
+import { ipc } from "../autoipc/main";
+
+app.whenReady().then(() => {
+   ipc.getVersion.handle(() => app.getVersion());
+   ipc.logLine.on((_event, line) => console.log(line));
+});
+```
+
+**5. Load the preload script.** The generated `preload.ts` is the preload script of your windows. It
+exposes the API to the page as `window.ipc`. A sandboxed window loads a compiled script, so build `preload.ts`
+with your bundler, or import it from your own preload entry; see
+[Composing the preload script](#composing-the-preload-script).
+
+**6. Call the API from the page.** The typings in `window.d.ts` declare `ipc` as a global variable:
+
+<!-- readme-example: getting-started src/renderer/app.ts -->
+```ts
+async function showVersion(): Promise<void> {
+   ipc.logLine.send("Asking for the version");
+   const version: string = await ipc.getVersion.invoke();
+   document.title = `Version ${version}`;
+}
+
+showVersion();
+```
+
+Finally, make sure that your `tsconfig.json` files include the generated ones; see
+[TypeScript configuration](#typescript-configuration).
 
 
 ### Channel Maps
@@ -352,11 +560,11 @@ The key of each property is the channel name, the verb helper picks the kind of 
 of the verb is the signature. The schema file is never executed by Node. Instead, this library parses it to deduce
 the meanings behind the declarations, so the config of a verb must be written as an object literal.
 
-Since this library is well-documented through its type definitions, the developer is encouraged to use an IDE 
-which facilitates easy type inference and hints within its user interface. To that end, you should configure your 
-`tsconfig.node.json` to include the generated `main.ts` and `preload.ts` files from within the IPC data directory.
-For the renderer process, you should include the generated `window.d.ts` file into your `tsconfig.web.json` file.
-It takes the types of the API from `types.ts`, which is written next to it (see [Helper types](#helper-types)).
+Since this library is well-documented through its type definitions, the developer is encouraged to use an IDE
+which facilitates easy type inference and hints within its user interface. To that end, include the generated
+files in your projects, as described in [TypeScript configuration](#typescript-configuration). The typings of
+the renderer take the types of the API from `types.ts`, which is written next to them (see
+[Helper types](#helper-types)).
 
 _Note: IPC automation does not make a distinction between senders/listeners and invokers/handlers as they are 
 defined in the IPC documentation of the Electron library. Whether an IPC component is generated as a sender/listener
@@ -375,7 +583,8 @@ Rules of the schema file:
 ### Simple Example
 
 Schema file content at path `src/autoipc/schema.ts`:
-```typescript
+<!-- readme-example: simple-example src/autoipc/schema.ts -->
+```ts
 import { defineChannels, send } from "automate-electron-ipc";
 
 export default defineChannels({
@@ -387,7 +596,8 @@ After IPC bindings have been generated by running `ipcgen`, they can be used as 
 _Note: For brevity sake, other important code related to BrowserWindow has been omitted._
 
 In main process source code file `src/main/index.ts`:
-```typescript
+<!-- readme-example: simple-example src/main/index.ts -->
+```ts
 import { app } from "electron";
 import { ipc } from "../autoipc/main";
 
@@ -396,16 +606,19 @@ app.whenReady().then(() => {
 });
 ```
 
-Anywhere in renderer process source code:
-```html
-<button onClick={() => ipc.echoUserName.send("Anonymous")}>
+Anywhere in renderer process source code, such as a click handler (`src/renderer/app.ts`):
+<!-- readme-example: simple-example src/renderer/app.ts -->
+```ts
+document.querySelector("button")?.addEventListener("click", () => {
+   ipc.echoUserName.send("Anonymous");
+});
 ```
 
 In the renderer, `ipc` is a global variable, so `window.ipc.echoUserName.send("Anonymous")` and
 `globalThis.ipc` are the same typed object. The main process imports its own `ipc` from the generated
 `main.ts`; it is a different object with the methods of the main process.
 
-The example code provides only basic HTML, because this library is front-end-tech agnostic,
+The example code provides only basic DOM code, because this library is front-end-tech agnostic,
 meaning you can use any front-end framework or library like React, Vue or Angular.
 
 
@@ -1067,7 +1280,8 @@ The API of a scope is its own channels and the ones without `scopes`.
 a window that is in no scope, so they have only the channels without `scopes`: all of them in a schema
 that uses no scopes. Use the file of its scope as the preload script of each window, and include only
 one `window*.d.ts` in a renderer project, since each of them declares the same global. A scope that
-you remove from the schema leaves its old files behind, so delete them by hand.
+you remove from the schema has its `preload.<scope>.ts` and `window.<scope>.d.ts` deleted by the next run, like
+the other [stale files](#stale-files); delete its `types.<scope>.ts` by hand.
 
 **The main process admits a call by the scope of the window.** The preload script is only the API of
 the page, and a compromised page can call `ipcRenderer` itself, so the generated `main.ts` also

@@ -42,6 +42,13 @@ export interface RunFixtureOptions {
     * `undefined` is removed.
     */
    config?: Record<string, unknown>;
+   /**
+    * Files that are written into the copy, keyed by their path from the fixture root, after the
+    * copy and before the run. They replace the files of the fixture of the same path, so a project
+    * whose files come from somewhere else, such as the examples of the README, needs only a
+    * fixture with a `package.json`.
+    */
+   files?: Record<string, string>;
 }
 
 export interface E2EProject {
@@ -107,6 +114,12 @@ export async function runFixture(
    const cleanup = () => fsp.rm(root, { recursive: true, force: true });
    try {
       await fsp.cp(path.join(fixturesDir, fixture), root, { recursive: true });
+      await Promise.all(
+         Object.entries(options.files ?? {}).map(async ([file, contents]) => {
+            await fsp.mkdir(path.dirname(path.join(root, file)), { recursive: true });
+            await fsp.writeFile(path.join(root, file), contents);
+         }),
+      );
       const dir = path.join(root, options.project ?? ".");
       const manifestPath = path.join(dir, "package.json");
       const manifest = JSON.parse(await fsp.readFile(manifestPath, "utf8"));
