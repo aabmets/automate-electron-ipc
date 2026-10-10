@@ -237,6 +237,28 @@ describe("UtilityBindingsWriter", () => {
       expect(output).toContain("    progress: {\n        send: (): void =>");
    });
 
+   // T173: a helper that no channel calls fails noUnusedLocals in the file of the project.
+   it("writes the helpers of the peer that the channels use, and no other", async () => {
+      const output = await render([callUtility, notifyMain]);
+
+      expect(output).toContain("function setUtilityHandler(");
+      expect(output).toContain("function sendUtilityPeer(");
+      for (const name of ["callUtilityPeer", "lastUtilityCallId", "addUtilityListener"]) {
+         expect(output).not.toContain(name);
+      }
+   });
+
+   it("writes closeUtilityPeer only for the brokered ports, which end the peer", async () => {
+      const brokered = {
+         name: "lookup",
+         kind: "Unicast",
+         direction: "RendererToUtility",
+      } as const;
+
+      expect(await render([callUtility])).not.toContain("closeUtilityPeer");
+      expect(await render([callUtility, brokered])).toContain("function closeUtilityPeer(");
+   });
+
    it("includes the envelope and the protocol once", async () => {
       const output = await render([callUtility, callMain]);
 

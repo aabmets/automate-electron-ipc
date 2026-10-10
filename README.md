@@ -336,10 +336,9 @@ files follow them:
  - `types.ts` imports the channel map from `schema.ts`, so the schema is part of every project that
    includes `types.ts` (the renderer, in the table above). `main.ts`, `utility.ts` and `types.ts` import
    the types that your signatures use from your own files, so those are part of those projects too.
- - The generated files compile under `strict`, and with a `lib` of `ES2022` and `DOM`. They do not compile
-   under `noUnusedLocals` or `noUnusedParameters`: `main.ts` and `utility.ts` hold helpers that a schema may
-   not use, which those options report. The node project of the electron-vite template turns both on, so
-   its type check (`tsc`, not the build) fails until you set them to `false` there.
+ - The generated files compile under `strict`, and with a `lib` of `ES2022` and `DOM`. They also compile
+   under `noUnusedLocals`, `noUnusedParameters` and `noImplicitReturns`, which the node project of the
+   electron-vite template turns on: a file holds only the helpers that its channels use.
 
 **Module resolution.** The generated files import each other and your types without an extension, as
 `import type { User } from "../shared/types"`. That resolves with a `moduleResolution` of `bundler` (the
@@ -675,9 +674,7 @@ showVersion();
 
 **6. Include the generated files in the tsconfigs.** The `include` lists of the template do not reach
 `src/autoipc`: see [TypeScript configuration](#typescript-configuration) for the lists of
-`tsconfig.node.json` and `tsconfig.web.json`. The node project of the template turns on
-`noUnusedLocals` and `noUnusedParameters`, which the generated `main.ts` does not pass yet, so set
-both to `false` there.
+`tsconfig.node.json` and `tsconfig.web.json`.
 
 **7. Run it.** `npm run dev` generates the files and starts the app with hot reload, and `npm run build`
 generates them before it builds. A build in CI should not rewrite files that are checked in, so add

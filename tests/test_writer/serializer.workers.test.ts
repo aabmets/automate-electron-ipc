@@ -10,7 +10,6 @@
  */
 
 import {
-   IMPORT,
    main,
    preload,
    worker,
@@ -27,6 +26,8 @@ import {
 } from "@testutils/writer/test-writers.js";
 import { describe, expect, it } from "vitest";
 
+const SERIALIZER_IMPORT = /^import \{ [^}]*ipc(De)?[sS]erialize[^}]* \} from "superjson";$/m;
+
 describe("serializer, service workers", () => {
    mockGetTargetFilePath(VitestMainBindingsWriter);
    mockGetTargetFilePath(VitestPreloadBindingsWriter);
@@ -39,9 +40,10 @@ describe("serializer, service workers", () => {
          const script = await workerPreload([channel]);
          const page = await preload([channel]);
 
-         expect(output).toContain(IMPORT);
+         // Only the names that the channel calls stay in the import (T173).
+         expect(output).toMatch(SERIALIZER_IMPORT);
          expect(output).toContain("export class IpcSerializationError extends Error {");
-         expect(script).toContain(IMPORT);
+         expect(script).toMatch(SERIALIZER_IMPORT);
          // The page has nothing to do with the channels of a worker.
          expect(page).not.toContain("ipcSerialize");
       }

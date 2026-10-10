@@ -16,6 +16,7 @@ import {
    config,
    IMPORT,
    main,
+   notifyMain,
    preload,
    utility,
    utilityFile,
@@ -79,7 +80,7 @@ describe("serializer, utility processes", () => {
    });
 
    it("serializes the channels with a utility process in the utility file, with the import of the config", async () => {
-      const output = await utilityFile([utility, utilityNotify, callMain]);
+      const output = await utilityFile([utility, utilityNotify, callMain, notifyMain]);
 
       expect(output).toContain(IMPORT);
       expect(output).toContain("export class IpcSerializationError extends Error {");

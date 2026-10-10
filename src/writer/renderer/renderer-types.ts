@@ -87,6 +87,13 @@ export class RendererTypesWriter extends BaseWriter {
          this.importsGenerator.getFileImportPath(this.getTypesFilePath()),
       );
    }
+   /**
+    * Whether the file imports the types that only the errors of a channel use. They are named in
+    * the `@throws` tag of the method, which TypeScript does not count as a use of the import.
+    */
+   protected importsErrorTypes(): boolean {
+      return true;
+   }
    /** Gathers the channels of the page (see `CollectedChannels`). */
    protected collectChannels(): CollectedChannels {
       const imports: string[] = [];
@@ -106,7 +113,7 @@ export class RendererTypesWriter extends BaseWriter {
             names.push(spec.name);
             const specCustomTypes = new Set([
                ...spec.signature.customTypes,
-               ...(spec.errors?.customTypes ?? []),
+               ...(this.importsErrorTypes() ? (spec.errors?.customTypes ?? []) : []),
             ]);
             customTypes = customTypes.union(specCustomTypes);
          }

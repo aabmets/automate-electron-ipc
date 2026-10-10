@@ -87,6 +87,12 @@ export const callMain: SimpleChannel = {
    params: ["at: Date"],
    returnType: "Promise<Date>",
 };
+export const notifyMain: SimpleChannel = {
+   name: "notifyMain",
+   kind: "Broadcast",
+   direction: "UtilityToMain",
+   params: ["at: Date"],
+};
 export const brokeredCall: SimpleChannel = {
    name: "brokeredCall",
    kind: "Unicast",

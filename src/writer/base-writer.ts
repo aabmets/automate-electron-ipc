@@ -17,6 +17,7 @@ import utils from "../utils.js";
 import { anySpec } from "./channel-kinds.js";
 import { ImportsGenerator } from "./imports-generator.js";
 import { getOriginalParams } from "./param-names.js";
+import { pruneUnusedHelpers } from "./prune-helpers.js";
 import { renameChannelSpecs } from "./rename-signatures.js";
 
 /** The `maxQueue` of a port channel which does not set it: how many messages a send queue holds. */
@@ -256,7 +257,9 @@ export class BaseWriter {
 
    /** The text of the file: the notice, if wanted, and the contents, which start with a line of code. */
    public render(withNotice = true): string {
-      const contents = (this.isEmpty() ? this.renderEmptyFileContents() : this.renderFileContents())
+      const contents = pruneUnusedHelpers(
+         this.isEmpty() ? this.renderEmptyFileContents() : this.renderFileContents(),
+      )
          // The file starts with its first line, not with a blank one.
          .replace(/^\n+/, "");
       return withNotice ? `${notice(this.config)}\n\n${contents}` : contents;

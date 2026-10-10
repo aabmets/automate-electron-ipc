@@ -25,8 +25,8 @@ describe("fixture error-envelope", () => {
       const project = await fixtures.run("error-envelope");
       const types = project.generated["types.ts"];
 
-      expect(types).toContain('import type { AuthError } from "./schema";');
-      expect(types).toContain('import type { NotFoundError } from "./schema";');
+      // The names are in the tags only, which TypeScript does not count as a use of an import (T173).
+      expect(types).not.toMatch(/import type \{[^}]*(AuthError|NotFoundError)/);
       expect(types).toContain(
          "getUser: {\n      /** @throws {IpcError<NotFoundError | AuthError>} */\n      invoke:",
       );
@@ -87,13 +87,12 @@ describe("fixture raw-errors", () => {
 });
 
 describe("fixture error-collisions", () => {
-   it("imports the error types of every channel under names that do not clash", async () => {
+   it("names the error types of every channel under names that do not clash", async () => {
       const project = await fixtures.run("error-collisions");
       const types = project.generated["types.ts"];
 
-      expect(types).toContain('import type { Conflict } from "./errors/one";');
-      expect(types).toContain('import type { Conflict as Conflict_2 } from "./errors/two";');
-      expect(types).toContain('import type { Ok } from "./errors/one";');
+      // The tags name the errors without importing them, since only a tag uses them (T173).
+      expect(types).not.toMatch(/import type \{[^}]*(Conflict|Ok)\b/);
       // Each channel names the declaration of its own schema file.
       expect(types).toContain("/** @throws {IpcError<Conflict | Ok>} */");
       expect(types).toContain("/** @throws {IpcError<Conflict_2>} */");

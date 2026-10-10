@@ -64,6 +64,37 @@ describe("MainBindingsWriter, utility channels", () => {
       }
    });
 
+   // T173: a helper that no channel calls fails noUnusedLocals in the file of the project.
+   it.each([
+      ["callUtility", [callUtility], ["callUtilityPeer", "callUtilityChild", "lastUtilityCallId"]],
+      ["notifyUtility", [notifyUtility], ["sendUtilityPeer"]],
+      ["callMain", [callMain], ["setUtilityHandler"]],
+      ["notifyMain", [notifyMain], ["addUtilityListener"]],
+   ] as const)(
+      "writes the helpers of the peer that a %s channel uses, and no other",
+      async (_kind, channels, used) => {
+         const output = await render([...channels]);
+         const all = [
+            "callUtilityPeer",
+            "callUtilityChild",
+            "lastUtilityCallId",
+            "sendUtilityPeer",
+            "setUtilityHandler",
+            "addUtilityListener",
+         ];
+
+         for (const name of all) {
+            if (used.includes(name as never)) {
+               expect(output).toMatch(new RegExp(`(function|let) ${name}\\b`));
+            } else {
+               expect(output).not.toContain(name);
+            }
+         }
+         // The exit of a child closes its peer, whichever channels there are.
+         expect(output).toContain("function closeUtilityPeer(");
+      },
+   );
+
    it("imports nothing but the type of the child when only utility channels are declared", async () => {
       const output = await render([callUtility, callMain]);
 

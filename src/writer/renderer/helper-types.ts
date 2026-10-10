@@ -41,6 +41,14 @@ export class HelperTypesWriter extends RendererTypesWriter {
          "AsyncIterable",
       ];
    }
+   /**
+    * `types.ts` is a module that gets checked with the options of the project, and `noUnusedLocals`
+    * reports an import that only a `@throws` tag names. The tag keeps the name of the error, which
+    * only the file of the global (`window.d.ts`) links to its declaration.
+    */
+   protected importsErrorTypes(): boolean {
+      return false;
+   }
    protected renderModule({ channels, imports, files }: CollectedChannels): string {
       const maps = files.flatMap(({ pfs, names }) => {
          const map = this.importsGenerator.getChannelMapImport(pfs);

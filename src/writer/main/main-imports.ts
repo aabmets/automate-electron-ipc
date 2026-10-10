@@ -48,7 +48,7 @@ export function buildImports(values: string[], types: string[], declarations: st
 export function addStreamImports(used: boolean, values: Set<string>, types: Set<string>): void {
    if (used) {
       values.add("MessageChannelMain");
-      for (const type of ["MessagePortMain", "WebContents", "WebFrameMain"]) {
+      for (const type of ["WebContents", "WebFrameMain"]) {
          types.add(type);
       }
    }

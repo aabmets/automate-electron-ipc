@@ -120,7 +120,7 @@ describe("MainBindingsWriter", () => {
             'import { ipcMain as electronIpcMain, MessageChannelMain } from "electron";',
          );
          expect(output).toContain(
-            'import type { IpcMainInvokeEvent, MessagePortMain, WebContents, WebFrameMain, IpcMain } from "electron";',
+            'import type { IpcMainInvokeEvent, WebContents, WebFrameMain, IpcMain } from "electron";',
          );
       });
 

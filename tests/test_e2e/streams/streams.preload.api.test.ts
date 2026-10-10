@@ -72,7 +72,7 @@ describe("window.d.ts of stream channels", () => {
       expect(types).toContain("stream: <T>(seed: T) => IpcStream<T>;");
       expect(types).toContain("stream: (count: number) => IpcStream<number>;");
       expect(types).toContain("@throws {IpcError<NotFoundError>}");
-      expect(types).toContain('import type { NotFoundError } from "./schema";');
+      expect(types).not.toMatch(/import type \{[^}]*NotFoundError/);
    });
 
    it("type-checks the generated files and a program which uses them", async () => {
