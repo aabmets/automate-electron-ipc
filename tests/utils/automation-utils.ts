@@ -30,6 +30,7 @@ function mockAutomationConfig(dir: string, overrides: Partial<t.IPCResolvedConfi
       utilityBindingsFilePath: path.join(dir, "out/utility.ts"),
       serviceWorkerPreloadFilePath: path.join(dir, "out/service-worker-preload.ts"),
       serviceWorkerTypesFilePath: path.join(dir, "out/service-worker.d.ts"),
+      hooksFilePath: path.join(dir, "out/hooks.react.ts"),
       ...overrides,
    } as t.IPCResolvedConfig);
 }

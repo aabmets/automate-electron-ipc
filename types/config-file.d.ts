@@ -98,6 +98,15 @@ export interface AutoIpcConfig {
     */
    format?: "biome" | "prettier" | false;
    /**
+    * Writes `hooks.react.ts` to `ipcDataDir`, next to `types.ts`: the React hooks `useIpcEvent(name,
+    * callback)`, which subscribes to an `emit` channel and unsubscribes on unmount, and
+    * `useIpcInvoke(name)`, which wraps an `invoke` channel in `invoke`, `data`, `error` and
+    * `pending`. The hooks are written for the surface of no scope, and reach the API through the
+    * global of `exposeAs`. The generated file imports `react`; the library does not depend on it.
+    * `"vue"` is accepted, but writes no file yet. `false`, the default, writes no hooks.
+    */
+   hooks?: "react" | "vue" | false;
+   /**
     * A module that exports the functions `serialize(value)` and `deserialize(wire)`, in the shape
     * of superjson: what `serialize` returns must be cloneable by Electron, and `deserialize` turns
     * it back into the value. The generated main and preload code apply them to the arguments and

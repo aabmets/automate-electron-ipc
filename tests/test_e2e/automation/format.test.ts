@@ -95,6 +95,7 @@ describe("the format option", () => {
       expect(stale?.map((file) => path.posix.basename(file))).toEqual([
          "main.ts",
          "preload.ts",
+         "types.ts",
          "window.d.ts",
       ]);
    });

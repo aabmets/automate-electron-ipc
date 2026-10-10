@@ -124,6 +124,7 @@ export async function getResolvedConfig(
       autoExpose: true,
       getPathForFile: false,
       format: false,
+      hooks: false,
       ...userConfig,
       ...defined,
    };

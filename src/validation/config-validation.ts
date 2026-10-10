@@ -113,6 +113,13 @@ const IPCOptionalConfigStruct = object({
             : "format must be 'biome', 'prettier' or false",
       ),
    ),
+   hooks: optional(
+      refine(any(), "framework", (value) =>
+         value === "react" || value === "vue" || value === false
+            ? true
+            : "hooks must be 'react', 'vue' or false",
+      ),
+   ),
    serializer: optional(
       refine(string(), "module", (value) => {
          if (value.startsWith(".")) {

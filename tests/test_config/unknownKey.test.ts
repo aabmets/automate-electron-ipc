@@ -14,7 +14,8 @@ import { withConfigProject } from "@testutils/config/config-project.js";
 import { describe, expect, it } from "vitest";
 
 const KNOWN_KEYS =
-   "autoExpose, channelPrefix, codeIndent, exposeAs, format, getPathForFile, ipcDataDir, isolatedWorldId, " +
+   "autoExpose, channelPrefix, codeIndent, exposeAs, format, getPathForFile, hooks, ipcDataDir, " +
+   "isolatedWorldId, " +
    "mainBindingsPath, preloadBindingsPath, projectUsesNodeNext, rawErrors, rendererTypesPath, " +
    "serializer, serviceWorkerPreloadPath, timeoutMs, utilityBindingsPath";
 

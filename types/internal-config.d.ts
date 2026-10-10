@@ -24,6 +24,7 @@ export interface IPCResolvedConfig {
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;
+   hooksFilePath: string;
    projectUsesNodeNext: boolean;
    ipcDataDir: string;
    codeIndent: number;
@@ -35,6 +36,7 @@ export interface IPCResolvedConfig {
    autoExpose: boolean;
    getPathForFile: boolean;
    format: "biome" | "prettier" | false;
+   hooks: "react" | "vue" | false;
    serializer?: string;
    /** The path of the `serializer` module with `/` separators, when the config gives a path. */
    serializerFilePath?: string;

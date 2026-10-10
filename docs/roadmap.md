@@ -14,7 +14,7 @@ delivery note are in its own file under [`tasks/`](./tasks/), linked below.
 - **Decision needed** marks a task with an open question for the user.
 - `Bn` refers to the audit's confirmed bug list.
 
-**Progress:** 143 delivered, 7 remaining, 1 dropped.
+**Progress:** 144 delivered, 6 remaining, 1 dropped.
 
 ## Phase 0: Declaration syntax and test infrastructure
 
@@ -183,7 +183,7 @@ pipeline. Builders running at the same time follow "Parallel builders" in `CLAUD
 - [x] [T41a: Programmatic API (`automate-electron-ipc/api`)](./tasks/T41a-programmatic-api.md) · depends on: T38a, T39
 - [x] [T43a: Generated file headers and stale-file removal](./tasks/T43a-generated-file-headers-and-stale-files.md) · depends on: T39
 - [ ] [T46: Mock generation for renderer tests](./tasks/T46-mock-generation-for-renderer-tests.md) · depends on: T14, T38a, T44
-- [ ] [T47a: React hooks (optional output)](./tasks/T47a-react-hooks.md) · depends on: T14, T38a, T44
+- [x] [T47a: React hooks (optional output)](./tasks/T47a-react-hooks.md) · depends on: T14, T38a, T44
 - [x] [T41b: Vite / electron-vite plugin (`automate-electron-ipc/vite`)](./tasks/T41b-vite-plugin.md) · depends on: T40, T41a
 - [x] [T43b: `format` option](./tasks/T43b-format-option.md) · depends on: T43a
 - [ ] [T47b: Vue composables (optional output)](./tasks/T47b-vue-composables.md) · depends on: T47a

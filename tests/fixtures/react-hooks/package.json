@@ -1,0 +1,10 @@
+{
+   "name": "fixture-react-hooks",
+   "private": true,
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "ipc",
+         "hooks": "react"
+      }
+   }
+}

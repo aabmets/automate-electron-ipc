@@ -85,11 +85,25 @@ const workerPreloadFiles: ExtraFilesFinder = async (dir, ipcDataDir) => {
    return files ? [files.preload] : [];
 };
 
+/** The React hooks, if the config asks for them. */
+const hooksFiles: ExtraFilesFinder = async (dir, ipcDataDir) => {
+   const file = `${ipcDataDir}/hooks.react.ts`;
+   const exists = await fsp.access(path.join(dir, file)).then(
+      () => true,
+      () => false,
+   );
+   return exists ? [file] : [];
+};
+
 /**
  * The extra generated files of the check of the page. A new output that the check must include
  * adds one finder here.
  */
-export const extraGeneratedFiles: ExtraFilesFinder[] = [workerPreloadFiles, utilityFiles];
+export const extraGeneratedFiles: ExtraFilesFinder[] = [
+   workerPreloadFiles,
+   utilityFiles,
+   hooksFiles,
+];
 
 /** Name of the `.ts` copy of `window.d.ts` that the type-check compiles in its place. */
 const windowCheckFile = "window.dts-check.ts";
@@ -115,6 +129,9 @@ function projectCompilerOptions(
       paths: {
          electron: [path.join(root, "node_modules/electron/electron.d.ts")],
          "automate-electron-ipc": [path.join(root, "types/index.d.ts")],
+         // The generated hooks import React and its JSX runtime.
+         react: [path.join(root, "node_modules/@types/react/index.d.ts")],
+         "react/jsx-runtime": [path.join(root, "node_modules/@types/react/jsx-runtime.d.ts")],
          ...(compilerOptions.paths as Record<string, string[]> | undefined),
       },
    };

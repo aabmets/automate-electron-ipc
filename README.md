@@ -35,6 +35,7 @@ Node library for generating IPC components for Electron apps.
 11) Scopes, which give each kind of window its own API and keep the others out in the main process
 12) Typed channels between the main process and a service worker (Electron 35 or later, experimental),
     with a generated preload script and typings for the worker
+13) Optional React hooks for the channels of a page, in a generated `hooks.react.ts`
 
 
 ### Installation
@@ -71,7 +72,8 @@ The same options can live in a config file instead, see [Config file](#config-fi
          "exposeAs": "ipc",
          "autoExpose": true,
          "getPathForFile": false,
-         "format": false
+         "format": false,
+         "hooks": false
       }
    }
 }
@@ -142,6 +144,9 @@ Config explanation:
    are written unformatted; a formatter that exits with an error fails the run and names the file. The
    notice at the top of each file is not formatted. `--check` and the programmatic API compare the formatted
    text, so run them with the same `format` as the run that wrote the files.
+ - `hooks` - `"react"` writes `hooks.react.ts` next to `types.ts`, with the React hooks `useIpcEvent` and
+   `useIpcInvoke`. `false`, the default, writes nothing. `"vue"` is accepted, but Vue composables are not
+   generated yet: the run prints a warning and writes no file. See [Framework hooks](#framework-hooks).
  - `serializer` - A module with the functions `serialize` and `deserialize`, applied to everything that
    crosses between a page, a utility process or a service worker and the main process, and to the messages
    of `port` and `mainPort` channels, so that a `Date`, a `Map` or a class instance arrives as it was sent. Off by default. A value that starts with `.` is a path from the project root, such as
@@ -1496,6 +1501,47 @@ both forms of the declaration, the verb call `invoke<(id: number) => Promise<Use
 They cover the channels that the page has, not the ones to a utility process or a service worker that the page has
 no part in. With scopes, `types.<scope>.ts` holds the channels of that scope. `types.ts` is written on every run,
 also for a schema without channels, where `ChannelName` is `never`.
+
+#### Framework hooks
+
+With `"hooks": "react"` in the config, `ipcgen` writes `hooks.react.ts` next to `types.ts`. It is for the surface of
+no scope, takes its types from `types.ts`, and reaches the API through `globalThis[exposeAs]`, so the API must be
+exposed in the main world, which is the default. The file imports `react`; the library itself does not depend
+on it, and the file is written (and removed again, when you set `hooks` back to `false`) like the other outputs.
+
+```typescript
+import { useIpcEvent, useIpcInvoke } from "./autoipc/hooks.react";
+
+function Profile({ id }: { id: number }) {
+   // `titleChanged` is an `emit` channel: the callback is typed as its signature.
+   useIpcEvent("titleChanged", (title) => {
+      document.title = title;
+   });
+
+   // `getUser` is an `invoke` channel.
+   const { invoke, data, error, pending } = useIpcInvoke("getUser");
+
+   return (
+      <button type="button" disabled={pending} onClick={() => invoke(id).catch(() => undefined)}>
+         {error ? "Failed" : (data?.name ?? "Load")}
+      </button>
+   );
+}
+```
+
+| Hook | Does |
+|------|------|
+| `useIpcEvent(name, callback)` | Subscribes to an `emit` channel when the component mounts, and unsubscribes when it unmounts or `name` changes. It calls the latest `callback`, so a new function on each render does not resubscribe |
+| `useIpcInvoke(name)` | Returns `invoke(...args)` for an `invoke` channel, with the state of the latest call: `data` (the last result), `error` (the error of the last call, cleared when a new call starts) and `pending` |
+
+`invoke` resolves with the result and rejects with the error, as the call of the channel does, and also sets
+`data` or `error`. So a call that nobody catches, such as `onClick={() => invoke(id)}`, ends in an unhandled
+rejection. Catch it, as the example does, and read `error` for the message to show. The result of a call that finishes after the component unmounted, or after a newer call started, does not change
+the state. The other channel kinds (`send`, `ask`, `stream` and the ports) have no hook; use the API directly.
+
+`hooks.react.ts` also exports the types `EventName`, `EventCallback<N>`, `InvokeName`, `InvokeArgs<N>` and
+`InvokeReturn<N>`, which are picked out of `IpcApi`. A name that is not a channel of that kind, such as an
+`invoke` channel in `useIpcEvent`, is a type error.
 
 #### Migrating from 0.2
 

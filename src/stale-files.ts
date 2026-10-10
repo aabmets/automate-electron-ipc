@@ -12,6 +12,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import type * as t from "@types";
+import { HOOKS_FILE_NAMES } from "./config-outputs.js";
 import { GENERATED_PREFIX, LEGACY_NOTICE_PREFIX } from "./output-files.js";
 import { scopeOfFile } from "./scopes.js";
 import utils from "./utils.js";
@@ -37,10 +38,10 @@ async function scopedFilesNextTo(basePath: string): Promise<string[]> {
 
 /**
  * The files of earlier runs that this run does not generate: the outputs that exist for some
- * schemas only (utility processes, service workers) and the files of scopes, minus the outputs of
- * this run. A file is listed only when it starts with the header of a generated file, so that a
- * file written by hand is never touched. A generated file at a custom path that the config no
- * longer names cannot be found.
+ * schemas only (utility processes, service workers), the files of scopes and the hooks of the
+ * `hooks` option, minus the outputs of this run. A file is listed only when it starts with the
+ * header of a generated file, so that a file written by hand is never touched. A generated file at
+ * a custom path that the config no longer names cannot be found.
  *
  * @returns The absolute paths in posix form, sorted.
  */
@@ -48,6 +49,7 @@ export async function findStaleGeneratedFiles(
    config: t.IPCResolvedConfig,
    outputs: readonly t.OutputFile[],
 ): Promise<string[]> {
+   const hooks = utils.toPosix(config.hooksFilePath);
    const planned = new Set(outputs.map((output) => output.path));
    const scoped = await Promise.all(
       [config.preloadBindingsFilePath, config.rendererTypesFilePath].map(scopedFilesNextTo),
@@ -57,6 +59,8 @@ export async function findStaleGeneratedFiles(
          config.utilityBindingsFilePath,
          config.serviceWorkerPreloadFilePath,
          config.serviceWorkerTypesFilePath,
+         // The hooks of a framework that the config no longer names.
+         ...HOOKS_FILE_NAMES.map((name) => path.posix.join(path.posix.dirname(hooks), name)),
          ...scoped.flat(),
       ].map(utils.toPosix),
    );

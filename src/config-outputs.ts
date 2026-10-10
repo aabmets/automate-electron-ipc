@@ -79,7 +79,12 @@ export interface OutputPaths {
    utilityBindingsFilePath: string;
    serviceWorkerPreloadFilePath: string;
    serviceWorkerTypesFilePath: string;
+   /** The file of the `hooks` option: `hooks.react.ts`, or `hooks.vue.ts` for `"vue"`. */
+   hooksFilePath: string;
 }
+
+/** The file names of the framework hooks, one per value of the `hooks` option. */
+export const HOOKS_FILE_NAMES = ["hooks.react.ts", "hooks.vue.ts"] as const;
 
 /** The path of a generated file: the one that the config sets, or `name` in the data directory. */
 function outputPath(
@@ -128,6 +133,12 @@ export function deriveOutputPaths(
          cwd,
       ),
       serviceWorkerPreloadFilePath,
+      hooksFilePath: outputPath(
+         undefined,
+         ipcDataDir,
+         config.hooks === "vue" ? "hooks.vue.ts" : "hooks.react.ts",
+         cwd,
+      ),
       // The typings of the worker are written next to its preload script.
       serviceWorkerTypesFilePath: utils.toPosix(
          path.join(path.dirname(serviceWorkerPreloadFilePath), "service-worker.d.ts"),
@@ -175,6 +186,8 @@ export async function assertOutputsDistinct(
       ...options.filter(([, value]) => value === undefined).map(([, , file]) => file),
       outputs.serviceWorkerTypesFilePath,
       outputs.typesFilePath,
+      // The hooks file is written only for the `hooks` option, so only then can it be clashed with.
+      ...(config.hooks ? [outputs.hooksFilePath] : []),
    ].map(fold);
    for (const [option, value, file] of configured) {
       if (taken.includes(fold(file))) {
