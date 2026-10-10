@@ -52,7 +52,9 @@ export async function findStaleGeneratedFiles(
    const hooks = utils.toPosix(config.hooksFilePath);
    const planned = new Set(outputs.map((output) => output.path));
    const scoped = await Promise.all(
-      [config.preloadBindingsFilePath, config.rendererTypesFilePath].map(scopedFilesNextTo),
+      [config.preloadBindingsFilePath, config.rendererTypesFilePath, config.typesFilePath].map(
+         scopedFilesNextTo,
+      ),
    );
    const candidates = new Set(
       [

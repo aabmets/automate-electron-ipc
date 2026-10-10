@@ -16,4 +16,7 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     hand, and add the file to the list of files that a run removes.
 - **Tests:** e2e (temp dir): dropping a scope deletes `types.<scope>.ts` with the other two files, and a
   hand-written `types.foo.ts` without the header survives. `findStaleOutputs` lists it before the run.
-- **Delivered:**
+- **Delivered:** 2026-10-10. `findStaleGeneratedFiles` now also takes the scoped files next to `typesFilePath`
+  as candidates, with the usual header rule, so `findStaleOutputs` and `--check` list them. README: removed the
+  "delete by hand" notes in "Stale files" and "Scopes", and added `types.<scope>.ts` to the files a run removes.
+  e2e tests cover removal, listing before the run, and a hand-written `types.foo.ts` that survives. No deviations.
