@@ -8,39 +8,34 @@ Planning document only. It is deleted together with `docs/tasks` and `docs/roadm
 - **Verify before writing.** For every claim you move (option names, defaults, error messages, generated names, behavior), check it against the source areas listed for your package. If the README is wrong or stale, write what the code does and list the discrepancy in your final report. If the README omits behavior you find in your source areas, document it.
 - Move the content faithfully; you may restructure and tighten for readability, but do not drop information. Keep the existing tagged examples (section 4) and their tags.
 - Do not cite `docs/tasks/*` or `docs/roadmap.md` in the docs, and do not link to them.
-- Links between pages: use site-relative Markdown links with the `.md` extension that work both on GitHub and in Jekyll, for example `[Timeouts](../channels/invoke.md#timeouts)`. Every README anchor link (`](#...)`, 72 of them) must be rewritten to the new page's relative path. Where the target page belongs to another package, use the target path from section 1 plus a heading anchor; the final pass checks the anchors.
-- Liquid: Jekyll (GitHub Pages) evaluates `{{ }}` and `{% %}` outside raw tags, even inside code fences. If a page contains either sequence, wrap the fence in `{% raw %}` ... `{% endraw %}` lines. Known case: README line 2564 (Vue hooks, package P6).
-- Front matter on every page follows section 1. Page titles: sentence case, short.
+- Links between pages: use relative Markdown links with the `.md` extension (they work on GitHub and in MkDocs, which validates them), for example `[Timeouts](../channels/invoke.md#timeouts)`. Every README anchor link (`](#...)`, 72 of them) must be rewritten to the new page's relative path. Where the target page belongs to another package, use the target path from section 1 plus a heading anchor; the final pass checks the anchors.
+- No front matter: the nav lives in `mkdocs.yml` (owned by P1), and the page title is its first `# H1`. Page titles: sentence case, short. Do not rename, merge, split or add pages: the tree in section 1 is the contract with the nav. If you think the tree is wrong, say so in your report.
 - Use 3-space indentation in code samples, like the README.
 - Commit only your own files, `git pull --rebase origin claude/lucid-sagan-35t6kr` before pushing, push to `claude/lucid-sagan-35t6kr`. Do not touch `README.md`, the test, or `CLAUDE.md` unless your package owns it.
 
 ## 1. Target tree and site conventions
 
-Theme: **just-the-docs as a remote theme**, minimal Jekyll, built by GitHub Pages from `/docs` on the branch (Settings, Pages, Deploy from branch, folder `/docs`). Reason: it gives a sidebar tree, search and nav ordering from front matter alone, with no build step or Gemfile in the repo. `docs/tasks` and `docs/roadmap.md` are excluded in `_config.yml` so they never publish while they still exist.
+Revised after the user asked to reuse the setup of their `aabmets/deap-er` repo. That repo uses **MkDocs with the Material theme**, an explicit `nav:` tree in a root `mkdocs.yml`, content in `docs/<section>/<page>.md` (no front matter), a `docs/index.md` landing page, and a GitHub Actions workflow `.github/workflows/docs.yml` that builds with `uv` and deploys with the Pages actions (`configure-pages`, `upload-pages-artifact`, `deploy-pages`; Pages source set to "GitHub Actions"). This plan mirrors it:
 
-Front matter convention:
+- **`mkdocs.yml`** (repo root): `site_name`, `site_description`, `site_url: https://aabmets.github.io/automate-electron-ipc/`, `repo_url`, `repo_name`, `copyright`, theme `material` with the same teal palette and auto/light/dark toggle, features `navigation.sections`, `content.code.copy`, `search.highlight`, plugin `search`, the same markdown extensions (`admonition`, `attr_list`, `def_list`, `footnotes`, `md_in_html`, `pymdownx.details`, `pymdownx.superfences`, `pymdownx.highlight` with `anchor_linenums`, `toc` with `permalink`), no math/KaTeX and no `mkdocstrings` (this library is documented by hand). Plus `exclude_docs: |` with `tasks/` and `roadmap.md` so they never publish while they exist. Nav is an explicit tree, one top-level entry per section directory, each with its pages listed in the order below; every section directory has an `index.md` (a short intro and a list of its pages), listed first in its nav entry as "Overview".
+- **`.github/workflows/docs.yml`**: copy of the deap-er workflow (same triggers: push to `main` and `workflow_dispatch`; same `concurrency`, `permissions`, `build` and `deploy` jobs and action versions). The build step has no `pyproject.toml` to sync, so it is `uv run --with "mkdocs-material>=9.7.7" mkdocs build` (the same `uv` setup action and pin as deap-er). Add `--strict` so broken relative links and missing nav files fail the build.
+- **Pages setting** (owner, once): Settings, Pages, Source: GitHub Actions.
+- Images, if any, go in `docs/images/`; no JS files are needed.
+- Link and anchor style: relative `.md` links, anchors are the MkDocs `toc` slugs (same lowercase-hyphen form as GitHub).
+- Each page starts with `# Title` and a one-paragraph summary; `##` is the top heading inside a page (demote README headings accordingly). Admonitions (`!!! note`) may replace README blockquote notes.
 
-```yaml
----
-title: Invoke channels
-parent: Channels        # the title of the section index page; omit on section index pages and on top-level pages
-nav_order: 2            # order inside the parent (1-based, set by the page's owner)
----
-```
-
-Section index pages (`<dir>/index.md`) use `has_children: true`, `nav_order: N` (top-level order from the tree below) and no `parent`. They contain a short intro and a list of the pages of the section. Each page starts with `# Title` after the front matter and a one-paragraph summary. The first `# H1` is the page title, so `## ` is the top heading inside a page (demote README headings accordingly).
+Final tree (every file below must exist and be in the nav):
 
 ```
 docs/
-  _config.yml                          P1  remote_theme: just-the-docs/just-the-docs, title, search_enabled, exclude: [tasks, roadmap.md, README.md]
-  index.md                             P1  landing page, nav_order 1: description, feature list, map of the docs
-  getting-started/                     P1  nav_order 2
+  index.md                             P1  landing page: description, feature list, map of the docs
+  getting-started/                     P1
     index.md                           P1
     installation.md                    P1
     quickstart.md                      P1  (Getting Started, README 683-756; tags getting-started)
     simple-example.md                  P1  (README 784-825; tags simple-example)
     channel-maps.md                    P1  (README 757-783)
-  tooling/                             P2  nav_order 3
+  tooling/ 
     index.md
     configuration.md                   (68-207: options table, config file, NodeNext)
     command-line.md                    (208-263: CLI, --check, watch mode)
@@ -50,33 +45,33 @@ docs/
     generated-files.md                 (408-454: headers, stale files)
     preload-bundling.md                (455-549: sandbox, preload composition; tags preload-compose)
     electron-vite.md                   (550-682; tags electron-vite)
-  schema/                              P3  nav_order 4
+  schema/ 
     index.md
     verbs.md                           (826-944; tags verbs)
     generated-api.md                   (945-973)
     what-can-be-sent.md                (3165-3184)
     custom-serializers.md              (3185-3285)
     as-form.md                         (3286-3308)
-  channels/                            P4  nav_order 5
+  channels/ 
     index.md
     invoke.md                          (974-1211: invoke, Errors, Timeouts)
     send.md                            (1212-1340: send, handlers for one window)
     emit.md                            (1341-1469: emit, targets)
     ask.md                             (1470-1593)
     stream.md                          (1594-1772: stream, backpressure)
-  processes/                           P5  nav_order 6
+  processes/ 
     index.md
     ports.md                           (1773-1935: port, mainPort)
     send-queues.md                     (1936-2011)
     utility-processes.md               (2012-2148)
     utility-from-renderer.md           (2149-2284)
     service-workers.md                 (2285-2467)
-  renderer/                            P6  nav_order 7
+  renderer/ 
     index.md
     helper-types.md                    (2468-2502)
     framework-hooks.md                 (2503-2578: React, Vue)
     mocking.md                         (2579-2630)
-  security/                            P7  nav_order 8
+  security/ 
     index.md
     threat-model.md                    (2631-2682: intro, threat model, default checks)
     sender-validation.md               (2683-2719)
@@ -84,21 +79,21 @@ docs/
     scopes.md                          (2752-2809)
     putting-it-together.md             (2810-2922)
     checklist.md                       (2923-2939)
-  migration/                           P6  nav_order 9
+  migration/ 
     index.md                           (2940-3164 split: overview and the list below)
     schema-rewrite.md                  (2956-3058: rewriting the schema, generated names)
     config-and-behavior.md             (3059-3164: config and CLI, generated files, behavior, package and Node version)
-  contributing/                        P1  nav_order 10
+  contributing/ 
     index.md                           (Development, 3309-3332)
 ```
 
-Where a package finds that a split page would be under about 40 lines or over about 600, it may merge or split its own pages, keeping the section directory and its `index.md` list consistent. It must tell the final pass in its report.
+Pages are not merged, split or renamed by workers (the nav in `mkdocs.yml` is written from this tree). A worker who thinks a page is too long or too thin says so in its report; the final pass may adjust the tree and the nav together.
 
 ## 2. Packages (disjoint ownership)
 
 | Pkg | README lines | Owns (writes) |
 |---|---|---|
-| P1 Site, landing, getting started | 1-67, 683-825, 3309-3332 | `docs/_config.yml`, `docs/index.md`, `docs/getting-started/*`, `docs/contributing/*`, **the README rewrite**, **the test change** (section 4), the `package.json` `files` check |
+| P1 Site, landing, getting started | 1-67, 683-825, 3309-3332 | `mkdocs.yml`, `.github/workflows/docs.yml`, `docs/index.md`, `docs/getting-started/*`, `docs/contributing/*`, **the README rewrite**, **the test change** (section 4), the `package.json` `files` check |
 | P2 Tooling | 68-682 | `docs/tooling/*` |
 | P3 Schema | 826-973, 3165-3308 | `docs/schema/*` |
 | P4 Channels | 974-1772 | `docs/channels/*` |
@@ -138,12 +133,12 @@ After the move:
 
 1. P2, P3, P4, P5, P6, P7 in parallel (they read the README on the plan's commit, write only their own dirs). They do not run the examples test until step 2 is done; they compare tagged blocks with the originals instead.
 2. P1: docs part can run in parallel with step 1. The README rewrite and the test change run last, after steps 1 reports, in one commit. Then `bun run check` and `bunx vitest run` must be green.
-3. Final high-effort pass: source against docs coverage, readability, link and anchor check across the whole site, `{{`/`{%` Liquid check, front matter and nav check, 65 examples still present.
-4. Only then: delete `docs/tasks`, `docs/roadmap.md`, and update `CLAUDE.md` (it imports `@docs/roadmap.md` at line 104 and refers to it at lines 46-96) and any test that reads them; remove the `exclude` entries from `_config.yml`. Delete this plan file last.
+3. Final high-effort pass: source against docs coverage, readability, link and anchor check across the whole site, `uv run --with "mkdocs-material>=9.7.7" mkdocs build --strict` passes (nav complete, no broken links or anchors), 65 examples still present.
+4. Only then: delete `docs/tasks`, `docs/roadmap.md`, and update `CLAUDE.md` (it imports `@docs/roadmap.md` at line 104 and refers to it at lines 46-96) and any test that reads them; remove the `exclude_docs` entries from `mkdocs.yml`. Delete this plan file last.
 
 ## 6. Things to know
 
 - The README is 3332 lines; line ranges above are on the commit of this plan. `grep -n '^#' README.md` gives the headings.
 - `package.json` `files` ships `README.md` only, which is fine: the docs live on the site and the repository. Mention nothing about npm shipping docs.
 - `CLAUDE.md` must not be edited by P1-P7.
-- Pages must be enabled by the repository owner (Settings, Pages, branch, `/docs`) once the branch is merged to the default branch; nothing in the repo can do that.
+- The workflow deploys on push to `main` (as in deap-er) and by manual dispatch. The repository owner must set Settings, Pages, Source to "GitHub Actions" once; nothing in the repo can do that.
