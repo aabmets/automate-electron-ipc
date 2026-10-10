@@ -96,7 +96,7 @@ does not exist, or a value that is not valid, fails the run with a message that 
 | `timeoutMs` | integer, 0 or more | `0` | The default time limit of the calls that wait for an answer; `0` waits for ever. See [Timeouts](#timeouts). |
 | `exposeAs` | identifier | `"ipc"` | The name of the API in the page: `window.ipc`. |
 | `isolatedWorldId` | integer, 1000 to 2147483647 | not set | Exposes the API in this isolated world, not in the main world. |
-| `autoExpose` | boolean | `true` | Whether `preload.ts` exposes the API when it loads. See [Composing the preload script](#composing-the-preload-script). |
+| `autoExpose` | boolean | `true` | Whether `preload.ts` exposes the API when it loads. See [Preload bundling and the sandbox](#preload-bundling-and-the-sandbox). |
 | `getPathForFile` | boolean | `false` | Adds `getPathForFile(file)` to the API of the page. |
 | `serializer` | string | not set | A module that serializes what crosses a process boundary. See [Custom serializers](#custom-serializers). |
 | `mainBindingsPath` | `.ts` path | `<ipcDataDir>/main.ts` | Where `main.ts` is written. |
@@ -453,9 +453,36 @@ deleted only when its first line is the header above or the notice of earlier ve
 found, so delete it yourself. `types.<scope>.ts` is not removed when its scope goes away: delete it by hand.
 
 
-### Composing the preload script
+### Preload bundling and the sandbox
 
-The generated `preload.ts` exports the API it builds, and a function that exposes it:
+A window with `sandbox: true` (the default since Electron 20) runs its preload script with a small,
+polyfilled `require`. It can load `electron` (only `contextBridge`, `crashReporter`, `ipcRenderer`,
+`nativeImage`, `webFrame` and `webUtils`), `events`, `timers` and `url`, and nothing else: not a local
+file, not a package from `node_modules`, and not an ES module. Electron also does not load TypeScript.
+So the script that a window loads has to be one compiled, single CommonJS file, and `preload.ts` gets
+there through your bundler: build it as the entry of the preload build, or import it from your own
+preload entry.
+
+**What the generated preload imports.** `contextBridge` and `ipcRenderer` from `electron`, and
+`webUtils` too with `getPathForFile`. All of them are available in a sandboxed preload script. The
+generated code has no other import, and none from this library. The one exception is the module of the
+[`serializer`](#custom-serializers), which `preload.ts` imports when the schema has channels that it
+applies to. The bundler must inline that module, so keep it out of what the build leaves external. In
+electron-vite the config of the template externalizes the dependencies of the preload build, so add
+the serializer package to the `exclude` of its `externalizeDepsPlugin`. Without a serializer, the compiled script
+has a single `require("electron")`, and works as it is.
+
+**Format.** A sandboxed preload script cannot be an ES module, because Electron loads ES module
+preload scripts only for windows with `sandbox: false`. Check that your build emits CommonJS for the
+preload entry, and point `preload` of the window at that file. electron-vite builds CommonJS for the preload
+by default; if your `package.json` has `"type": "module"`, the preload build may emit an ES module
+(`.mjs`), which only an unsandboxed window can load, so set the output format of that build to `cjs`. Keep `sandbox: true` and
+`contextIsolation: true` on the windows that show anything but your own pages. The generated
+`preload.ts` was written for them, and the [tests that run in Electron](#development) use them.
+For the tsconfig of the preload code, see [TypeScript configuration](#typescript-configuration).
+
+**`autoExpose`: let the file expose the API, or do it yourself.** `preload.ts` exports the API it builds,
+and a function that exposes it:
 
 ```ts
 export const api = { /* one object per channel */ };
@@ -463,23 +490,198 @@ export function expose(key = "ipc"): void { /* contextBridge.exposeInMainWorld(k
 expose();   // only with "autoExpose": true, the default
 ```
 
-By default the file calls `expose()` itself, so using it as the preload script of a window works as
-before. With `"autoExpose": false` nothing is exposed while the file loads, and your own preload code
-decides what happens:
+By default the file calls `expose()` itself when it loads, so it can be the preload script of a window,
+or it can be imported by your own preload entry that does other things as well. A preload entry
+that has its own API needs only the import, since the import runs `expose()`:
 
 ```ts
-// src/preload.ts
-import { api, expose } from "./autoipc/preload";
+// src/preload/index.ts
+import { contextBridge } from "electron";
+import "../autoipc/preload";   // exposes `ipc`
 
-expose();                // under the configured key, `exposeAs`
-expose("legacyIpc");     // under another key
-doSomethingBefore(api);  // or use the API in the preload script itself
+contextBridge.exposeInMainWorld("platform", { name: process.platform });
 ```
 
-The default key of `expose` is `exposeAs`, and with `isolatedWorldId` it exposes in that isolated
-world. Every call exposes the same `api` object, so the state of the channels (listeners, ports,
-streams) is shared between the keys. Only the key that `window.d.ts` declares (`exposeAs`) is typed
-for the page.
+With `"autoExpose": false` nothing is exposed while the file loads, and your own preload code
+decides what happens. This is for an entry that must run code before the page can see the API, that
+wants another key, or that uses the API in the preload script itself:
+
+<!-- readme-example: preload-compose package.json -->
+```json
+{
+   "config": {
+      "autoipc": {
+         "ipcDataDir": "src/autoipc",
+         "autoExpose": false
+      }
+   }
+}
+```
+
+<!-- readme-example: preload-compose src/autoipc/schema.ts -->
+```ts
+import { defineChannels, send } from "automate-electron-ipc";
+
+export default defineChannels({
+   logLine: send<(line: string) => void>(),
+});
+```
+
+<!-- readme-example: preload-compose src/preload/index.ts -->
+```ts
+import { api, expose } from "../autoipc/preload";
+
+api.logLine.send("The preload script is running");   // use the API in the preload script itself
+expose();                // under the configured key, `exposeAs`
+expose("legacyIpc");     // under another key
+```
+
+The default key of `expose` is `exposeAs`. Every call exposes the same `api` object, so the state of
+the channels (listeners, ports, streams) is shared between the keys. Only the key that `window.d.ts`
+declares (`exposeAs`) is typed for the page.
+
+**`isolatedWorldId`: expose the API to an isolated world.** By default `expose` uses
+`contextBridge.exposeInMainWorld`, so the API is a global of the page. With `isolatedWorldId` set,
+`expose` uses `contextBridge.exposeInIsolatedWorld(isolatedWorldId, key, api)`: the page does not see
+the API, and only code that runs in that world does, such as a script that the preload script runs with
+`webFrame.executeJavaScriptInIsolatedWorld`. Electron's own worlds have the ids below 1000 (`999` is the
+one of `contextIsolation`), so the config accepts 1000 up to 2147483647. `window.d.ts` still declares
+the global, with a comment that only that world has it. The generated code only exposes the API in the world: your own code decides what runs there.
+
+### electron-vite end to end
+
+This walk-through takes the project that `npm create @quick-start/electron` makes (the vanilla
+TypeScript template; the React and Vue ones differ in the renderer only) and gives it a typed IPC with
+one request, and one message from the main process to the page. The layout, with the files that you
+write marked:
+
+```text
+my-app/
+├── electron.vite.config.ts      ← the plugin goes in
+├── package.json
+├── tsconfig.json
+├── tsconfig.node.json           ← include the generated files of the main process and the preload script
+├── tsconfig.web.json            ← include the generated files of the page
+└── src/
+    ├── autoipc/
+    │   ├── schema.ts            ← you write this one
+    │   └── main.ts, preload.ts, window.d.ts, types.ts   ← generated
+    ├── main/index.ts            ← the main process
+    ├── preload/index.ts         ← the preload entry
+    └── renderer/
+        ├── index.html
+        └── src/main.ts          ← the page
+```
+
+**1. Add the plugin to the three builds.** electron-vite starts the main, preload and renderer builds
+in one process, and the plugin generates the bindings once at the start of them, and again when the
+schema changes in the dev server (see [Vite and electron-vite](#vite-and-electron-vite)):
+
+```ts
+// electron.vite.config.ts
+import { autoipc } from "automate-electron-ipc/vite";
+import { defineConfig } from "electron-vite";
+
+export default defineConfig({
+   main: { plugins: [autoipc()] },
+   preload: { plugins: [autoipc()] },
+   renderer: { plugins: [autoipc()] },
+});
+```
+
+The config of the template has more in it, such as the `externalizeDepsPlugin` and the alias of the
+renderer; leave that as it is and add `autoipc()` to `plugins`. This file is shown, but the README test
+does not type-check it, since that would need the `electron-vite` package.
+
+**2. Write the schema.** The default `ipcDataDir` is `src/autoipc`, which is next to the folders of the
+template:
+
+<!-- readme-example: electron-vite src/autoipc/schema.ts -->
+```ts
+import { defineChannels, emit, invoke } from "automate-electron-ipc";
+
+export default defineChannels({
+   // The page asks, the main process answers.
+   getVersion: invoke<() => string>(),
+   // The main process tells every window when the theme of the system changes.
+   themeChanged: emit<(theme: "light" | "dark") => void>(),
+});
+```
+
+**3. Wire up the main process.** The window must load the compiled preload script, and the handlers
+come from `ipc`:
+
+<!-- readme-example: electron-vite src/main/index.ts -->
+```ts
+import { join } from "node:path";
+import { app, BrowserWindow, nativeTheme } from "electron";
+import { ipc } from "../autoipc/main";
+
+function createWindow(): BrowserWindow {
+   const window = new BrowserWindow({
+      webPreferences: {
+         // The output of the preload build, which electron-vite writes next to the main build.
+         preload: join(__dirname, "../preload/index.js"),
+         sandbox: true,
+         contextIsolation: true,
+      },
+   });
+   if (process.env.ELECTRON_RENDERER_URL) {
+      window.loadURL(process.env.ELECTRON_RENDERER_URL);   // the dev server
+   } else {
+      window.loadFile(join(__dirname, "../renderer/index.html"));
+   }
+   return window;
+}
+
+app.whenReady().then(() => {
+   ipc.getVersion.handle(() => app.getVersion());
+   nativeTheme.on("updated", () => {
+      ipc.themeChanged.broadcast(nativeTheme.shouldUseDarkColors ? "dark" : "light");
+   });
+   createWindow();
+});
+```
+
+**4. Write the preload entry.** electron-vite bundles `src/preload/index.ts` into the script above,
+with the generated file inlined (see [Preload bundling and the sandbox](#preload-bundling-and-the-sandbox)).
+The entry is one line, since the generated file exposes `window.ipc` when it loads:
+
+<!-- readme-example: electron-vite src/preload/index.ts -->
+```ts
+import "../autoipc/preload";
+```
+
+**5. Call the API from the page.** `window.d.ts` declares `ipc` as a global, so the page needs no import:
+
+<!-- readme-example: electron-vite src/renderer/src/main.ts -->
+```ts
+const versionLabel = document.querySelector<HTMLElement>("#version");
+
+async function showVersion(): Promise<void> {
+   const version: string = await ipc.getVersion.invoke();
+   if (versionLabel) {
+      versionLabel.textContent = `Version ${version}`;
+   }
+}
+
+// `on` returns a function which removes the listener again.
+const stopListening = ipc.themeChanged.on((theme) => {
+   document.documentElement.dataset.theme = theme;
+});
+
+showVersion();
+```
+
+**6. Include the generated files in the tsconfigs.** The `include` lists of the template do not reach
+`src/autoipc`: see [TypeScript configuration](#typescript-configuration) for the lists of
+`tsconfig.node.json` and `tsconfig.web.json`. The node project of the template turns on
+`noUnusedLocals` and `noUnusedParameters`, which the generated `main.ts` does not pass yet, so set
+both to `false` there.
+
+**7. Run it.** `npm run dev` generates the files and starts the app with hot reload, and `npm run build`
+generates them before it builds. A build in CI should not rewrite files that are checked in, so add
+`ipcgen --check` to the checks that run before it (see [Command line](#command-line)).
 
 ### Getting Started
 
@@ -534,7 +736,7 @@ app.whenReady().then(() => {
 **5. Load the preload script.** The generated `preload.ts` is the preload script of your windows. It
 exposes the API to the page as `window.ipc`. A sandboxed window loads a compiled script, so build `preload.ts`
 with your bundler, or import it from your own preload entry; see
-[Composing the preload script](#composing-the-preload-script).
+[Preload bundling and the sandbox](#preload-bundling-and-the-sandbox).
 
 **6. Call the API from the page.** The typings in `window.d.ts` declare `ipc` as a global variable:
 
@@ -551,6 +753,8 @@ showVersion();
 
 Finally, make sure that your `tsconfig.json` files include the generated ones; see
 [TypeScript configuration](#typescript-configuration).
+Using electron-vite? [electron-vite end to end](#electron-vite-end-to-end) is this walk-through for its
+project layout.
 
 
 ### Channel Maps

@@ -14,4 +14,13 @@ Status and dependencies are in the [roadmap](../roadmap.md).
     preload imports; `autoExpose` and composing with an existing preload; `isolatedWorldId`.
 - **Tests:** the README example check passes.
 - **Follow-up IDs:** T176-T177.
-- **Delivered:**
+- **Delivered:** 2026-10-10. "Composing the preload script" is now "Preload bundling and the sandbox": what a sandboxed
+  preload can `require`, what the generated preload imports (`electron` only, plus the `serializer`
+  module, which the bundler must inline), CommonJS output, `autoExpose` and composing with an own
+  preload, and `isolatedWorldId`. The new "electron-vite end to end" section has the layout, the plugin
+  in the three builds, and the schema, main, preload and renderer files as one `readme-example`
+  (`electron-vite`); the composed preload is a second one (`preload-compose`, with `autoExpose: false`).
+  The Vite config is shown without a tag, since checking it needs `electron-vite`; a comment in
+  `readmeExamples.test.ts` says so. The Electron-side claims (the modules of a sandboxed `require`, ES
+  module preloads needing `sandbox: false`, the `exclude` of `externalizeDepsPlugin`) come from the
+  Electron and electron-vite docs, not from a test here.

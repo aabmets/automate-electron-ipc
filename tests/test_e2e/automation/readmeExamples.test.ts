@@ -147,6 +147,8 @@ describe("README example check", () => {
 });
 
 describe("README examples", () => {
+   // Only `ts` and `json` blocks are tagged. The `electron.vite.config.ts` of the electron-vite
+   // walk-through is shown without a tag: type-checking it would need the `electron-vite` package.
    const examples = extractReadmeExamples(readme);
 
    it("tags the examples of Getting Started and the Simple Example", () => {
