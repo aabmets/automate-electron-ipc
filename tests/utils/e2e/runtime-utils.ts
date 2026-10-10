@@ -15,7 +15,7 @@ import { parseSync, transformSync } from "@swc/core";
 import { vi } from "vitest";
 
 /** Orders strings by code unit, which is what `sort()` does, and so keeps the order of the paths. */
-const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byCodeUnit = (a: string, b: string) => Number(a > b) - Number(a < b);
 
 /**
  * Runs a generated TypeScript file in this process and returns its exports.

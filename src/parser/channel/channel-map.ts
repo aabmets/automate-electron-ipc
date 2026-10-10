@@ -100,6 +100,32 @@ function assertValidSignature(
    }
 }
 
+/** Rejects too many type arguments, and a signature that is given both as one and with `as`. */
+function checkTypeArguments(
+   typeArgs: AstNode[],
+   asType: AstNode | null,
+   verb: string,
+   info: { errors?: boolean },
+   call: AstNode,
+   fail: (message: string, node?: AstNode) => SchemaError,
+): void {
+   if (typeArgs.length > (info.errors ? 2 : 1)) {
+      throw fail(
+         info.errors
+            ? `'${verb}' takes at most two type arguments, the signature and the error types.`
+            : `'${verb}' takes exactly one type argument, the signature.`,
+         call.typeArguments,
+      );
+   }
+   if (typeArgs.length > 0 && asType) {
+      throw fail(
+         `the signature is given twice, as a type argument and with 'as'. ` +
+            `Use only one of them. Error types need the type argument form.`,
+         asType,
+      );
+   }
+}
+
 /**
  * Parses one `Name: verb<Sig>(config?)` or `Name: verb(config?) as Sig` property.
  */
@@ -140,21 +166,7 @@ function parseChannelProperty(prop: AstNode, ctx: ParseContext): Partial<t.Chann
 
    const config = parseChannelConfig(value, verb, info, name, ctx);
    const typeArgs: AstNode[] = value.typeArguments?.params ?? [];
-   const maxTypeArgs = info.errors ? 2 : 1;
-   if (typeArgs.length > maxTypeArgs) {
-      throw fail(
-         info.errors
-            ? `'${verb}' takes at most two type arguments, the signature and the error types.`
-            : `'${verb}' takes exactly one type argument, the signature.`,
-         value.typeArguments,
-      );
-   } else if (typeArgs.length > 0 && asType) {
-      throw fail(
-         `the signature is given twice, as a type argument and with 'as'. ` +
-            `Use only one of them. Error types need the type argument form.`,
-         asType,
-      );
-   }
+   checkTypeArguments(typeArgs, asType, verb, info, value, fail);
    const signature = asType ?? (typeArgs.length > 0 ? unwrapTypeParentheses(typeArgs[0]) : null);
    assertValidSignature(signature, verb, value, ctx, fail);
    const parsed = parseSignature(

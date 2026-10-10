@@ -36,6 +36,23 @@ export interface MainCollection {
    usesStreams: boolean;
 }
 
+function collectOffPageValidator(
+   importsGenerator: ImportsGenerator,
+   parsedFileSpecs: t.ParsedFileSpecs,
+   spec: t.ChannelSpec,
+   collection: MainCollection,
+): void {
+   const validator = importValidator(
+      importsGenerator,
+      parsedFileSpecs,
+      spec,
+      collection.importDeclarations,
+   );
+   if (validator !== null) {
+      collection.offPage.validators.set(spec, validator);
+   }
+}
+
 /**
  * Builds the channels of every schema file, and collects the imports and the features that the
  * generated code uses, so that it contains only what the channels need.
@@ -101,15 +118,7 @@ export function collectMainChannels(
             }
             channels.push(buildMainToRendererChannel(ctx, spec));
          } else {
-            const validator = importValidator(
-               importsGenerator,
-               parsedFileSpecs,
-               spec,
-               importDeclarations,
-            );
-            if (validator !== null) {
-               offPage.validators.set(spec, validator);
-            }
+            collectOffPageValidator(importsGenerator, parsedFileSpecs, spec, collection);
             channels.push(
                ...buildOffPageChannels(ctx, spec, electronImports, electronTypeImports, offPage),
             );

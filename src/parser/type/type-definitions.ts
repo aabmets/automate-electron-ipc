@@ -94,13 +94,8 @@ export function parseTypeDefinitions(
    });
 }
 
-/**
- * Marks the local types and values that the module exports through `export { X }`,
- * `export { X as Y }`, `export { X as default }` or `export default X`. Re-exports from another
- * module declare nothing local, and neither do imports, so they match no spec and are ignored.
- * When a type is exported several times, the export under its own name wins, then the first.
- */
-export function applyExportSpecifiers(body: AstNode[], typeSpecs: t.TypeSpec[]): void {
+/** Maps each local name to the names it is exported under by `export { }` and `export default`. */
+function collectExportNames(body: AstNode[]): Map<string, string[]> {
    const exportNames = new Map<string, string[]>();
    const add = (local: string, exported: string) => {
       exportNames.set(local, [...(exportNames.get(local) ?? []), exported]);
@@ -116,6 +111,17 @@ export function applyExportSpecifiers(body: AstNode[], typeSpecs: t.TypeSpec[]):
          }
       }
    }
+   return exportNames;
+}
+
+/**
+ * Marks the local types and values that the module exports through `export { X }`,
+ * `export { X as Y }`, `export { X as default }` or `export default X`. Re-exports from another
+ * module declare nothing local, and neither do imports, so they match no spec and are ignored.
+ * When a type is exported several times, the export under its own name wins, then the first.
+ */
+export function applyExportSpecifiers(body: AstNode[], typeSpecs: t.TypeSpec[]): void {
+   const exportNames = collectExportNames(body);
    for (const spec of typeSpecs) {
       const names = exportNames.get(spec.name);
       if (spec.isExported || !names) {
