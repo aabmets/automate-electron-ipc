@@ -19,7 +19,24 @@ import {
 import { fixtures } from "@testutils/fixture-tracker.js";
 import { describe, expect, it } from "vitest";
 
-const readme = await fsp.readFile(path.resolve(import.meta.dirname, "../../../README.md"), "utf8");
+const docsDir = path.resolve(import.meta.dirname, "../../../docs");
+
+/** Every `.md` file below `docs/` in sorted path order, except the planning files that are not published. */
+async function readDocs(): Promise<string> {
+   const entries = await fsp.readdir(docsDir, { recursive: true });
+   const pages = entries
+      .map((entry) => entry.split(path.sep).join("/"))
+      .filter(
+         (entry) => entry.endsWith(".md") && !entry.startsWith("tasks/") && entry !== "roadmap.md",
+      )
+      .sort();
+   const texts = await Promise.all(
+      pages.map((page) => fsp.readFile(path.join(docsDir, page), "utf8")),
+   );
+   return texts.join("\n\n");
+}
+
+const docs = await readDocs();
 
 /**
  * Generates the bindings of the example's project and type-checks it: the schema files together
@@ -29,7 +46,7 @@ const readme = await fsp.readFile(path.resolve(import.meta.dirname, "../../../RE
 async function checkExample(example: ReadmeExample): Promise<void> {
    const files = Object.fromEntries(example.files.map(({ file, contents }) => [file, contents]));
    const fail = (reason: string) => {
-      throw new Error(`README example '${example.name}': ${reason}`);
+      throw new Error(`docs example '${example.name}': ${reason}`);
    };
    const project = await fixtures
       .run("readme-project", { files })
@@ -68,7 +85,7 @@ async function checkExample(example: ReadmeExample): Promise<void> {
 const schema = (body: string) =>
    `import { defineChannels, send } from "automate-electron-ipc";\nexport default defineChannels({ ${body} });\n`;
 
-describe("README example extraction", () => {
+describe("docs example extraction", () => {
    const tag = (name: string, file: string, code: string) =>
       `<!-- readme-example: ${name} ${file} -->\n\`\`\`ts\n${code}\n\`\`\`\n`;
 
@@ -104,7 +121,7 @@ describe("README example extraction", () => {
       expect(() => extractReadmeExamples(markdown)).toThrow("gives the file 'a.ts' twice");
    });
 
-   it("counts a tag whose block is not a ts block, so the README test can see it", () => {
+   it("counts a tag whose block is not a ts block, so the docs test can see it", () => {
       const markdown = "<!-- readme-example: one a.ts -->\n```bash\nls\n```\n";
 
       expect(countExampleTags(markdown)).toBe(1);
@@ -112,7 +129,7 @@ describe("README example extraction", () => {
    });
 });
 
-describe("README example check", () => {
+describe("docs example check", () => {
    it("passes an example that generates and type-checks", async () => {
       const files = [
          {
@@ -139,7 +156,7 @@ describe("README example check", () => {
       ];
 
       await expect(checkExample({ name: "broken-schema", files })).rejects.toThrow(
-         "README example 'broken-schema': it does not generate",
+         "docs example 'broken-schema': it does not generate",
       );
    }, 60_000);
 
@@ -153,15 +170,15 @@ describe("README example check", () => {
       ];
 
       await expect(checkExample({ name: "wrong-call", files })).rejects.toThrow(
-         /README example 'wrong-call': its code does not type-check:[\s\S]*src\/renderer\/app\.ts/,
+         /docs example 'wrong-call': its code does not type-check:[\s\S]*src\/renderer\/app\.ts/,
       );
    }, 60_000);
 });
 
-describe("README examples", () => {
+describe("docs examples", () => {
    // Only `ts` and `json` blocks are tagged. The `electron.vite.config.ts` of the electron-vite
    // walk-through is shown without a tag: type-checking it would need the `electron-vite` package.
-   const examples = extractReadmeExamples(readme);
+   const examples = extractReadmeExamples(docs);
 
    it("tags the examples of Getting Started and the Simple Example", () => {
       const names = examples.map((example) => example.name);
@@ -172,7 +189,7 @@ describe("README examples", () => {
    it("matches every tag with a ts block, so that no example is left unchecked", () => {
       const blocks = examples.reduce((sum, example) => sum + example.files.length, 0);
 
-      expect(blocks).toBe(countExampleTags(readme));
+      expect(blocks).toBe(countExampleTags(docs));
    });
 
    it.each(examples.map((example) => [example.name, example] as const))(

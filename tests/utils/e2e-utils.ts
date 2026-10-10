@@ -45,7 +45,7 @@ export interface RunFixtureOptions {
    /**
     * Files that are written into the copy, keyed by their path from the fixture root, after the
     * copy and before the run. They replace the files of the fixture of the same path, so a project
-    * whose files come from somewhere else, such as the examples of the README, needs only a
+    * whose files come from somewhere else, such as the examples in the docs, needs only a
     * fixture with a `package.json`.
     */
    files?: Record<string, string>;

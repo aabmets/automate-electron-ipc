@@ -1,0 +1,118 @@
+site_name: Automate Electron IPC
+site_description: Node library for generating IPC components for Electron apps.
+site_url: https://aabmets.github.io/automate-electron-ipc/
+repo_url: https://github.com/aabmets/automate-electron-ipc
+repo_name: aabmets/automate-electron-ipc
+copyright: Copyright &copy; Mattias Aabmets
+
+validation:
+  links:
+    anchors: warn
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+exclude_docs: |
+  tasks/
+  roadmap.md
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.sections
+    - content.code.copy
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+    - Overview: getting-started/index.md
+    - "Installation": getting-started/installation.md
+    - "Quickstart": getting-started/quickstart.md
+    - "Channel maps": getting-started/channel-maps.md
+    - "Simple example": getting-started/simple-example.md
+  - Tooling:
+    - Overview: tooling/index.md
+    - "Configuration": tooling/configuration.md
+    - "Command line": tooling/command-line.md
+    - "Node API": tooling/node-api.md
+    - "Vite and electron-vite": tooling/vite.md
+    - "TypeScript configuration": tooling/typescript-configuration.md
+    - "Generated files": tooling/generated-files.md
+    - "Preload bundling and the sandbox": tooling/preload-bundling.md
+    - "electron-vite end to end": tooling/electron-vite.md
+  - Schema:
+    - Overview: schema/index.md
+    - "Verbs": schema/verbs.md
+    - "The generated API": schema/generated-api.md
+    - "What can be sent": schema/what-can-be-sent.md
+    - "Custom serializers": schema/custom-serializers.md
+    - "The `as` form": schema/as-form.md
+  - Channels:
+    - Overview: channels/index.md
+    - "invoke": channels/invoke.md
+    - "send": channels/send.md
+    - "emit": channels/emit.md
+    - "ask": channels/ask.md
+    - "stream": channels/stream.md
+  - Processes:
+    - Overview: processes/index.md
+    - "Port channels": processes/ports.md
+    - "Bounded send queues": processes/send-queues.md
+    - "Utility processes": processes/utility-processes.md
+    - "Calling a utility process from a renderer": processes/utility-from-renderer.md
+    - "Service workers": processes/service-workers.md
+  - Renderer:
+    - Overview: renderer/index.md
+    - "Helper types": renderer/helper-types.md
+    - "Framework hooks": renderer/framework-hooks.md
+    - "Mocking in renderer tests": renderer/mocking.md
+  - Security:
+    - Overview: security/index.md
+    - "Threat model": security/threat-model.md
+    - "Sender validation": security/sender-validation.md
+    - "Validating arguments": security/validating-arguments.md
+    - "Scopes": security/scopes.md
+    - "Putting it together": security/putting-it-together.md
+    - "The Electron security checklist": security/checklist.md
+  - Migrating from 0.2.x:
+    - Overview: migration/index.md
+    - "Rewriting the schema": migration/schema-rewrite.md
+    - "Configuration and behavior": migration/config-and-behavior.md
+  - Contributing:
+    - Overview: contributing/index.md

@@ -18,7 +18,7 @@ const fixturesDir = path.resolve(import.meta.dirname, "../../fixtures");
 
 /**
  * The fixtures that generate nothing: the schema or the config is rejected, or the fixture has no
- * schema, since `readme-project` gets its files from the examples of the README.
+ * schema, since `readme-project` gets its files from the examples in the docs.
  */
 const REJECTED = new Set([
    "declaration-output-paths",
